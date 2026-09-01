@@ -1053,6 +1053,17 @@ def create_app(
     # ── Build RuntimeContext ────────────────────────────────────────
     config = load_config()
 
+    # Mirror [network] into the process-level overseas-routing source of
+    # truth (openbiliclaw.network). Domestic / local endpoints (DeepSeek /
+    # SenseNova / 通义 / self-hosted) always bypass it and connect directly.
+    from openbiliclaw.network import set_outbound_proxy
+
+    network_config = getattr(config, "network", None)
+    set_outbound_proxy(
+        getattr(network_config, "proxy", "") or "",
+        mode=getattr(network_config, "mode", "system") or "system",
+    )
+
     # Auto-generate the session signing secret on first enable so login state
     # survives restarts (see docs/plans/2026-05-30-web-password-auth-design.md).
     from openbiliclaw.api.auth import (

@@ -242,6 +242,15 @@ executable = ""
 # Use headed mode for debugging
 headed = false
 
+# ── 海外出站网络策略 ──
+# 只作用于海外服务（OpenAI/Claude/Gemini/DeepSeek/OpenRouter/YouTube 等）。
+# 国内/本机端点（B站/抖音/Ollama/SenseNova/通义等）始终直连，不走此代理。
+# mode: system=继承系统/环境代理(默认) | direct=忽略所有代理 | custom=使用下方 proxy
+# proxy: 仅 mode=custom 时生效，支持 http/https/socks5/socks5h
+[network]
+mode = "system"
+proxy = ""
+
 # ── 通用 Web / 自定义网页源的浏览器配置 ──
 # 与 [bilibili.browser] 独立：Bilibili 走 agent-browser CLI，
 # 小红书 / 抖音当前走 Chrome 插件任务，不依赖这里。

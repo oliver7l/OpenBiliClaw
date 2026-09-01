@@ -651,6 +651,28 @@ class TlsProxyConfig:
 
 
 @dataclass
+class NetworkConfig:
+    """Outbound proxy for OVERSEAS clients only.
+
+    Applies to LLM SDKs (OpenAI/Claude/Gemini/DeepSeek/OpenRouter/
+    openai_compatible chat+embedding), YouTube (yt-dlp) and other overseas
+    services. Domestic / local endpoints (bilibili / douyin / ollama /
+    DeepSeek / SenseNova / 通义 / self-hosted) always connect directly and
+    never consume this setting — see ``openbiliclaw.network``.
+
+    ``mode`` is one of ``system`` (default; inherit HTTP(S)_PROXY / OS
+    settings), ``direct`` (ignore env/system proxies), or ``custom`` (use
+    ``proxy`` explicitly). Accepted proxy schemes: http / https / socks5 /
+    socks5h. The default is ``system`` because every consumer is an
+    overseas-only service; with no proxy configured, ``system`` behaves
+    exactly like a direct connection.
+    """
+
+    mode: str = "system"
+    proxy: str = ""
+
+
+@dataclass
 class Config:
     """Root configuration for OpenBiliClaw."""
 
@@ -662,6 +684,9 @@ class Config:
     bilibili: BilibiliConfig = field(default_factory=BilibiliConfig)
     sources: SourcesConfig = field(default_factory=SourcesConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    # Top-level `[network]` controls overseas outbound routing; domestic
+    # endpoints always bypass it (see openbiliclaw.network).
+    network: NetworkConfig = field(default_factory=NetworkConfig)
     # Top-level `[discovery]` carries the unified keyword planner / backpressure
     # knobs (P1). Distinct from `[llm.discovery]` (per-module provider override).
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
@@ -786,6 +811,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
     autostart_raw = raw.get("autostart", {})
     if not isinstance(autostart_raw, dict):
         autostart_raw = {}
+    network_raw = raw.get("network", {})
+    if not isinstance(network_raw, dict):
+        network_raw = {}
     store_raw = raw.get("storage", {})
     logging_raw = raw.get("logging", {})
 
@@ -1006,6 +1034,10 @@ def _build_config(raw: dict[str, Any]) -> Config:
         llm=llm,
         bilibili=bilibili,
         sources=sources,
+        network=NetworkConfig(
+            mode=str(network_raw.get("mode", "system") or "system"),
+            proxy=str(network_raw.get("proxy", "") or ""),
+        ),
         scheduler=SchedulerConfig(
             **{
                 **sched_raw,

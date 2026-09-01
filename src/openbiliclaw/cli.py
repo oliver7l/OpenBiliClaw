@@ -898,6 +898,25 @@ def main(log_level: str | None = typer.Option(None, "--log-level")) -> None:
     _APP_CONTEXT["log_level"] = log_level
     _bootstrap_container_runtime()
     _initialize_logging(log_level_override=log_level)
+    _sync_outbound_proxy()
+
+
+def _sync_outbound_proxy() -> None:
+    """Mirror [network].proxy into the process-level source of truth for CLI.
+
+    Runs once per CLI invocation so any command that builds an LLM registry or
+    the updater routes overseas traffic through the configured proxy. Guarded
+    so a missing/broken config never blocks a command from starting.
+    """
+    import contextlib
+
+    from openbiliclaw.config import load_config
+    from openbiliclaw.network import set_outbound_proxy
+
+    # Config resolution must never block a command from starting.
+    with contextlib.suppress(Exception):
+        network = load_config().network
+        set_outbound_proxy(network.proxy, mode=network.mode)
 
 
 def _print_config_guidance(messages: list[str]) -> None:
@@ -1105,7 +1124,7 @@ _PROVIDER_MODEL_HINT: dict[str, str] = {
 # — the user has already bought access from a relay vendor and just
 # wants OpenBiliClaw to talk to it. That's why ``relay`` is the
 # default (#1). Native Chinese vendor APIs (Kimi / MiniMax / Qwen / GLM
-# / Yi) follow because some users do go straight to the vendor; Azure
+# / Yi / SenseNova) follow because some users do go straight to the vendor; Azure
 # and self-hosted are infrastructure-flavor variants for企业 / 玩家;
 # ``custom`` is the manual escape hatch.
 _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
@@ -1239,6 +1258,31 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
             "hint": (
                 "yi-spark (最便宜) / yi-medium (默认 / 平衡) / yi-lightning (新 / 快) / "
                 "yi-large (旗舰) / yi-large-turbo (平衡) / yi-medium-200k (长上下文)"
+            ),
+        },
+    ),
+    (
+        "sensenova",
+        {
+            "label": "商汤日日新 (SenseNova) 官方",
+            "description": (
+                "商汤日日新开放平台,新用户有免费额度,可以零成本体验本项目"
+                "(issue #193)。token 推理端点已按 OpenAI 协议实测连通"
+                "(deepseek-v4-flash 真实请求验证)"
+            ),
+            "signup_url": (
+                "https://console.sensecore.cn （日日新开放平台控制台申请 API Key,"
+                "免费额度以官方页面为准）"
+            ),
+            "supports_embedding": "false",
+            "base_url": "https://token.sensenova.cn/v1",
+            "default_model": "deepseek-v4-flash",
+            "hint": (
+                "deepseek-v4-flash (默认 / 已实测) / 其它可用模型以控制台模型清单为准。"
+                "免费额度适合试用与轻度使用;重度使用建议充值或换 DeepSeek 官方"
+            ),
+            "embedding_alt": (
+                "token 推理端点未验证 /v1/embeddings,Phase 3 默认推荐独立 Ollama bge-m3"
             ),
         },
     ),
@@ -1612,8 +1656,8 @@ def _prompt_openai_compat() -> tuple[str, str, str, str]:
         "\n[bold]配置 OpenAI 协议兼容服务[/bold]\n"
         "[dim]这一项主要给三类用户:[/dim]\n"
         "[dim]  1. **买了中转站 / OneAPI Key**(国内付人民币用海外模型,最常见)→ 选 1[/dim]\n"
-        "[dim]  2. **用国产大模型官方 API**(Kimi / 通义 / 智谱 / Yi / MiniMax) → 选 2-6[/dim]\n"
-        "[dim]  3. **企业 Azure / 自建 vLLM-LMStudio** → 选 7-8[/dim]\n"
+        "[dim]  2. **用国产大模型官方 API**(Kimi / 通义 / 智谱 / Yi / MiniMax / 商汤) → 选 2-7[/dim]\n"
+        "[dim]  3. **企业 Azure / 自建 vLLM-LMStudio** → 选 8-9[/dim]\n"
         r"[dim]后端会按 OpenAI 协议(Bearer 鉴权 + /v1/chat/completions)打你给的 Base URL,"
         r"配置统一写到 config.toml 的 \[llm.openai] 段。[/dim]\n"
     )
@@ -1629,8 +1673,8 @@ def _prompt_openai_compat() -> tuple[str, str, str, str]:
     console.print(table)
     console.print(
         "[dim]Tip: 不知道选哪个就看你的 API Key 是哪家发的—— "
-        "买的中转站 / OneAPI(常见)选 1;Kimi/MiniMax/通义/智谱/Yi 官方选 2-6;"
-        "Azure 选 7;自建本地服务选 8。[/dim]\n"
+        "买的中转站 / OneAPI(常见)选 1;Kimi/MiniMax/通义/智谱/Yi/商汤官方选 2-7;"
+        "Azure 选 8;自建本地服务选 9。[/dim]\n"
     )
     raw = typer.prompt(f"选服务类型 (1-{len(_OPENAI_COMPAT_PRESETS)})", default="1").strip()
     try:
