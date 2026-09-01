@@ -238,8 +238,8 @@ class TestBackendAPI:
         assert '<link rel="manifest" href="manifest.json">' in response.text
         assert '<meta name="mobile-web-app-capable" content="yes">' in response.text
         assert '<meta name="apple-mobile-web-app-capable" content="yes">' in response.text
-        assert '<meta name="apple-mobile-web-app-title" content="BiliClaw">' in response.text
-        assert '<link rel="apple-touch-icon" sizes="180x180" href="icon-192.png">' in response.text
+        assert '<meta name="apple-mobile-web-app-title" content="古灵阁">' in response.text
+        assert '<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png' in response.text
 
     def test_mobile_web_manifest_is_installable_and_assets_resolve(self) -> None:
         from fastapi.testclient import TestClient
@@ -264,9 +264,11 @@ class TestBackendAPI:
         sizes = {icon["sizes"] for icon in icons}
         assert {"192x192", "512x512"}.issubset(sizes)
 
+        # Manifest ships separate any + maskable icon sets (PWA install-safe).
+        purposes = {icon.get("purpose") for icon in icons}
+        assert purposes == {"any", "maskable"}
         for icon in icons:
             assert icon["type"] == "image/png"
-            assert icon.get("purpose") == "any maskable"
             icon_response = client.get(f"/m/{icon['src']}")
             assert icon_response.status_code == 200
             assert icon_response.headers.get("content-type", "").startswith("image/png")
@@ -989,6 +991,7 @@ class TestBackendAPI:
                 **_extras: object,
             ) -> None:
                 captured["engine_concurrency"] = concurrency
+                self.adapter_registry = object()
 
             def register_strategy(self, strategy: object) -> None:
                 return None
@@ -3878,9 +3881,11 @@ class TestBackendAPI:
                 *,
                 profile: object,
                 limit: int = 10,
+                platform: str | None = None,
             ) -> list[object]:
                 assert profile == {"profile": "ok"}
                 assert limit == 10
+                assert platform is None
                 self.runtime.pool_available_count = 0
                 from openbiliclaw.discovery.engine import DiscoveredContent
                 from openbiliclaw.recommendation.engine import Recommendation
@@ -3932,6 +3937,8 @@ class TestBackendAPI:
                     "source_platform": "bilibili",
                     "content_type": "video",
                     "body_text": "",
+                    "quality_score": 0.0,
+                    "quality_reason": "",
                 }
             ]
         }
@@ -4038,6 +4045,8 @@ class TestBackendAPI:
                     "source_platform": "bilibili",
                     "content_type": "video",
                     "body_text": "",
+                    "quality_score": 0.0,
+                    "quality_reason": "",
                 }
             ]
         }
@@ -4072,7 +4081,7 @@ class TestBackendAPI:
                 self.calls = 0
 
             async def reshuffle_recommendations(
-                self, *, profile: object, limit: int = 10
+                self, *, profile: object, limit: int = 10, platform: str | None = None
             ) -> list[object]:
                 self.calls += 1
                 raise AssertionError("empty pool should not call reshuffle")
@@ -8639,6 +8648,10 @@ class TestEmbeddingAndCompatProviderE2E:
             "youtube": 1,
             "twitter": 1,
             "zhihu": 1,
+            "v2ex": 1,
+            "reddit": 1,
+            "rss": 2,
+            "wechat": 1,
         }
         assert cfg.scheduler.refresh_check_interval_seconds == 75
         assert cfg.scheduler.signal_event_threshold == 9
@@ -9254,6 +9267,21 @@ class _FakeInitPrereqs:
 
     def enabled_platforms(self) -> list[str]:
         return list(self._platforms)
+
+    # Non-blocking peekers used by GET /api/init-status (init_prereqs plan C1):
+    # return the cached value and report the cache as fresh so the endpoint
+    # never schedules background probe tasks during tests.
+    def peek_chat(self) -> bool:
+        return self._chat
+
+    def chat_is_stale(self) -> bool:
+        return False
+
+    def peek_bilibili(self) -> str:
+        return self._bili
+
+    def bilibili_is_stale(self) -> bool:
+        return False
 
 
 def test_select_init_platforms_none_selection_uses_all_enabled() -> None:

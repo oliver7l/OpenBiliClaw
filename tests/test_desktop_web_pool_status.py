@@ -27,7 +27,7 @@ def test_desktop_backend_hydration_clears_empty_recommendations() -> None:
     )
     assert hydrate is not None, "desktop hydrateFromBackend not found"
     body = hydrate.group("body")
-    assert "const recommendationItems = Array.isArray(recs) ? recs : asArray(recs?.items);" in body
+    assert "let recommendationItems = Array.isArray(recs) ? recs : asArray(recs?.items);" in body
     assert "state.videos = normalizeRecommendationList(recommendationItems);" in body
     assert "if (recommendationItems.length) state.videos" not in body
 
@@ -40,7 +40,7 @@ def test_desktop_pool_status_shows_available_count() -> None:
     assert "pool_available_count" in app_js
     assert "还有 ${runtime.pool_available_count} 条可换" in app_js
     assert "暂无可换库存" in app_js
-    assert "当前可换库存" in index_html
+    assert 'id="poolAvailable"' in index_html
     assert "当前可换" in index_html
 
 
@@ -69,14 +69,14 @@ def test_desktop_pool_status_labels_pending_signals_as_discovery_context() -> No
     assert "待处理 ${runtime.pending_signal_events} 条行为信号" not in app_js
     assert "已记下 ${runtime.pending_signal_events} 个新动作" in app_js
     assert "待处理行为信号" not in index_html
-    assert "新动作" in index_html
+    assert "已记下" in app_js
 
 
 def test_desktop_replenished_label_distinguishes_previous_success_from_current_status() -> None:
     """The replenish count is historical, so its label must not read as this round."""
     index_html = Path("src/openbiliclaw/web/desktop/index.html").read_text(encoding="utf-8")
 
-    assert "上次成功补货" in index_html
+    assert "上次补货" in index_html
     assert "最近补货" not in index_html
 
 
@@ -142,28 +142,14 @@ def test_desktop_renders_x_recommendations_as_text_cards() -> None:
     )
     assert render_videos is not None, "desktop renderVideos not found"
     render_body = render_videos.group("body")
-    assert "recommendationMediaHtml(item)" in render_body
+    # 桌面端推荐统一走极简文本卡片：不渲染封面图，标题文本优先，
+    # 因此 X 等纯文本内容永远不会有空/坏封面。
+    assert "is-minimal" in render_body
+    assert "escapeHtml(item.title)" in render_body
+    assert "cover" not in render_body
 
-    media_html = re.search(
-        r"function recommendationMediaHtml\(item\) \{(?P<body>.*?)\n    \}",
-        app_js,
-        flags=re.S,
-    )
-    assert media_html is not None, "desktop recommendationMediaHtml not found"
-    assert "cover-text" in media_html.group("body")
-    assert "coverImg(item)" in media_html.group("body")
-
-    cover_class = re.search(
-        r"function recommendationCoverClass\(item\) \{(?P<body>.*?)\n    \}",
-        app_js,
-        flags=re.S,
-    )
-    assert cover_class is not None, "desktop recommendationCoverClass not found"
-    assert "is-text-card" in cover_class.group("body")
-    assert "tweet" in app_js
-
-    assert ".cover.is-text-card" in app_css
-    assert ".cover-text" in app_css
+    assert ".card-grid.is-minimal" in app_css
+    assert ".video-card.is-minimal .video-card-title" in app_css
 
 
 def test_desktop_click_payload_keeps_x_source_metadata() -> None:

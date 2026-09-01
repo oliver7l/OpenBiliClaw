@@ -1219,6 +1219,9 @@ async def test_reshuffle_recommendations_hides_missing_precomputed_copy() -> Non
 
         # Once precompute fills the copy, the row becomes visible.
         db.update_pool_copy("BV1EMPTY", expression="LLM 文案", topic_label="LLM topic")
+        # The first (empty) batch armed a 20s negative cache for this key;
+        # clear it so the re-probe below actually hits the pool again.
+        engine._batch_empty_until.clear()
         recommendations = await engine.reshuffle_recommendations(
             profile=_build_profile(),
             limit=1,

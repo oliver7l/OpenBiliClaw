@@ -2745,7 +2745,9 @@ class TestDatabase:
                     self.commits += 1
 
             fake_conn = _LockingConnection()
-            db._conn = fake_conn  # type: ignore[assignment]
+            # The write paths go through the ``conn`` property, which reads
+            # from the per-thread connection slot.
+            db._thread_local.conn = fake_conn  # type: ignore[assignment]
 
             recommendation_id = db.insert_recommendation("BV1LOCK", confidence=0.6)
 
@@ -2803,7 +2805,9 @@ class TestDatabase:
                     self.commits += 1
 
             fake_conn = _LockingConnection()
-            db._conn = fake_conn  # type: ignore[assignment]
+            # The write paths go through the ``conn`` property, which reads
+            # from the per-thread connection slot.
+            db._thread_local.conn = fake_conn  # type: ignore[assignment]
 
             db.update_recommendation_content(
                 7,
@@ -2857,7 +2861,9 @@ class TestDatabase:
                     self.commits += 1
 
             fake_conn = _LockingConnection()
-            db._conn = fake_conn  # type: ignore[assignment]
+            # The write paths go through the ``conn`` property, which reads
+            # from the per-thread connection slot.
+            db._thread_local.conn = fake_conn  # type: ignore[assignment]
 
             db.mark_recommendations_presented([1, 2])
 
@@ -2940,7 +2946,9 @@ class TestDatabase:
                     self.commits += 1
 
             fake_conn = _LockingConnection()
-            db._conn = fake_conn  # type: ignore[assignment]
+            # The write paths go through the ``conn`` property, which reads
+            # from the per-thread connection slot.
+            db._thread_local.conn = fake_conn  # type: ignore[assignment]
 
             db.update_recommendation_feedback(
                 7,

@@ -1,11 +1,36 @@
 """Tests for logging setup."""
 
 import logging
+import time
+from logging import FileHandler
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from openbiliclaw.config import Config, LoggingConfig
 from openbiliclaw.logging_setup import configure_logging
+
+
+def _wait_for_file_contains(path: Path, needle: str, timeout: float = 3.0) -> bool:
+    """configure_logging routes records through a QueueListener, so writes
+    happen on a listener thread — poll instead of reading synchronously."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if path.exists() and needle in path.read_text(encoding="utf-8", errors="ignore"):
+                return True
+        except FileNotFoundError:
+            pass
+        time.sleep(0.05)
+    return False
+
+
+def _listener_file_handlers() -> list[FileHandler]:
+    """File handlers live on the QueueListener, not on the root logger."""
+    from openbiliclaw.logging_setup import _LOG_LISTENER
+
+    if _LOG_LISTENER is None:
+        return []
+    return [h for h in _LOG_LISTENER.handlers if isinstance(h, FileHandler)]
 
 
 def test_configure_logging_creates_log_directory_and_file(tmp_path: Path) -> None:
@@ -23,8 +48,7 @@ def test_configure_logging_creates_log_directory_and_file(tmp_path: Path) -> Non
     logger.info("hello from logging test")
 
     log_file = tmp_path / "logs" / "openbiliclaw.log"
-    assert log_file.exists()
-    assert "hello from logging test" in log_file.read_text(encoding="utf-8")
+    assert _wait_for_file_contains(log_file, "hello from logging test")
 
 
 def test_configure_logging_replaces_existing_handlers(tmp_path: Path) -> None:
@@ -80,7 +104,7 @@ def test_configure_logging_uses_rotating_handler_when_enabled(tmp_path: Path) ->
     )
 
     configure_logging(config)
-    file_handlers = [h for h in logging.getLogger().handlers if isinstance(h, logging.FileHandler)]
+    file_handlers = _listener_file_handlers()
 
     assert len(file_handlers) == 1
     handler = file_handlers[0]
@@ -100,7 +124,7 @@ def test_configure_logging_disables_rotation_when_size_is_zero(tmp_path: Path) -
     )
 
     configure_logging(config)
-    file_handlers = [h for h in logging.getLogger().handlers if isinstance(h, logging.FileHandler)]
+    file_handlers = _listener_file_handlers()
 
     assert len(file_handlers) == 1
     handler = file_handlers[0]
@@ -126,12 +150,9 @@ def test_rotating_file_handler_preserves_exception_traceback(tmp_path: Path) -> 
     except ValueError:
         logging.getLogger("openbiliclaw.test").exception("sentinel exception")
 
-    for handler in logging.getLogger().handlers:
-        if isinstance(handler, logging.FileHandler):
-            handler.flush()
-
-    text = (log_dir / "app.log").read_text(encoding="utf-8")
-    assert "sentinel exception" in text
+    log_file = log_dir / "app.log"
+    assert _wait_for_file_contains(log_file, "sentinel exception")
+    text = log_file.read_text(encoding="utf-8")
     assert "Traceback (most recent call last)" in text
     assert "ValueError: sentinel" in text
 
@@ -155,12 +176,9 @@ def test_plain_file_handler_preserves_exception_traceback(tmp_path: Path) -> Non
     except ValueError:
         logging.getLogger("openbiliclaw.test").exception("sentinel exception")
 
-    for handler in logging.getLogger().handlers:
-        if isinstance(handler, logging.FileHandler):
-            handler.flush()
-
-    text = (log_dir / "app.log").read_text(encoding="utf-8")
-    assert "sentinel exception" in text
+    log_file = log_dir / "app.log"
+    assert _wait_for_file_contains(log_file, "sentinel exception")
+    text = log_file.read_text(encoding="utf-8")
     assert "Traceback (most recent call last)" in text
     assert "ValueError: sentinel" in text
 

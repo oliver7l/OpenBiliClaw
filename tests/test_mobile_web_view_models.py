@@ -151,7 +151,7 @@ class TestMobileWebViewModels:
               title: "A YouTube deep dive",
               recommendation_id: 42,
               topic_label: "",
-              up_name: "这位 UP 还没认出来",
+              up_name: "这位创作者还没认出来",
             });
         """)
         )
@@ -256,7 +256,7 @@ class TestMobileWebViewModels:
               title: "一个知乎回答",
               recommendation_id: 43,
               topic_label: "",
-              up_name: "这位 UP 还没认出来",
+              up_name: "这位创作者还没认出来",
             });
 
             const missingUrl = normalizeRecommendation({
@@ -551,7 +551,9 @@ class TestMobileWebViewModels:
             assert.equal(viewed.response_tone, "success");
 
             const liked = getDelightUiState({ bvid: "BV1", state: "liked", delight_score: 0.7 });
-            assert.equal(liked.handled, true);
+            assert.equal(liked.handled, false);
+            assert.equal(liked.like_pressed, true);
+            assert.equal(liked.like_disabled, true);
             assert.equal(liked.response_tone, "success");
 
             const chatted = getDelightUiState({
@@ -595,8 +597,9 @@ class TestMobileWebViewModels:
             assert.deepEqual(
               getProbeMessageActions().map((item) => [item.label, item.action]),
               [
-                ["喜欢", "confirm"],
-                ["不喜欢", "reject"],
+                ["确认喜欢", "confirm"],
+                ["暂时搁置", "defer"],
+                ["确认不喜欢", "reject"],
                 ["多聊聊", "chat"],
               ],
             );
@@ -695,7 +698,7 @@ class TestMobileWebViewModels:
               header.poolChips.map((chip) => [chip.label, chip.value, chip.tone]),
               [
                 ["当前可换", "23 条", "neutral"],
-                ["最近补进", "补进 7 条", "brand"],
+                ["补货进展", "补进 7 条", "brand"],
                 ["现在在忙", "城市影像 / 设备测评", "info"],
               ],
             );
@@ -713,7 +716,7 @@ class TestMobileWebViewModels:
               internal.poolChips.map((chip) => [chip.label, chip.value]),
               [
                 ["当前可换", "600 条"],
-                ["最近补进", "补进 1 条"],
+                ["补货进展", "补进 1 条"],
                 ["现在在忙", "小红书任务 / 探索"],
               ],
             );
@@ -862,7 +865,7 @@ class TestMobileWebViewModels:
         assert 'type === "avoidance.probe"' in chat_js
         assert '"avoidance_probe"' in chat_js
         assert "getAvoidanceProbeMessageActions" in chat_js
-        assert "确实不喜欢" in view_models_js
+        assert "getAvoidanceProbeMessageActions" in view_models_js
 
         assert "speculative_avoidances" in profile_js
         assert "renderSpecAvoidances" in profile_js

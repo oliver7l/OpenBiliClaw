@@ -7,8 +7,8 @@ def test_setup_wizard_static_contract_uses_guided_init_endpoint() -> None:
     html = Path("src/openbiliclaw/web/setup/index.html").read_text(encoding="utf-8")
 
     assert 'data-panel="3"' in html
-    assert "GET /api/init-status" in html or 'fetch("/api/init-status"' in html
-    assert 'fetch("/api/init"' in html
+    assert 'fetchWithTimeout("/api/init-status"' in html
+    assert 'fetchWithTimeout("/api/init"' in html
     assert "init_progress" in html
     assert "/api/init-completed" not in html
 
@@ -70,8 +70,11 @@ def test_setup_init_sources_are_explicit_opt_in_without_settings_enable_block() 
     assert "勾选会同时开启该来源" in setup_html
     assert "selectedSourcesNeedingEnable" not in setup_html
     assert "还没在设置里开启" not in setup_html
+    # Setup 的来源清单由 SourceStatus.INIT_SOURCE_KEYS 动态生成（后端单一事实源），
+    # 不在 setup 页硬编码平台 key 列表；桌面端 app.js 才是完整的静态 key 清单。
+    assert "INIT_SOURCE_KEYS" in setup_html
+    assert "SourceStatus.sourceLabel" in setup_html
     for source in ("bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu"):
-        assert f'key: "{source}"' in setup_html
         assert f'key: "{source}"' in app_js
 
 

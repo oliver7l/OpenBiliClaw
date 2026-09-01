@@ -216,7 +216,10 @@ def test_init_status_endpoint_shape(tmp_path: Path) -> None:
     assert body["total_stages"] == 4
     assert len(body["stages"]) == 4
     # No configured cookie / chat creds in this minimal app → can't start.
-    assert body["prerequisites"]["bilibili_check"] == "failed"
+    # bilibili_check is a non-blocking peek: the first poll returns the
+    # initial "checking" and a background probe flips it to "failed" once it
+    # finishes, so accept either non-ok value.
+    assert body["prerequisites"]["bilibili_check"] in ("checking", "failed")
     assert body["can_start"] is False
     assert body["reason"] in ("bilibili_not_logged_in", "unsupported_runtime", "llm_not_ready")
 

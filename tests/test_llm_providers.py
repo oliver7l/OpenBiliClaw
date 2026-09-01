@@ -702,20 +702,18 @@ async def test_ollama_provider_default_num_ctx_uses_openai_shim(
 ) -> None:
     """num_ctx=0 (default) keeps the OpenAI-compat /v1 path untouched —
     the native /api/chat client must never be constructed."""
-    import httpx
-
-    class _ExplodingClient:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            raise AssertionError("native /api/chat client built when num_ctx=0")
-
-    monkeypatch.setattr(httpx, "AsyncClient", _ExplodingClient)
-
     provider = OllamaProvider(model="llama3", base_url="http://localhost:11434/v1")
 
     async def fake_request(**kwargs: object) -> SimpleNamespace:
         return _openai_response("shim-ok")
 
+    async def explode_native(*args: object, **kwargs: object) -> dict[str, object]:
+        raise AssertionError("native /api/chat client built when num_ctx=0")
+
     monkeypatch.setattr(provider, "_request_with_retry", fake_request)
+    # The native path is the only one that POSTs to /api/chat; if num_ctx=0
+    # incorrectly routed there, _post_chat would raise instead of returning.
+    monkeypatch.setattr(provider, "_post_chat", explode_native)
 
     response = await provider.complete([{"role": "user", "content": "hi"}])
     assert response.content == "shim-ok"

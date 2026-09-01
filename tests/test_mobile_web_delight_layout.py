@@ -34,8 +34,10 @@ def test_mobile_delight_tray_uses_featured_reason_wrap() -> None:
     thumb_block = _css_block(css, ".delight-thumb")
     later_block = _css_block(css, ".delight-later-btn")
 
-    assert "linear-gradient" in tray_block
-    assert "linear-gradient" in tag_block
+    # 极简风格：tray 用纯色 surface + brand 左侧强调条，tag 用 brand-soft 胶囊
+    assert "background: var(--surface)" in tray_block
+    assert "border-left: 3px solid var(--brand)" in tray_block
+    assert "background: var(--brand-soft)" in tag_block
     assert "flow-root" in wrap_block
     assert "max-height" not in reason_block
     assert "overflow: hidden" not in reason_block

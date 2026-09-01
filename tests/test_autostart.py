@@ -1,6 +1,7 @@
 """Tests for boot autostart runtime helpers."""
 
 import plistlib
+import shlex
 import sys
 from pathlib import Path
 
@@ -289,7 +290,13 @@ def test_linux_xdg_register_writes_desktop_file(
     assert "Type=Application" in content
     assert "Name=OpenBiliClaw" in content
     assert f"OPENBILICLAW_PROJECT_ROOT={tmp_path}" in content
-    assert f"{sys.executable} -m openbiliclaw.cli start" in content
+    # Exec is emitted as `env KEY=VAL ...` with every part shell-quoted, so
+    # parse it back instead of matching a raw substring.
+    exec_line = next(line for line in content.splitlines() if line.startswith("Exec="))
+    exec_args = shlex.split(exec_line[len("Exec=") :])
+    assert exec_args[0] == "env"
+    assert f"OPENBILICLAW_PROJECT_ROOT={tmp_path}" in exec_args
+    assert exec_args[-4:] == [sys.executable, "-m", "openbiliclaw.cli", "start"]
     assert "X-GNOME-Autostart-enabled=true" in content
     assert "Hidden=false" in content
 

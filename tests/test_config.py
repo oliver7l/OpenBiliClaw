@@ -108,6 +108,10 @@ class TestConfigDefaults:
             "youtube": 1,
             "twitter": 1,
             "zhihu": 1,
+            "v2ex": 1,
+            "reddit": 1,
+            "rss": 2,
+            "wechat": 1,
         }
 
     def test_bilibili_source_enabled_defaults_true(self) -> None:
@@ -872,6 +876,10 @@ youtube = 3
         "youtube": 3,
         "twitter": 1,
         "zhihu": 1,
+        "v2ex": 1,
+        "reddit": 1,
+        "rss": 2,
+        "wechat": 1,
     }
 
 
@@ -1087,6 +1095,10 @@ def test_save_config_round_trips_pool_source_shares(tmp_path: Path) -> None:
         "youtube": 1,
         "twitter": 3,
         "zhihu": 1,
+        "v2ex": 1,
+        "reddit": 1,
+        "rss": 2,
+        "wechat": 1,
     }
 
 
