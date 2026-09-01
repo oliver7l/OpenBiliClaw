@@ -16,6 +16,7 @@ from openbiliclaw.llm.base import LLMResponse
 from openbiliclaw.llm.service import LLMProviderExecutionError
 from openbiliclaw.recommendation.engine import (
     RecommendationEngine,
+    _PerLoopLock,
     _recommendation_profile_summary,
 )
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
@@ -3242,3 +3243,46 @@ async def test_precompute_delight_scores_uses_llm_batch_scorer() -> None:
         assert candidate["bvid"] == "BV1BACKFILL"
         assert candidate["delight_reason"] == "这条会把你最近那股想搞明白系统结构的劲头接住。"
         assert candidate["delight_hook"] == "结构上头"
+
+
+def test_per_loop_lock_survives_multiple_event_loops() -> None:
+    """_PerLoopLock must not raise when acquired from different loops.
+
+    Regression: a plain asyncio.Lock lazily binds to its first loop and
+    raises RuntimeError ("bound to a different event loop") when the
+    engine's precompute flows run on both the request loop and the
+    dedicated background refresh loop (observed 2026-09-01 on restart).
+    """
+
+    async def grab(lock: _PerLoopLock, tag: str, results: list[str]) -> None:
+        async with lock:
+            results.append(tag)
+
+    lock = _PerLoopLock()
+    results: list[str] = []
+
+    asyncio.run(grab(lock, "loop1", results))
+    asyncio.run(grab(lock, "loop2", results))
+
+    assert results == ["loop1", "loop2"]
+
+
+def test_per_loop_lock_still_mutually_exclusive_within_loop() -> None:
+    """Same-loop concurrency must keep the original mutual-exclusion semantics."""
+
+    async def main() -> None:
+        lock = _PerLoopLock()
+        order: list[int] = []
+
+        async def worker() -> None:
+            async with lock:
+                order.append(1)
+                await asyncio.sleep(0.02)
+                order.append(2)
+
+        await asyncio.gather(worker(), worker())
+        # Worker 1 runs its critical section to completion before worker 2
+        # enters — 1 and 2 must stay paired, never interleaved.
+        assert order == [1, 2, 1, 2]
+
+    asyncio.run(main())

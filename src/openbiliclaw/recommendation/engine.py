@@ -11,6 +11,7 @@ import inspect
 import json
 import logging
 import re
+import threading
 import time
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
@@ -21,6 +22,46 @@ from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS, normalize_style_
 from openbiliclaw.llm.json_utils import extract_llm_json_list, extract_llm_json_object
 from openbiliclaw.llm.service import is_llm_rate_limit_error
 from openbiliclaw.soul.tone import ToneProfile, build_tone_profile
+
+
+class _PerLoopLock:
+    """asyncio.Lock that rebinds per event loop.
+
+    ``asyncio.Lock`` lazily binds to the loop that first acquires it; once
+    bound, acquiring it from a different loop raises ``RuntimeError``
+    ("bound to a different event loop"). The engine's precompute / delight
+    / classify flows run on BOTH the request loop and the dedicated
+    background refresh loop (``runtime_context._spawn_background_loop``),
+    so a plain ``asyncio.Lock`` blows up on hot restart (observed
+    2026-09-01: precompute_pool_copy → _drain_expression_copy crashed with
+    the cross-loop error). A per-loop lock keeps same-loop mutual
+    exclusion; cross-loop double-spend is already prevented by the DB's
+    idempotent claim (only rows still missing copy/delight state are
+    loaded), so racing loops simply observe each other's committed work.
+    """
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+
+    def _lock_for_loop(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        slot = getattr(self._local, "slot", None)
+        if slot is None or slot[0] is not loop:
+            slot = (loop, asyncio.Lock())
+            self._local.slot = slot
+        return slot[1]
+
+    def locked(self) -> bool:
+        try:
+            return self._lock_for_loop().locked()
+        except RuntimeError:
+            return False
+
+    async def __aenter__(self) -> asyncio.Lock:
+        return await self._lock_for_loop().__aenter__()
+
+    async def __aexit__(self, *exc: object) -> bool | None:
+        return await self._lock_for_loop().__aexit__(*exc)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -207,7 +248,7 @@ class RecommendationEngine:
         # When None, the engine falls back to bare asyncio.create_task —
         # tests that don't inject a registry continue to work unchanged.
         self.task_registry: BackgroundTaskRegistry | None = task_registry
-        self._classify_lock = asyncio.Lock()
+        self._classify_lock = _PerLoopLock()
         # v0.3.47+: serialise precompute_pool_copy so multiple
         # per-strategy fire-and-forget tasks (now created from
         # _run_refresh_plan after each strategy completes) don't load
@@ -223,8 +264,8 @@ class RecommendationEngine:
         # runs in a detached task guarded by ``_delight_lock``, so the
         # two flows progress independently and back-to-back precompute
         # calls still avoid double-spending delight LLM tokens.
-        self._expression_lock = asyncio.Lock()
-        self._delight_lock = asyncio.Lock()
+        self._expression_lock = _PerLoopLock()
+        self._delight_lock = _PerLoopLock()
         # Background-computed supergroup canonical map. Populated by
         # prewarm_supergroup_embeddings() during refresh ticks; consumed
         # by serve()'s _merge_topic_supergroups for instant lookup.
@@ -241,7 +282,7 @@ class RecommendationEngine:
         # the background and pop them on the user click path — making
         # reshuffle O(1) instead of the multi-second latency the user hit.
         self._batch_buffers: dict[str, deque[list[Recommendation]]] = {}
-        self._batch_buffer_locks: dict[str, asyncio.Lock] = {}
+        self._batch_buffer_locks: dict[str, _PerLoopLock] = {}
         self._BATCH_BUFFER_TARGET = 4
         # Negative cache: key -> monotonic deadline until which we know
         # serve() yields nothing for this key. Without it, every click on a
@@ -1788,7 +1829,7 @@ class RecommendationEngine:
         buf = self._batch_buffers.setdefault(key, deque())
         if len(buf) >= self._BATCH_BUFFER_TARGET:
             return
-        lock = self._batch_buffer_locks.setdefault(key, asyncio.Lock())
+        lock = self._batch_buffer_locks.setdefault(key, _PerLoopLock())
         if lock.locked():
             return  # a refill for this key is already in flight
         loop = None
@@ -1818,7 +1859,7 @@ class RecommendationEngine:
     ) -> None:
         """Fill ``key``'s buffer up to target with fresh serve() batches."""
         buf = self._batch_buffers.setdefault(key, deque())
-        lock = self._batch_buffer_locks.setdefault(key, asyncio.Lock())
+        lock = self._batch_buffer_locks.setdefault(key, _PerLoopLock())
         async with lock:
             while len(buf) < self._BATCH_BUFFER_TARGET:
                 try:
