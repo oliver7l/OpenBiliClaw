@@ -26,6 +26,7 @@ from openbiliclaw.discovery.strategies._utils import (
     search_cooldown_remaining,
 )
 from openbiliclaw.discovery.strategies.search import SearchStrategy
+from openbiliclaw.llm.json_utils import extract_llm_json_object
 from openbiliclaw.llm.prompts import build_explore_domains_prompt
 
 if TYPE_CHECKING:
@@ -359,7 +360,9 @@ class ExploreStrategy(DiscoveryStrategy):
                 reasoning_effort="",
                 caller="discovery.explore.queries",
             )
-            parsed = json.loads(str(getattr(response, "content", "")).strip())
+            parsed = extract_llm_json_object(
+                str(getattr(response, "content", "")).strip()
+            )
         except Exception:
             logger.exception("Explore domain generation failed.")
             return []
