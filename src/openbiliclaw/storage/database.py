@@ -72,6 +72,14 @@ def _chunks(values: Sequence[str], size: int) -> list[list[str]]:
 _DELIGHT_CLAIM_MIN_SCORE = 0.70
 _DEFAULT_ADMISSION_MIN_SCORE = 0.60
 
+# Cross-circle explore candidates get a lower admission floor than the
+# configured default. Explore content is intentionally far from the user's
+# profile, so its relevance_score runs systematically low; a uniform floor
+# would bar the whole explore pool from being served (delight surprises
+# included). Mirrors upstream discovery/admission.EXPLORE_ADMISSION_MIN_SCORE.
+_EXPLORE_ADMISSION_MIN_SCORE = 0.58
+_EXPLORE_STRATEGY = "explore"
+
 # Rows claimed by the surprise (delight) channel: already delivered as a
 # delight, or currently delight-eligible (the pending-queue predicate). The
 # regular feed's servable gate excludes them so the same content never shows
@@ -1125,6 +1133,30 @@ class Database:
 
     def _pool_admission_min_score(self) -> float:
         return _normalize_admission_min_score(self._admission_min_score)
+
+    def _admission_predicate_sql(
+        self,
+        score_expr: str = "COALESCE(relevance_score, 0.0)",
+    ) -> tuple[str, tuple[Any, ...]]:
+        """Return a SQL predicate and params for the shared admission policy.
+
+        ``explore``-source candidates get a lower floor (``_EXPLORE_STRATEGY``
+        content is intentionally far from the profile, so its relevance score
+        runs systematically low — a uniform floor would bar the whole explore
+        pool from service). Everything else keeps the configured admission
+        score. Mirrors upstream ``_pool_admission_sql``.
+        """
+        predicate = f"""
+            {score_expr} >= CASE
+                WHEN LOWER(TRIM(COALESCE(source, ''))) = ? THEN ?
+                ELSE ?
+            END
+        """
+        return predicate, (
+            _EXPLORE_STRATEGY,
+            _EXPLORE_ADMISSION_MIN_SCORE,
+            self._pool_admission_min_score(),
+        )
 
     def open_connection(self) -> sqlite3.Connection:
         """Open a short-lived connection to the initialized database.
@@ -7179,13 +7211,13 @@ class Database:
             if include_liked
             else "COALESCE(feedback_type, '') = ''"
         )
-        min_score = self._pool_admission_min_score()
+        admission_sql, admission_params = self._admission_predicate_sql()
         cursor = self.conn.execute(
             f"""
             SELECT *
             FROM content_cache
             WHERE COALESCE(delight_score, 0.0) >= ?
-              AND COALESCE(relevance_score, 0.0) >= ?
+              AND {admission_sql}
               AND COALESCE(delight_notified, 0) = 0
               AND COALESCE(delight_reason, '') != ''
               AND COALESCE(delight_hook, '') != ''
@@ -7194,7 +7226,7 @@ class Database:
             ORDER BY delight_score DESC, relevance_score DESC, discovered_at DESC
             LIMIT ?
             """,
-            (min_delight_score, min_score, max(1, int(limit))),
+            (min_delight_score, *admission_params, max(1, int(limit))),
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -7236,20 +7268,20 @@ class Database:
         min_delight_score: float = 0.85,
     ) -> int:
         """Return the number of un-notified delight candidates."""
-        min_score = self._pool_admission_min_score()
+        admission_sql, admission_params = self._admission_predicate_sql()
         cursor = self.conn.execute(
-            """
+            f"""
             SELECT COUNT(*) AS count
             FROM content_cache
             WHERE COALESCE(delight_score, 0.0) >= ?
-              AND COALESCE(relevance_score, 0.0) >= ?
+              AND {admission_sql}
               AND COALESCE(delight_notified, 0) = 0
               AND COALESCE(delight_reason, '') != ''
               AND COALESCE(delight_hook, '') != ''
               AND COALESCE(feedback_type, '') = ''
               AND COALESCE(pool_status, 'fresh') IN ('fresh', 'shown', 'suppressed')
             """,
-            (min_delight_score, min_score),
+            (min_delight_score, *admission_params),
         )
         row = cursor.fetchone()
         return int(row["count"]) if row is not None else 0
