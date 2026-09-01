@@ -1015,3 +1015,68 @@ async def test_health_check_returns_false_on_failure(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(provider, "complete", fake_complete)
 
     assert await provider.health_check() is False
+
+
+def _length_empty_response(reasoning: str = "x" * 14309) -> SimpleNamespace:
+    return SimpleNamespace(
+        model="reasoning-model",
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="", reasoning=reasoning),
+                finish_reason="length",
+            )
+        ],
+        usage=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_retries_empty_length_with_bigger_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reasoning models that burn the whole budget retry once with more tokens."""
+    from openbiliclaw.llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
+
+    provider = OpenAIProvider(api_key="test-key")
+    budgets: list[int] = []
+
+    async def fake_request(**kwargs: object) -> SimpleNamespace:
+        budgets.append(int(kwargs.get("max_tokens", 0)))
+        if len(budgets) == 1:
+            return _length_empty_response()
+        return _openai_response('{"domains": []}')
+
+    monkeypatch.setattr(provider, "_request_with_retry", fake_request)
+
+    response = await provider.complete(
+        [{"role": "user", "content": "hi"}],
+        max_tokens=8192,
+        json_mode=True,
+    )
+
+    assert response.content == '{"domains": []}'
+    assert budgets == [8192, _REASONING_RETRY_MAX_TOKENS]
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_raises_when_bigger_budget_still_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openbiliclaw.llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
+
+    provider = OpenAIProvider(api_key="test-key")
+    budgets: list[int] = []
+
+    async def fake_request(**kwargs: object) -> SimpleNamespace:
+        budgets.append(int(kwargs.get("max_tokens", 0)))
+        return _length_empty_response()
+
+    monkeypatch.setattr(provider, "_request_with_retry", fake_request)
+
+    with pytest.raises(LLMResponseError, match="returned empty content"):
+        await provider.complete(
+            [{"role": "user", "content": "hi"}],
+            max_tokens=8192,
+        )
+
+    assert budgets == [8192, _REASONING_RETRY_MAX_TOKENS]

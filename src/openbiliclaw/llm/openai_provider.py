@@ -45,6 +45,14 @@ def _generic_json_schema_response_format() -> dict[str, Any]:
     }
 
 
+# When a reasoning model burns its whole output budget on the thinking
+# stream (finish_reason="length", empty content), retry once with a much
+# larger budget instead of failing the call. Mirrors the DeepSeek thinking
+# floor (max → 32768). Only fires on empty-content failures, so healthy
+# calls never pay the extra round-trip.
+_REASONING_RETRY_MAX_TOKENS = 32768
+
+
 class OpenAIProvider(LLMProvider):
     """OpenAI and compatible API provider."""
 
@@ -150,13 +158,28 @@ class OpenAIProvider(LLMProvider):
             # The output budget was consumed before any final answer was
             # produced (typical for reasoning models whose thinking stream
             # eats the whole budget). Retrying without response_format
-            # cannot help — the budget is still the same — so raise with a
-            # diagnostic message instead of burning a second call.
-            raise LLMResponseError(
-                f"{self._provider_name} returned empty content (finish_reason=length; "
-                f"max_tokens={kwargs.get('max_tokens')} exhausted, likely by reasoning tokens; "
-                f"reasoning={len(getattr(choice.message, 'reasoning', '') or '')} chars)"
-            )
+            # cannot help — the budget is still the same — but retrying
+            # with a larger budget can: the thinking stream then has room
+            # to finish and emit content. Try once before giving up.
+            if int(kwargs.get("max_tokens", 0) or 0) < _REASONING_RETRY_MAX_TOKENS:
+                logger.warning(
+                    "%s returned empty content (finish_reason=length, reasoning=%s chars); "
+                    "retrying with max_tokens=%s",
+                    self._provider_name,
+                    len(getattr(choice.message, "reasoning", "") or ""),
+                    _REASONING_RETRY_MAX_TOKENS,
+                )
+                kwargs["max_tokens"] = _REASONING_RETRY_MAX_TOKENS
+                response = await self._request_with_retry(**kwargs)
+                choice = response.choices[0]
+                content = choice.message.content or ""
+                finish_reason = str(getattr(choice, "finish_reason", "") or "")
+            if not content.strip():
+                raise LLMResponseError(
+                    f"{self._provider_name} returned empty content (finish_reason=length; "
+                    f"max_tokens={kwargs.get('max_tokens')} exhausted, likely by reasoning tokens; "
+                    f"reasoning={len(getattr(choice.message, 'reasoning', '') or '')} chars)"
+                )
         if not content.strip():
             # Some OpenAI-compatible backends return HTTP 200 and report
             # completion_tokens > 0, yet ``message.content`` is empty when

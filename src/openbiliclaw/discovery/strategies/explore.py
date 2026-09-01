@@ -347,7 +347,16 @@ class ExploreStrategy(DiscoveryStrategy):
                 # at line 20 col 32 / char 736 in production logs),
                 # which made json.loads error out and the whole strategy
                 # return 0 items. 8K leaves comfortable headroom.
+                # reasoning_effort="": structured domain generation doesn't
+                # benefit from chain-of-thought. Without it, reasoning
+                # models eat the whole budget on the thinking stream and
+                # finish_reason=length with empty content (observed
+                # 2026-09-01: 14309 reasoning chars vs max_tokens=8192),
+                # so the strategy returned 0 items every cycle. Providers
+                # that can't disable thinking (sensenova) are covered by
+                # the provider-side budget-increase retry.
                 max_tokens=8192,
+                reasoning_effort="",
                 caller="discovery.explore.queries",
             )
             parsed = json.loads(str(getattr(response, "content", "")).strip())
