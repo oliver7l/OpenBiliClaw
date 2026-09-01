@@ -79,3 +79,13 @@ output/
 *.log
 logs/
 extension/dist-firefox/
+
+# WorkBuddy project data (automations, memory) — per-developer, never commit
+.workbuddy/
+
+# Runtime locks & migration state
+*.lock
+.openbiliclaw-migration/
+
+# Local test artifacts
+.pytest-tmp/
