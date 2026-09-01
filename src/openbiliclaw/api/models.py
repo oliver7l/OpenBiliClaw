@@ -104,6 +104,9 @@ class RecommendationOut(BaseModel):
     # cover_url is empty.
     content_type: str = "video"
     body_text: str = ""
+    # LLM quality score and recommendation reason
+    quality_score: float = 0.0
+    quality_reason: str = ""
 
 
 class RecommendationListResponse(BaseModel):
@@ -1085,6 +1088,72 @@ class SchedulerConfigOut(BaseModel):
     auto_update_check_interval_hours: int = 6
     auto_update_allow_prerelease: bool = False
     auto_update_allowed_remotes: list[str] = Field(default_factory=list)
+    rss_subscriptions: list[dict[str, str]] = Field(default_factory=list)
+    xiaoyuzhou_subscriptions: list[dict[str, str]] = Field(default_factory=list)
+    wechat_subscriptions: list[dict[str, str]] = Field(default_factory=list)
+
+
+class SubscriptionAddIn(BaseModel):
+    """Add a new subscription source."""
+
+    source_type: str  # 'rss' | 'xiaoyuzhou' | 'wechat'
+    name: str
+    url: str
+
+
+class SubscriptionDeleteIn(BaseModel):
+    """Delete a subscription source by type and URL."""
+
+    source_type: str  # 'rss' | 'xiaoyuzhou' | 'wechat'
+    url: str
+
+
+class ArticleUpdateIn(BaseModel):
+    """Update a reading-library article.
+
+    All fields are optional so a single endpoint covers status transitions
+    (unread → reading → finished → archived), manual tag edits, reading
+    progress, and favoriting in one PATCH.
+    """
+
+    status: str | None = None  # 'unread' | 'reading' | 'finished' | 'archived'
+    tags: list[str] | None = None
+    percent: float | None = None  # 0-100 reading progress
+    progress: str | None = None  # scroll anchor / position marker
+    favorited: bool | None = None  # article-level favorite flag
+
+
+class ArticleNoteIn(BaseModel):
+    """Add a note / highlight to an article."""
+
+    quote: str = ""  # selected text being highlighted
+    note: str = ""  # user's own note
+    color: str = ""  # highlight color tag
+
+
+class SubscriptionListOut(BaseModel):
+    """List of subscriptions grouped by type."""
+
+    rss: list[dict[str, str]] = Field(default_factory=list)
+    xiaoyuzhou: list[dict[str, str]] = Field(default_factory=list)
+    wechat: list[dict[str, str]] = Field(default_factory=list)
+
+
+class SubscriptionItemOut(BaseModel):
+    """A single subscription item with optional fetch stats."""
+
+    name: str = ""
+    url: str = ""
+    item_count: int = 0
+    last_fetched_at: str = ""
+
+
+class SubscriptionStatsOut(BaseModel):
+    """List of subscriptions with fetch stats grouped by type."""
+
+    rss: list[SubscriptionItemOut] = Field(default_factory=list)
+    xiaoyuzhou: list[SubscriptionItemOut] = Field(default_factory=list)
+    wechat: list[SubscriptionItemOut] = Field(default_factory=list)
 
 
 class DiscoveryConfigOut(BaseModel):

@@ -11,6 +11,7 @@ import { initRecommendView, onStreamEvent as recStreamEvent } from "./views/reco
 import { initProfileView, onStreamEvent as profileStreamEvent } from "./views/profile.js";
 import { initChatView, onStreamEvent as chatStreamEvent, toggleMessages, loadNotifications } from "./views/chat.js";
 import { initWatchLaterView, initFavoritesView } from "./views/saved.js";
+import { initPreferencesView } from "./views/preferences.js";
 
 // ── DOM refs ─────────────────────────────────────────────────
 const $app = document.getElementById("app");
@@ -23,7 +24,7 @@ function renderStatusBar() {
 
   const title = document.createElement("span");
   title.className = "status-title";
-  title.textContent = "OpenBiliClaw";
+  title.textContent = "古灵阁的大模型推荐系统";
 
   const right = document.createElement("div");
   right.className = "status-right";
@@ -80,6 +81,7 @@ const TABS = [
   { id: "recommend", icon: "\u2728", label: "\u63A8\u8350" },
   { id: "watchLater", icon: "🕐", label: "稍后" },
   { id: "favorites", icon: "⭐", label: "收藏" },
+  { id: "preferences", icon: "🧠", label: "偏好" },
   { id: "profile", icon: "\u{1F9E0}", label: "\u753B\u50CF" },
   { id: "chat", icon: "\u{1F4AC}", label: "\u5BF9\u8BDD" },
 ];
@@ -124,6 +126,7 @@ function initActiveView() {
   if (id === "recommend") initRecommendView(views.recommend);
   else if (id === "watchLater") initWatchLaterView(views.watchLater);
   else if (id === "favorites") initFavoritesView(views.favorites);
+  else if (id === "preferences") initPreferencesView(views.preferences);
   else if (id === "profile") initProfileView(views.profile);
   else if (id === "chat") initChatView(views.chat);
 }

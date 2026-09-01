@@ -171,6 +171,7 @@ class TrendingStrategy(DiscoveryStrategy):
         return results
 
     async def _select_rids(self, profile: SoulProfile) -> list[int]:
+        from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
         from openbiliclaw.llm.prompts import build_trending_rids_prompt
 
         messages = build_trending_rids_prompt(profile_summary=build_profile_summary(profile))
@@ -180,7 +181,9 @@ class TrendingStrategy(DiscoveryStrategy):
                 user_input=messages[1]["content"],
                 caller="discovery.trending.rids",
             )
-            parsed = json.loads(str(getattr(response, "content", "")).strip())
+            # Reasoning models may preface/wrap the JSON with prose — parse
+            # tolerantly instead of a bare json.loads.
+            parsed = parse_llm_json_tolerant(str(getattr(response, "content", "")).strip())
             if isinstance(parsed, dict) and isinstance(parsed.get("rids"), list):
                 selected = [to_int(item) for item in parsed["rids"] if to_int(item) > 0]
                 selected = self._dedupe_ints(selected)[: self.max_related_rids]

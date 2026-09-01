@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
@@ -282,6 +283,7 @@ class RuntimeContext:
     runtime_controller: Any = None
     account_sync_service: Any = None
     auto_update_service: Any = None
+    saved_sync_service: Any = None
 
     @property
     def init_coordinator(self) -> Any:
@@ -581,6 +583,23 @@ class RuntimeContext:
         xiaohongshu_adapter = XiaohongshuAdapter()
         new_discovery_engine.register_adapter(xiaohongshu_adapter)
 
+        # Register RSS adapter — standalone feed fetcher, no LLM required
+        from openbiliclaw.sources.rss_adapter import RssAdapter
+
+        new_discovery_engine.register_adapter(RssAdapter())
+
+        # Register YouTube (yt-dlp) adapter — uses browser cookies for
+        # personalized feed, no API key required.
+        from openbiliclaw.sources.youtube_adapter import YtDlpAdapter
+
+        new_discovery_engine.register_adapter(YtDlpAdapter())
+
+        # Register Xiaoyuzhou (小宇宙) podcast adapter — RSS-based podcast
+        # feed fetcher with audio metadata extraction.
+        from openbiliclaw.sources.xiaoyuzhou_adapter import XiaoyuzhouAdapter
+
+        new_discovery_engine.register_adapter(XiaoyuzhouAdapter())
+
         # Register X (Twitter) adapter — server-side cookie replay, like
         # Bilibili / Douyin-direct (a real fetch(), NOT an extension stub).
         # Gated on [sources.twitter].enabled. The branch is the ONLY place
@@ -796,6 +815,7 @@ class RuntimeContext:
             youtube_producer=new_youtube_producer,
             x_producer=new_x_producer,
             zhihu_producer=new_zhihu_producer,
+            rss_adapter_registry=new_discovery_engine.adapter_registry,
             scheduler_config=new_config.scheduler,
             presence=self.presence,
             # gui-init D1: pause the controller's background loops while a guided
@@ -850,6 +870,20 @@ class RuntimeContext:
             with suppress(Exception):
                 new_auto_update.adopt_status_from(old_auto_update)
 
+        # 12. Saved-sync service (reading library)
+        try:
+            from openbiliclaw.saved_sync.router import NativeSaveRouter
+            from openbiliclaw.saved_sync.service import SavedSyncService
+
+            new_saved_sync = SavedSyncService(
+                database=self.database,
+                router=NativeSaveRouter(),
+                task_starter=self.task_registry.track,
+            )
+        except Exception:
+            logger.warning("Failed to initialize saved-sync service", exc_info=True)
+            new_saved_sync = None
+
         # ── Atomic swap ─────────────────────────────────────────────
         # All construction succeeded → assign attributes.
         self.config = new_config
@@ -863,6 +897,7 @@ class RuntimeContext:
         self.runtime_controller = new_runtime_controller
         self.account_sync_service = new_account_sync
         self.auto_update_service = new_auto_update
+        self.saved_sync_service = new_saved_sync
         # Drop the cached init prerequisite probes (chat/bilibili) — config or
         # cookie just changed, so the next /api/init pre-flight must re-probe
         # against the new provider/cookie instead of a stale TTL value (gui-init
@@ -873,8 +908,50 @@ class RuntimeContext:
 
         logger.info(
             "Hot-reload complete — rebuilt %d swappable components",
-            11,
+            12,
         )
+
+    def _spawn_background_loop(self, app: FastAPI, slot: str, coro: Any) -> Any:
+        """Run a long-lived ``run_forever`` coroutine on a dedicated thread.
+
+        Each background loop (discovery refresh, account sync, auto-update)
+        gets its OWN asyncio event loop running on its OWN OS thread. This
+        keeps their synchronous SQLite writes / LLM calls / blocking HTTP
+        entirely off the FastAPI request event loop — so user-facing endpoints
+        (e.g. 换一批 / reshuffle) can never stall behind a background tick.
+
+        The resulting task is stored in ``app.state.<slot>`` (preserving the
+        existing cancel/await shutdown path) and registered with the task
+        registry (so hot-reload ``cancel_all`` also stops it). ``Database`` now
+        serves a per-thread connection, so sharing the same ``Database`` across
+        the request thread and these background threads is safe.
+        """
+        loop = asyncio.new_event_loop()
+        # Bind the task to the background loop now (loop not yet running).
+        task = loop.create_task(coro)
+
+        def _runner() -> None:
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Background loop %s crashed", slot)
+            finally:
+                with suppress(Exception):
+                    loop.close()
+
+        thread = threading.Thread(target=_runner, name=f"obc-{slot}", daemon=True)
+        thread.start()
+
+        setattr(app.state, slot, task)
+        setattr(app.state, f"{slot}_bg_loop", loop)
+        setattr(app.state, f"{slot}_thread", thread)
+        if self.task_registry is not None:
+            with suppress(Exception):
+                self.task_registry.register(slot, task)
+        return task
 
     async def restart_background_tasks(
         self,
@@ -883,41 +960,62 @@ class RuntimeContext:
         run_post_reload_llm_work: bool = True,
     ) -> None:
         """Cancel old background tasks and start new ones from current components."""
-        # Cancel existing tasks
+        # Cancel existing tasks.
+        #
+        # Each of these runs on its own background thread + event loop
+        # (see ``_spawn_background_loop``). Awaiting a task that belongs to
+        # another loop raises "got Future ... attached to a different loop",
+        # which made every shutdown log "Application shutdown failed.
+        # Exiting.". So: cancel foreign tasks on their own loop and give the
+        # owning thread a moment to unwind — never ``await`` them here.
         for attr in ("refresh_task", "account_sync_task", "auto_update_task"):
             task = getattr(app.state, attr, None)
-            if task is not None:
+            if task is None:
+                continue
+            thread = getattr(app.state, f"{attr}_thread", None)
+            try:
+                foreign = task.get_loop() is not asyncio.get_running_loop()
+            except Exception:
+                foreign = True
+            if foreign:
+                with suppress(RuntimeError):
+                    task.get_loop().call_soon_threadsafe(task.cancel)
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=2.0)
+            else:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
+            setattr(app.state, f"{attr}_thread", None)
+            setattr(app.state, f"{attr}_bg_loop", None)
 
         # Start new tasks from the freshly-built components.
         # v0.3.63+: route through ``self.task_registry.track`` so the
         # next hot-reload's ``cancel_all`` cleanly stops them too.
+        # v0.3.x+: each loop runs on its OWN background thread + event loop
+        # (see ``_spawn_background_loop``) so its sync DB/LLM work never blocks
+        # the request loop that serves 换一批 / reshuffle.
         if run_post_reload_llm_work:
             run_forever = getattr(self.runtime_controller, "run_forever", None)
-            app.state.refresh_task = (
-                self.task_registry.track("refresh_loop", run_forever())
-                if callable(run_forever)
-                else None
-            )
+            if callable(run_forever):
+                self._spawn_background_loop(app, "refresh_task", run_forever())
+            else:
+                app.state.refresh_task = None
 
             sync_forever = getattr(self.account_sync_service, "run_forever", None)
-            app.state.account_sync_task = (
-                self.task_registry.track("account_sync_loop", sync_forever())
-                if callable(sync_forever)
-                else None
-            )
+            if callable(sync_forever):
+                self._spawn_background_loop(app, "account_sync_task", sync_forever())
+            else:
+                app.state.account_sync_task = None
         else:
             app.state.refresh_task = None
             app.state.account_sync_task = None
 
         update_forever = getattr(self.auto_update_service, "run_forever", None)
-        app.state.auto_update_task = (
-            self.task_registry.track("auto_update_loop", update_forever())
-            if callable(update_forever)
-            else None
-        )
+        if callable(update_forever):
+            self._spawn_background_loop(app, "auto_update_task", update_forever())
+        else:
+            app.state.auto_update_task = None
 
         llm_work_allowed = run_post_reload_llm_work and self.background_llm_work_allowed()
 

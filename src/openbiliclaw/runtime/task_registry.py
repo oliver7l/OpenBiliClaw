@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -45,6 +46,29 @@ class BackgroundTaskRegistry:
     def __init__(self) -> None:
         self._tasks: dict[asyncio.Task[Any], str] = {}
 
+    @staticmethod
+    def _is_foreign(task: asyncio.Task[Any]) -> bool:
+        """True when ``task`` runs on a different event loop than the caller's.
+
+        Long-lived ``run_forever`` loops are spawned on their own thread +
+        event loop (``RuntimeContext._spawn_background_loop``) so their
+        synchronous SQLite/LLM work never blocks the request loop. Those
+        tasks are registered here too (so hot-reload stops them), but they
+        must NOT be cancelled or awaited from the request loop:
+
+        * ``Task.cancel()`` from a foreign thread/loop is not safe — it has
+          to be scheduled onto the owning loop via ``call_soon_threadsafe``.
+        * ``await task`` / ``asyncio.gather(task)`` raises
+          ``RuntimeError: got Future ... attached to a different loop``,
+          which surfaced as ``Application shutdown failed. Exiting.`` on
+          every restart.
+        """
+        try:
+            return task.get_loop() is not asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop in this thread → treat as foreign.
+            return True
+
     def track(self, name: str, coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
         """Wrap ``asyncio.create_task`` and remember the resulting task.
 
@@ -52,6 +76,17 @@ class BackgroundTaskRegistry:
         registry doesn't grow unbounded across a long-running daemon.
         """
         task = asyncio.create_task(coro, name=name)
+        self._tasks[task] = name
+        task.add_done_callback(lambda t: self._tasks.pop(t, None))
+        return task
+
+    def register(self, name: str, task: asyncio.Task[Any]) -> asyncio.Task[Any]:
+        """Track an already-created task (e.g. one bound to a background thread's
+
+        own event loop rather than the request loop). Behaves like ``track`` but
+        takes a live ``asyncio.Task`` instead of a coroutine. ``cancel_all`` can
+        then stop it on hot-reload (``Task.cancel`` is thread-safe across loops).
+        """
         self._tasks[task] = name
         task.add_done_callback(lambda t: self._tasks.pop(t, None))
         return task
@@ -66,18 +101,25 @@ class BackgroundTaskRegistry:
         (gui-init spec §5c). Returns the number of tasks actually cancelled.
         """
         tasks = [t for t, name in self._tasks.items() if name not in exclude]
+        local: list[asyncio.Task[Any]] = []
         for task in tasks:
-            task.cancel()
-        if tasks:
+            if self._is_foreign(task):
+                # Cancel on the task's own loop; never awaited from here.
+                with suppress(RuntimeError):
+                    task.get_loop().call_soon_threadsafe(task.cancel)
+            else:
+                local.append(task)
+                task.cancel()
+        if local:
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
+                    asyncio.gather(*local, return_exceptions=True),
                     timeout=grace_seconds,
                 )
             except TimeoutError:
                 logger.warning(
                     "%d background task(s) did not exit within %.1fs of cancel",
-                    sum(1 for t in tasks if not t.done()),
+                    sum(1 for t in local if not t.done()),
                     grace_seconds,
                 )
         # Self-untrack callbacks may not have fired for cancelled tasks
@@ -94,12 +136,18 @@ class BackgroundTaskRegistry:
         without touching the rest (gui-init spec §5f).
         """
         tasks = [t for t, n in self._tasks.items() if n == name]
+        local: list[asyncio.Task[Any]] = []
         for task in tasks:
-            task.cancel()
-        if tasks:
+            if self._is_foreign(task):
+                with suppress(RuntimeError):
+                    task.get_loop().call_soon_threadsafe(task.cancel)
+            else:
+                local.append(task)
+                task.cancel()
+        if local:
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
+                    asyncio.gather(*local, return_exceptions=True),
                     timeout=grace_seconds,
                 )
             except TimeoutError:

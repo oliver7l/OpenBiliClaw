@@ -639,7 +639,7 @@ class AutoUpdateService:
         channel: str,
         verify_tls: bool,
     ) -> _BackendTagSelection:
-        async with httpx.AsyncClient(timeout=30, verify=verify_tls) as client:
+        async with httpx.AsyncClient(timeout=30, verify=verify_tls, trust_env=False) as client:
             tag_names: list[str] = []
             for page in range(1, _MAX_TAG_PAGES + 1):
                 try:

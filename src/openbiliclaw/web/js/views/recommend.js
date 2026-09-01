@@ -24,7 +24,7 @@ import {
   removeFromFavorite,
   favoriteStatus,
 } from "../api.js";
-import { state, patchState } from "../state.js";
+import { state, patchState, persistListMode } from "../state.js";
 import {
   getCoverImageAttrs,
   getRecommendationCardKind,
@@ -47,6 +47,8 @@ import {
   normalizeSourcePlatform,
   getSourceLabel,
   formatRelativeTimestamp,
+  getPublishedTimeDisplay,
+  recommendationStats,
   getMobileChatSession,
   shouldAutoAppendRecommendations,
 } from "../view-models.js";
@@ -80,6 +82,13 @@ function esc(s) {
   const el = document.createElement("span");
   el.textContent = s;
   return el.innerHTML;
+}
+
+export function publishedTimeHtml(item) {
+  const display = getPublishedTimeDisplay(item);
+  if (!display) return "";
+  const title = display.title ? ` title="${esc(display.title)}"` : "";
+  return `<span class="card-published-time"${title}>${esc(display.text)}</span>`;
 }
 
 // ── Render ────────────────────────────────────────────────────
@@ -122,7 +131,7 @@ function render() {
   }
 
   for (const [index, item] of recs.entries()) {
-    frag.appendChild(renderCard(item, index));
+    frag.appendChild(state.listMode ? renderListCard(item, index) : renderCard(item, index));
   }
 
   renderInto(frag, renderLoadMoreRow);
@@ -173,6 +182,22 @@ function renderRecommendationHeader() {
       <p class="recommend-kicker">${esc(headerState.kicker)}</p>
       <h2 class="recommend-title">${esc(headerState.title)}</h2>
     </div>`;
+
+  // View mode toggle
+  const modeToggle = document.createElement("button");
+  modeToggle.className = "view-mode-toggle";
+  modeToggle.type = "button";
+  modeToggle.title = state.listMode ? "切换为卡片模式" : "切换为列表模式";
+  modeToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
+  modeToggle.addEventListener("click", () => {
+    const newMode = !state.listMode;
+    patchState({ listMode: newMode });
+    persistListMode(newMode);
+    modeToggle.title = newMode ? "切换为卡片模式" : "切换为列表模式";
+    render();
+    rerenderHeaderOnly();
+  });
+  top.appendChild(modeToggle);
 
   const refreshBtn = document.createElement("button");
   refreshBtn.className = "btn btn-outline recommend-refresh-btn";
@@ -875,6 +900,9 @@ function renderCard(rawItem, index = 0) {
       : `<div class="card-cover-frame is-error"></div>`;
   }
 
+  const publishedHtml = publishedTimeHtml(item);
+  const statsHtml = recommendationStats(item);
+
   card.innerHTML = `
     ${coverHtml}
     <div class="card-body">
@@ -883,7 +911,9 @@ function renderCard(rawItem, index = 0) {
         <span class="card-source" data-source="${item.source_platform}">${esc(getSourceLabel(item.source_platform))}</span>
         ${item.up_name ? `<span>${esc(item.up_name)}</span>` : ""}
         ${item.topic_label ? `<span style="color:var(--text-muted)">${esc(item.topic_label)}</span>` : ""}
+        ${publishedHtml}
       </div>
+      ${statsHtml ? `<div class="card-stats">${esc(statsHtml)}</div>` : ""}
       ${item.expression ? `<div class="card-expression">${esc(item.expression)}</div>` : ""}
     </div>`;
 
@@ -1047,6 +1077,181 @@ function createCardAction(label, handler) {
   return btn;
 }
 
+// ── List Mode Card ─────────────────────────────────────────
+function renderListCard(rawItem, index = 0) {
+  const item = normalizeRecommendation(rawItem);
+  const card = document.createElement("div");
+  card.className = "card list-mode";
+  const url = buildContentUrl(item);
+  const cardMedia = getRecommendationCardKind(item);
+  const imageAttrs = getRecommendationImageLoadingAttrs(index);
+
+  let coverHtml;
+  if (cardMedia.kind === "text") {
+    coverHtml = `<div class="card-cover-frame is-text-card"><p class="card-cover-text">${esc(cardMedia.text)}</p></div>`;
+  } else {
+    const cover = getCoverImageAttrs(cardMedia.coverUrl);
+    coverHtml = cover
+      ? `<div class="card-cover-frame"><img class="card-cover" src="${esc(cover.src)}" alt="" loading="${esc(imageAttrs.loading)}" fetchpriority="${esc(imageAttrs.fetchPriority)}" decoding="async" onerror="this.parentElement.classList.add('is-error');this.remove()"></div>`
+      : `<div class="card-cover-frame is-error"></div>`;
+  }
+
+  const publishedHtml = publishedTimeHtml(item);
+  const statsHtml = recommendationStats(item);
+
+  card.innerHTML = `
+    ${coverHtml}
+    <div class="card-body">
+      <div class="card-title">${esc(item.title)}</div>
+      <div class="card-meta">
+        <span class="card-source" data-source="${item.source_platform}">${esc(getSourceLabel(item.source_platform))}</span>
+        ${item.up_name ? `<span>${esc(item.up_name)}</span>` : ""}
+        ${item.topic_label ? `<span style="color:var(--text-muted)">${esc(item.topic_label)}</span>` : ""}
+        ${publishedHtml}
+      </div>
+      ${statsHtml ? `<div class="card-stats">${esc(statsHtml)}</div>` : ""}
+      ${item.expression ? `<div class="card-expression">${esc(item.expression)}</div>` : ""}
+    </div>`;
+
+  // Cover chips — overlay on the thumbnail
+  const coverFrame = card.querySelector(".card-cover-frame");
+  if (coverFrame) {
+    const savedNow = watchLaterSaved.has(item.bvid);
+    const starBtn = createCoverChip(CLOCK_SVG_ICON, "watch-later-btn", async () => {
+      if (watchLaterBusy) return;
+      watchLaterBusy = true;
+      const wasSaved = watchLaterSaved.has(item.bvid);
+      setChipState(starBtn, !wasSaved);
+      try {
+        if (wasSaved) {
+          await removeFromWatchLater(item.bvid);
+          watchLaterSaved.delete(item.bvid);
+        } else {
+          await addToWatchLater(item.bvid);
+          watchLaterSaved.add(item.bvid);
+        }
+      } catch {
+        setChipState(starBtn, wasSaved);
+      } finally {
+        watchLaterBusy = false;
+      }
+    });
+    setChipState(starBtn, savedNow);
+    starBtn.title = savedNow ? "取消稍后再看" : "稍后再看";
+    watchLaterStatus(item.bvid).then((res) => {
+      if (res && res.saved) {
+        watchLaterSaved.add(item.bvid);
+        setChipState(starBtn, true);
+        starBtn.title = "取消稍后再看";
+      }
+    }).catch(() => {});
+
+    const favNow = favoriteSaved.has(item.bvid);
+    const favBtn = createCoverChip(STAR_SVG_ICON, "favorite-btn", async () => {
+      if (favoriteBusy) return;
+      favoriteBusy = true;
+      const wasSaved = favoriteSaved.has(item.bvid);
+      setChipState(favBtn, !wasSaved);
+      try {
+        if (wasSaved) {
+          await removeFromFavorite(item.bvid);
+          favoriteSaved.delete(item.bvid);
+        } else {
+          await addToFavorite(item.bvid);
+          favoriteSaved.add(item.bvid);
+        }
+      } catch {
+        setChipState(favBtn, wasSaved);
+      } finally {
+        favoriteBusy = false;
+      }
+    });
+    setChipState(favBtn, favNow);
+    favBtn.title = favNow ? "取消收藏" : "收藏";
+    favoriteStatus(item.bvid).then((res) => {
+      if (res && res.saved) {
+        favoriteSaved.add(item.bvid);
+        setChipState(favBtn, true);
+        favBtn.title = "取消收藏";
+      }
+    }).catch(() => {});
+
+    const coverActions = document.createElement("div");
+    coverActions.className = "cover-actions";
+    coverActions.appendChild(starBtn);
+    coverActions.appendChild(favBtn);
+    coverFrame.appendChild(coverActions);
+  }
+
+  // Action buttons row
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "card-actions";
+  actionsRow.addEventListener("click", (e) => e.stopPropagation());
+
+  const alreadyFeedback = feedbackDone.get(item.id);
+
+  const openBtn = createCardAction("\u{1F517}", () => {
+    reportClick(buildRecommendationClickPayload(item, url));
+    if (url) window.open(url, "_blank");
+  });
+  const likeBtn = createCardAction(alreadyFeedback === "like" ? "\u2705" : "\u{1F44D}", async () => {
+    likeBtn.disabled = true;
+    likeBtn.textContent = "\u2026";
+    try {
+      await submitFeedback(buildFeedbackPayload(item.id, "like"));
+      feedbackDone.set(item.id, "like");
+      likeBtn.textContent = "\u2705";
+    } catch {
+      likeBtn.disabled = false;
+      likeBtn.textContent = "\u{1F44D}";
+    }
+  });
+  if (alreadyFeedback === "like") likeBtn.disabled = true;
+
+  const dislikeBtn = createCardAction(alreadyFeedback === "dislike" ? "\u274C" : "\u{1F44E}", async () => {
+    dislikeBtn.disabled = true;
+    dislikeBtn.textContent = "\u2026";
+    try {
+      await submitFeedback(buildFeedbackPayload(item.id, "dislike"));
+      feedbackDone.set(item.id, "dislike");
+      card.style.transition = "opacity 0.2s ease";
+      card.style.opacity = "0";
+      setTimeout(() => {
+        card.remove();
+        patchState({
+          recommendations: state.recommendations.filter((r) => r.id !== item.id),
+        });
+      }, 300);
+    } catch {
+      dislikeBtn.disabled = false;
+      dislikeBtn.textContent = "\u{1F44E}";
+    }
+  });
+  if (alreadyFeedback === "dislike") dislikeBtn.disabled = true;
+
+  const commentBtn = createCardAction("\u{1F4AC}", () => {
+    feedbackSheet = { itemId: item.id, note: "", submitState: "idle" };
+    renderFeedbackSheet();
+  });
+
+  actionsRow.appendChild(likeBtn);
+  actionsRow.appendChild(dislikeBtn);
+  actionsRow.appendChild(commentBtn);
+  actionsRow.appendChild(openBtn);
+  card.appendChild(actionsRow);
+
+  // Whole card click (except action row)
+  if (url) {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      reportClick(buildRecommendationClickPayload(item, url));
+      window.open(url, "_blank");
+    });
+  }
+
+  return card;
+}
+
 // 稍后再看 = 时钟（一眼看懂"待会看"）；收藏 = 星星。SVG 图标族统一，
 // 选中态由 aria-pressed + CSS 驱动（时钟变色、星星填充），不做字形替换。
 const CLOCK_SVG_ICON =
@@ -1167,7 +1372,7 @@ async function handleAppend() {
     // Append new cards before the load-more row without rebuilding existing ones.
     if (loadMoreRow) {
       for (const [offset, item] of newItems.entries()) {
-        const card = renderCard(item, startIndex + offset);
+        const card = (state.listMode ? renderListCard : renderCard)(item, startIndex + offset);
         $root.insertBefore(card, loadMoreRow);
         if (scrollPreheatObserver) scrollPreheatObserver.observe(card);
       }

@@ -10,7 +10,55 @@
 const BASE_URL = `${location.protocol}//${location.host}/api`;
 const DEFAULT_READ_TIMEOUT_MS = 12_000;
 const QUICK_READ_TIMEOUT_MS = 5_000;
+const CONFIG_WRITE_TIMEOUT_MS = 60_000;
+const SAVED_READ_TIMEOUT_MS = 10_000;
+const SAVED_MUTATION_TIMEOUT_MS = 10_000;
+const FEEDBACK_SUBMIT_TIMEOUT_MS = 30_000;
 const CSRF_HEADER = "X-OBC-Auth";
+const PENDING_REQUEST_IDS_KEY = "openbiliclaw.pending_request_ids";
+const pendingRequestIds = new Map();
+
+function newRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function loadPendingRequestIds() {
+  try {
+    const parsed = JSON.parse(globalThis.localStorage?.getItem(PENDING_REQUEST_IDS_KEY) || "{}");
+    if (parsed && typeof parsed === "object") {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === "string" && value) pendingRequestIds.set(key, value);
+      }
+    }
+  } catch { /* storage unavailable or corrupt */ }
+}
+
+function persistPendingRequestIds() {
+  try {
+    globalThis.localStorage?.setItem(
+      PENDING_REQUEST_IDS_KEY,
+      JSON.stringify(Object.fromEntries(pendingRequestIds)),
+    );
+  } catch { /* in-memory fallback still covers retries in this page */ }
+}
+
+function rememberPendingRequestId(namespace, identity) {
+  loadPendingRequestIds();
+  const key = `${namespace}:${identity}`;
+  const existing = pendingRequestIds.get(key);
+  if (existing) return { key, requestId: existing };
+  const requestId = newRequestId();
+  pendingRequestIds.set(key, requestId);
+  persistPendingRequestIds();
+  return { key, requestId };
+}
+
+function forgetPendingRequestId(key, requestId) {
+  if (pendingRequestIds.get(key) !== requestId) return;
+  pendingRequestIds.delete(key);
+  persistPendingRequestIds();
+}
 
 /** Notify the shell that the session is gone so it can show the login view. */
 function signalAuthRequired() {
@@ -124,25 +172,94 @@ export async function checkHealth() {
   } catch { return false; }
 }
 
+export async function fetchConfig(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/config", { timeoutMs });
+}
+
+export async function updateConfig(data, timeoutMs = CONFIG_WRITE_TIMEOUT_MS) {
+  return requestJson("/config", {
+    method: "PUT",
+    timeoutMs,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Recommendations ─────────────────────────────────────────
 export async function fetchRecommendations() {
   const data = await requestJson("/recommendations", { timeoutMs: DEFAULT_READ_TIMEOUT_MS });
   return Array.isArray(data.items) ? data.items : [];
 }
 
-export async function reshuffleRecommendations() {
-  const data = await requestJson("/recommendations/reshuffle", { method: "POST" });
+export async function fetchContentHistory(category, limit = 12, cursorOrOffset = "") {
+  if (!["clicked", "shown", "removed"].includes(category)) {
+    throw new TypeError(`Unknown content history category: ${category}`);
+  }
+  const params = new URLSearchParams({
+    category,
+    limit: String(Math.max(1, Math.min(50, Math.floor(Number(limit) || 12)))),
+  });
+  // The current UI uses an opaque keyset cursor. Numeric offsets remain
+  // accepted only for older callers during migration. An empty cursor is
+  // intentionally omitted because the API treats it as malformed.
+  if (typeof cursorOrOffset === "number") {
+    const offset = Math.max(0, Math.floor(Number(cursorOrOffset) || 0));
+    if (offset > 0) params.set("offset", String(offset));
+  } else {
+    const cursor = String(cursorOrOffset || "").trim();
+    if (cursor) params.set("cursor", cursor);
+  }
+  const data = await requestJson(`/content-history?${params}`, {
+    timeoutMs: DEFAULT_READ_TIMEOUT_MS,
+  });
+  return {
+    ...data,
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Math.max(0, Number(data?.total) || 0),
+    has_more: data?.has_more === true,
+    next_cursor: data?.has_more === true ? String(data?.next_cursor || "") : "",
+  };
+}
+
+export async function reshuffleRecommendations(excludedBvids = []) {
+  const data = await requestJson(
+    "/recommendations/reshuffle",
+    json({ excluded_bvids: excludedBvids }),
+  );
   return { ...data, items: Array.isArray(data.items) ? data.items : [] };
 }
 
 export async function appendRecommendations(excludedBvids = []) {
-  const data = await requestJson("/recommendations/append", json({ excluded_bvids: excludedBvids }));
+  const data = await requestJson(
+    "/recommendations/append",
+    { ...json({ excluded_bvids: excludedBvids }), timeoutMs: DEFAULT_READ_TIMEOUT_MS },
+  );
   return { ...data, items: Array.isArray(data.items) ? data.items : [] };
 }
 
 export async function reportClick(payload) {
+  const stableRecommendationId = payload?.recommendation_id ?? null;
+  const stableContentId = String(payload?.content_id || payload?.bvid || "").trim();
+  let fallbackUrl = "";
+  if (stableRecommendationId == null && !stableContentId) {
+    const rawUrl = String(payload?.content_url || payload?.url || "").trim();
+    try {
+      const normalizedUrl = new URL(rawUrl, globalThis.location?.href);
+      normalizedUrl.hash = "";
+      fallbackUrl = normalizedUrl.toString();
+    } catch { fallbackUrl = rawUrl; }
+  }
+  const identity = JSON.stringify([
+    stableRecommendationId,
+    stableContentId || fallbackUrl,
+  ]);
+  const pending = payload?.request_id
+    ? null
+    : rememberPendingRequestId("recommendation-click", identity);
+  const body = { ...payload, request_id: payload?.request_id || pending?.requestId || "" };
   try {
-    await requestJson("/recommendation-click", json(payload));
+    await requestJson("/recommendation-click", json(body));
+    if (pending) forgetPendingRequestId(pending.key, pending.requestId);
     return true;
   } catch { return false; }
 }
@@ -164,10 +281,25 @@ export async function fetchDelightBatch(limit = null) {
 }
 
 export async function respondToDelight(bvid, responseType, title = "", message = "") {
-  return requestJson("/delight/respond", {
-    ...json({ bvid, response: responseType, title, message }),
+  const durableReaction = ["like", "dislike", "dismiss"].includes(responseType);
+  const pending = durableReaction
+    ? rememberPendingRequestId(
+      "delight-response",
+      JSON.stringify([bvid, responseType]),
+    )
+    : null;
+  const result = await requestJson("/delight/respond", {
+    ...json({
+      bvid,
+      response: responseType,
+      title,
+      message,
+      request_id: pending?.requestId || "",
+    }),
     timeoutMs: 35_000,
   });
+  if (pending) forgetPendingRequestId(pending.key, pending.requestId);
+  return result;
 }
 
 // ── Profile ─────────────────────────────────────────────────
@@ -225,22 +357,32 @@ export async function fetchActivityFeed({ limit, before } = {}) {
 }
 
 // ── Chat ────────────────────────────────────────────────────
-export async function startChatTurn({ turnId = "", session = "mobile", scope = "chat", subjectId = "", subjectTitle = "", message }) {
-  return requestJson("/chat/turns", json({
+export async function startChatTurn({
+  turnId = "",
+  session = "popup",
+  scope = "chat",
+  subjectId = "",
+  subjectTitle = "",
+  replyToTurnId = "",
+  message,
+}) {
+  const payload = {
     turn_id: turnId,
     session,
     scope,
     subject_id: subjectId,
     subject_title: subjectTitle,
     message,
-  }));
+  };
+  if (replyToTurnId) payload.reply_to_turn_id = replyToTurnId;
+  return requestJson("/chat/turns", json(payload));
 }
 
-export async function fetchChatTurn(turnId) {
-  return requestJson(`/chat/turns/${encodeURIComponent(turnId)}`);
+export async function fetchChatTurn(turnId, { signal, timeoutMs = 10_000 } = {}) {
+  return requestJson(`/chat/turns/${encodeURIComponent(turnId)}`, { signal, timeoutMs });
 }
 
-export async function fetchChatTurns({ session = "mobile", scope = "", limit = 50 } = {}) {
+export async function fetchChatTurns({ session = "popup", scope = "", limit = 50 } = {}) {
   const params = new URLSearchParams();
   params.set("session", session);
   if (scope) params.set("scope", scope);
@@ -248,9 +390,67 @@ export async function fetchChatTurns({ session = "mobile", scope = "", limit = 5
   return requestJson(`/chat/turns?${params.toString()}`);
 }
 
+export async function fetchChatContext(turnId, { signal, timeoutMs = QUICK_READ_TIMEOUT_MS } = {}) {
+  return requestJson(`/chat/contexts/${encodeURIComponent(turnId)}`, { signal, timeoutMs });
+}
+
+export async function fetchPendingConfirmations({ session = "popup" } = {}) {
+  const params = new URLSearchParams({ session });
+  return requestJson(`/chat/pending-confirmations?${params.toString()}`);
+}
+
+export async function openPendingConfirmation(ref, { session = "popup", signal } = {}) {
+  return requestJson(`/chat/pending-confirmations/${encodeURIComponent(String(ref || ""))}/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session }),
+    signal,
+  });
+}
+
+export async function actOnChatCard(turnId, action, { signal } = {}) {
+  return requestJson(`/chat/cards/${encodeURIComponent(String(turnId || ""))}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+    signal,
+    timeoutMs: 60_000,
+  });
+}
+
 // ── Feedback ───────────────────────────────────────────────
 export async function submitFeedback(payload) {
-  return requestJson("/feedback", json(payload));
+  const identity = JSON.stringify([
+    payload?.recommendation_id ?? null,
+    payload?.feedback_type || "",
+    payload?.note || "",
+  ]);
+  const pending = payload?.request_id ? null : rememberPendingRequestId("feedback", identity);
+  const body = { ...payload, request_id: payload?.request_id || pending?.requestId || "" };
+  const result = await requestJson("/feedback", {
+    ...json(body),
+    timeoutMs: FEEDBACK_SUBMIT_TIMEOUT_MS,
+  });
+  if (pending) forgetPendingRequestId(pending.key, pending.requestId);
+  return result;
+}
+
+// ── Content-based feedback (saved lists have no recommendation_id) ──
+export async function sendBehaviorEvents(events, { retryKey = "" } = {}) {
+  let pending = null;
+  if (retryKey && events.length === 1 && !String(events[0]?.event_id || "").trim()) {
+    pending = rememberPendingRequestId("behavior-command", retryKey);
+    events[0].event_id = pending.requestId;
+  }
+  events.forEach((event) => {
+    const existing = String(event?.event_id || "").trim();
+    event.event_id = existing || newRequestId();
+  });
+  const result = await requestJson("/events", json({ events }));
+  if (pending && Number(result?.accepted || 0) >= 1) {
+    forgetPendingRequestId(pending.key, pending.requestId);
+  }
+  return result;
 }
 
 // ── Delight Ack ────────────────────────────────────────────
@@ -299,6 +499,72 @@ export async function respondToAvoidanceProbe(domain, responseType, message = ""
 
 // ── Watch-later ──────────────────────────────────────────────────
 
+function savedListPath(listKind) {
+  if (listKind !== "favorite" && listKind !== "watch_later") {
+    throw new TypeError(`Unknown saved list: ${listKind}`);
+  }
+  return `/saved/${listKind}`;
+}
+
+export function normalizeSavedItemInput(item = {}) {
+  const sourcePlatform = String(item.source_platform || item.platform || "bilibili").trim();
+  const legacyId = String(item.bvid || "").trim();
+  const contentId = String(
+    item.content_id || (legacyId && !legacyId.includes(":") ? legacyId : ""),
+  ).trim();
+  return {
+    source_platform: sourcePlatform,
+    content_id: contentId,
+    content_url: String(item.content_url || item.url || "").trim(),
+    content_type: String(
+      item.content_type || (sourcePlatform === "bilibili" && contentId ? "video" : ""),
+    ).trim(),
+    title: String(item.title || "").trim(),
+    author_name: String(item.author_name || item.up_name || item.author || "").trim(),
+    cover_url: String(item.cover_url || item.cover || item.pic || item.thumbnail_url || item.thumbnail || item.image_url || "").trim(),
+    note: String(item.note || "").trim(),
+  };
+}
+
+export async function saveItem(listKind, item, timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(savedListPath(listKind), {
+    ...json(normalizeSavedItemInput(item)), timeoutMs,
+  });
+}
+
+export async function removeSavedItem(listKind, itemKey, timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(`${savedListPath(listKind)}/remove`, {
+    ...json({ item_key: String(itemKey || "").trim() }), timeoutMs,
+  });
+}
+
+export async function fetchSavedItems(listKind, limit = 50, offset = 0, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  return requestJson(
+    `${savedListPath(listKind)}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+    { timeoutMs },
+  );
+}
+
+export async function savedItemStatus(listKind, itemKey, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  const query = new URLSearchParams({ item_key: String(itemKey || "").trim() });
+  return requestJson(`${savedListPath(listKind)}/status?${query}`, { timeoutMs });
+}
+
+export async function syncSavedItems(listKind, itemKeys = [], timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(`${savedListPath(listKind)}/sync`, {
+    ...json({
+      item_keys: Array.from(new Set(itemKeys.map((key) => String(key || "").trim()).filter(Boolean))),
+    }),
+    timeoutMs,
+  });
+}
+
+export async function pollSavedSyncTask(taskId, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  return requestJson(`/saved-sync/tasks/${encodeURIComponent(String(taskId || "").trim())}`, {
+    timeoutMs,
+  });
+}
+
 export async function addToWatchLater(bvid) {
   return requestJson("/watch-later", { ...json({ bvid }), method: "POST" });
 }
@@ -331,4 +597,9 @@ export async function favoriteStatus(bvid) {
 
 export async function fetchFavorites(limit = 50, offset = 0) {
   return requestJson(`/favorites?limit=${limit}&offset=${offset}`);
+}
+
+// ── User Events (preference data) ──────────────────────────────
+export async function fetchUserEvents(limit = 50) {
+  return requestJson(`/user-events?limit=${limit}`);
 }

@@ -455,7 +455,10 @@ class PromptOptimizer:
             response = await self._llm.complete(
                 messages,
                 temperature=0.4,
-                max_tokens=2048,
+                # Reasoning models burn 1k+ tokens on thinking before the
+                # final answer; 2048 left too little room and produced empty
+                # content (finish_reason=length) on sensenova-6.8.
+                max_tokens=4096,
                 json_mode=True,
             )
             fix = json.loads(response.content)
@@ -518,7 +521,7 @@ class PromptOptimizer:
             response = await self._llm.complete(
                 messages,
                 temperature=0.9,
-                max_tokens=2048,
+                max_tokens=4096,
                 json_mode=True,
             )
             fix = json.loads(response.content)

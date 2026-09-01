@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""阅读库正文统一补抓（v2：覆盖 zhihu / xiaohongshu / youtube / bilibili / 其他）。
+
+扫描 articles 中 content_text 为空、url 非空、重试未超限的行，按 source_type
+分通道抓取正文写回 content_text：
+
+- **zhihu**：`zhihu answer <id> --json` / `zhihu article <id> --json`（本机已登录
+  pyzhihu-cli；URL 含 answer 走 answer，zhuanlan/p 走 article，question 取标题）。
+- **xiaohongshu**：`xhs read <url> --xsec-token <token> --json`（URL 必须带
+  xsec_token，否则跳过；正文取 data.note_desc / desc）。
+- **youtube**：`yt-dlp --write-subs` 抓字幕（优先中文，走本机代理），解析 vtt。
+- **bilibili**：`bili video <BV> -s --ai --json`，优先字幕口播稿，AI 总结+简介兜底。
+- **其他**：`autocli read <url>`（Readability）。
+
+设计要点（与 refill_article_bodies.py 一致）：
+- content_text 为空即"待补"隐形队列；body_fetch_attempts 记录重试次数，
+  >= MAX_ATTEMPTS 的行不再尝试。
+- 区分「调用失败→保留重试」与「确认无正文→记满次数跳过」。
+- 绝不覆盖已有正文；写入截断 20000 字符；只 UPDATE 不删行。
+
+用法:
+    python3 scripts/refill_library_bodies_v2.py [limit] [--source=zhihu]
+"""
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+import time
+from urllib.parse import parse_qs, urlparse
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB = os.path.join(BASE, "data", "openbiliclaw.db")
+AUTOCLI = "/Users/imac/bin/autocli"
+BILI_CLI = "/Users/imac/.local/bin/bili"
+ZHIHU_CLI = "/opt/homebrew/bin/zhihu"
+XHS_CLI = "/Users/imac/.local/bin/xhs"
+YTDLP = "/opt/homebrew/bin/yt-dlp"
+YT_PROXY = "http://127.0.0.1:7890"
+MAX_ATTEMPTS = 3
+TIMEOUT = 150
+MIN_BODY = 50
+BV_RE = re.compile(r"(BV[0-9A-Za-z]{10})")
+ZH_ANSWER_RE = re.compile(r"zhihu\.com/(?:question/\d+/)?answer/(\d+)")
+ZH_ARTICLE_RE = re.compile(r"zhuanlan\.zhihu\.com/p/(\d+)")
+ZH_QUESTION_RE = re.compile(r"zhihu\.com/question/(\d+)")
+YT_VID_RE = re.compile(r"(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})")
+YT_LANG_PRIORITY = ["zh-Hans", "zh-CN", "zh", "zh-TW", "zh-Hant", "en"]
+
+
+def _run(cmd: list[str], timeout: int = TIMEOUT) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def fetch_autocli(url: str) -> str:
+    for _ in range(2):
+        try:
+            r = _run([AUTOCLI, "read", url])
+            out = (r.stdout or "").strip()
+            if len(out) > MIN_BODY:
+                return out
+        except Exception:
+            pass
+        time.sleep(2)
+    return ""
+
+
+def fetch_bilibili_body(url: str) -> tuple[str, bool]:
+    """返回 (正文, 调用是否成功)。"""
+    m = BV_RE.search(url or "")
+    if not m:
+        return "", True
+    try:
+        r = _run([BILI_CLI, "video", m.group(1), "-s", "--ai", "--json"])
+        d = json.loads(r.stdout or "{}").get("data") or {}
+    except Exception:
+        return "", False
+    if not d:
+        return "", False
+    st = d.get("subtitle") or {}
+    if st.get("available") and (st.get("text") or "").strip():
+        return (st.get("text") or "").strip(), True
+    ai = d.get("ai_summary") or ""
+    desc = ((d.get("video") or {}).get("description") or "").strip()
+    parts = [p.strip() for p in (ai, desc) if isinstance(p, str) and p.strip()]
+    combined = "\n\n".join(parts)
+    return (combined if len(combined) >= MIN_BODY else ""), True
+
+
+def _html_to_text(html: str) -> str:
+    """知乎正文是 HTML：换行标签转 \\n、去其余标签、反转义。"""
+    import html as _html
+
+    s = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+    s = re.sub(r"</(p|div|h\d|li|blockquote)>", "\n", s, flags=re.IGNORECASE)
+    s = re.sub(r"<[^>]+>", "", s)
+    return _html.unescape(s)
+
+
+def fetch_zhihu_body(url: str) -> tuple[str, bool]:
+    """知乎正文：answer / article / question 标题。调用失败保留重试。"""
+    m = ZH_ANSWER_RE.search(url or "")
+    if m:
+        try:
+            r = _run([ZHIHU_CLI, "answer", m.group(1), "--json"])
+            d = json.loads(r.stdout or "{}")
+            # 实际结构: data.answer.content（HTML）。旧代码找 data.content
+            # 导致正文永远为空、被误判为"确认无正文"。
+            answer = (d.get("data") or {}).get("answer") or {}
+            content = answer.get("content") or ""
+            if isinstance(content, str):
+                content = _html_to_text(content)
+                if len(content) > MIN_BODY:
+                    return content.strip(), True
+            return "", True  # 调用成功但拿不到正文
+        except Exception:
+            return "", False
+    m = ZH_ARTICLE_RE.search(url or "")
+    if m:
+        try:
+            r = _run([ZHIHU_CLI, "article", m.group(1), "--json"])
+            d = json.loads(r.stdout or "{}")
+            article = (d.get("data") or {}).get("article") or {}
+            content = article.get("content") or ""
+            if isinstance(content, str):
+                content = _html_to_text(content)
+                if len(content) > MIN_BODY:
+                    return content.strip(), True
+            return "", True
+        except Exception:
+            return "", False
+    m = ZH_QUESTION_RE.search(url or "")
+    if m:
+        # 问题页无正文，返回问题标题作为最小可用正文
+        try:
+            r = _run([ZHIHU_CLI, "question", m.group(1), "--json"])
+            d = json.loads(r.stdout or "{}")
+            question = (d.get("data") or {}).get("question") or {}
+            title = question.get("title") or ""
+            if isinstance(title, str) and title.strip():
+                return f"【知乎问题】{title.strip()}", True
+            return "", True
+        except Exception:
+            return "", False
+    return "", True  # 无法识别 URL 形态，视为永久跳过
+
+
+def fetch_xhs_body(url: str) -> tuple[str, bool]:
+    """小红书正文：URL 必须带 xsec_token，否则视为无法处理。"""
+    parsed = urlparse(url or "")
+    params = parse_qs(parsed.query)
+    token = (params.get("xsec_token") or [""])[0]
+    if not token:
+        return "", True
+    try:
+        r = _run([XHS_CLI, "read", url, "--xsec-token", token, "--json"])
+        d = json.loads(r.stdout or "{}")
+        data = d.get("data") or d
+        desc = (data.get("note_desc") or data.get("desc") or "").strip()
+        if isinstance(desc, str) and len(desc) > MIN_BODY:
+            return desc, True
+        return "", True
+    except Exception:
+        return "", False
+
+
+def _yt_run(url: str) -> str:
+    """yt-dlp 抓字幕到临时目录，返回解析后的纯文本。"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            _run(
+                # --cookies-from-browser chrome: 过 YouTube bot 检测
+                # ("Sign in to confirm you're not a bot")；--remote-components
+                # ejs:github + 本机 deno: 解 JS challenge（n challenge）。
+                [YTDLP, "--proxy", YT_PROXY,
+                 "--cookies-from-browser", "chrome",
+                 "--remote-components", "ejs:github",
+                 "--skip-download", "--write-subs",
+                 "--sub-langs", "all", "--sub-format", "vtt",
+                 "-o", os.path.join(td, "sub.%(ext)s"), url],
+                timeout=TIMEOUT,
+            )
+        except Exception:
+            return ""
+        best = ""
+        for lang in YT_LANG_PRIORITY:
+            for ext in ("vtt", "en.vtt"):
+                p = os.path.join(td, f"sub.{lang}.{ext}")
+                if os.path.exists(p):
+                    best = p
+                    break
+            if best:
+                break
+        if not best:
+            import glob
+            vtts = sorted(glob.glob(os.path.join(td, "*.vtt")))
+            best = vtts[0] if vtts else ""
+        if not best:
+            return ""
+        out = []
+        try:
+            with open(best, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("WEBVTT") or "-->" in s or s.isdigit():
+                        continue
+                    s = re.sub(r"<[^>]+>", "", s)
+                    if s:
+                        out.append(s)
+        except Exception:
+            return ""
+        # 去连续重复行
+        dedup = []
+        for s in out:
+            if not dedup or dedup[-1] != s:
+                dedup.append(s)
+        text = "\n".join(dedup).strip()
+        return text if len(text) >= MIN_BODY else ""
+
+
+def fetch_youtube_body(url: str) -> tuple[str, bool]:
+    m = YT_VID_RE.search(url or "")
+    if not m:
+        return "", True
+    text = _yt_run(url)
+    if text:
+        return text, True
+    return "", False  # 抓取失败/无字幕 → 重试
+
+
+def main() -> None:
+    limit, source = 100, None
+    for arg in sys.argv[1:]:
+        if arg.startswith("--source="):
+            source = arg.split("=", 1)[1].strip()
+        elif arg.isdigit():
+            limit = int(arg)
+
+    db = sqlite3.connect(DB)
+    db.execute("PRAGMA busy_timeout=15000")
+    sql = """SELECT id, url, source_type FROM articles
+           WHERE (content_text IS NULL OR content_text = '')
+             AND url IS NOT NULL AND url <> ''
+             AND COALESCE(body_fetch_attempts, 0) < ?"""
+    params: list = [MAX_ATTEMPTS]
+    if source:
+        sql += " AND source_type = ?"
+        params.append(source)
+    sql += " ORDER BY id LIMIT ?"
+    params.append(limit)
+    rows = db.execute(sql, params).fetchall()
+
+    ok = fail = skipped = 0
+    for idx, (aid, url, src) in enumerate(rows, 1):
+        src = (src or "").strip().lower()
+        if src == "bilibili":
+            body, call_ok = fetch_bilibili_body(url)
+        elif src == "zhihu":
+            body, call_ok = fetch_zhihu_body(url)
+        elif src == "xiaohongshu":
+            body, call_ok = fetch_xhs_body(url)
+        elif src == "youtube":
+            body, call_ok = fetch_youtube_body(url)
+        else:
+            body, call_ok = fetch_autocli(url), True
+        attempts = db.execute(
+            "SELECT COALESCE(body_fetch_attempts, 0) FROM articles WHERE id = ?", (aid,)
+        ).fetchone()[0] + 1
+        if body:
+            db.execute(
+                "UPDATE articles SET content_text = ?, body_fetch_attempts = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (body[:20000], attempts, aid),
+            )
+            print(f"[{idx}/{len(rows)}] OK   id={aid} {src} len={len(body)}", flush=True)
+            ok += 1
+        elif call_ok:
+            db.execute(
+                "UPDATE articles SET body_fetch_attempts = ? WHERE id = ?",
+                (MAX_ATTEMPTS, aid),
+            )
+            print(f"[{idx}/{len(rows)}] SKIP id={aid} {src} 确认无正文", flush=True)
+            skipped += 1
+        else:
+            db.execute(
+                "UPDATE articles SET body_fetch_attempts = ? WHERE id = ?", (attempts, aid)
+            )
+            print(f"[{idx}/{len(rows)}] RETRY id={aid} {src} 调用失败，保留重试", flush=True)
+            fail += 1
+        db.commit()
+        time.sleep(1)
+    print(
+        f"DONE total={len(rows)} ok={ok} fail={fail} skipped={skipped}"
+        + (f" source={source}" if source else ""),
+        flush=True,
+    )
+
+
+if __name__ == "__main__":
+    main()

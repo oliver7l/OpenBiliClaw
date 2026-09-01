@@ -97,11 +97,18 @@ from openbiliclaw.api.models import (
     RecommendationClickIn,
     RecommendationClickResponse,
     RecommendationListResponse,
+    ArticleUpdateIn,
+    ArticleNoteIn,
     RecommendationOut,
     RecommendationRefreshResponse,
     RecommendationReshuffleResponse,
     RuntimeStatusResponse,
     SchedulerConfigOut,
+    SubscriptionAddIn,
+    SubscriptionDeleteIn,
+    SubscriptionItemOut,
+    SubscriptionListOut,
+    SubscriptionStatsOut,
     SourceCredentialItem,
     SourcesBrowserConfigOut,
     SourcesConfigOut,
@@ -126,6 +133,7 @@ from openbiliclaw.api.models import (
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
+from openbiliclaw.recommendation.quality_scorer import QualityScorer
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
 from openbiliclaw.runtime.image_cache import (
     CoverFetchError,
@@ -186,7 +194,94 @@ _PROFILE_UPDATE_BACKFILL_EVENT_TYPES = [
     "coin",
     "comment",
     "feedback",
+    "article_finished",
 ]
+
+# ── 阅读库兴趣契合度（轻量打分，零 LLM 延迟）───────────────────────
+# 读取 soul_profile.json 的兴趣标签（interest.likes），对文章
+# title/summary/tags/正文前缀做子串加权匹配，返回 0-1 的 fit_score。
+_interest_keywords_cache: dict[str, Any] = {"at": 0.0, "keywords": []}
+_INTEREST_KEYWORDS_TTL_SECONDS = 120.0
+
+
+def _soul_profile_candidates() -> list[str]:
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    roots = [here.parents[3], Path.cwd()]
+    out: list[str] = []
+    for root in roots:
+        p = root / "data" / "memory" / "soul_profile.json"
+        if p.exists():
+            out.append(str(p))
+    return out
+
+
+def _load_interest_keywords() -> list[tuple[str, float]]:
+    """Return ``[(interest_name, weight), ...]`` from the soul profile.
+
+    Cached for a short TTL so the list endpoint stays fast; a missing or
+    unparsable profile degrades to an empty list (fit_score = 0 for all).
+    """
+    now = time.monotonic()
+    if _interest_keywords_cache["at"] and (
+        now - _interest_keywords_cache["at"] < _INTEREST_KEYWORDS_TTL_SECONDS
+    ):
+        return _interest_keywords_cache["keywords"]
+    keywords: list[tuple[str, float]] = []
+    for path in _soul_profile_candidates():
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            likes = (data.get("interest") or {}).get("likes") or []
+            for item in likes:
+                if not isinstance(item, dict):
+                    continue
+                domain = str(item.get("domain") or "").strip()
+                d_weight = float(item.get("weight") or 0.5)
+                if domain:
+                    keywords.append((domain, max(0.05, d_weight)))
+                for spec in item.get("specifics") or []:
+                    if not isinstance(spec, dict):
+                        continue
+                    name = str(spec.get("name") or "").strip()
+                    s_weight = float(spec.get("weight") or 0.3)
+                    if name:
+                        keywords.append((name, max(0.05, s_weight)))
+        except Exception:
+            logger.debug("Failed to load soul profile keywords from %s", path, exc_info=True)
+    # 去重：同一名称保留最大权重
+    merged: dict[str, float] = {}
+    for name, weight in keywords:
+        merged[name] = max(merged.get(name, 0.0), weight)
+    keywords = sorted(merged.items(), key=lambda kv: kv[1], reverse=True)
+    _interest_keywords_cache["at"] = now
+    _interest_keywords_cache["keywords"] = keywords
+    return keywords
+
+
+def _article_fit_score(text: str) -> float:
+    """Weighted substring match of the interest profile against article text.
+
+    Returns 0.0-1.0. Sums weights of matched interest names, capped so a
+    handful of strong hits saturate at 1.0.
+    """
+    if not text:
+        return 0.0
+    keywords = _load_interest_keywords()
+    if not keywords:
+        return 0.0
+    haystack = text.lower()
+    total = 0.0
+    matched: list[str] = []
+    for name, weight in keywords:
+        if name and name.lower() in haystack:
+            total += weight
+            if len(matched) < 3:
+                matched.append(name)
+    if total <= 0:
+        return 0.0
+    return round(min(1.0, total / 1.5), 3)
 
 # Canonical home is openbiliclaw.sources.x_auth (mirrors douyin_auth);
 # re-exported here because callers historically imported from api.app.
@@ -931,6 +1026,7 @@ def create_app(
         build_degraded_runtime_context,
         build_runtime_context,
     )
+    from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -1500,9 +1596,13 @@ def create_app(
         if cursor >= max_event_id:
             return 0
 
-        events = _query_profile_update_backfill_events(
-            after_event_id=cursor,
-            max_event_id=max_event_id,
+        # The backfill query scans event rows; run it off the event loop.
+        events = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: _query_profile_update_backfill_events(
+                after_event_id=cursor,
+                max_event_id=max_event_id,
+            ),
         )
         if not events:
             return 0
@@ -1815,6 +1915,21 @@ def create_app(
             _embedding_ready_checked_at = time.monotonic()
             return ready
 
+    def _embedding_ready_peek() -> tuple[bool, bool]:
+        """Return ``(cached_value, is_stale)`` without blocking on a probe.
+
+        Used by ``GET /api/init-status`` so the poll never awaits a slow
+        embedding round-trip — it returns the last cached value and lets the
+        real ``_health_embedding_ready()`` refresh the cache in the background.
+        """
+        nonlocal _embedding_ready_value, _embedding_ready_checked_at
+        ttl = (
+            _EMBEDDING_READY_TTL_SECONDS
+            if _embedding_ready_value
+            else _EMBEDDING_FAIL_TTL_SECONDS
+        )
+        return _embedding_ready_value, (time.monotonic() - _embedding_ready_checked_at >= ttl)
+
     def _embedding_required_for_init() -> bool:
         """Whether guided init must wait for a configured embedding provider."""
         cfg = getattr(ctx, "config", None)
@@ -1872,15 +1987,30 @@ def create_app(
         coord = ctx.init_coordinator
         prereqs = ctx.init_prereqs
         run = coord.get_status()
-        # Probe the three services concurrently — each is a real (now strict)
-        # request with a generous cold-load timeout, so running them sequentially
-        # could stack to ~40s. gather() bounds the wait to the slowest single
-        # probe (TTL-cached, so steady-state polls are instant).
-        bili, chat, embedding = await asyncio.gather(
-            prereqs.bilibili_check(),
-            prereqs.chat_ready(),
-            _health_embedding_ready(),
-        )
+        # init-status is polled frequently (the extension popup polls ~3s). Each
+        # probe is a real (strict) provider round-trip with a generous cold-load
+        # timeout, and a cache-miss used to make the HTTP response await the
+        # slowest probe — so the poll lagged 1–2s every time a down-provider's
+        # fail-TTL re-fired. Instead we return the cached values instantly and
+        # refresh only the stale ones in the background, so the poll is always
+        # fast and the UI catches up on the next tick.
+        embedding, embedding_stale = _embedding_ready_peek()
+        chat = prereqs.peek_chat()
+        chat_stale = prereqs.chat_is_stale()
+        bili = prereqs.peek_bilibili()
+        bili_stale = prereqs.bilibili_is_stale()
+
+        def _bg_refresh(coro: Any) -> None:
+            task = asyncio.create_task(coro)
+            _fire_and_forget_tasks.add(task)
+            task.add_done_callback(_fire_and_forget_tasks.discard)
+
+        if chat_stale:
+            _bg_refresh(prereqs.chat_ready())
+        if bili_stale:
+            _bg_refresh(prereqs.bilibili_check())
+        if embedding_stale:
+            _bg_refresh(_health_embedding_ready())
         platforms = prereqs.enabled_platforms()
         initialized = bool(_health_profile_ready())
         trusted = _get_auth_gate().is_trusted_local(request)
@@ -2528,6 +2658,8 @@ def create_app(
                 source_platform=str(getattr(item.content, "source_platform", "") or "bilibili"),
                 content_type=str(getattr(item.content, "content_type", "") or "video"),
                 body_text=str(getattr(item.content, "body_text", "") or ""),
+                quality_score=float(getattr(item.content, "quality_score", 0.0) or 0.0),
+                quality_reason=str(getattr(item.content, "quality_reason", "") or ""),
             )
             for item in items
         ]
@@ -2715,27 +2847,61 @@ def create_app(
             return
         await ctx.restart_background_tasks(app)
 
+        # Warm the reshuffle batch buffer so the first page load / 换一批 is
+        # instant instead of blocking on the ~5-11s serve() pipeline. The
+        # refill itself runs in the background (fire-and-forget). The soul
+        # profile may not be ready at the exact startup instant, so retry
+        # for a short window before giving up.
+        async def _warm_batch_buffer() -> None:
+            _engine = getattr(ctx, "recommendation_engine", None)
+            _soul = getattr(ctx, "soul_engine", None)
+            if _engine is None or _soul is None:
+                return
+            for _attempt in range(12):
+                _prof = None
+                with suppress(Exception):
+                    _prof = await _soul.get_profile()
+                if _prof is not None:
+                    _engine.prefetch_batch_buffer(profile=_prof, platform=None, limit=10)
+                    return
+                await asyncio.sleep(3)
+
+        try:
+            _loop = asyncio.get_running_loop()
+            _loop.create_task(_warm_batch_buffer())
+        except RuntimeError:
+            pass
+
     @app.on_event("shutdown")
     async def shutdown_refresh_loop() -> None:
         feedback_scheduler = getattr(app.state, "feedback_batch_scheduler", None)
         if feedback_scheduler is not None:
             with suppress(Exception):
                 await feedback_scheduler.close()
-        refresh_task = getattr(app.state, "refresh_task", None)
-        if refresh_task is not None:
-            refresh_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await refresh_task
-        account_sync_task = getattr(app.state, "account_sync_task", None)
-        if account_sync_task is not None:
-            account_sync_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await account_sync_task
-        auto_update_task = getattr(app.state, "auto_update_task", None)
-        if auto_update_task is not None:
-            auto_update_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await auto_update_task
+        # These loops run on their own thread + event loop (see
+        # ``RuntimeContext._spawn_background_loop``). Awaiting a task owned by
+        # another loop raises "got Future ... attached to a different loop" and
+        # aborts the lifespan shutdown ("Application shutdown failed.
+        # Exiting."), so cancel them on their own loop and let the owning
+        # thread unwind instead.
+        for attr in ("refresh_task", "account_sync_task", "auto_update_task"):
+            task = getattr(app.state, attr, None)
+            if task is None:
+                continue
+            thread = getattr(app.state, f"{attr}_thread", None)
+            try:
+                foreign = task.get_loop() is not asyncio.get_running_loop()
+            except Exception:
+                foreign = True
+            if foreign:
+                with suppress(RuntimeError):
+                    task.get_loop().call_soon_threadsafe(task.cancel)
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=2.0)
+            else:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
     @app.get("/api/profile-summary", response_model=ProfileSummaryResponse)
     async def profile_summary(
@@ -3189,6 +3355,59 @@ def create_app(
                     )
         return EventIngestResponse(accepted=accepted, rejected=rejected)
 
+    # ── Quality scoring background task ─────────────────────────────
+
+    @dataclass
+    class _QualityScorerCandidate:
+        """Minimal candidate shape for QualityScorer.score_batch."""
+        bvid: str
+        title: str
+        description: str
+        up_name: str
+        source_platform: str
+        topic_key: str
+        relevance_score: float
+        content_type: str
+        body_text: str
+
+    async def _bg_quality_score_recommendations(rows: list[dict[str, Any]]) -> None:
+        """Score recommendation items that lack quality scores, in background."""
+        logger.info("_bg_quality_score_recommendations called with %d rows, llm=%s, soul=%s", len(rows), ctx.llm_service is not None, ctx.soul_engine is not None)
+        if not rows or ctx.llm_service is None or ctx.soul_engine is None:
+            return
+        to_score = [r for r in rows if not float(r.get("quality_score", 0.0) or 0.0)]
+        if not to_score:
+            return
+        try:
+            profile = await ctx.soul_engine.get_profile()
+            scorer = QualityScorer(llm_service=ctx.llm_service, batch_size=10)
+            candidates = [
+                _QualityScorerCandidate(
+                    bvid=str(r.get("bvid", "")),
+                    title=str(r.get("title", "")),
+                    description=str(r.get("body_text", r.get("expression", ""))),
+                    up_name=str(r.get("up_name", "")),
+                    source_platform=str(r.get("source_platform", "")),
+                    topic_key=str(r.get("topic", "")),
+                    relevance_score=float(r.get("confidence", 0.0) or 0.0),
+                    content_type=str(r.get("content_type", "video")),
+                    body_text=str(r.get("body_text", "")),
+                )
+                for r in to_score
+            ]
+            scored = await scorer.score_batch(candidates, profile)
+            db_scores: list[tuple[str, float, str]] = []
+            for bvid, result in scored.items():
+                db_scores.append((bvid, result["quality_score"], result["reason"]))
+            if db_scores:
+                ctx.database.batch_update_content_quality_scores(db_scores)
+                logger.info(
+                    "Quality scored %d/%d recommendation items",
+                    len(db_scores), len(to_score),
+                )
+        except Exception:
+            logger.exception("Background quality scoring failed")
+
     @app.get("/api/recommendations", response_model=RecommendationListResponse)
     async def recommendations() -> RecommendationListResponse:
         def _admission_min_score() -> float:
@@ -3264,6 +3483,12 @@ def create_app(
                     )
 
         rows = _cap_by_franchise(rows, max_per_franchise=2)[:20]
+
+        # Fire background quality scoring for items that lack scores
+        task = asyncio.create_task(_bg_quality_score_recommendations(rows))
+        _fire_and_forget_tasks.add(task)
+        task.add_done_callback(_fire_and_forget_tasks.discard)
+
         return RecommendationListResponse(
             items=[
                 RecommendationOut(
@@ -3281,6 +3506,8 @@ def create_app(
                     source_platform=str(row.get("source_platform", "") or "bilibili"),
                     content_type=str(row.get("content_type", "") or "video"),
                     body_text=str(row.get("body_text", "") or ""),
+                    quality_score=float(row.get("quality_score", 0.0) or 0.0),
+                    quality_reason=str(row.get("quality_reason", "") or ""),
                 )
                 for row in rows
             ]
@@ -3389,28 +3616,33 @@ def create_app(
     ) -> ActivityFeedResponse:
         from openbiliclaw.runtime.activity_feed import ActivityFeedBuilder
 
-        runtime_status: dict[str, object] = {}
-        get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
-        if callable(get_runtime_status):
-            runtime_status = dict(get_runtime_status())
-        get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
-        if callable(get_account_sync_status):
-            runtime_status.update(get_account_sync_status())
+        # All of the input collection (runtime counts + cognition updates +
+        # feed query) hits SQLite synchronously; keep it off the event loop.
+        def _collect_feed_inputs() -> dict[str, object]:
+            runtime_status: dict[str, object] = {}
+            get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
+            if callable(get_runtime_status):
+                runtime_status = dict(get_runtime_status())
+            get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
+            if callable(get_account_sync_status):
+                runtime_status.update(get_account_sync_status())
 
-        cognition_updates: list[dict[str, object]] = []
-        load_cognition_updates = getattr(ctx.memory_manager, "load_cognition_updates", None)
-        if callable(load_cognition_updates):
-            cognition_updates = [
-                item for item in load_cognition_updates() if isinstance(item, dict)
-            ]
+            cognition_updates: list[dict[str, object]] = []
+            load_cognition_updates = getattr(ctx.memory_manager, "load_cognition_updates", None)
+            if callable(load_cognition_updates):
+                cognition_updates = [
+                    item for item in load_cognition_updates() if isinstance(item, dict)
+                ]
 
-        builder = ActivityFeedBuilder(database=ctx.database)
-        payload = builder.build(
-            runtime_status=runtime_status,
-            cognition_updates=cognition_updates,
-            limit=limit,
-            before=before,
-        )
+            builder = ActivityFeedBuilder(database=ctx.database)
+            return builder.build(
+                runtime_status=runtime_status,
+                cognition_updates=cognition_updates,
+                limit=limit,
+                before=before,
+            )
+
+        payload = await asyncio.get_running_loop().run_in_executor(None, _collect_feed_inputs)
         payload_items = payload.get("items", [])
         item_dicts = payload_items if isinstance(payload_items, list) else []
         return ActivityFeedResponse(
@@ -3562,7 +3794,12 @@ def create_app(
             "type": "refresh.pool_updated",
             "phase": "done",
             "message": message,
-            **_runtime_pool_status_payload(),
+            # The payload builder runs several pool-count SQL queries; keep
+            # them off the request event loop (they take 100ms-1s on a large
+            # pool and otherwise stall every in-flight request).
+            **await asyncio.get_running_loop().run_in_executor(
+                None, _runtime_pool_status_payload
+            ),
         }
         with suppress(Exception):
             result = publish(event)
@@ -3616,7 +3853,12 @@ def create_app(
             curator = getattr(ctx.recommendation_engine, "_curator", None)
             if curator is None or not hasattr(curator, "needs_replenishment"):
                 return
-            if not curator.needs_replenishment():
+            # needs_replenishment() runs pool-count SQL synchronously; keep it
+            # off the event loop so it cannot stall in-flight requests.
+            needs = await asyncio.get_running_loop().run_in_executor(
+                None, curator.needs_replenishment
+            )
+            if not needs:
                 return
 
         nonlocal auto_replenishment_started_at, auto_replenishment_task
@@ -3641,20 +3883,37 @@ def create_app(
         task.add_done_callback(_fire_and_forget_tasks.discard)
 
     @app.post("/api/recommendations/reshuffle", response_model=RecommendationReshuffleResponse)
-    async def reshuffle_recommendations() -> RecommendationReshuffleResponse:
+    async def reshuffle_recommendations(
+        platform: str | None = Query(default=None, description="Restrict the fresh batch to this source_platform (e.g. bilibili, xiaohongshu)."),
+    ) -> RecommendationReshuffleResponse:
         if ctx.recommendation_engine is None or ctx.soul_engine is None:
             return RecommendationReshuffleResponse(items=[])
-        if _pool_available_count() == 0:
+        # 池为空（罕见，如首次部署/刚耗尽）时直接返回空并触发补货，跳过
+        # profile/reshuffle 路径——与 append 端点保持一致，避免无谓的 soul
+        # 调用和空转。_pool_available_count() 同步执行 count SQL，放到
+        # executor 里避免阻塞事件循环。
+        if await asyncio.get_running_loop().run_in_executor(
+            None, _pool_available_count
+        ) == 0:
             await _trigger_replenishment_if_needed(force=True)
             return RecommendationReshuffleResponse(items=[])
         try:
             profile = await ctx.soul_engine.get_profile()
         except Exception:
             return RecommendationReshuffleResponse(items=[])
-        items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=10)
-        await _publish_pool_status_snapshot()
-        await _trigger_replenishment_if_needed()
-        return RecommendationReshuffleResponse(items=_serialize_recommendation_items(items))
+        items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=10, platform=platform)
+        _serialized = _serialize_recommendation_items(items)
+        # Best-effort post-processing — explicitly kept OFF the user's
+        # latency path. serve() already consumed pool inventory and the
+        # batch buffer refills asynchronously, so we must not block the
+        # HTTP response on snapshot publishing / replenishment checks.
+        try:
+            _loop = asyncio.get_running_loop()
+            _loop.create_task(_publish_pool_status_snapshot())
+            _loop.create_task(_trigger_replenishment_if_needed())
+        except RuntimeError:
+            pass
+        return RecommendationReshuffleResponse(items=_serialized)
 
     @app.post("/api/recommendations/append", response_model=RecommendationReshuffleResponse)
     async def append_recommendations(
@@ -3662,7 +3921,11 @@ def create_app(
     ) -> RecommendationReshuffleResponse:
         if ctx.recommendation_engine is None or ctx.soul_engine is None:
             return RecommendationReshuffleResponse(items=[])
-        if _pool_available_count() == 0:
+        # _pool_available_count() runs count SQL synchronously; keep it off
+        # the event loop.
+        if await asyncio.get_running_loop().run_in_executor(
+            None, _pool_available_count
+        ) == 0:
             await _trigger_replenishment_if_needed(force=True)
             return RecommendationReshuffleResponse(items=[])
         try:
@@ -3705,7 +3968,11 @@ def create_app(
                 pending_signal_events=0,
                 unread_count=0,
             )
-        payload = dict(get_runtime_status())
+        # get_runtime_status() runs several count SQL queries synchronously;
+        # keep them off the event loop (frontend polls this endpoint).
+        payload = dict(
+            await asyncio.get_running_loop().run_in_executor(None, get_runtime_status)
+        )
         get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
         if callable(get_account_sync_status):
             payload.update(get_account_sync_status())
@@ -5882,7 +6149,13 @@ def create_app(
                 updated += cursor.rowcount or 0
             except Exception:
                 continue
-        if updated:
+        # Commit unconditionally: a bare UPDATE (even with zero matched
+        # rows) opens a write transaction in sqlite3's default isolation
+        # mode and holds a RESERVED lock until commit. Skipping the commit
+        # when `updated == 0` leaked the transaction, blocking other
+        # connections' writers (e.g. the thread-local connection used by
+        # tests / threadpool requests) behind a stale lock.
+        if database.conn.in_transaction:
             with suppress(Exception):
                 database.conn.commit()
         return updated
@@ -7944,6 +8217,9 @@ def create_app(
                 auto_update_check_interval_hours=cfg.scheduler.auto_update_check_interval_hours,
                 auto_update_allow_prerelease=cfg.scheduler.auto_update_allow_prerelease,
                 auto_update_allowed_remotes=list(cfg.scheduler.auto_update_allowed_remotes),
+                rss_subscriptions=list(cfg.scheduler.rss_subscriptions),
+                xiaoyuzhou_subscriptions=list(cfg.scheduler.xiaoyuzhou_subscriptions),
+                wechat_subscriptions=list(cfg.scheduler.wechat_subscriptions),
             ),
             discovery=DiscoveryConfigOut(
                 unified_keyword_planner_enabled=cfg.discovery.unified_keyword_planner_enabled,
@@ -8600,6 +8876,13 @@ def create_app(
                 cfg.scheduler.pool_source_shares = _normalize_pool_source_shares(
                     sdata["pool_source_shares"]
                 )
+            # Update subscription lists (rss, xiaoyuzhou, wechat)
+            if "rss_subscriptions" in sdata:
+                cfg.scheduler.rss_subscriptions = list(sdata["rss_subscriptions"])
+            if "xiaoyuzhou_subscriptions" in sdata:
+                cfg.scheduler.xiaoyuzhou_subscriptions = list(sdata["xiaoyuzhou_subscriptions"])
+            if "wechat_subscriptions" in sdata:
+                cfg.scheduler.wechat_subscriptions = list(sdata["wechat_subscriptions"])
 
         # Apply discovery planner / evaluator updates
         if "discovery" in update:
@@ -8889,6 +9172,505 @@ def create_app(
                 _existing_self_info.get("nickname", ""),
             )
 
+    # ── Subscription management routes ────────────────────────────
+    @app.get("/api/subscriptions", response_model=SubscriptionListOut)
+    def list_subscriptions() -> SubscriptionListOut:
+        """List all subscription sources grouped by type."""
+        from openbiliclaw.config import load_config as _load_cfg
+
+        _cfg = _load_cfg()
+        return SubscriptionListOut(
+            rss=list(_cfg.scheduler.rss_subscriptions),
+            xiaoyuzhou=list(_cfg.scheduler.xiaoyuzhou_subscriptions),
+            wechat=list(_cfg.scheduler.wechat_subscriptions),
+        )
+
+    @app.get("/api/articles")
+    def list_articles(
+        q: str = "",
+        source_type: str = "",
+        status: str = "",
+        tag: str = "",
+        limit: int = 50,
+        offset: int = 0,
+        random: bool = False,
+        sort: str = "",
+    ) -> JSONResponse:
+        """List reading-library articles, optionally filtered.
+
+        Supports keyword search (``q``) over the full-text index, plus
+        filtering by source type, reading status and tag. When ``q`` is given
+        the results are ranked by FTS relevance (bm25); otherwise they are
+        ordered by recency. ``sort=relevance`` re-ranks by interest-profile
+        fit (each item carries a ``fit_score`` 0-1); the re-rank samples the
+        top ``max(limit*4, 200)`` recent rows so the per-request cost stays
+        tiny while still surfacing the best matches.
+        """
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"items": [], "total": 0})
+        limit = max(1, min(int(limit), 200))
+        offset = max(0, int(offset))
+        if q and q.strip():
+            items = database.search_articles(
+                q=q.strip(),
+                limit=limit,
+                offset=offset,
+                source_type=source_type or None,
+                status=status or None,
+                tag=tag or None,
+            )
+            total = len(items)
+        else:
+            items = database.get_recent_articles(
+                limit=limit,
+                offset=offset,
+                source_type=source_type or None,
+                status=status or None,
+                tag=tag or None,
+                random_order=random,
+            )
+            total = database.count_articles(
+                source_type=source_type or None,
+                status=status or None,
+                tag=tag or None,
+            )
+            if sort and sort.strip().lower() == "relevance" and not random:
+                candidate_limit = max(limit * 4, 200)
+                cands = database.get_recent_articles(
+                    limit=candidate_limit,
+                    offset=0,
+                    source_type=source_type or None,
+                    status=status or None,
+                    tag=tag or None,
+                )
+                for item in cands:
+                    text = " ".join(
+                        [
+                            str(item.get("title") or ""),
+                            str(item.get("summary") or ""),
+                            str(item.get("tags") or ""),
+                        ]
+                    )
+                    item["fit_score"] = _article_fit_score(text)
+                cands.sort(key=lambda it: it.get("fit_score", 0.0), reverse=True)
+                items = cands[offset : offset + limit]
+        return JSONResponse({"items": items, "total": total, "query": q})
+
+    @app.get("/api/articles/facets", response_model=None)
+    def list_article_facets() -> JSONResponse:
+        """Source-type distribution for the reading-library filter UI."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"source_types": [], "total": 0})
+        try:
+            rows = database.conn.execute(
+                "SELECT source_type, COUNT(*) AS n FROM articles GROUP BY source_type ORDER BY n DESC"
+            ).fetchall()
+        except Exception:
+            logger.exception("Failed to read article facets")
+            return JSONResponse({"source_types": [], "total": 0})
+        total = sum(int(r["n"]) for r in rows)
+        return JSONResponse(
+            {
+                "source_types": [{"type": r["source_type"], "count": int(r["n"])} for r in rows],
+                "total": total,
+            }
+        )
+
+    @app.get("/api/articles/{article_id}")
+    def get_article(article_id: int) -> JSONResponse:
+        """Fetch a single article with its full body text for reading."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse(
+                {"ok": False, "error": "database unavailable"}, status_code=503
+            )
+        row = database.get_article(article_id)
+        if row is None:
+            return JSONResponse(
+                {"ok": False, "error": "article not found"}, status_code=404
+            )
+        return JSONResponse({"ok": True, "article": row})
+
+    @app.patch("/api/articles/{article_id}")
+    async def update_article(
+        article_id: int, payload: ArticleUpdateIn
+    ) -> JSONResponse:
+        """Update an article's reading status and/or tags."""
+        # Mirrors Database.ARTICLE_STATUSES — keep the two in sync.
+        valid = {"unread", "reading", "finished", "archived"}
+        if payload.status is not None and payload.status not in valid:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": f"invalid status: {payload.status}; expected one of {sorted(valid)}",
+                },
+                status_code=400,
+            )
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse(
+                {"ok": False, "error": "database unavailable"}, status_code=503
+            )
+        ok = True
+        if payload.status is not None:
+            ok = bool(database.update_article_status(article_id, payload.status))
+            # 读完回流画像：finished 是强正向信号，插入事件由 soul 管道
+            # 自然消费（classify_event_satisfaction 已将其归为 positive）。
+            # 失败不阻塞主操作。
+            if ok and payload.status == "finished":
+                try:
+                    row = database.get_article(article_id)
+                    if row:
+                        from openbiliclaw.sources.event_format import (
+                            format_event_context,
+                        )
+
+                        context = format_event_context(
+                            event_type="article_finished",
+                            source_platform=str(row.get("source_type") or "阅读库"),
+                            title=str(row.get("title") or ""),
+                            author=str(row.get("author") or ""),
+                        )
+                        database.insert_event(
+                            "article_finished",
+                            url=str(row.get("url") or ""),
+                            title=str(row.get("title") or ""),
+                            context=context,
+                            metadata={
+                                "article_id": article_id,
+                                "source_type": str(row.get("source_type") or ""),
+                                "source_name": str(row.get("source_name") or ""),
+                                "author": str(row.get("author") or ""),
+                                "tags": row.get("tags") or "[]",
+                                "signal_strength": 0.8,
+                            },
+                        )
+                except Exception:
+                    logger.exception("Failed to record article_finished event")
+        if payload.tags is not None and ok:
+            ok = bool(database.update_article_tags(article_id, payload.tags))
+        if (payload.percent is not None or payload.progress is not None) and ok:
+            ok = bool(
+                database.update_article_reading_progress(
+                    article_id,
+                    percent=payload.percent if payload.percent is not None else 0.0,
+                    progress=payload.progress or "",
+                )
+            )
+        if payload.favorited is not None and ok:
+            ok = bool(database.set_article_favorited(article_id, payload.favorited))
+        return JSONResponse({"ok": ok, "id": article_id})
+
+    @app.get("/api/articles/{article_id}/notes")
+    def list_article_notes(article_id: int) -> JSONResponse:
+        """List notes / highlights for an article."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if database.get_article(article_id) is None:
+            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
+        notes = database.get_article_notes(article_id)
+        return JSONResponse({"ok": True, "notes": notes})
+
+    @app.post("/api/articles/{article_id}/notes")
+    def add_article_note(article_id: int, payload: ArticleNoteIn) -> JSONResponse:
+        """Add a note / highlight to an article."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if database.get_article(article_id) is None:
+            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
+        note_id = database.add_article_note(
+            article_id,
+            quote=payload.quote,
+            note=payload.note,
+            color=payload.color,
+        )
+        if note_id is None:
+            return JSONResponse({"ok": False, "error": "failed to save note"}, status_code=500)
+        return JSONResponse({"ok": True, "id": note_id})
+
+    @app.delete("/api/notes/{note_id}")
+    def delete_article_note(note_id: int) -> JSONResponse:
+        """Delete one note by its own id."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        ok = database.delete_article_note(note_id)
+        return JSONResponse({"ok": ok, "id": note_id})
+
+    @app.post("/api/articles/{article_id}/summarize")
+    async def summarize_article(article_id: int) -> JSONResponse:
+        """Generate / refresh an AI summary (one-liner + 3 key points) via LLM.
+
+        Idempotent: an existing summary is returned as-is unless ``force``
+        is passed. Requires a body of at least 200 chars; short articles
+        fall back to their stored ``summary`` field.
+        """
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        row = database.get_article(article_id)
+        if row is None:
+            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
+        if row.get("ai_summary"):
+            try:
+                return JSONResponse({"ok": True, "summary": json.loads(row["ai_summary"]), "cached": True})
+            except Exception:
+                pass  # 损坏则重新生成
+        content = str(row.get("content_text") or "").strip()
+        if len(content) < 200:
+            return JSONResponse(
+                {"ok": False, "error": "正文过短，无法生成摘要", "article_id": article_id},
+                status_code=422,
+            )
+        try:
+            from openbiliclaw.config import load_config as _sum_cfg
+            from openbiliclaw.llm.registry import build_llm_registry as _build_reg
+
+            registry = _build_reg(_sum_cfg())
+            system = (
+                "你是个人阅读助手。为下面这篇文章生成中文摘要，"
+                "只输出 JSON，不要多余文字，格式："
+                '{"one_liner":"不超过30字的一句话总结","points":["要点1，一句话","要点2，一句话","要点3，一句话"]}'
+            )
+            user = (
+                f"标题：{row.get('title') or ''}\n"
+                f"作者：{row.get('author') or ''}\n"
+                f"来源：{row.get('source_name') or row.get('source_type') or ''}\n"
+                f"标签：{row.get('tags') or '[]'}\n\n"
+                f"正文（截取前 3000 字）：\n{content[:3000]}"
+            )
+            resp = await registry.complete(
+                [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.3,
+                # sensenova-6.8 is a reasoning model: its thinking process
+                # routinely eats 1000+ tokens, so a 700-token budget was
+                # exhausted by reasoning alone and content came back empty
+                # (finish_reason=length). 3000 leaves room for reasoning +
+                # the actual summary.
+                max_tokens=3000,
+                json_mode=True,
+            )
+            raw = (resp.content or "").strip()
+            summary = json.loads(raw)
+            if not isinstance(summary, dict):
+                raise ValueError("non-dict summary")
+            summary.setdefault("one_liner", "")
+            summary.setdefault("points", [])
+            summary["generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            database.update_article_ai_summary(article_id, json.dumps(summary, ensure_ascii=False))
+            return JSONResponse({"ok": True, "summary": summary, "cached": False})
+        except Exception:
+            logger.exception("AI summary generation failed for article %d", article_id)
+            return JSONResponse(
+                {"ok": False, "error": "摘要生成失败，请稍后重试", "article_id": article_id},
+                status_code=502,
+            )
+
+    @app.get("/api/reading/suggestions")
+    def daily_reading_suggestions(limit: int = 5) -> JSONResponse:
+        """Today's reading picks: unread articles ranked by interest fit.
+
+        Samples the most recent unread articles (with body text preferred),
+        scores each against the soul interest profile, and returns the top
+        ``limit`` with a human-readable reason (matched interest names).
+        """
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        limit = max(1, min(int(limit), 20))
+        keywords = _load_interest_keywords()
+        cands = database.get_recent_articles(
+            limit=300, status="unread"
+        )
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for item in cands:
+            text = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("summary") or ""),
+                    str(item.get("tags") or ""),
+                ]
+            ).lower()
+            score = 0.0
+            reasons: list[str] = []
+            for name, weight in keywords:
+                if name and name.lower() in text:
+                    score += weight
+                    if len(reasons) < 2:
+                        reasons.append(name)
+            if score > 0:
+                item["fit_score"] = round(min(1.0, score / 1.5), 3)
+                item["fit_reason"] = reasons
+                scored.append((score, item))
+        scored.sort(key=lambda kv: kv[0], reverse=True)
+        items = [it for _, it in scored[:limit]]
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": items,
+                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+
+    @app.get("/api/reading/stats")
+    def reading_stats() -> JSONResponse:
+        """Reading-library dashboard: totals, monthly finished trend,
+        source mix, top tags, notes count, and a light interest-shift
+        view (recently-read tags vs the current interest profile)."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        stats = database.get_article_reading_stats()
+        # 兴趣迁移：最近在读/读完文章打到的画像关键词
+        recent = database.get_articles_for_reading_stats(limit=100)
+        interest_shift: dict[str, Any] = {"matched": [], "recent_articles": len(recent)}
+        keywords = _load_interest_keywords()
+        hit_counter: dict[str, float] = {}
+        for item in recent:
+            text = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("tags") or ""),
+                ]
+            ).lower()
+            for name, weight in keywords:
+                if name and name.lower() in text:
+                    hit_counter[name] = hit_counter.get(name, 0.0) + weight
+        interest_shift["matched"] = sorted(
+            hit_counter.items(), key=lambda kv: kv[1], reverse=True
+        )[:10]
+        return JSONResponse({"ok": True, "stats": stats, "interest_shift": interest_shift})
+
+    @app.get("/api/subscriptions/stats", response_model=SubscriptionStatsOut)
+    def list_subscriptions_with_stats() -> SubscriptionStatsOut:
+        """List all subscriptions with item count and last fetch statistics."""
+        from openbiliclaw.config import load_config as _load_cfg
+
+        _cfg = _load_cfg()
+        stats_map: dict[str, dict[str, tuple[int, str]]] = {}  # url -> (count, last_fetched)
+
+        # Query from content_cache
+        database = getattr(ctx, "database", None)
+        conn = getattr(database, "conn", None) if database else None
+
+        if conn is not None:
+            for platform, config_list in [
+                ("rss", _cfg.scheduler.rss_subscriptions),
+                ("xiaoyuzhou", _cfg.scheduler.xiaoyuzhou_subscriptions),
+                ("wechat", _cfg.scheduler.wechat_subscriptions),
+            ]:
+                for item in config_list:
+                    name = item.get("name", "")
+                    url = item.get("url", "")
+                    if not url:
+                        continue
+                    cursor = conn.execute(
+                        """
+                        SELECT COUNT(*) AS item_count, MAX(discovered_at) AS last_fetched
+                        FROM content_cache
+                        WHERE source_platform = ? AND up_name = ?
+                        """,
+                        (platform, name),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        stats_map[f"{platform}:{url}"] = (row[0] or 0, row[1] or "")
+
+        # Build response
+        result = SubscriptionStatsOut()
+
+        def map_subs(subs: list[dict[str, str]], platform: str) -> list[SubscriptionItemOut]:
+            out = []
+            for sub in subs:
+                key = f"{platform}:{sub['url']}"
+                count, last = stats_map.get(key, (0, ""))
+                out.append(SubscriptionItemOut(
+                    name=sub["name"],
+                    url=sub["url"],
+                    item_count=count,
+                    last_fetched_at=last or "",
+                ))
+            return out
+
+        result.rss = map_subs(list(_cfg.scheduler.rss_subscriptions), "rss")
+        result.xiaoyuzhou = map_subs(list(_cfg.scheduler.xiaoyuzhou_subscriptions), "xiaoyuzhou")
+        result.wechat = map_subs(list(_cfg.scheduler.wechat_subscriptions), "wechat")
+        return result
+
+    @app.post("/api/subscriptions")
+    async def add_subscription(payload: SubscriptionAddIn) -> JSONResponse:
+        """Add a new subscription source."""
+        from openbiliclaw.config import load_config as _load_cfg
+        from openbiliclaw.config import save_config as _save_cfg
+
+        async with _CONFIG_SAVE_LOCK:
+            _cfg = _load_cfg()
+            source_type = payload.source_type
+            source_map = {
+                "rss": "rss_subscriptions",
+                "xiaoyuzhou": "xiaoyuzhou_subscriptions",
+                "wechat": "wechat_subscriptions",
+            }
+            field_name = source_map.get(source_type)
+            if field_name is None:
+                return JSONResponse(
+                    {"ok": False, "error": f"unknown source_type: {source_type}"},
+                    status_code=400,
+                )
+            subscriptions: list[dict[str, str]] = getattr(_cfg.scheduler, field_name)
+            # Check if already exists
+            for sub in subscriptions:
+                if sub.get("url") == payload.url:
+                    return JSONResponse(
+                        {"ok": False, "error": "subscription already exists"},
+                        status_code=409,
+                    )
+            subscriptions.append({"name": payload.name, "url": payload.url})
+            setattr(_cfg.scheduler, field_name, subscriptions)
+            _save_cfg(_cfg)
+        return JSONResponse({"ok": True})
+
+    @app.delete("/api/subscriptions")
+    async def delete_subscription(payload: SubscriptionDeleteIn) -> JSONResponse:
+        """Delete a subscription source by type and URL."""
+        from openbiliclaw.config import load_config as _load_cfg
+        from openbiliclaw.config import save_config as _save_cfg
+
+        async with _CONFIG_SAVE_LOCK:
+            _cfg = _load_cfg()
+            source_type = payload.source_type
+            source_map = {
+                "rss": "rss_subscriptions",
+                "xiaoyuzhou": "xiaoyuzhou_subscriptions",
+                "wechat": "wechat_subscriptions",
+            }
+            field_name = source_map.get(source_type)
+            if field_name is None:
+                return JSONResponse(
+                    {"ok": False, "error": f"unknown source_type: {source_type}"},
+                    status_code=400,
+                )
+            subscriptions: list[dict[str, str]] = getattr(_cfg.scheduler, field_name)
+            new_list = [s for s in subscriptions if s.get("url") != payload.url]
+            if len(new_list) == len(subscriptions):
+                return JSONResponse(
+                    {"ok": False, "error": "subscription not found"},
+                    status_code=404,
+                )
+            setattr(_cfg.scheduler, field_name, new_list)
+            _save_cfg(_cfg)
+        return JSONResponse({"ok": True})
+
+    # ── Saved-sync (reading library) routes ─────────────────────
+    register_saved_sync_routes(app, ctx)
+
     # ── Mobile Web UI ───────────────────────────────────────────
     from pathlib import Path as _Path
 
@@ -8952,6 +9734,22 @@ def create_app(
         def _desktop_index_slash() -> Response:
             return _desktop_index_response()
 
+        _DESKTOP_PAGE_NAMES = {
+            "home", "delight", "saved", "profile", "chat", "library", "settings",
+            "watchLater", "watchlater",
+        }
+
+        @app.get("/web/{page}", include_in_schema=False)
+        def _desktop_page(page: str) -> Response:
+            """Bookmarkable desktop page routes (e.g. /web/library, /web/chat).
+
+            Returns the SPA shell; the client reads location.pathname and opens
+            the matching view. `page` is a single path segment, so /web/assets/*
+            static requests are never intercepted. Unknown pages 404."""
+            if page not in _DESKTOP_PAGE_NAMES:
+                raise HTTPException(status_code=404, detail="unknown desktop page")
+            return _desktop_index_response()
+
         app.mount("/web", _StaticFiles(directory=_desktop_dir, html=True), name="desktop-web")
 
         @app.get("/", include_in_schema=False)
@@ -8965,5 +9763,30 @@ def create_app(
     _setup_dir = _Path(__file__).resolve().parent.parent / "web" / "setup"
     if _setup_dir.is_dir():
         app.mount("/setup", _StaticFiles(directory=_setup_dir, html=True), name="setup-wizard")
+
+    # ── Standalone Reading Library ───────────────────────────────
+    # Independent, bookmarkable reading-library page. Surfaces the `articles`
+    # table (the 阅读库) with full-text search + source/status/tag filters,
+    # decoupled from the mobile/desktop SPAs so it can be opened on its own.
+    _reading_dir = _web_dir / "reading-library"
+
+    @app.get("/library/{source}", include_in_schema=False)
+    def reading_library_platform(source: str):
+        """Bookmarkable per-platform reading page. Reuses the same SPA,
+        injecting the active source so the client filters and labels by it."""
+        from fastapi.responses import Response
+        import re
+        html_path = _reading_dir / "index.html"
+        try:
+            html = html_path.read_text(encoding="utf-8")
+        except Exception:
+            return Response("reading-library page not found", status_code=500)
+        safe = re.sub(r"[^a-zA-Z0-9_]", "", source or "")
+        injected = '<script>window.__SOURCE__="' + safe + '";</script>'
+        html = html.replace("</head>", injected + "</head>", 1)
+        return Response(html, media_type="text/html")
+
+    if _reading_dir.is_dir():
+        app.mount("/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library")
 
     return app

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>内容卡片</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --primary:#ff2442;--bg:#f5f5f7;--surface:#fff;--border:#e5e5e7;
+      --text:#1d1d1f;--muted:#86868b;
+      --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;
+    }
+    @media(prefers-color-scheme:dark){
+      :root{--bg:#1c1c1e;--surface:#2c2c2e;--border:#38383a;--text:#f5f5f7;--muted:#98989d}
+    }
+    html{font-family:"KaiTi","楷体","STKaiti",Georgia,serif;background:var(--bg);color:var(--text)}
+    body{min-height:100vh}
+    #app{max-width:100%;margin:0 auto;padding:20px}
+
+    .top-row{display:flex;align-items:center;justify-content:space-between;padding:0 0 12px;gap:8px;flex-wrap:wrap}
+    #statusBar{font-size:12px;color:var(--muted);flex:1}
+    .top-actions{display:flex;align-items:center;gap:6px}
+    .top-actions button,#pagePrev,#pageNext{
+      background:none;border:1px solid var(--border);border-radius:8px;
+      padding:4px 10px;font-size:12px;color:var(--text);cursor:pointer;
+    }
+    .top-actions button:disabled{opacity:0.3;cursor:default}
+    #refreshBtn{border-color:var(--primary);color:var(--primary)}
+    #pageInfo{font-size:11px;color:var(--muted);white-space:nowrap}
+
+    .platform-bar{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px}
+    .platform-btn{
+      background:none;border:1px solid var(--border);border-radius:14px;
+      padding:4px 12px;font-size:12px;color:var(--muted);cursor:pointer;transition:all 0.12s;
+    }
+    .platform-btn:hover{color:var(--text);border-color:var(--text)}
+    .platform-btn.active{color:#fff;background:var(--primary);border-color:var(--primary)}
+    .plat-count{margin-left:3px;opacity:0.7;font-size:10px}
+
+    .card-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+    @media(min-width:768px){.card-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(min-width:1024px){.card-grid{grid-template-columns:repeat(4,1fr)}}
+
+    /* card — clean layout without cover */
+    .card{
+      position:relative;
+      border-radius:8px;
+      overflow:hidden;
+      cursor:pointer;
+      transition:all 0.15s;
+      background:var(--surface);
+      box-shadow:0 1px 3px rgba(0,0,0,0.06);
+      display:flex;flex-direction:column;
+    }
+    .card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+    @media(prefers-color-scheme:dark){.card{border:1px solid rgba(255,255,255,0.1)}}
+    @media(prefers-color-scheme:light){.card{border:1px solid var(--border)}}
+
+    .card-head{
+      display:flex;align-items:center;gap:6px;
+      padding:12px 12px 0;
+    }
+    .card-badge{
+      font-size:9px;font-weight:500;padding:1px 6px;
+      background:var(--border);color:var(--muted);
+      border-radius:4px;line-height:1.5;
+    }
+    .card-origin{
+      margin-left:auto;
+      font-size:10px;padding:2px 8px;
+      text-decoration:none;color:var(--muted);line-height:1.6;
+    }
+    .card-origin:hover{color:var(--primary)}
+
+    .card-body{padding:8px 12px 12px;flex:1}
+    .card-title{
+      font-size:14px;font-weight:500;line-height:1.4;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+    .card-author{
+      font-size:12px;color:var(--muted);margin-top:6px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+    .card-stats{
+      display:flex;gap:12px;font-size:12px;color:var(--muted);
+      margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+    }
+
+    .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:80px 20px;color:var(--muted);font-size:14px;grid-column:1/-1}
+    .loading-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--text);border-radius:50%;animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .page-ctrl{display:flex;align-items:center;justify-content:center;gap:8px;padding:20px 0;grid-column:1/-1}
+    .page-ctrl button{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--text);cursor:pointer}
+    .page-ctrl button:disabled{opacity:0.3;cursor:default}
+    .page-ctrl span{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="top-row">
+      <div id="statusBar"></div>
+      <div class="top-actions">
+        <button id="pagePrev" disabled>←</button>
+        <span id="pageInfo">第 1 页</span>
+        <button id="pageNext">→</button>
+        <button id="refreshBtn">🔄</button>
+      </div>
+    </div>
+    <div class="platform-bar" id="platformBar"></div>
+    <div class="card-grid" id="cardGrid">
+      <div class="empty"><div class="loading-spinner"></div><span>加载中…</span></div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var API="/api";
+      var PAGE_SIZE=40;
+      var currentPage=0;
+      var totalItems=0;
+      var currentPlatform="";
+      var PER_PLATFORM_COUNTS={};
+
+      var grid=document.getElementById("cardGrid");
+      var status=document.getElementById("statusBar");
+      var prevBtn=document.getElementById("pagePrev");
+      var nextBtn=document.getElementById("pageNext");
+      var pageInfo=document.getElementById("pageInfo");
+      var refreshBtn=document.getElementById("refreshBtn");
+
+      function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+      function formatCount(c){if(!c)return"0";if(c>=1e4)return(c/1e4).toFixed(1)+"w";return String(c)}
+
+      var PLATFORMS=[
+        {id:"",label:"全部",icon:"📋"},
+        {id:"bilibili",label:"B站",icon:"📺"},
+        {id:"xiaohongshu",label:"小红书",icon:"📕"},
+        {id:"douyin",label:"抖音",icon:"🎵"},
+        {id:"youtube",label:"YouTube",icon:"▶️"},
+        {id:"zhihu",label:"知乎",icon:"💡"},
+        {id:"twitter",label:"Twitter",icon:"🐦"},
+        {id:"user_favorite_xiaohongshu",label:"收藏-小红书",icon:"⭐",isFilter:true},
+        {id:"user_favorite_douyin",label:"收藏-抖音",icon:"⭐",isFilter:true},
+        {id:"user_favorite_zhihu",label:"收藏-知乎",icon:"⭐",isFilter:true},
+        {id:"user_favorite_bilibili",label:"收藏-B站",icon:"⭐",isFilter:true},
+        {id:"user_like_xiaohongshu",label:"点赞-小红书",icon:"👍",isFilter:true},
+        {id:"user_like_douyin",label:"点赞-抖音",icon:"👍",isFilter:true},
+        {id:"user_like_zhihu",label:"点赞-知乎",icon:"👍",isFilter:true},
+        {id:"user_favorite",label:"我的收藏",icon:"⭐",isFilter:true},
+        {id:"user_like",label:"全部点赞",icon:"👍",isFilter:true},
+        {id:"user_viewed",label:"全部浏览",icon:"👁️",isFilter:true},
+      ];
+
+      var bar=document.getElementById("platformBar");
+      for(var pi=0;pi<PLATFORMS.length;pi++){
+        var p=PLATFORMS[pi];
+        var btn=document.createElement("button");
+        btn.className="platform-btn";
+        btn.dataset.platform=p.id;
+        btn.innerHTML='<span>'+p.icon+' '+esc(p.label)+'</span><span class="plat-count" data-pid="'+p.id+'"></span>';
+        btn.addEventListener("click",(function(id){return function(){setActivePlatform(id)}})(p.id));
+        bar.appendChild(btn);
+      }
+
+      function parsePlatform(pid){
+        if(!pid)return{sf:"",sp:""};
+        var parts=pid.split("_");
+        if(parts.length>=3&&parts[0]==="user"&&(parts[1]==="favorite"||parts[1]==="like")){
+          return{sf:parts[0]+"_"+parts[1],sp:parts.slice(2).join("_")};
+        }
+        if(pid.startsWith("user_"))return{sf:pid,sp:""};
+        return{sf:"",sp:pid};
+      }
+
+      function setActivePlatform(pid){
+        currentPlatform=pid;
+        var btns=bar.querySelectorAll(".platform-btn");
+        for(var bi=0;bi<btns.length;bi++)btns[bi].classList.toggle("active",btns[bi].dataset.platform===pid);
+        currentPage=0;
+        load();
+      }
+
+      function renderCards(items,offset,isShuffle){
+        if(!items||!items.length){
+          grid.innerHTML='<div class="empty"><span>暂无内容</span></div>';
+          status.textContent="暂无内容";
+          return;
+        }
+        var html="";
+        for(var i=0;i<items.length;i++){
+          var item=items[i];
+          var title=item.title||"";
+          var author=item.up_name||item.author_name||"";
+          var url=item.content_url||"";
+          var src=(item.source_platform||"").toLowerCase();
+          var srcLabel=({xiaohongshu:"小红书",bilibili:"B站",douyin:"抖音",youtube:"YouTube",zhihu:"知乎",twitter:"Twitter"})[src]||src||"web";
+          var likes=item.like_count||item.likes||0;
+          var collects=item.favorite_count||item.collected||item.collect_count||0;
+
+          html+='<div class="card" data-url="'+esc(url)+'">';
+          html+='<div class="card-head">';
+          html+='<span class="card-badge">'+esc(srcLabel)+'</span>';
+          if(url)html+='<a class="card-origin" href="'+esc(url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">原文</a>';
+          html+='</div>';
+          html+='<div class="card-body">';
+          html+='<div class="card-title">'+esc(title)+'</div>';
+          if(author)html+='<div class="card-author">'+esc(author)+'</div>';
+          if(likes||collects)html+='<div class="card-stats"><span>👍 '+formatCount(likes)+'</span><span>⭐ '+formatCount(collects)+'</span></div>';
+          html+='</div></div>';
+        }
+        grid.innerHTML=html;
+
+        var cards=grid.querySelectorAll(".card");
+        for(var ci=0;ci<cards.length;ci++){
+          (function(card){
+            card.addEventListener("click",function(){
+              var u=card.dataset.url;
+              if(u)window.open(u,"_blank");
+            });
+          })(cards[ci]);
+        }
+
+        var platformLabel="";
+        for(var pi=0;pi<PLATFORMS.length;pi++){
+          if((currentPlatform&&PLATFORMS[pi].id===currentPlatform)||(!currentPlatform&&!PLATFORMS[pi].id)){
+            platformLabel=PLATFORMS[pi].label;break;
+          }
+        }
+        var label=isShuffle?"随机":"第";
+        status.textContent="["+platformLabel+"] "+label+" "+(offset+1)+"~"+(offset+items.length)+" 条，共 "+totalItems+" 条";
+        updateButtons();
+        fetchCounts();
+      }
+
+      function load(){
+        var offset=currentPage*PAGE_SIZE;
+        status.textContent="加载中…";
+        grid.innerHTML='<div class="empty"><div class="loading-spinner"></div><span>加载中…</span></div>';
+
+        var parsed=parsePlatform(currentPlatform);
+        var url=API+"/pool?limit="+PAGE_SIZE+"&offset="+offset;
+        if(parsed.sf)url+="&source_filter="+encodeURIComponent(parsed.sf);
+        if(parsed.sp)url+="&source_platform="+encodeURIComponent(parsed.sp);
+        if(!parsed.sf&&!parsed.sp&&currentPlatform)url+="&source_platform="+encodeURIComponent(currentPlatform);
+
+        fetch(url,{credentials:"same-origin"})
+          .then(function(r){return r.json()})
+          .then(function(data){totalItems=data.total||0;renderCards(data&&data.items,offset,false);})
+          .catch(function(err){grid.innerHTML='<div class="empty"><span>加载失败：'+esc(err.message)+'</span></div>';status.textContent="加载失败";});
+      }
+
+      function fetchCounts(){
+        var combos=[{sf:"user_like",sp:"xiaohongshu"},{sf:"user_like",sp:"douyin"},{sf:"user_like",sp:"zhihu"},{sf:"user_favorite",sp:"xiaohongshu"},{sf:"user_favorite",sp:"douyin"},{sf:"user_favorite",sp:"zhihu"},{sf:"user_favorite",sp:"bilibili"}];
+        for(var ci=0;ci<combos.length;ci++){
+          (function(item){
+            var pid=item.sf+"_"+item.sp;
+            fetch(API+"/pool?limit=1&source_filter="+item.sf+"&source_platform="+item.sp)
+              .then(function(r){return r.json()})
+              .then(function(d){PER_PLATFORM_COUNTS[pid]=d.total;updateBtnCount(pid,d.total);});
+          })(combos[ci]);
+        }
+      }
+
+      function updateBtnCount(pid,cnt){
+        var cs=document.querySelector('.plat-count[data-pid="'+pid+'"]');
+        if(cs)cs.textContent=formatCount(cnt);
+      }
+
+      function updateButtons(){
+        prevBtn.disabled=currentPage<=0;
+        nextBtn.disabled=(currentPage+1)*PAGE_SIZE>=totalItems;
+        pageInfo.textContent="第 "+(currentPage+1)+" 页";
+      }
+
+      refreshBtn.addEventListener("click",function(){currentPage=0;shuffleLoad();});
+      prevBtn.addEventListener("click",function(){if(currentPage>0){currentPage--;load()}});
+      nextBtn.addEventListener("click",function(){if((currentPage+1)*PAGE_SIZE<totalItems){currentPage++;load()}});
+
+      function shuffleLoad(){
+        var offset=currentPage*PAGE_SIZE;
+        status.textContent="随机中…";
+        grid.innerHTML='<div class="empty"><div class="loading-spinner"></div><span>随机挑选中…</span></div>';
+
+        var parsed=parsePlatform(currentPlatform);
+        var url=API+"/pool?limit="+PAGE_SIZE+"&offset="+offset+"&shuffle=1";
+        if(parsed.sf)url+="&source_filter="+encodeURIComponent(parsed.sf);
+        if(parsed.sp)url+="&source_platform="+encodeURIComponent(parsed.sp);
+        if(!parsed.sf&&!parsed.sp&&currentPlatform)url+="&source_platform="+encodeURIComponent(currentPlatform);
+
+        fetch(url,{credentials:"same-origin"})
+          .then(function(r){return r.json()})
+          .then(function(data){totalItems=data.total||0;renderCards(data&&data.items,offset,true);})
+          .catch(function(err){grid.innerHTML='<div class="empty"><span>加载失败：'+esc(err.message)+'</span></div>';status.textContent="加载失败";});
+      }
+
+      setActivePlatform("");
+    })();
+  </script>
+</body>
+</html>

@@ -6,8 +6,12 @@
 
 import {
   startChatTurn,
+  fetchChatContext,
   fetchChatTurn,
   fetchChatTurns,
+  fetchPendingConfirmations,
+  openPendingConfirmation,
+  actOnChatCard,
   fetchProfileSummary,
   fetchActivityFeed,
   fetchPendingNotifications,
@@ -24,6 +28,7 @@ import { setUnreadCount, navigateToTab } from "../app.js";
 import {
   forgetHandledProbe,
   mergeProbeNotifications,
+  probeNotificationKey,
   rememberHandledProbe,
   removeProbeFromNotifications,
   shouldDisplayProbeFromWebSocket,
@@ -42,7 +47,34 @@ import {
   getSourceLabel,
   buildContentUrl,
 } from "../view-models.js";
+import { openContentUrl } from "../app-launch.js";
 import { state, patchState } from "../state.js";
+
+const dialogueConfirmation = globalThis.OpenBiliClawDialogueConfirmation;
+if (!dialogueConfirmation) {
+  throw new Error("dialogue-confirmation shared helper did not load");
+}
+const {
+  activateReplyQuote,
+  clearContextSelection,
+  contextBarMarkup,
+  contextErrorCode,
+  contextErrorMessage,
+  contextSelectionFromTurn,
+  executeCardAction,
+  executePendingConfirmationOpen,
+  isCardTurn,
+  isTerminalCardTurn,
+  isQuestionTurn,
+  normalizeContextPreview,
+  readContextSelection,
+  replyQuoteMarkup,
+  renderMarkdown,
+  renderPendingListMarkup,
+  renderTurnMarkup,
+  selectDialogueTurns,
+  writeContextSelection,
+} = dialogueConfirmation;
 
 let $root = null;
 let loaded = false;
@@ -51,15 +83,41 @@ let sending = false;
 let pendingTurnId = null;
 let pollTimer = null;
 let userScrolledUp = false;
+const CHAT_HISTORY_REFRESH_INTERVAL_MS = 2500;
+let historyRefreshTimer = null;
+let historyRefreshInFlight = false;
+let lastHistorySignature = null;
+let pendingConfirmationRefreshTimer = null;
+let dialogueStatus = { message: "", tone: "info" };
+let retainedDraft = "";
+let dialogueContextSelection = readContextSelection(
+  (() => {
+    try { return globalThis.localStorage; } catch { return null; }
+  })(),
+  "mobile-web",
+);
+const dialogueTurnsById = new Map();
+const dialogueCardActionAbortController = new AbortController();
+let pendingConfirmations = {
+  count: 0,
+  items: [],
+  expanded: false,
+};
 
 // Messages overlay state
 let overlayOpen = false;
 let notifications = [];
 let delightMsgs = [];
+const pendingProbeActions = new Map();
+
+function pendingProbeAction(type, domain) {
+  return pendingProbeActions.get(probeNotificationKey(type, domain)) || null;
+}
 
 function setProbeCardBusy(card, busy) {
   if (!card) return;
   card.classList.toggle("is-processing", busy);
+  card.setAttribute("aria-busy", busy ? "true" : "false");
   for (const actionBtn of card.querySelectorAll("[data-probe]")) {
     actionBtn.disabled = busy;
   }
@@ -81,6 +139,60 @@ function chatSession(scope = "chat") {
   return getMobileChatSession(scope);
 }
 
+function contextStorage() {
+  try { return globalThis.localStorage; } catch { return null; }
+}
+
+function storeDialogueContext(selection) {
+  dialogueContextSelection = writeContextSelection(contextStorage(), "mobile-web", selection);
+  return dialogueContextSelection;
+}
+
+async function validateDialogueContext({ announce = false } = {}) {
+  const current = normalizeContextPreview(dialogueContextSelection);
+  if (!current) return null;
+  const contextTarget = turns.find((turn) => turn?.turn_id === current.reply_to_turn_id);
+  if (isTerminalCardTurn(contextTarget)) {
+    storeDialogueContext(clearContextSelection());
+    return null;
+  }
+  try {
+    const preview = normalizeContextPreview(await fetchChatContext(current.reply_to_turn_id));
+    if (!preview) throw new Error("invalid_context_preview");
+    return storeDialogueContext(preview);
+  } catch (error) {
+    const code = contextErrorCode(error);
+    if (["reply_target_not_found", "reply_target_inactive", "invalid_reply_target"].includes(code)) {
+      storeDialogueContext(clearContextSelection());
+      if (announce) setDialogueStatus(contextErrorMessage(error), "error");
+    } else if (announce && code === "reply_target_processing") {
+      setDialogueStatus(contextErrorMessage(error), "info");
+    }
+    return code === "reply_target_processing" ? current : null;
+  }
+}
+
+async function selectDialogueContext(turnId, preview = null) {
+  const turn = turns.find((item) => item?.turn_id === turnId) || { turn_id: turnId };
+  const candidate = contextSelectionFromTurn(turn, preview);
+  if (candidate) {
+    storeDialogueContext(candidate);
+    render();
+    return candidate;
+  }
+  try {
+    const fetched = normalizeContextPreview(await fetchChatContext(turnId));
+    const fetchedCandidate = contextSelectionFromTurn(turn, fetched);
+    if (!fetchedCandidate) throw new Error("invalid_context_preview");
+    storeDialogueContext(fetchedCandidate);
+    render();
+    return fetchedCandidate;
+  } catch (error) {
+    setDialogueStatus(contextErrorMessage(error), "error");
+    return null;
+  }
+}
+
 // ── Escape helper ────────────────────────────────────────────
 function esc(s) {
   const el = document.createElement("span");
@@ -94,58 +206,160 @@ function isChallengeProbe(item) {
 }
 
 // ── Render Chat ──────────────────────────────────────────────
+function isNearChatBottom(element) {
+  if (!element) return true;
+  return element.scrollHeight - element.clientHeight - element.scrollTop <= 40;
+}
+
+function openEvidenceTurnIds(element) {
+  if (!element) return new Set();
+  return new Set(
+    Array.from(element.querySelectorAll(".dialogue-evidence[open]"))
+      .map((details) => details.closest("[data-dialogue-turn-id]")?.dataset.dialogueTurnId || "")
+      .filter(Boolean),
+  );
+}
+
+function setDialogueStatus(message = "", tone = "info") {
+  dialogueStatus = { message, tone };
+  const status = $root?.querySelector(".chat-status");
+  if (status instanceof HTMLElement) {
+    status.textContent = message;
+    status.hidden = !message;
+    status.dataset.tone = tone;
+  }
+}
+
+function createPendingPanel(previousScrollTop = 0) {
+  const panel = document.createElement("section");
+  panel.className = "chat-pending";
+  panel.setAttribute("aria-label", "待聊确认");
+
+  const toggle = document.createElement("button");
+  toggle.className = `chat-pending-toggle${pendingConfirmations.expanded ? " is-expanded" : ""}`;
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", String(pendingConfirmations.expanded));
+  toggle.setAttribute("aria-controls", "mobile-chat-pending-list");
+  const countText = pendingConfirmations.count > 99 ? "99+" : String(pendingConfirmations.count);
+  toggle.innerHTML = `<span>待聊确认 <span class="chat-pending-count">${countText}</span></span>`;
+  toggle.addEventListener("click", () => {
+    pendingConfirmations.expanded = !pendingConfirmations.expanded;
+    render();
+    if (pendingConfirmations.expanded) void refreshPendingConfirmations();
+  });
+
+  const list = document.createElement("div");
+  list.id = "mobile-chat-pending-list";
+  list.className = "chat-pending-list";
+  list.hidden = !pendingConfirmations.expanded;
+  list.setAttribute("aria-label", "待聊确认列表");
+  list.innerHTML = renderPendingListMarkup(pendingConfirmations.items);
+  list.addEventListener("click", (event) => {
+    const button = event.target instanceof Element
+      ? event.target.closest("[data-confirmation-ref]")
+      : null;
+    if (button instanceof HTMLButtonElement) void handlePendingConfirmationOpen(button);
+  });
+
+  panel.append(toggle, list);
+  requestAnimationFrame(() => {
+    list.scrollTop = Math.min(previousScrollTop, Math.max(0, list.scrollHeight - list.clientHeight));
+  });
+  return panel;
+}
+
 function render() {
   if (!$root) return;
+  const previousMessages = $root.querySelector("#chat-messages");
+  const previousPendingList = $root.querySelector("#mobile-chat-pending-list");
+  const previousInput = $root.querySelector("#chat-input");
+  const previousScrollTop = previousMessages?.scrollTop || 0;
+  const previousPendingScrollTop = previousPendingList?.scrollTop || 0;
+  const shouldStickToBottom = !previousMessages || isNearChatBottom(previousMessages);
+  const openEvidence = openEvidenceTurnIds(previousMessages);
+  const previousDraft = previousInput instanceof HTMLTextAreaElement
+    ? previousInput.value || retainedDraft
+    : retainedDraft;
+  const restoreInputFocus = document.activeElement === previousInput;
   $root.innerHTML = "";
 
   const shell = document.createElement("div");
   shell.className = "chat-shell";
 
+  shell.appendChild(createPendingPanel(previousPendingScrollTop));
+
   // Messages area
   const messages = document.createElement("div");
   messages.className = "chat-messages";
   messages.id = "chat-messages";
+  messages.tabIndex = 0;
+  messages.setAttribute("role", "region");
+  messages.setAttribute("aria-label", "口味对话记录");
 
-  if (turns.length === 0 && !sending) {
+  const dialogueTurns = selectDialogueTurns(turns);
+  dialogueTurnsById.clear();
+  if (dialogueTurns.length === 0 && !sending) {
     messages.innerHTML = `<div class="empty-state"><div class="empty-state-icon">\u{1F4AC}</div><div class="empty-state-text">\u548C AI \u804A\u804A\u4F60\u7684\u5174\u8DA3\u548C\u60F3\u6CD5</div></div>`;
   }
 
-  for (const turn of turns) {
-    if (turn.message) {
-      const userBubble = document.createElement("div");
-      userBubble.className = "chat-bubble user";
-      userBubble.textContent = turn.message;
-      messages.appendChild(userBubble);
-    }
-    if (turn.response) {
-      const aiBubble = document.createElement("div");
-      aiBubble.className = "chat-bubble assistant";
-      aiBubble.textContent = turn.response;
-      messages.appendChild(aiBubble);
-    } else if (turn.status === "pending" || turn.status === "processing") {
+  for (const turn of dialogueTurns) {
+    if (turn?.turn_id) dialogueTurnsById.set(turn.turn_id, turn);
+    const container = document.createElement("div");
+    container.className = "dialogue-turn";
+    container.dataset.dialogueTurnContainer = turn?.turn_id || "";
+    container.innerHTML = `${replyQuoteMarkup(turn, dialogueTurns)}${renderTurnMarkup(turn, { surface: "desktop" })}`;
+    if (
+      !isCardTurn(turn) &&
+      !isQuestionTurn(turn) &&
+      !turn.response &&
+      (turn.status === "pending" || turn.status === "processing")
+    ) {
       const thinking = document.createElement("div");
       thinking.className = "chat-bubble thinking";
       thinking.innerHTML = `<div class="spinner" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px"></div>\u601D\u8003\u4E2D\u2026`;
-      messages.appendChild(thinking);
-    } else if (turn.status === "error" || turn.status === "failed") {
-      const errBubble = document.createElement("div");
-      errBubble.className = "chat-bubble error";
-      errBubble.textContent = turn.error || "\u56DE\u590D\u5931\u8D25";
+      container.appendChild(thinking);
+    }
+    if (turn.status === "error" || turn.status === "failed") {
+      const errBubble = container.querySelector('[data-part="assistant"]');
+      if (errBubble) {
+        errBubble.textContent = turn.error || "\u56DE\u590D\u5931\u8D25";
+      }
       const retryBtn = document.createElement("button");
       retryBtn.className = "chat-retry-btn";
+      retryBtn.type = "button";
       retryBtn.textContent = "\u91CD\u8BD5";
       retryBtn.addEventListener("click", () => retryTurn(turn));
-      errBubble.appendChild(retryBtn);
-      messages.appendChild(errBubble);
+      container.appendChild(retryBtn);
     }
+    messages.appendChild(container);
   }
 
   // Scroll tracking
   messages.addEventListener("scroll", () => {
-    userScrolledUp = messages.scrollTop + messages.clientHeight < messages.scrollHeight - 40;
+    userScrolledUp = !isNearChatBottom(messages);
+  });
+  messages.addEventListener("click", (event) => {
+    activateReplyQuote(event, messages);
+    const button = event.target instanceof Element
+      ? event.target.closest("[data-card-action]")
+      : null;
+    if (button instanceof HTMLButtonElement) void handleDialogueCardAction(button);
   });
 
   shell.appendChild(messages);
+
+  const contextMarkup = contextBarMarkup(dialogueContextSelection);
+  if (contextMarkup) {
+    const contextBar = document.createElement("div");
+    contextBar.innerHTML = contextMarkup;
+    const clearButton = contextBar.querySelector("[data-context-clear]");
+    clearButton?.addEventListener("click", () => {
+      storeDialogueContext(clearContextSelection());
+      setDialogueStatus("已清除这条消息的对话上下文。", "info");
+      render();
+    });
+    shell.appendChild(contextBar.firstElementChild || contextBar);
+  }
 
   // Input row
   const inputRow = document.createElement("div");
@@ -156,6 +370,7 @@ function render() {
   textarea.id = "chat-input";
   textarea.placeholder = PLACEHOLDERS[placeholderIdx];
   textarea.rows = 2;
+  textarea.value = previousDraft;
   textarea.addEventListener("input", autoGrow);
   textarea.addEventListener("focus", () => { inputFocused = true; });
   textarea.addEventListener("blur", () => { inputFocused = false; });
@@ -176,6 +391,8 @@ function render() {
   const sendBtn = document.createElement("button");
   sendBtn.className = "chat-send-btn";
   sendBtn.id = "chat-send";
+  sendBtn.type = "button";
+  sendBtn.setAttribute("aria-label", "发送消息");
   sendBtn.innerHTML = "\u{1F4E8}";
   sendBtn.disabled = sending;
   sendBtn.addEventListener("click", handleSend);
@@ -184,13 +401,34 @@ function render() {
   inputRow.appendChild(sendBtn);
   shell.appendChild(inputRow);
 
+  const status = document.createElement("p");
+  status.className = "chat-status";
+  status.setAttribute("aria-live", "polite");
+  status.dataset.tone = dialogueStatus.tone;
+  status.textContent = dialogueStatus.message;
+  status.hidden = !dialogueStatus.message;
+  shell.appendChild(status);
+
   $root.appendChild(shell);
 
-  // Auto-scroll to bottom (unless user scrolled up)
-  if (!userScrolledUp) {
+  for (const details of messages.querySelectorAll(".dialogue-evidence")) {
+    const turnId = details.closest("[data-dialogue-turn-id]")?.dataset.dialogueTurnId || "";
+    if (openEvidence.has(turnId)) details.open = true;
+  }
+
+  // Auto-scroll only while the reader is already following the newest turn.
+  if (!userScrolledUp || shouldStickToBottom) {
     requestAnimationFrame(() => {
       messages.scrollTop = messages.scrollHeight;
     });
+  } else {
+    messages.scrollTop = Math.min(
+      previousScrollTop,
+      Math.max(0, messages.scrollHeight - messages.clientHeight),
+    );
+  }
+  if (restoreInputFocus) {
+    requestAnimationFrame(() => textarea.focus({ preventScroll: true }));
   }
 
   // Start placeholder carousel
@@ -218,6 +456,23 @@ function startPlaceholderCarousel() {
   }, 4000);
 }
 
+function isChatMessagesNearBottom(messages) {
+  return messages.scrollHeight - messages.scrollTop - messages.clientHeight <= 48;
+}
+
+function chatHistorySignature(nextTurns) {
+  return JSON.stringify(nextTurns);
+}
+
+function trackPendingHistoryTurn(nextTurns) {
+  const last = [...nextTurns].reverse().find((turn) => turn.scope === "chat");
+  if (!last || (last.status !== "pending" && last.status !== "processing")) return;
+  if (pendingTurnId === last.turn_id) return;
+  pendingTurnId = last.turn_id;
+  sending = true;
+  pollForResponse();
+}
+
 // ── Send ─────────────────────────────────────────────────────
 async function handleSend() {
   const input = document.getElementById("chat-input");
@@ -226,19 +481,31 @@ async function handleSend() {
 
   sending = true;
   const turnId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const replyToTurnId = dialogueContextSelection?.reply_to_turn_id || "";
 
-  turns.push({ turn_id: turnId, message: text, response: null, status: "pending" });
+  retainedDraft = "";
+  input.value = "";
+  turns.push({
+    turn_id: turnId,
+    message: text,
+    response: null,
+    status: "pending",
+    reply_to_turn_id: replyToTurnId,
+  });
   userScrolledUp = false;
+  setDialogueStatus("阿B 正在整理这句话…", "info");
   render();
 
   try {
-    await startChatTurn({ turnId, ...chatSession(), message: text });
+    await startChatTurn({ turnId, ...chatSession(), replyToTurnId, message: text });
     pendingTurnId = turnId;
     pollForResponse();
-  } catch {
+  } catch (error) {
     const t = turns.find((t) => t.turn_id === turnId);
     if (t) { t.status = "error"; t.error = "\u53D1\u9001\u5931\u8D25"; }
+    retainedDraft = text;
     sending = false;
+    setDialogueStatus(contextErrorMessage(error), "error");
     render();
   }
 }
@@ -247,6 +514,7 @@ async function retryTurn(failedTurn) {
   if (sending) return;
   failedTurn.status = "pending";
   failedTurn.error = "";
+  retainedDraft = "";
   sending = true;
   render();
 
@@ -257,14 +525,142 @@ async function retryTurn(failedTurn) {
       message: failedTurn.message,
       subjectId: failedTurn.subject_id || "",
       subjectTitle: failedTurn.subject_title || "",
+      replyToTurnId: failedTurn.reply_to_turn_id || "",
     });
     pendingTurnId = failedTurn.turn_id;
     pollForResponse();
-  } catch {
+  } catch (error) {
     failedTurn.status = "error";
     failedTurn.error = "\u91CD\u8BD5\u5931\u8D25";
     sending = false;
+    retainedDraft = failedTurn.message || "";
+    setDialogueStatus(contextErrorMessage(error), "error");
     render();
+  }
+}
+
+function updateDialogueTurn(turn) {
+  if (!turn?.turn_id) return;
+  const normalized = normalizeChatTurn(turn);
+  const index = turns.findIndex((item) => item?.turn_id === normalized.turn_id);
+  if (index >= 0) turns[index] = normalized;
+  else turns.push(normalized);
+  render();
+}
+
+export async function refreshPendingConfirmations({ renderNow = true } = {}) {
+  if (!state.online) {
+    if (state.pendingConfirmationCount !== 0) patchState({ pendingConfirmationCount: 0 });
+    return;
+  }
+  try {
+    const payload = await fetchPendingConfirmations({ session: "popup" });
+    const count = Math.max(0, Number(payload?.count) || 0);
+    pendingConfirmations = {
+      ...pendingConfirmations,
+      count,
+      items: Array.isArray(payload?.items) ? payload.items : [],
+    };
+    if (state.pendingConfirmationCount !== count) patchState({ pendingConfirmationCount: count });
+    if (renderNow) render();
+  } catch {
+    // Preserve the last successful list while the backend reconnects.
+  }
+}
+
+async function handleDialogueCardAction(button) {
+  const card = button.closest(".dialogue-card");
+  const turnId = card?.dataset.dialogueTurnId || "";
+  const action = button.dataset.cardAction || "";
+  const turn = dialogueTurnsById.get(turnId);
+  if (!turn || !action || button.disabled) return;
+  button.disabled = true;
+  try {
+    const { response } = await executeCardAction(turn, action, {
+      request(_path, body) {
+        return actOnChatCard(turnId, body.action, {
+          signal: dialogueCardActionAbortController.signal,
+        });
+      },
+      fetchTurn(id, options) {
+        return fetchChatTurn(id, options);
+      },
+      signal: dialogueCardActionAbortController.signal,
+      onUpdate: updateDialogueTurn,
+    });
+    if (response?.outcome === "retryable_error") {
+      const reason = String(response?.reason || "").toLowerCase();
+      setDialogueStatus(
+        reason === "stale_anchor" || reason === "anchor_dependency_failed"
+          ? "你正在聊另一条，先结束那条再结算这张卡。"
+          : "后端结果暂未同步，可以刷新或直接重试。",
+        "error",
+      );
+      return;
+    }
+    if (action === "discuss") {
+      await selectDialogueContext(turnId, response?.context_preview || null);
+    } else if (dialogueContextSelection?.reply_to_turn_id === turnId) {
+      storeDialogueContext(clearContextSelection());
+    }
+    await loadHistory();
+    setDialogueStatus(
+      action === "discuss"
+        ? "好，沿着这条猜测继续聊。"
+        : action === "defer"
+          ? "先放一放，之后再聊。"
+          : response?.state === "revised"
+            ? "已按你的修正记下。"
+            : action === "confirm"
+              ? "已确认这条猜测。"
+              : "已记下这条猜测不准。",
+      "success",
+    );
+  } catch (error) {
+    setDialogueStatus(contextErrorMessage(error), "error");
+    render();
+  }
+}
+
+async function handlePendingConfirmationOpen(button) {
+  const ref = button.dataset.confirmationRef || "";
+  if (!ref || button.disabled) return;
+  button.disabled = true;
+  button.textContent = "打开中…";
+  try {
+    const turn = await executePendingConfirmationOpen(ref, {
+      session: "popup",
+      signal: dialogueCardActionAbortController.signal,
+      request(_path, body, { signal } = {}) {
+        return openPendingConfirmation(ref, { session: body.session, signal });
+      },
+      onWaiting({ message }) {
+        button.textContent = "等待中…";
+        setDialogueStatus(`${message}，空闲后会自动打开。`, "info");
+      },
+    });
+    if (turn?.turn_id) {
+      updateDialogueTurn(turn);
+      await selectDialogueContext(turn.turn_id);
+    }
+    await loadHistory();
+    userScrolledUp = false;
+    setDialogueStatus(
+      isQuestionTurn(turn) ? "这条疑惑已经放进对话里。" : "这张确认卡已经放进对话里。",
+      "success",
+    );
+    render();
+    $root?.querySelector("#chat-input")?.focus({ preventScroll: true });
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "打开";
+    if (Number(error?.status) === 409) {
+      await refreshPendingConfirmations();
+      setDialogueStatus("另一条疑惑正在聊，待聊列表已经同步。", "error");
+    } else if (error?.name !== "AbortError") {
+      const detail = String(error?.details?.detail?.message || "").trim();
+      setDialogueStatus(detail || "这条待聊内容暂时打不开，请稍后重试。", "error");
+    }
   }
 }
 
@@ -281,11 +677,13 @@ function pollForResponse() {
         pendingTurnId = null;
         sending = false;
         userScrolledUp = false;
+        setDialogueStatus("这句已经记下了。", "success");
         render();
-        refreshAfterChatTurn();
+        void Promise.allSettled([refreshAfterChatTurn(), refreshPendingConfirmations()]);
       } else if (turn.status === "error" || turn.status === "failed") {
         pendingTurnId = null;
         sending = false;
+        setDialogueStatus("这句处理失败了，可以重试。", "error");
         render();
       } else {
         render();
@@ -335,11 +733,16 @@ function renderOverlay() {
 
   // Probe notifications
   for (const n of notifications) {
+    const domain = n.domain || n.title || "";
     const isAvoidance = (n.type || "") === "avoidance.probe";
     const isChallenge = !isAvoidance && isChallengeProbe(n);
     const actions = isAvoidance ? getAvoidanceProbeMessageActions() : getProbeMessageActions();
+    const pending = pendingProbeAction(n.type, domain);
     const card = document.createElement("div");
     card.className = `message-card ${isAvoidance ? "is-avoidance-probe" : isChallenge ? "is-challenge-probe" : "is-interest-probe"}`;
+    card.dataset.probeDomain = domain;
+    card.setAttribute("aria-busy", pending ? "true" : "false");
+    card.classList.toggle("is-processing", Boolean(pending));
     const prompt = isAvoidance
       ? "想少看这类，就确认这是雷点；如果阿B猜错了，点不是。"
       : isChallenge
@@ -348,13 +751,16 @@ function renderOverlay() {
     card.innerHTML = `
       <div class="message-card-type"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>${isAvoidance ? "避雷确认" : isChallenge ? "挑战探针" : "兴趣探测"}</div>
       <div class="message-card-prompt">${esc(prompt)}</div>
-      <div class="message-card-title">${esc(n.domain || n.title || "")}</div>
+      <div class="message-card-title">${esc(domain)}</div>
       <div class="message-card-body">${esc(n.description || n.reason || n.message || "")}</div>
       <div class="message-card-actions">
         ${actions.map((item) => `
-          <button class="message-action-btn ${item.primary ? "primary" : "secondary"}" data-probe="${esc(item.action)}" data-probe-kind="${isAvoidance ? "avoidance" : "interest"}" data-domain="${esc(n.domain || "")}">${esc(item.label)}</button>
+          <button type="button" class="message-action-btn ${item.primary ? "primary" : "secondary"}" data-probe="${esc(item.action)}" data-probe-kind="${isAvoidance ? "avoidance" : "interest"}" data-domain="${esc(n.domain || "")}">${esc(item.label)}</button>
         `).join("")}
       </div>`;
+    for (const button of card.querySelectorAll("button")) {
+      button.disabled = Boolean(pending);
+    }
     panel.appendChild(card);
   }
 
@@ -393,24 +799,24 @@ function renderOverlay() {
         });
         return;
       }
+      const key = probeNotificationKey(probeType, domain);
+      if (!key || pendingProbeActions.has(key)) return;
+      pendingProbeActions.set(key, { response: action });
       setProbeCardBusy(card, true);
-      rememberHandledProbe(domain, probeType);
+      renderOverlay();
       try {
-        const resp = isAvoidance
-          ? await respondToAvoidanceProbe(domain, action)
-          : await respondToProbe(domain, action);
-        if (resp && resp.ok === false) {
-          notifications = removeProbeFromNotifications(notifications, domain, probeType);
-          updateBadgeCount();
-          renderOverlay();
-          return;
-        }
+        await (isAvoidance
+          ? respondToAvoidanceProbe(domain, action)
+          : respondToProbe(domain, action));
+        pendingProbeActions.delete(key);
+        rememberHandledProbe(domain, probeType);
         notifications = removeProbeFromNotifications(notifications, domain, probeType);
         updateBadgeCount();
         renderOverlay();
       } catch {
-        forgetHandledProbe(domain, probeType);
+        pendingProbeActions.delete(key);
         setProbeCardBusy(card, false);
+        renderOverlay();
       }
     });
   }
@@ -465,7 +871,7 @@ function renderOverlay() {
       if (action === "view") {
         const item = normalizeDelightCandidate({ bvid, title });
         const url = buildContentUrl(item);
-        if (url) window.open(url, "_blank");
+        if (url) openContentUrl(url);
       }
     });
   }
@@ -479,19 +885,78 @@ function updateBadgeCount() {
 
 // ── Load ─────────────────────────────────────────────────────
 async function loadHistory() {
+  if (!state.online || historyRefreshInFlight) return;
+  historyRefreshInFlight = true;
+  const existingMessages = document.getElementById("chat-messages");
+  const shouldStickToBottom =
+    !(existingMessages instanceof HTMLElement) || isChatMessagesNearBottom(existingMessages);
+  const previousScrollTop = existingMessages instanceof HTMLElement ? existingMessages.scrollTop : 0;
   try {
-    const data = await fetchChatTurns({ ...chatSession(), limit: 50 });
-    turns = Array.isArray(data?.items || data?.turns)
-      ? (data.items || data.turns).map(normalizeChatTurn)
-      : [];
-    const last = turns[turns.length - 1];
-    if (last && (last.status === "pending" || last.status === "processing")) {
-      pendingTurnId = last.turn_id;
-      sending = true;
-      pollForResponse();
+    const [historyResult, pendingResult] = await Promise.allSettled([
+      fetchChatTurns({ session: "popup", limit: 100 }),
+      fetchPendingConfirmations({ session: "popup" }),
+    ]);
+    let changed = false;
+    if (historyResult.status === "fulfilled") {
+      const data = historyResult.value;
+      const nextTurns = Array.isArray(data?.items || data?.turns)
+        ? (data.items || data.turns).map(normalizeChatTurn)
+        : [];
+      trackPendingHistoryTurn(nextTurns);
+      const signature = chatHistorySignature(nextTurns);
+      if (signature !== lastHistorySignature) {
+        lastHistorySignature = signature;
+        turns = nextTurns;
+        changed = true;
+      }
     }
-  } catch { /* ignore */ }
-  render();
+    if (pendingResult.status === "fulfilled") {
+      const payload = pendingResult.value;
+      const nextPending = {
+        count: Math.max(0, Number(payload?.count) || 0),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+      };
+      if (
+        nextPending.count !== pendingConfirmations.count ||
+        JSON.stringify(nextPending.items) !== JSON.stringify(pendingConfirmations.items)
+      ) {
+        pendingConfirmations = { ...pendingConfirmations, ...nextPending };
+        changed = true;
+      }
+      if (state.pendingConfirmationCount !== nextPending.count) {
+        patchState({ pendingConfirmationCount: nextPending.count });
+      }
+    }
+    const contextBefore = dialogueContextSelection?.reply_to_turn_id || "";
+    await validateDialogueContext({ announce: true });
+    if ((dialogueContextSelection?.reply_to_turn_id || "") !== contextBefore) {
+      changed = true;
+    }
+    if (!changed) return;
+    render();
+    if (!shouldStickToBottom) {
+      window.requestAnimationFrame(() => {
+        const messages = document.getElementById("chat-messages");
+        if (!(messages instanceof HTMLElement)) return;
+        messages.scrollTop = Math.min(
+          previousScrollTop,
+          Math.max(0, messages.scrollHeight - messages.clientHeight),
+        );
+      });
+    }
+  } catch {
+    // Keep the last durable snapshot while offline.
+  } finally {
+    historyRefreshInFlight = false;
+  }
+}
+
+function startChatHistorySync() {
+  if (historyRefreshTimer !== null) return;
+  historyRefreshTimer = window.setInterval(() => {
+    if (state.activeTab !== "chat" || document.hidden || !state.online) return;
+    void loadHistory();
+  }, CHAT_HISTORY_REFRESH_INTERVAL_MS);
 }
 
 async function refreshAfterChatTurn() {
@@ -539,6 +1004,7 @@ export async function loadNotifications({ includeDelights = false } = {}) {
 // ── Public API ───────────────────────────────────────────────
 export function initChatView(root) {
   $root = root;
+  startChatHistorySync();
   if (!loaded) {
     loaded = true;
     loadNotifications();
@@ -562,6 +1028,13 @@ export function updateBadge() {
 }
 
 export function onStreamEvent(payload) {
+  if (pendingConfirmationRefreshTimer !== null) {
+    window.clearTimeout(pendingConfirmationRefreshTimer);
+  }
+  pendingConfirmationRefreshTimer = window.setTimeout(() => {
+    pendingConfirmationRefreshTimer = null;
+    void refreshPendingConfirmations();
+  }, 300);
   const type = payload?.type || payload?.event;
   if (type === "interest.probe" || type === "avoidance.probe") {
     const item = payload.data || payload;
@@ -675,13 +1148,15 @@ function expandInlineChatOnCard(card, { scope, subjectId, subjectTitle, placehol
         message,
       });
 
+      // Only a completed turn consumes a probe notification. Failed turns
+      // keep the composer/card available so the user can retry.
       const showReply = (t) => {
         thinking.remove();
         input.remove();
         sendBtn.remove();
         const replyEl = document.createElement("div");
-        replyEl.className = "inline-chat-reply";
-        replyEl.textContent = t.reply || t.response || "收到了，我会结合这个方向继续观察。";
+        replyEl.className = "inline-chat-reply chat-markdown";
+        replyEl.innerHTML = renderMarkdown(t.reply || t.response || "收到了，我会结合这个方向继续观察。");
         chatArea.appendChild(replyEl);
         setTimeout(() => {
           const domain = subjectId;
@@ -693,15 +1168,32 @@ function expandInlineChatOnCard(card, { scope, subjectId, subjectTitle, placehol
         }, 3500);
       };
 
+      const settleTurn = (t) => {
+        if (t.status === "failed") {
+          thinking.remove();
+          sendBtn.disabled = false;
+          input.disabled = false;
+          if (isProbeScope) {
+            forgetHandledProbe(subjectId, probeType);
+          }
+          const errEl = document.createElement("div");
+          errEl.className = "inline-chat-error";
+          errEl.textContent = t.error || "刚刚没发出去，换个说法再试试。";
+          chatArea.appendChild(errEl);
+          return;
+        }
+        if (t.status === "completed") showReply(t);
+      };
+
       if (turn.status === "completed" || turn.status === "failed") {
-        showReply(turn);
+        settleTurn(turn);
       } else {
         // Poll until settled
         const poll = async () => {
           try {
             const t = await fetchChatTurn(turnId);
             if (t.status === "completed" || t.status === "failed") {
-              showReply(t);
+              settleTurn(t);
             } else {
               setTimeout(poll, 1500);
             }

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -117,6 +118,15 @@ class BiliTaskQueue:
         daily_budget: int = 100,
     ) -> str | None:
         """Enqueue a task and return its id, or ``None`` when budget is exhausted."""
+
+        # Recover orphaned ``in_progress`` tasks before issuing new work: a
+        # task claimed by a worker (browser extension) that then goes offline
+        # can sit in ``in_progress`` forever otherwise — ``next_pending`` only
+        # re-claims when a worker polls, and ``find_recent_task`` treats
+        # ``in_progress`` as recent, so the producer's ``_is_due`` keeps
+        # skipping ("already running") while the zombie row blocks discovery.
+        with suppress(Exception):
+            self.expire_stale_in_progress()
 
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         if daily_budget > 0:
@@ -279,6 +289,46 @@ class BiliTaskQueue:
             (json.dumps(result_payload, ensure_ascii=False), task_id),
         )
         self._db.conn.commit()
+
+    def expire_stale_in_progress(
+        self,
+        *,
+        stale_after_minutes: float = 120.0,
+    ) -> int:
+        """Mark long-orphaned ``in_progress`` tasks as failed.
+
+        ``next_pending`` re-claims an ``in_progress`` task only when a worker
+        (the browser extension) polls, so if the extension goes offline after
+        claiming, the row can stay ``in_progress`` indefinitely. Worse, the
+        producer's ``_is_due`` treats ``in_progress`` as a recent task and
+        keeps skipping new discovery while the zombie row sits there.
+
+        Called automatically on every ``enqueue_with_id``; recovers orphans
+        whenever the queue is next used. Returns the number of tasks expired.
+        """
+        stale_before = (
+            datetime.now(UTC) - timedelta(minutes=float(stale_after_minutes))
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        cursor = self._db.conn.execute(
+            """
+            UPDATE bili_tasks
+            SET status = 'failed',
+                result_json = ?,
+                completed_at = CURRENT_TIMESTAMP
+            WHERE status = 'in_progress'
+              AND claimed_at IS NOT NULL
+              AND claimed_at <= ?
+            """,
+            (
+                json.dumps({"error": "stale_in_progress"}, ensure_ascii=False),
+                stale_before,
+            ),
+        )
+        self._db.conn.commit()
+        count = cursor.rowcount
+        if count:
+            logger.info("Expired %d stale in_progress bili task(s)", count)
+        return count
 
 
 def source_keyword_id_from_bili_task(payload_json: str | None) -> int | None:

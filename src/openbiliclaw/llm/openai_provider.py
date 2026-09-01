@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
+import httpx
 
 from .base import (
     LLMProvider,
@@ -65,6 +66,7 @@ class OpenAIProvider(LLMProvider):
         token_provider: Callable[[bool], Awaitable[str]] | None = None,
         timeout: float = 300.0,
         embedding_output_dimensionality: int = 0,
+        reasoning_effort: str = "",
     ) -> None:
         self._model = model
         self._provider_name = provider_name
@@ -72,11 +74,19 @@ class OpenAIProvider(LLMProvider):
         self._token_provider = token_provider
         self._timeout = timeout
         self._embedding_output_dimensionality = max(0, int(embedding_output_dimensionality or 0))
+        # Non-empty = forwarded verbatim to the backend via ``extra_body``
+        # (see ``_extra_body``). Empty = don't send the field at all, which
+        # keeps vanilla OpenAI.com (that rejects ``reasoning_effort``) working.
+        self._reasoning_effort = reasoning_effort.strip()
         self._client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url or None,
             max_retries=0,
             timeout=timeout,
+            # Bypass the macOS system proxy (127.0.0.1:7890) — it is restarted
+            # often and its downtime kills every LLM call. All configured
+            # providers (sensenova / deepseek) are reachable directly.
+            http_client=httpx.AsyncClient(trust_env=False),
         )
 
     @property
@@ -135,6 +145,18 @@ class OpenAIProvider(LLMProvider):
                 raise
         choice = response.choices[0]
         content = choice.message.content or ""
+        finish_reason = str(getattr(choice, "finish_reason", "") or "")
+        if not content.strip() and finish_reason == "length":
+            # The output budget was consumed before any final answer was
+            # produced (typical for reasoning models whose thinking stream
+            # eats the whole budget). Retrying without response_format
+            # cannot help — the budget is still the same — so raise with a
+            # diagnostic message instead of burning a second call.
+            raise LLMResponseError(
+                f"{self._provider_name} returned empty content (finish_reason=length; "
+                f"max_tokens={kwargs.get('max_tokens')} exhausted, likely by reasoning tokens; "
+                f"reasoning={len(getattr(choice.message, 'reasoning', '') or '')} chars)"
+            )
         if not content.strip():
             # Some OpenAI-compatible backends return HTTP 200 and report
             # completion_tokens > 0, yet ``message.content`` is empty when
@@ -152,7 +174,10 @@ class OpenAIProvider(LLMProvider):
                 choice = response.choices[0]
                 content = choice.message.content or ""
             if not content.strip():
-                raise LLMResponseError(f"{self._provider_name} returned empty content")
+                raise LLMResponseError(
+                    f"{self._provider_name} returned empty content "
+                    f"(finish_reason={finish_reason or '?'})"
+                )
 
         usage = None
         if response.usage:
@@ -378,8 +403,12 @@ class OpenAIProvider(LLMProvider):
 
         Used for non-standard keys like DeepSeek's ``thinking`` and
         ``reasoning_effort``. Keys returned here are passed verbatim via
-        ``extra_body`` of the OpenAI SDK.
+        ``extra_body`` of the OpenAI SDK. The base provider only forwards
+        ``reasoning_effort`` (set from config); subclasses (DeepSeekProvider)
+        override this for their own thinking schemas.
         """
+        if self._reasoning_effort:
+            return {"reasoning_effort": self._reasoning_effort}
         return {}
 
 
@@ -429,7 +458,8 @@ class DeepSeekProvider(OpenAIProvider):
             provider_name="deepseek",
             timeout=timeout,
         )
-        self._reasoning_effort = reasoning_effort.strip()
+        # Empty config falls back to DeepSeek's historical "max" default.
+        self._reasoning_effort = (reasoning_effort or "max").strip()
 
     async def complete(
         self,

@@ -125,7 +125,7 @@ class DouyinDirectClient:
             raise DouyinDirectAuthError("Douyin direct discovery requires a cookie.")
 
         self._owns_http_client = http_client is None
-        self._http = http_client or httpx.AsyncClient(timeout=30.0)
+        self._http = http_client or httpx.AsyncClient(timeout=30.0, trust_env=False)
         self._signer = signer or XBogusSigner(user_agent)
         self._user_agent = self._signer.user_agent
 

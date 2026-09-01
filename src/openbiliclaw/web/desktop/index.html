@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenBiliClaw 推荐首页</title>
+  <title>古灵阁的大模型推荐系统</title>
   <link rel="stylesheet" href="/web/assets/css/app.css">
 </head>
 <body>
@@ -13,9 +13,9 @@
         <button class="icon-btn side-drawer-btn" id="sideDrawerBtn" type="button" aria-label="打开侧边菜单">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
         </button>
-        <a class="brand" href="#home" aria-label="OpenBiliClaw 首页">
+        <a class="brand" href="/web" aria-label="古灵阁的大模型推荐系统 首页">
           <span class="brand-mark">B</span>
-          <span class="brand-copy"><span class="brand-title">OpenBiliClaw</span><span class="brand-sub">你的本地全网推荐入口</span></span>
+          <span class="brand-copy"><span class="brand-title">古灵阁的大模型推荐系统</span><span class="brand-sub">你的本地全网推荐入口</span></span>
         </a>
       </div>
       <form class="search" id="searchForm">
@@ -48,57 +48,87 @@
 
     <div class="fatal-banner" id="fatalBanner" role="alert"></div>
 
-    <aside class="side-drawer" id="sideDrawer" aria-label="侧边菜单" aria-hidden="true">
-      <div class="side-drawer-scrim" id="sideDrawerScrim"></div>
-      <div class="side-drawer-panel" aria-label="侧边菜单">
-        <nav class="side-drawer-nav" aria-label="全局功能">
-          <button class="nav-action" id="homeBtn" type="button"><span class="nav-glyph">⌂</span><span>首页</span></button>
-          <button class="nav-action" id="watchLaterBtn" type="button"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 1.9"/></svg></span><span>稍后再看</span><span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
-          <button class="nav-action" id="favoritesBtn" type="button"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M12 3.6l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.1l-5.31 2.8 1.01-5.9L3.41 9.83l5.93-.86z"/></svg></span><span>我的收藏</span><span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
-          <button class="nav-action" id="profileBtn" type="button"><span class="nav-glyph">◎</span><span>我的画像</span></button>
-          <button class="nav-action" id="chatBtn" type="button"><span class="nav-glyph">✦</span><span>聊聊口味</span></button>
-          <button class="nav-action" id="settingsBtn" type="button"><span class="nav-glyph">⌁</span><span>设置</span></button>
-        </nav>
-        <section class="side-section side-runtime-panel" aria-label="实时运行摘要">
-          <p class="eyebrow">Runtime</p>
-          <h3>推荐池实时看板</h3>
-          <p id="runtimeSummary">连接 FastAPI 后，这里会显示候选池、补货和新动作记录。</p>
-          <div class="hero-status-grid" aria-label="推荐池实时状态">
-            <div><span>当前可换库存</span><strong id="poolAvailable">—</strong></div>
-            <div><span>上次成功补货</span><strong id="poolReplenished">—</strong></div>
-            <div><span>补货状态</span><strong id="poolRefreshState">—</strong></div>
-          </div>
-          <div class="metric-row">
-            <div class="metric"><strong id="metricPool">—</strong><span>当前可换</span></div>
-            <div class="metric"><strong id="metricUnread">—</strong><span>通知数</span></div>
-            <div class="metric"><strong id="metricSources">—</strong><span>内容源</span></div>
-          </div>
-          <p class="hero-topics">最近主题：<span id="poolTopics">等待后端同步</span></p>
-        </section>
-        <section class="side-section side-activity-section" data-od-id="activity-rail" aria-label="后台动态摘要">
-          <p class="eyebrow">Activity</p>
-          <h3>后台刚记住的事</h3>
-          <div class="activity-list" id="activityList"></div>
-          <div class="drawer-actions"><button class="small-btn" id="activityBtn" type="button">查看全部动态</button></div>
-        </section>
+    <nav class="tabbar" id="tabBar" aria-label="全局导航">
+      <div class="tabbar-scroll" aria-label="全局导航">
+        <button class="tab-btn" id="homeBtn" type="button">首页</button>
+        <button class="tab-btn" id="libraryBtn" type="button">阅读库</button>
+        <button class="tab-btn" id="delightTabBtn" type="button">惊喜</button>
+        <button class="tab-btn" id="watchLaterBtn" type="button">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
+        <button class="tab-btn" id="favoritesBtn" type="button">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
+        <button class="tab-btn" id="profileBtn" type="button">我的画像</button>
+        <button class="tab-btn" id="chatBtn" type="button">聊聊口味</button>
+        <button class="tab-btn" id="settingsBtn" type="button">设置</button>
       </div>
+      <div class="tabbar-tools" aria-label="推荐筛选与操作">
+        <div class="filter-row" id="filterRow" aria-label="推荐筛选"></div>
+        <div class="tabbar-actions" aria-label="推荐操作">
+          <span class="pool-pill" title="当前可更换的推荐数"><strong id="metricPool">—</strong><span>可换</span></span>
+          <label class="reshuffle-toggle" title="开启：换一批前先将当前显示的推荐标记为忽略；关闭：只重排当前推荐池，不反馈当前内容。">
+            <input id="dismissOnReshuffleToggle" type="checkbox">
+            <span class="reshuffle-switch" aria-hidden="true"></span>
+            <span>换一批时忽略当前</span>
+          </label>
+          <button class="icon-btn" id="reshuffleBtn" type="button" aria-label="换一批" title="换一批">↻</button>
+          <button class="pill-btn" id="resetFiltersBtn" type="button" hidden="">重置筛选</button>
+        </div>
+      </div>
+    </nav>
+
+    <aside class="side-drawer" id="sideDrawer" aria-label="侧边菜单" aria-hidden="true" hidden>
+      <div class="side-drawer-scrim" id="sideDrawerScrim"></div>
     </aside>
 
     <main class="layout" id="home">
       <section class="main-col" id="homePage" aria-label="推荐首页" data-od-id="recommendation-home">
+        <section class="runtime-strip" id="runtimeStrip" aria-label="推荐池实时摘要">
+          <div class="runtime-summary" id="runtimeSummary">连接后端后显示运行状态</div>
+          <div class="runtime-item"><span>当前可换</span><strong id="poolAvailable">—</strong></div>
+          <div class="runtime-item"><span>上次补货</span><strong id="poolReplenished">—</strong></div>
+          <div class="runtime-item"><span>补货状态</span><strong id="poolRefreshState">—</strong></div>
+          <div class="runtime-item"><span>通知</span><strong id="metricUnread">—</strong></div>
+          <div class="runtime-item"><span>内容源</span><strong id="metricSources">—</strong></div>
+          <div class="runtime-item"><span>最近主题</span><strong id="poolTopics">等待后端同步</strong></div>
+        </section>
+
+        <!-- 惊喜推荐已移至独立页面 delightPage -->
+        <section data-od-id="recommendations">
+          <div class="card-grid" id="videoGrid"></div>
+          <div class="load-row"><button class="pill-btn dark" id="loadMoreBtn" type="button">换一批推荐</button></div>
+        </section>
+
+        <section class="activity-section" data-od-id="activity-rail" aria-label="后台动态摘要">
+          <div class="section-head activity-section-head">
+            <div>
+              <p class="eyebrow">Activity</p>
+              <h2>后台刚记住的事</h2>
+            </div>
+            <div class="drawer-actions"><button class="small-btn" id="activityBtn" type="button">查看全部动态</button></div>
+          </div>
+          <div class="activity-list" id="activityList"></div>
+        </section>
+      </section>
+
+      <section class="delight-page content-page" id="delightPage" aria-label="惊喜推荐" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Delight</p>
+            <h2>惊喜推荐</h2>
+            <p class="video-meta">基于你近期兴趣找出的高惊喜候选——大概率是你不会主动搜、但看了会想"原来可以这样"的内容。</p>
+          </div>
+        </div>
         <section class="delight" id="delightBanner" data-od-id="delight-banner">
-          <div class="thumb" id="delightThumb" role="button" tabindex="0" aria-label="打开当前惊喜推荐"></div>
-          <div class="delight-body">
-            <div class="delight-meta">
-              <p class="eyebrow">惊喜推荐</p>
-              <div class="delight-queue-tools" aria-label="惊喜推荐队列管理">
-                <div class="delight-nav" aria-label="惊喜推荐队列导航">
-                  <button class="icon-btn" data-delight="prev" type="button" aria-label="上一条惊喜推荐">‹</button>
-                  <span id="delightCount">1/1</span>
-                  <button class="icon-btn" data-delight="next" type="button" aria-label="下一条惊喜推荐">›</button>
-                </div>
+          <div class="delight-meta">
+            <p class="eyebrow">惊喜推荐</p>
+            <div class="delight-queue-tools" aria-label="惊喜推荐队列管理">
+              <div class="delight-nav" aria-label="惊喜推荐队列导航">
+                <button class="icon-btn" data-delight="prev" type="button" aria-label="上一条惊喜推荐">‹</button>
+                <span id="delightCount">1/1</span>
+                <button class="icon-btn" data-delight="next" type="button" aria-label="下一条惊喜推荐">›</button>
               </div>
             </div>
+          </div>
+          <div class="thumb" id="delightThumb" role="button" tabindex="0" aria-label="打开当前惊喜推荐"></div>
+          <div class="delight-body">
             <div class="delight-copy">
               <h3 id="delightTitle">你可能会意外喜欢：县域经济的债务齿轮</h3>
               <p id="delightReason">你最近的轨迹同时出现了宏观债务、地方财政和长叙事内容，这条把它们咬合得很清楚。</p>
@@ -136,52 +166,31 @@
             <p class="status-line" id="delightStatus"></p>
           </div>
         </section>
+        <p class="delight-page-note">看完点"忽略"会换下一条；喜欢的点星标收藏或时钟稍后再看。</p>
+      </section>
 
-        <section data-od-id="recommendations">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Recommendations</p>
-              <h2>为你推荐的内容</h2>
-              <p>阿B 根据你的近期兴趣筛选的内容，有任何意见尽管和我聊~</p>
-            </div>
-            <div class="drawer-actions recommendation-actions">
-              <label class="reshuffle-toggle" title="开启：换一批前先将当前显示的推荐标记为忽略；关闭：只重排当前推荐池，不反馈当前内容。">
-                <input id="dismissOnReshuffleToggle" type="checkbox">
-                <span class="reshuffle-switch" aria-hidden="true"></span>
-                <span>换一批时忽略当前</span>
-              </label>
-              <button class="icon-btn" id="reshuffleBtn" type="button" aria-label="换一批" title="换一批">↻</button>
-              <button class="pill-btn" id="resetFiltersBtn" type="button" hidden="">重置筛选</button>
-            </div>
+      <section class="saved-page content-page" id="savedPage" aria-label="收藏" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Favorites</p>
+            <h2>收藏<span class="saved-tab-count" id="favCountBadge"></span></h2>
+            <p class="video-meta">喜欢的点星标收藏，随时回来翻。</p>
           </div>
-          <div class="filter-row" id="filterRow" aria-label="推荐筛选"></div>
-          <div class="card-grid" id="videoGrid"></div>
-          <div class="load-row"><button class="pill-btn dark" id="loadMoreBtn" type="button">加载更多推荐</button></div>
-        </section>
+        </div>
+        <div class="saved-grid" id="savedList"></div>
+        <div class="saved-empty" id="savedEmpty" hidden></div>
       </section>
 
       <section class="saved-page content-page" id="watchLaterPage" aria-label="稍后再看" hidden>
         <div class="content-page-head">
           <div>
             <p class="eyebrow">Watch later</p>
-            <h2>稍后再看</h2>
-            <p class="video-meta">你加入稍后再看的内容会在这里排队，看完随手移除即可。</p>
+            <h2>稍后再看<span class="saved-tab-count" id="wlCountBadge"></span></h2>
+            <p class="video-meta">暂时没空看的，先放进这里慢慢补。</p>
           </div>
         </div>
         <div class="saved-grid" id="watchLaterList"></div>
-        <div class="saved-empty" id="watchLaterEmpty" hidden>还没有稍后再看的内容，去推荐里点时钟图标加入吧。</div>
-      </section>
-
-      <section class="saved-page content-page" id="favoritesPage" aria-label="我的收藏" hidden>
-        <div class="content-page-head">
-          <div>
-            <p class="eyebrow">Favorites</p>
-            <h2>我的收藏</h2>
-            <p class="video-meta">点 ★ 收藏的内容会长期留在这里，和稍后再看互相独立。</p>
-          </div>
-        </div>
-        <div class="saved-grid" id="favoritesList"></div>
-        <div class="saved-empty" id="favoritesEmpty" hidden>还没有收藏的内容，去推荐里点星标收藏吧。</div>
+        <div class="saved-empty" id="watchLaterEmpty" hidden></div>
       </section>
 
       <section class="profile-page" id="profilePage" aria-label="我的画像" hidden>
@@ -207,6 +216,38 @@
       <form class="chat-input" id="chatForm"><input id="chatInput" placeholder="说说你最近怎么想——你是什么样的人、喜欢什么、讨厌什么，都可以直接说。"><button class="pill-btn primary" type="submit">发送</button></form>
       </section>
 
+      <section class="library-page content-page" id="libraryPage" aria-label="阅读库" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Reading Library</p>
+            <h2>阅读库</h2>
+            <p class="video-meta">来自各平台的文章和精选内容，由 RSS 订阅源持续更新。</p>
+          </div>
+        </div>
+        <div class="library-toolbar">
+          <div class="library-search">
+            <input type="search" id="librarySearchInput" class="library-search-input" placeholder="搜索标题 / 正文 / 标签 / 作者…" aria-label="搜索阅读库" autocomplete="off">
+            <button type="button" id="librarySearchClear" class="library-search-clear" hidden aria-label="清除搜索">✕</button>
+          </div>
+          <div class="library-filters" id="libraryFilters" role="group" aria-label="来源筛选"></div>
+          <div class="library-status-filters" role="group" aria-label="阅读状态筛选">
+            <button class="library-status-btn is-active" data-status="all" type="button">全部</button>
+            <button class="library-status-btn" data-status="unread" type="button">未读</button>
+            <button class="library-status-btn" data-status="reading" type="button">正在读</button>
+            <button class="library-status-btn" data-status="finished" type="button">已读完</button>
+          </div>
+          <span class="library-count" id="libraryCount"></span>
+        </div>
+        <div class="library-tags" id="libraryTags" hidden>
+          <span class="library-tags-label">标签:</span>
+          <div class="library-tags-list" id="libraryTagsList"></div>
+        </div>
+        <div class="card-grid is-minimal" id="libraryGrid" aria-label="文章列表"></div>
+        <div class="library-more" id="libraryMore" hidden>
+          <button class="small-btn" id="libraryMoreBtn" type="button">加载更多</button>
+        </div>
+      </section>
+
       <section class="settings-page content-page" id="settingsPage" aria-label="后端设置" hidden>
         <div class="content-page-head">
           <div>
@@ -221,6 +262,7 @@
           <button class="settings-tab" type="button" data-settings-tab="sources">平台源</button>
           <button class="settings-tab" type="button" data-settings-tab="scheduler">调度</button>
           <button class="settings-tab" type="button" data-settings-tab="general">通用</button>
+          <button class="settings-tab" type="button" data-settings-tab="subscriptions">订阅源</button>
           <button class="settings-tab" type="button" data-settings-tab="frontend">前端</button>
           <button class="settings-tab" type="button" data-settings-tab="logging">日志</button>
         </div>
@@ -500,6 +542,26 @@
           <p class="settings-note-inline" id="autostartHint">开启后下次登录系统会自动拉起后端（不影响当前进程）。</p>
         </div>
 
+        <div class="settings-panel" data-settings-panel="subscriptions" hidden>
+          <p class="settings-section-title">订阅源管理</p>
+          <p class="settings-note-inline">管理 RSS、小宇宙、微信公众号等订阅源。添加后保存配置，定时调度会自动抓取内容注入推荐池。</p>
+          <div id="subscriptionTabs" class="settings-tabs" role="tablist" style="margin-bottom:16px;font-size:13px;">
+            <button class="settings-tab is-active" type="button" data-sub-tab="rss">RSS 订阅</button>
+            <button class="settings-tab" type="button" data-sub-tab="xiaoyuzhou">小宇宙播客</button>
+            <button class="settings-tab" type="button" data-sub-tab="wechat">微信公众号</button>
+          </div>
+          <div id="subscriptionList" style="margin-bottom:16px;">
+            <p class="settings-note-inline" id="subscriptionLoading">加载中...</p>
+          </div>
+          <p class="settings-section-title">添加订阅</p>
+          <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:12px;align-items:center;">
+            <label class="settings-field" style="margin:0;"><span>名称</span><input id="subName" placeholder="显示名称"></label>
+            <label class="settings-field" style="margin:0;"><span>URL</span><input id="subUrl" placeholder="RSS 链接"></label>
+            <button class="pill-btn" id="addSubBtn" type="button" style="margin-top:18px;">添加</button>
+          </div>
+          <p class="settings-note-inline" id="subStatus" style="margin-top:8px;"></p>
+        </div>
+
         <div class="settings-panel" data-settings-panel="frontend" hidden>
           <p class="settings-section-title">前端相关设置</p>
           <label class="settings-field"><span>后端地址</span><input id="backendHost" placeholder="默认跟随当前页面地址"></label>
@@ -598,6 +660,30 @@
       <div class="drawer-head"><button class="small-btn mobile-back-btn" data-mobile-back type="button">← 返回菜单</button><div><p class="eyebrow">Activity history</p><h2>动态历史</h2></div><button class="icon-btn" data-close="activityDrawer" type="button">×</button></div>
       <div class="activity-list" id="activityHistory"></div>
       <div class="drawer-actions"><button class="pill-btn dark" id="activityMoreBtn" type="button">加载更早动态</button></div>
+    </div>
+  </section>
+
+  <section class="drawer article-drawer" id="articleDrawer" aria-label="文章阅读" data-od-id="article-drawer">
+    <div class="scrim" data-close="articleDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow" id="articleDrawerSource">Article</p>
+          <h2 id="articleDrawerTitle">文章</h2>
+        </div>
+        <button class="icon-btn" data-close="articleDrawer" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="article-reader" id="articleReader">
+        <div class="reader-progress" id="readerProgress"><i></i></div>
+        <p class="article-reader-meta" id="articleReaderMeta"></p>
+        <div class="article-reader-body" id="articleReaderBody"></div>
+      </div>
+      <div class="drawer-actions article-reader-actions">
+        <button class="small-btn" data-article-status="unread" type="button">标为未读</button>
+        <button class="small-btn" data-article-status="reading" type="button">正在读</button>
+        <button class="small-btn" data-article-status="finished" type="button">已读完</button>
+        <button class="small-btn ghost" id="articleOpenOrigin" type="button">打开原文</button>
+      </div>
     </div>
   </section>
 

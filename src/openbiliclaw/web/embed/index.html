@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-platform-title>推荐</title>
+  <link rel="stylesheet" href="/embed/assets/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="feed"></div>
+    <div id="statusBar"></div>
+  </div>
+  <script>
+    // ── Config ────────────────────────────────────────────────
+    var API_BASE = "/api";
+    var PLATFORM = window.__EMBED_PLATFORM__ || "";
+    var AUTO_REFRESH_MS = 30000; // 30s
+    var MAX_CARDS = 50;
+
+    // ── State ─────────────────────────────────────────────────
+    var items = [];
+    var refreshTimer = null;
+
+    // ── DOM refs ──────────────────────────────────────────────
+    var feedEl = document.getElementById("feed");
+    var statusEl = document.getElementById("statusBar");
+
+    // ── Platform meta ─────────────────────────────────────────
+    var PLATFORM_META = {
+      xiaohongshu: { label: "\u7ea2\u4e66", icon: "\ud83d\udcd5", color: "#ff2442" },
+      bilibili:    { label: "B\u7ad9",     icon: "\ud83d\udcfa", color: "#fb7299" },
+      douyin:      { label: "\u6296\u97f3", icon: "\ud83c\udfb5", color: "#1e1e1e" },
+      youtube:     { label: "YouTube",      icon: "\u25b6\ufe0f", color: "#ff0000" },
+      zhihu:       { label: "\u77e5\u4e4e", icon: "\ud83d\udca1", color: "#0084ff" },
+      twitter:     { label: "Twitter",     icon: "\ud83d\udc26", color: "#1da1f2" },
+    };
+    var META = PLATFORM_META[PLATFORM] || { label: "\u63a8\u8350", icon: "\ud83c\udfaf", color: "#555" };
+
+    // ── Helpers ───────────────────────────────────────────────
+    function esc(s) {
+      var el = document.createElement("span");
+      el.textContent = s == null ? "" : String(s);
+      return el.innerHTML;
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return "";
+      var d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "";
+      var diff = (Date.now() - d.getTime()) / 1000;
+      if (diff < 60) return "\u521a\u521a";
+      if (diff < 3600) return Math.floor(diff / 60) + "\u5206\u949f\u524d";
+      if (diff < 86400) return Math.floor(diff / 3600) + "\u5c0f\u65f6\u524d";
+      return Math.floor(diff / 86400) + "\u5929\u524d";
+    }
+
+    function platformName(p) {
+      var m = PLATFORM_META[(p || "").toLowerCase()];
+      return m ? m.label : p || "web";
+    }
+
+    // ── API ───────────────────────────────────────────────────
+    function apiFetch(path) {
+      return fetch(API_BASE + path, {
+        credentials: "same-origin",
+        headers: { "Accept": "application/json", "X-OBC-Auth": "1" },
+      }).then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.json();
+      });
+    }
+
+    function fetchItems() {
+      var url = "/recommendations?limit=" + MAX_CARDS;
+      if (PLATFORM) url += "&source_platform=" + encodeURIComponent(PLATFORM);
+      return apiFetch(url);
+    }
+
+    function postFeedback(id, action) {
+      return fetch(API_BASE + "/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-OBC-Auth": "1" },
+        credentials: "same-origin",
+        body: JSON.stringify({ item_id: id, feedback_type: action }),
+      });
+    }
+
+    function reportClick(item, url) {
+      fetch(API_BASE + "/recommendation-click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-OBC-Auth": "1" },
+        credentials: "same-origin",
+        body: JSON.stringify({ item_id: item.id, bvid: item.bvid, url: url }),
+      }).catch(function () {});
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    function renderTime(item) {
+      var t = item.published_at || item.created_at || item.discovered_at || "";
+      var ago = timeAgo(t);
+      if (!ago && item.duration) return esc(item.duration);
+      return ago ? '<span class="time">' + esc(ago) + "</span>" : "";
+    }
+
+    function renderCards(data) {
+      items = data && data.items ? data.items : [];
+      if (!items.length) {
+        feedEl.innerHTML = '<div class="empty"><span class="empty-icon">\ud83d\udcba</span><span>\u6682\u65e0\u63a8\u8350</span></div>';
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var title = item.title || "";
+        var up = item.up_name || item.author_name || "";
+        var coverUrl = item.cover_url || "";
+        var url = item.content_url || item.url || "";
+        var id = item.id || item.bvid || "";
+        var reason = item.reason || "";
+        var src = (item.source_platform || item.platform || PLATFORM || "").toLowerCase();
+        var srcMeta = PLATFORM_META[src];
+        var srcLabel = srcMeta ? srcMeta.label : platformName(src);
+        var srcIcon = srcMeta ? srcMeta.icon : "\ud83c\udf10";
+        var srcColor = srcMeta ? srcMeta.color : "#888";
+
+        // Thumbnail fallback
+        var thumbHtml = "";
+        if (coverUrl) {
+          thumbHtml = '<div class="card-thumb"><img src="' + esc(coverUrl) + '" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'no-thumb\');this.remove()"><span class="card-src-badge" style="background:' + srcColor + '">' + esc(srcLabel) + "</span></div>";
+        } else {
+          thumbHtml = '<div class="card-thumb no-thumb"><span class="card-src-badge" style="background:' + srcColor + '">' + esc(srcLabel) + "</span></div>";
+        }
+
+        html += '<div class="card" data-id="' + esc(id) + '" data-url="' + esc(url) + '">';
+        html += thumbHtml;
+        html += '<div class="card-body">';
+        html += '<div class="card-title">' + esc(title) + "</div>";
+        html += '<div class="card-meta">' + (up ? '<span class="card-up">' + esc(up) + "</span>" : "") + renderTime(item) + "</div>";
+        if (reason) html += '<div class="card-reason">' + esc(reason) + "</div>";
+        html += '<div class="card-actions">';
+        html += '<button class="act-btn like-btn" data-action="like" title="\u559c\u6b22">\ud83d\udc4d</button>';
+        html += '<button class="act-btn dislike-btn" data-action="dislike" title="\u4e0d\u611f\u5174\u8da3">\ud83d\udc4e</button>';
+        html += '<button class="act-btn open-btn" title="\u6253\u5f00">\ud83d\udd17</button>';
+        html += "</div>";
+        html += "</div></div>";
+      }
+      feedEl.innerHTML = html;
+
+      // Bind events
+      feedEl.querySelectorAll(".card").forEach(function (card) {
+        var itemId = card.dataset.id;
+        var cardUrl = card.dataset.url;
+
+        card.querySelector(".open-btn").addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (cardUrl) { reportClick(itemId, cardUrl); window.open(cardUrl, "_blank"); }
+        });
+        card.querySelector(".like-btn").addEventListener("click", function (e) {
+          e.stopPropagation();
+          postFeedback(itemId, "like");
+          this.disabled = true;
+          this.textContent = "\u2705";
+        });
+        card.querySelector(".dislike-btn").addEventListener("click", function (e) {
+          e.stopPropagation();
+          postFeedback(itemId, "dislike");
+          card.style.opacity = "0";
+          var self = this;
+          setTimeout(function () { card.remove(); }, 300);
+        });
+        card.addEventListener("click", function () {
+          if (cardUrl) { reportClick(itemId, cardUrl); window.open(cardUrl, "_blank"); }
+        });
+        card.style.cursor = "pointer";
+      });
+    }
+
+    function setStatus(msg, isError) {
+      if (statusEl) {
+        statusEl.textContent = msg;
+        statusEl.style.color = isError ? "#e74c3c" : "#999";
+      }
+    }
+
+    function load() {
+      setStatus("\u52a0\u8f7d\u4e2d\u2026");
+      feedEl.innerHTML = '<div class="empty"><div class="loading-spinner"></div><span>\u52a0\u8f7d\u4e2d\u2026</span></div>';
+
+      fetchItems().then(function (data) {
+        renderCards(data);
+        var count = items.length;
+        setStatus("\u663e\u793a " + count + " \u6761\u63a8\u8350");
+      }).catch(function (err) {
+        setStatus("\u52a0\u8f7d\u5931\u8d25: " + err.message, true);
+        feedEl.innerHTML = '<div class="empty"><span class="empty-icon">\u26a0\ufe0f</span><span>\u52a0\u8f7d\u5931\u8d25</span></div>';
+      });
+    }
+
+    // ── Auto-refresh ──────────────────────────────────────────
+    function startAutoRefresh() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(function () {
+        fetchItems().then(function (data) {
+          renderCards(data);
+        }).catch(function () {});
+      }, AUTO_REFRESH_MS);
+    }
+
+    // ── Init ──────────────────────────────────────────────────
+    // Set page title
+    document.title = META.icon + " " + META.label + " \u63a8\u8350";
+
+    load();
+    startAutoRefresh();
+  </script>
+</body>
+</html>

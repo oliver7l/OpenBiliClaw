@@ -20,7 +20,7 @@ export function renderLoginView($app, { onSuccess } = {}) {
 
   const title = document.createElement("h1");
   title.className = "login-title";
-  title.textContent = "OpenBiliClaw";
+  title.textContent = "古灵阁的大模型推荐系统";
 
   const subtitle = document.createElement("p");
   subtitle.className = "login-subtitle";

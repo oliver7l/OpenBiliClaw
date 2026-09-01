@@ -235,11 +235,17 @@ class PoolCurator:
         self,
         candidates: list[DiscoveredContent],
         context: ScoringContext,
+        *,
+        quality_scores: dict[str, float] | None = None,
     ) -> dict[str, float]:
         """Return a bvid → rec_score mapping for the given candidates.
 
         The returned dict can be passed as ``score_override`` to the
         engine's diversified batch selector.
+
+        When ``quality_scores`` is provided (bvid → 0.0-1.0), the final
+        score blends MAB with LLM quality:
+            final_score = 0.6 * mab_score + 0.4 * quality_score
         """
         w = self._weights
         scores: dict[str, float] = {}
@@ -268,6 +274,11 @@ class PoolCurator:
             score += self._feedback_adjustment(item, context.feedback)
             if candidate_amplification_keys(item) & context.over_budget_amplification_keys:
                 score -= 0.35
+
+            # Blend with LLM quality score if available
+            if quality_scores and item.bvid in quality_scores:
+                qs = quality_scores[item.bvid]
+                score = score * 0.6 + qs * 0.4
 
             scores[item.bvid] = max(0.0, score)
         return scores

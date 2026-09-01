@@ -60,6 +60,10 @@ DEFAULT_MIN_INTERVAL_SECONDS = 12 * 60 * 60
 # watermark jumps to the newest event and older unprocessed events beyond this
 # window are skipped (logged, not silent) to keep "recent awareness" recent.
 _AWARENESS_BACKLOG_CAP = 900
+# Event types treated as low-signal for awareness selection. These dominate
+# raw volume (views alone are ~80%), so when the backlog cap bites they are
+# demoted in favor of high-signal events (favorites, clicks, follows...).
+_AWARENESS_LOW_SIGNAL_TYPES = frozenset({"view", "scroll", "hover", "snapshot"})
 # Per-LLM-call batch size. Sized for modern long-context models (256k+): an
 # event is ~100 tokens, so 300 events ≈ 30-45k input tokens — a typical 12h
 # window (even heavy usage) fits in a SINGLE call, no needless splitting.
@@ -216,6 +220,31 @@ class CognitionCycle:
 
     # -- Internal -------------------------------------------------------------
 
+    @staticmethod
+    def _signal_weighted_selection(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Re-fit a newest-first window to the backlog cap, signal-weighted.
+
+        ``rows`` comes newest-first from ``query_events`` (already truncated to
+        the cap). High-signal events in the window are all kept; the remaining
+        slots go to the newest low-signal events. Result is newest-first with
+        no duplicates and at most ``_AWARENESS_BACKLOG_CAP`` rows.
+        """
+        high = [r for r in rows if r.get("event_type") not in _AWARENESS_LOW_SIGNAL_TYPES]
+        low_budget = max(0, _AWARENESS_BACKLOG_CAP - len(high))
+        if low_budget == 0 and len(high) <= _AWARENESS_BACKLOG_CAP:
+            return high
+        if len(high) > _AWARENESS_BACKLOG_CAP:
+            high = high[:_AWARENESS_BACKLOG_CAP]
+            low_budget = 0
+        low = [
+            r
+            for r in rows
+            if r.get("event_type") in _AWARENESS_LOW_SIGNAL_TYPES
+        ][:low_budget]
+        selected = high + low
+        selected.sort(key=lambda r: _coerce_int(r.get("id", 0)), reverse=True)
+        return selected[:_AWARENESS_BACKLOG_CAP]
+
     def _is_due(
         self,
         last_run_at: datetime | None,
@@ -251,6 +280,12 @@ class CognitionCycle:
         if not rows:
             return 0
         if len(rows) >= _AWARENESS_BACKLOG_CAP:
+            # Signal-weighted selection: within the fixed LLM-cost cap,
+            # keep every high-signal event in the window and fill the
+            # remaining slots with the newest low-value events. Without
+            # this, a view-heavy window (views are ~80% of event volume)
+            # crowds clicks/favorites/follows out of the cap entirely.
+            rows = self._signal_weighted_selection(rows)
             logger.warning(
                 "Awareness backlog hit cap %d; older unprocessed events are "
                 "skipped (watermark jumps to newest of this window).",

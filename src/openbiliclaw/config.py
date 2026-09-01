@@ -66,7 +66,17 @@ _DEFAULT_POOL_SOURCE_SHARES = {
     "youtube": 1,
     "twitter": 1,
     "zhihu": 1,
+    "v2ex": 1,
+    "reddit": 1,
+    "rss": 2,
+    "wechat": 1,
 }
+_DEFAULT_RSS_SUBSCRIPTIONS: list[dict[str, str]] = [
+    {"name": "少数派", "url": "https://rsshub.bestblogs.dev/sspai/series"},
+    {"name": "知乎日报", "url": "https://rsshub.bestblogs.dev/zhihu/daily"},
+    {"name": "虎嗅", "url": "https://rsshub.bestblogs.dev/huxiu/article"},
+    {"name": "V2EX 最新", "url": "https://rsshub.bestblogs.dev/v2ex/topics/latest"},
+]
 _DEFAULT_AUTO_UPDATE_ALLOWED_REMOTES = [
     "https://github.com/whiteguo233/OpenBiliClaw.git",
     "git@github.com:whiteguo233/OpenBiliClaw.git",
@@ -125,8 +135,11 @@ class LLMProviderConfig:
     # better tags (franchise_key consistent across batch, score_threshold=0.70
     # still gives healthy pool throughput). Set to "" if the per-day spend
     # creeps too high and you want to trade off label quality for budget.
-    # Ignored by providers that don't accept ``thinking`` / ``reasoning_effort``.
-    reasoning_effort: str = "max"
+    # Thinking-mode control for providers that accept ``reasoning_effort``
+    # (DeepSeek v4, sensenova, GLM, Kimi). "" = don't send the field at all
+    # (keeps vanilla OpenAI.com happy, which rejects the param). DeepSeekProvider
+    # falls back to "max" when empty; set it explicitly per provider otherwise.
+    reasoning_effort: str = ""
     # Ollama-only: context window (tokens). 0 = use Ollama's server default
     # (usually 4096) via the OpenAI-compat ``/v1`` shim. When >0, chat routes
     # through Ollama's native ``/api/chat`` so ``options.num_ctx`` actually
@@ -219,6 +232,15 @@ class SchedulerConfig:
     pool_source_shares: dict[str, int] = field(
         default_factory=lambda: dict(_DEFAULT_POOL_SOURCE_SHARES)
     )
+    rss_subscriptions: list[dict[str, str]] = field(
+        default_factory=lambda: list(_DEFAULT_RSS_SUBSCRIPTIONS)
+    )
+    xiaoyuzhou_subscriptions: list[dict[str, str]] = field(
+        default_factory=list
+    )
+    wechat_subscriptions: list[dict[str, str]] = field(
+        default_factory=list
+    )
     account_sync_interval_hours: int = 6
     refresh_check_interval_seconds: int = _DEFAULT_REFRESH_CHECK_INTERVAL_SECONDS
     signal_event_threshold: int = _DEFAULT_SIGNAL_EVENT_THRESHOLD
@@ -226,6 +248,21 @@ class SchedulerConfig:
     explore_refresh_hours: int = _DEFAULT_EXPLORE_REFRESH_HOURS
     discovery_limit: int = _DEFAULT_DISCOVERY_LIMIT
     delight_queue_limit: int = _DEFAULT_DELIGHT_QUEUE_LIMIT
+    # 内容在推荐池中保持 fresh（可换）的最长天数；超过才被置 stale（下架但
+    # 不删除，仅改状态）。默认设很大以实现"尽量不过期、保留数据"。
+    pool_max_age_days: int = 365
+    # 行为事件表(events)的低价值事件 (view/scroll/hover/snapshot) 保留天数。
+    # ⚠️ 用户红线(2026-08-31): 行为留痕数据不清理不删 —— 本值保持 0(禁用)。
+    # 2026-09-01 曾误设 14 并执行清理(删 58.9 万行低信号事件, 已 VACUUM 不可逆),
+    # 教训已记入项目记忆。如需调整必须先经用户明确确认。
+    events_retention_days: int = 0
+    # recommendations / llm_usage 保留期同理默认禁用(0), 需用户拍板后才启用。
+    recommendations_retention_days: int = 0
+    llm_usage_retention_days: int = 0
+    # Retention for terminal crawl-task rows (zhihu_tasks/dy_tasks completed+
+    # failed) and rejected discovery_candidates — they accumulate ~10KB/row
+    # and nothing pruned them before, so the DB grows ~1-2MB/day forever.
+    task_history_retention_days: int = 30
     proactive_push_interval_seconds: int = _DEFAULT_PROACTIVE_PUSH_INTERVAL_SECONDS
     speculator_idle_interval_minutes: int = _DEFAULT_SPECULATOR_IDLE_INTERVAL_MINUTES
     # LLM-judged like/dislike topic consolidation (soul/consolidator.py).
@@ -421,6 +458,52 @@ class ZhihuSourceConfig:
 
 
 @dataclass
+class V2EXSourceConfig:
+    """V2EX public discovery configuration with an optional PAT."""
+    enabled: bool = False
+    username: str = ""
+    access_token: str = ""
+    token_env: str = "OPENBILICLAW_V2EX_TOKEN"
+    proxy: str = ""
+    source_modes: tuple[str, ...] = ("search", "node", "tab", "hot", "latest")
+    tab_modes: tuple[str, ...] = ("tech", "creative", "qna")
+    node_allowlist: tuple[str, ...] = ()
+    node_blocklist: tuple[str, ...] = ("sandbox",)
+    node_downweight: tuple[str, ...] = ("promotions", "jobs", "deals")
+    daily_search_budget: int = 120
+    daily_node_budget: int = 180
+    daily_tab_budget: int = 80
+    daily_hot_budget: int = 40
+    daily_latest_budget: int = 40
+    request_interval_seconds: int = 2
+    min_interval_minutes: int = 5
+    detail_fetch_limit: int = 15
+    reply_enrichment_limit: int = 10
+    max_topic_chars: int = 6000
+    max_reply_digest_chars: int = 1200
+    max_profile_nodes: int = 12
+    bootstrap_topics_limit: int = 100
+    bootstrap_replies_limit: int = 300
+    bootstrap_favorites_limit: int = 300
+    bootstrap_max_pages_per_scope: int = 20
+
+
+@dataclass
+class RedditSourceConfig:
+    """Reddit discovery configuration."""
+    enabled: bool = False
+    backend: str = "rdt"
+    source_modes: tuple[str, ...] = ("search", "hot", "subreddit", "related")
+    daily_search_budget: int = 300
+    daily_hot_budget: int = 300
+    daily_subreddit_budget: int = 300
+    daily_related_budget: int = 300
+    request_interval_seconds: int = 3
+    min_interval_minutes: int = 3
+    proxy: str = ""
+
+
+@dataclass
 class BilibiliSourceConfig:
     """Bilibili discovery source switch."""
 
@@ -450,6 +533,8 @@ class SourcesConfig:
     youtube: YoutubeSourceConfig = field(default_factory=YoutubeSourceConfig)
     twitter: TwitterSourceConfig = field(default_factory=TwitterSourceConfig)
     zhihu: ZhihuSourceConfig = field(default_factory=ZhihuSourceConfig)
+    v2ex: V2EXSourceConfig = field(default_factory=V2EXSourceConfig)
+    reddit: RedditSourceConfig = field(default_factory=RedditSourceConfig)
 
 
 @dataclass
@@ -557,12 +642,22 @@ class ApiConfig:
 
 
 @dataclass
+class TlsProxyConfig:
+    """Optional TLS reverse proxy for LAN / self-managed access."""
+    enabled: bool = False
+    port: int = 8443
+    cert_dir: str = ""
+    san_names: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Config:
     """Root configuration for OpenBiliClaw."""
 
     language: str = "zh"
     data_dir: str = "data"
     api: ApiConfig = field(default_factory=ApiConfig)
+    tls_proxy: TlsProxyConfig = field(default_factory=TlsProxyConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     bilibili: BilibiliConfig = field(default_factory=BilibiliConfig)
     sources: SourcesConfig = field(default_factory=SourcesConfig)
@@ -758,6 +853,8 @@ def _build_config(raw: dict[str, Any]) -> Config:
     youtube_raw = sources_raw.get("youtube", {})
     twitter_raw = sources_raw.get("twitter", {})
     zhihu_raw = sources_raw.get("zhihu", {})
+    v2ex_raw = sources_raw.get("v2ex", {})
+    reddit_raw = sources_raw.get("reddit", {})
     sources = SourcesConfig(
         browser_cdp_url=sources_browser_raw.get("cdp_url", ""),
         browser_headed=sources_browser_raw.get("headed", False),
@@ -815,6 +912,66 @@ def _build_config(raw: dict[str, Any]) -> Config:
             request_interval_seconds=int(zhihu_raw.get("request_interval_seconds", 3)),
             min_interval_minutes=max(0, int(zhihu_raw.get("min_interval_minutes", 60))),
         ),
+        v2ex=V2EXSourceConfig(
+            enabled=bool(v2ex_raw.get("enabled", False)),
+            username=str(v2ex_raw.get("username", "")),
+            access_token=str(v2ex_raw.get("access_token", "")),
+            token_env=str(v2ex_raw.get("token_env", "OPENBILICLAW_V2EX_TOKEN")),
+            proxy=str(v2ex_raw.get("proxy", "")),
+            source_modes=tuple(
+                mode
+                for mode in _coerce_str_list(
+                    v2ex_raw.get("source_modes", ["search", "node", "tab", "hot", "latest"])
+                )
+            )
+            or ("search",),
+            tab_modes=tuple(
+                mode
+                for mode in _coerce_str_list(
+                    v2ex_raw.get("tab_modes", ["tech", "creative", "qna"])
+                )
+            )
+            or ("tech",),
+            node_allowlist=tuple(_coerce_str_list(v2ex_raw.get("node_allowlist", []))),
+            node_blocklist=tuple(_coerce_str_list(v2ex_raw.get("node_blocklist", ["sandbox"]))),
+            node_downweight=tuple(
+                _coerce_str_list(v2ex_raw.get("node_downweight", ["promotions", "jobs", "deals"]))
+            ),
+            daily_search_budget=int(v2ex_raw.get("daily_search_budget", 120)),
+            daily_node_budget=int(v2ex_raw.get("daily_node_budget", 180)),
+            daily_tab_budget=int(v2ex_raw.get("daily_tab_budget", 80)),
+            daily_hot_budget=int(v2ex_raw.get("daily_hot_budget", 40)),
+            daily_latest_budget=int(v2ex_raw.get("daily_latest_budget", 40)),
+            request_interval_seconds=int(v2ex_raw.get("request_interval_seconds", 2)),
+            min_interval_minutes=max(0, int(v2ex_raw.get("min_interval_minutes", 5))),
+            detail_fetch_limit=int(v2ex_raw.get("detail_fetch_limit", 15)),
+            reply_enrichment_limit=int(v2ex_raw.get("reply_enrichment_limit", 10)),
+            max_topic_chars=int(v2ex_raw.get("max_topic_chars", 6000)),
+            max_reply_digest_chars=int(v2ex_raw.get("max_reply_digest_chars", 1200)),
+            max_profile_nodes=int(v2ex_raw.get("max_profile_nodes", 12)),
+            bootstrap_topics_limit=int(v2ex_raw.get("bootstrap_topics_limit", 100)),
+            bootstrap_replies_limit=int(v2ex_raw.get("bootstrap_replies_limit", 300)),
+            bootstrap_favorites_limit=int(v2ex_raw.get("bootstrap_favorites_limit", 300)),
+            bootstrap_max_pages_per_scope=int(v2ex_raw.get("bootstrap_max_pages_per_scope", 20)),
+        ),
+        reddit=RedditSourceConfig(
+            enabled=bool(reddit_raw.get("enabled", False)),
+            backend=str(reddit_raw.get("backend", "rdt")),
+            source_modes=tuple(
+                mode
+                for mode in _coerce_str_list(
+                    reddit_raw.get("source_modes", ["search", "hot", "subreddit", "related"])
+                )
+            )
+            or ("search",),
+            daily_search_budget=int(reddit_raw.get("daily_search_budget", 300)),
+            daily_hot_budget=int(reddit_raw.get("daily_hot_budget", 300)),
+            daily_subreddit_budget=int(reddit_raw.get("daily_subreddit_budget", 300)),
+            daily_related_budget=int(reddit_raw.get("daily_related_budget", 300)),
+            request_interval_seconds=int(reddit_raw.get("request_interval_seconds", 3)),
+            min_interval_minutes=max(0, int(reddit_raw.get("min_interval_minutes", 3))),
+            proxy=str(reddit_raw.get("proxy", "")),
+        ),
     )
 
     soul_raw = raw.get("soul", {}) if isinstance(raw.get("soul"), dict) else {}
@@ -830,6 +987,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
     )
 
     api_auth = _build_api_auth(api_raw)
+    tls_proxy_raw = api_raw.get("tls_proxy", {})
 
     return Config(
         language=general.get("language", "zh"),
@@ -838,6 +996,12 @@ def _build_config(raw: dict[str, Any]) -> Config:
             host=str(api_raw.get("host", "0.0.0.0") or "0.0.0.0").strip() or "0.0.0.0",
             port=_normalize_api_port(api_raw.get("port", 8420)),
             auth=api_auth,
+        ),
+        tls_proxy=TlsProxyConfig(
+            enabled=_coerce_bool(tls_proxy_raw.get("enabled"), default=False),
+            port=int(tls_proxy_raw.get("port", 8443)),
+            cert_dir=str(tls_proxy_raw.get("cert_dir", "")),
+            san_names=list(_coerce_str_list(tls_proxy_raw.get("san_names", []))),
         ),
         llm=llm,
         bilibili=bilibili,
@@ -1856,6 +2020,12 @@ def _render_config_toml(
         "",
         *_api_auth_lines(config, on_disk_auth, consult_local=consult_local),
         "",
+        "[api.tls_proxy]",
+        f"enabled = {_toml_bool(config.tls_proxy.enabled)}",
+        f"port = {config.tls_proxy.port}",
+        f"cert_dir = {_toml_string(config.tls_proxy.cert_dir)}",
+        f"san_names = {_toml_str_list(config.tls_proxy.san_names)}",
+        "",
         "[llm]",
         f"default_provider = {_toml_string(config.llm.default_provider)}",
         f"concurrency = {_normalize_llm_concurrency(config.llm.concurrency)}",
@@ -1963,6 +2133,27 @@ def _render_config_toml(
             f"request_interval_seconds = {config.sources.zhihu.request_interval_seconds}",
             f"min_interval_minutes = {config.sources.zhihu.min_interval_minutes}",
             "",
+            "[sources.v2ex]",
+            f"enabled = {_toml_bool(config.sources.v2ex.enabled)}",
+            f"source_modes = {_toml_str_list(list(config.sources.v2ex.source_modes))}",
+            f"daily_search_budget = {config.sources.v2ex.daily_search_budget}",
+            f"daily_node_budget = {config.sources.v2ex.daily_node_budget}",
+            f"daily_tab_budget = {config.sources.v2ex.daily_tab_budget}",
+            f"daily_hot_budget = {config.sources.v2ex.daily_hot_budget}",
+            f"daily_latest_budget = {config.sources.v2ex.daily_latest_budget}",
+            f"request_interval_seconds = {config.sources.v2ex.request_interval_seconds}",
+            f"min_interval_minutes = {config.sources.v2ex.min_interval_minutes}",
+            "",
+            "[sources.reddit]",
+            f"enabled = {_toml_bool(config.sources.reddit.enabled)}",
+            f"source_modes = {_toml_str_list(list(config.sources.reddit.source_modes))}",
+            f"daily_search_budget = {config.sources.reddit.daily_search_budget}",
+            f"daily_hot_budget = {config.sources.reddit.daily_hot_budget}",
+            f"daily_subreddit_budget = {config.sources.reddit.daily_subreddit_budget}",
+            f"daily_related_budget = {config.sources.reddit.daily_related_budget}",
+            f"request_interval_seconds = {config.sources.reddit.request_interval_seconds}",
+            f"min_interval_minutes = {config.sources.reddit.min_interval_minutes}",
+            "",
             "[scheduler]",
             f"enabled = {_toml_bool(config.scheduler.enabled)}",
             "pause_on_extension_disconnect = "
@@ -2008,65 +2199,106 @@ def _render_config_toml(
             "auto_update_allowed_remotes = "
             f"{_toml_str_list(config.scheduler.auto_update_allowed_remotes)}",
             "",
-            "[scheduler.pool_source_shares]",
-            f"bilibili = {int(config.scheduler.pool_source_shares.get('bilibili', 5))}",
-            f"xiaohongshu = {int(config.scheduler.pool_source_shares.get('xiaohongshu', 1))}",
-            f"douyin = {int(config.scheduler.pool_source_shares.get('douyin', 1))}",
-            f"youtube = {int(config.scheduler.pool_source_shares.get('youtube', 1))}",
-            f"twitter = {int(config.scheduler.pool_source_shares.get('twitter', 1))}",
-            f"zhihu = {int(config.scheduler.pool_source_shares.get('zhihu', 1))}",
-            "",
-            "[discovery]",
-            "unified_keyword_planner_enabled = "
-            f"{_toml_bool(config.discovery.unified_keyword_planner_enabled)}",
-            f"kw_cache_high = {config.discovery.kw_cache_high}",
-            f"kw_cache_low = {config.discovery.kw_cache_low}",
-            f"gen_batch = {config.discovery.gen_batch}",
-            f"fetch_batch = {config.discovery.fetch_batch}",
-            f"history_window_size = {config.discovery.history_window_size}",
-            f"history_window_hours = {config.discovery.history_window_hours}",
-            f"claim_lease_minutes = {config.discovery.claim_lease_minutes}",
-            f"planner_poll_seconds = {config.discovery.planner_poll_seconds}",
-            f"plan_ttl_hours = {config.discovery.plan_ttl_hours}",
-            f"admission_min_score = {config.discovery.admission_min_score:g}",
-            "multimodal_evaluation_enabled = "
-            f"{_toml_bool(config.discovery.multimodal_evaluation_enabled)}",
-            f"multimodal_batch_size = {config.discovery.multimodal_batch_size}",
-            f"multimodal_image_max_px = {config.discovery.multimodal_image_max_px}",
-            f"multimodal_image_quality = {config.discovery.multimodal_image_quality}",
-            "multimodal_image_timeout_seconds = "
-            f"{config.discovery.multimodal_image_timeout_seconds}",
-            "",
-            *_autostart_lines(
-                config,
-                on_disk_autostart,
-                autostart_authoritative=autostart_authoritative,
-            ),
-            "",
-            "[storage]",
-            f"db_path = {_toml_string(config.storage.db_path)}",
-            "",
-            "[logging]",
-            f"level = {_toml_string(config.logging.level)}",
-            f"file_level = {_toml_string(config.logging.file_level)}",
-            f"directory = {_toml_string(config.logging.directory)}",
-            f"filename = {_toml_string(config.logging.filename)}",
-            f"max_file_size_mb = {config.logging.max_file_size_mb}",
-            f"backup_count = {config.logging.backup_count}",
-            f"aggregate_budget_mb = {config.logging.aggregate_budget_mb}",
-            f"unmanaged_truncate_mb = {config.logging.unmanaged_truncate_mb}",
-            f"unmanaged_max_age_days = {config.logging.unmanaged_max_age_days}",
-            "",
-            "[soul.preference]",
-            "# v0.3.x event-satisfaction signal. When true, preference",
-            "# analysis ignores passive negative events such as quick_exit.",
-            "# Explicit dislike feedback is retained as disliked_topics",
-            "# evidence instead of being learned as a positive interest.",
-            "satisfaction_filter_enabled = "
-            f"{_toml_bool(config.soul.preference.satisfaction_filter_enabled)}",
-            "",
-        ]
-    )
+    ])
+    # 订阅源 key 必须保持在 [scheduler] 作用域内：TOML 子表头之后的
+    # 裸 key 会归属子表，因此这里要先把订阅源渲染完，再写
+    # [scheduler.pool_source_shares]。
+    lines.append("# RSS 订阅源列表（支持 RSSHub 等任意 RSS/Atom feed）")
+    lines.append("# 示例：")
+    lines.append("#   {name = \"少数派\", url = \"https://rsshub.app/sspai/series\"}")
+    lines.append("#   {name = \"知乎日报\", url = \"https://rsshub.app/zhihu/daily\"}")
+    lines.append("#   {name = \"微信公众号\", url = \"https://rsshub.app/wechat/mp/公众号ID\"}")
+    if config.scheduler.rss_subscriptions:
+        lines.append("rss_subscriptions = [")
+        for rss in config.scheduler.rss_subscriptions:
+            lines.append(f'  {{name = "{rss["name"]}", url = "{rss["url"]}"}},')
+        lines.append("]")
+    else:
+        lines.append("rss_subscriptions = []")
+    lines.append("")
+    lines.append("# 小宇宙播客订阅源列表（通过 RSSHub 获取）")
+    lines.append("# 格式：{{name = \"播客名称\", url = \"https://rsshub.bestblogs.dev/xiaoyuzhou/podcast/ID\"}}")
+    if config.scheduler.xiaoyuzhou_subscriptions:
+        lines.append("xiaoyuzhou_subscriptions = [")
+        for xyz in config.scheduler.xiaoyuzhou_subscriptions:
+            lines.append(f'  {{name = "{xyz["name"]}", url = "{xyz["url"]}"}},')
+        lines.append("]")
+    else:
+        lines.append("xiaoyuzhou_subscriptions = []")
+    lines.append("")
+    lines.append("# 微信公众号订阅源列表（通过 wechat2rss 等 RSS 服务获取）")
+    lines.append("# 格式：{{name = \"公众号名称\", url = \"https://wechat2rss.bestblogs.dev/feed/feed_id.xml\"}}")
+    if config.scheduler.wechat_subscriptions:
+        lines.append("wechat_subscriptions = [")
+        for wx in config.scheduler.wechat_subscriptions:
+            lines.append(f'  {{name = "{wx["name"]}", url = "{wx["url"]}"}},')
+        lines.append("]")
+    else:
+        lines.append("wechat_subscriptions = []")
+    lines.append("")
+    lines.append("[scheduler.pool_source_shares]")
+    lines.append(f"bilibili = {int(config.scheduler.pool_source_shares.get('bilibili', 5))}")
+    lines.append(f"xiaohongshu = {int(config.scheduler.pool_source_shares.get('xiaohongshu', 1))}")
+    lines.append(f"douyin = {int(config.scheduler.pool_source_shares.get('douyin', 1))}")
+    lines.append(f"youtube = {int(config.scheduler.pool_source_shares.get('youtube', 1))}")
+    lines.append(f"twitter = {int(config.scheduler.pool_source_shares.get('twitter', 1))}")
+    lines.append(f"zhihu = {int(config.scheduler.pool_source_shares.get('zhihu', 1))}")
+    lines.append(f"v2ex = {int(config.scheduler.pool_source_shares.get('v2ex', 1))}")
+    lines.append(f"reddit = {int(config.scheduler.pool_source_shares.get('reddit', 1))}")
+    lines.append(f"rss = {int(config.scheduler.pool_source_shares.get('rss', 2))}")
+    lines.append(f"wechat = {int(config.scheduler.pool_source_shares.get('wechat', 1))}")
+    lines.extend([
+        "",
+        "[discovery]",
+        "unified_keyword_planner_enabled = "
+        f"{_toml_bool(config.discovery.unified_keyword_planner_enabled)}",
+        f"kw_cache_high = {config.discovery.kw_cache_high}",
+        f"kw_cache_low = {config.discovery.kw_cache_low}",
+        f"gen_batch = {config.discovery.gen_batch}",
+        f"fetch_batch = {config.discovery.fetch_batch}",
+        f"history_window_size = {config.discovery.history_window_size}",
+        f"history_window_hours = {config.discovery.history_window_hours}",
+        f"claim_lease_minutes = {config.discovery.claim_lease_minutes}",
+        f"planner_poll_seconds = {config.discovery.planner_poll_seconds}",
+        f"plan_ttl_hours = {config.discovery.plan_ttl_hours}",
+        f"admission_min_score = {config.discovery.admission_min_score:g}",
+        "multimodal_evaluation_enabled = "
+        f"{_toml_bool(config.discovery.multimodal_evaluation_enabled)}",
+        f"multimodal_batch_size = {config.discovery.multimodal_batch_size}",
+        f"multimodal_image_max_px = {config.discovery.multimodal_image_max_px}",
+        f"multimodal_image_quality = {config.discovery.multimodal_image_quality}",
+        "multimodal_image_timeout_seconds = "
+        f"{config.discovery.multimodal_image_timeout_seconds}",
+        "",
+        *_autostart_lines(
+            config,
+            on_disk_autostart,
+            autostart_authoritative=autostart_authoritative,
+        ),
+        "",
+        "[storage]",
+        f"db_path = {_toml_string(config.storage.db_path)}",
+        "",
+        "[logging]",
+        f"level = {_toml_string(config.logging.level)}",
+        f"file_level = {_toml_string(config.logging.file_level)}",
+        f"directory = {_toml_string(config.logging.directory)}",
+        f"filename = {_toml_string(config.logging.filename)}",
+        f"max_file_size_mb = {config.logging.max_file_size_mb}",
+        f"backup_count = {config.logging.backup_count}",
+        f"aggregate_budget_mb = {config.logging.aggregate_budget_mb}",
+        f"unmanaged_truncate_mb = {config.logging.unmanaged_truncate_mb}",
+        f"unmanaged_max_age_days = {config.logging.unmanaged_max_age_days}",
+        "",
+        "[soul.preference]",
+        "# v0.3.x event-satisfaction signal. When true, preference",
+        "# analysis ignores passive negative events such as quick_exit.",
+        "# Explicit dislike feedback is retained as disliked_topics",
+        "# evidence instead of being learned as a positive interest.",
+        "satisfaction_filter_enabled = "
+        f"{_toml_bool(config.soul.preference.satisfaction_filter_enabled)}",
+        "",
+    ])
     return "\n".join(lines)
 
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import queue
 import time
-from logging.handlers import RotatingFileHandler
+from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from typing import TYPE_CHECKING
 
 from rich.logging import RichHandler
@@ -16,6 +17,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _NOISY_LOGGERS = ("httpx", "httpcore", "openai", "openai._base_client")
+
+# Non-blocking logging: every ``logger.*`` call enqueues the record and
+# returns immediately, so a slow handler (rich traceback rendering, file I/O)
+# can never stall the caller — critically the asyncio event loop, where a
+# ``logger.warning(..., exc_info=True)`` on a periodic path (e.g. the soul
+# speculator when the LLM is down) used to render a full traceback
+# synchronously and block all in-flight HTTP requests for 0.5s+. The real
+# handlers run on the listener's own thread.
+_LOG_QUEUE: queue.Queue[logging.LogRecord] = queue.Queue(-1)
+_LOG_LISTENER: QueueListener | None = None
 
 
 def _coerce_level(level_name: str) -> int:
@@ -287,7 +298,23 @@ def configure_logging(
         level=file_level,
     )
 
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+    # Route all logging through a queue so emission (rich traceback rendering,
+    # file I/O) happens on a dedicated listener thread and never on the
+    # caller's thread — in particular the asyncio event loop. Re-configuring
+    # stops any prior listener first.
+    global _LOG_LISTENER
+    if _LOG_LISTENER is not None:
+        try:
+            _LOG_LISTENER.stop()
+        except Exception:
+            pass
+        _LOG_LISTENER = None
+
+    _LOG_LISTENER = QueueListener(
+        _LOG_QUEUE, console_handler, file_handler, respect_handler_level=True
+    )
+    _LOG_LISTENER.start()
+
+    root_logger.addHandler(QueueHandler(_LOG_QUEUE))
     for logger_name in _NOISY_LOGGERS:
         logging.getLogger(logger_name).setLevel(logging.WARNING)

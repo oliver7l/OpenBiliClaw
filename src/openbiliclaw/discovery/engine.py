@@ -462,6 +462,11 @@ class DiscoveredContent:
     score_threshold: float = 0.0  # Strategy-specific admission floor for raw candidates
     body_text: str = ""  # tweet/thread full text; empty for video sources
     content_type: str = "video"  # shape: "video" | "note" | "tweet" | "thread"
+    # Full article body extracted from the feed (``content:encoded`` /
+    # ``content``). Deliberately NOT part of ``to_cache_kwargs()`` — it feeds
+    # the reading library (``articles.content_text``) only and must not bloat
+    # the recommendation pool.
+    content_text: str = ""
     # P1.8 yield provenance: the ``discovery_keywords.id`` of the search word
     # that produced this item (unified keyword planner). ``None`` for every
     # non-search / legacy / flag-off path — the admit-time yield backfill is a

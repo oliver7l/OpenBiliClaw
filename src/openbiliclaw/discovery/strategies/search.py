@@ -28,6 +28,7 @@ from openbiliclaw.discovery.strategies._utils import (
     search_cooldown_remaining,
     to_int,
 )
+from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
 from openbiliclaw.llm.prompts import build_search_queries_prompt
 
 if TYPE_CHECKING:
@@ -436,7 +437,13 @@ class SearchStrategy(DiscoveryStrategy):
         text = content.strip()
         if not text:
             return []
-        parsed = json.loads(text)
+        # Reasoning models (sensenova-6.8 etc.) sometimes wrap or preface the
+        # JSON with extra prose even in json_mode; reuse the tolerant parser
+        # instead of a bare json.loads so a valid payload still gets through.
+        try:
+            parsed = parse_llm_json_tolerant(text)
+        except Exception:
+            return []
         if not isinstance(parsed, dict):
             return []
         raw_queries = parsed.get("queries", [])

@@ -14,9 +14,12 @@ import logging
 import math
 import sqlite3
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Protocol
+
+from .base import is_connectivity_error
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +139,7 @@ class EmbeddingCache:
             return None
         try:
             return _coerce_embedding_vector(json.loads(row[0]))
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
             return None
 
     def put(self, key: str, vector: list[float], model: str = "") -> None:
@@ -204,6 +207,20 @@ class EmbeddingService:
         # cost. Default 2 keeps single-CPU bge-m3 healthy while still
         # using both cores for inference + tokenization.
         self._provider_semaphore = asyncio.Semaphore(max_concurrent_provider_calls)
+        # Connectivity cooldown: when the embedding provider is unreachable
+        # (connection refused / DNS / timeout), the discovery writer, the
+        # recommendation prewarm worker and delight-scoring all call
+        # ``embed()`` repeatedly, and each call would otherwise pay the full
+        # connect timeout (0.3–1.2s). That stalls the 换一批 batch buffer and
+        # background loops. ``EmbeddingService`` calls ``provider.embed()``
+        # directly — it never passes through ``LLMRegistry.complete()`` — so
+        # the registry's connectivity cooldown never applied here. Mirror it
+        # with a short, self-contained cooldown: on a connectivity failure we
+        # record a deadline and fail fast (return []) for the window. Callers
+        # already degrade gracefully on an empty vector, so this keeps the
+        # user-facing path responsive instead of retrying a dead endpoint.
+        self._connectivity_cooldown_until = 0.0
+        self._CONNECTIVITY_COOLDOWN_SECONDS = 15.0
 
     def lookup_cached(self, text: str) -> list[float]:
         """Cache-only lookup — never triggers a provider API call.
@@ -234,17 +251,37 @@ class EmbeddingService:
         if not key:
             return []
 
-        # L1 / L2 cache lookup (also covers warming-side hits).
-        cached = self.lookup_cached(text)
+        # L1 / L2 cache lookup (also covers warming-side hits). The L2 read
+        # is a pickled SQLite read — run it off the event loop so it cannot
+        # stall in-flight requests.
+        cached = await asyncio.get_running_loop().run_in_executor(
+            None, self.lookup_cached, text
+        )
         if cached:
             return cached
+
+        # Connectivity cooldown: skip the API round-trip entirely when the
+        # provider is known unreachable (set by the previous connectivity
+        # failure). Returns [] so callers fall back to non-embedding
+        # diversity scoring instead of paying the connect timeout again.
+        if time.monotonic() < self._connectivity_cooldown_until:
+            return []
 
         # L3: API call (throttled — see __init__ semaphore comment)
         async with self._provider_semaphore:
             try:
                 vector = await self._provider.embed(key, model=self._model)
-            except Exception:
-                logger.warning("Embedding failed for: %s", key[:50], exc_info=True)
+            except Exception as exc:
+                if is_connectivity_error(exc):
+                    self._connectivity_cooldown_until = (
+                        time.monotonic() + self._CONNECTIVITY_COOLDOWN_SECONDS
+                    )
+                    logger.warning(
+                        "Embedding provider unreachable — cooling down for %.0fs.",
+                        self._CONNECTIVITY_COOLDOWN_SECONDS,
+                    )
+                else:
+                    logger.warning("Embedding failed for: %s", key[:50], exc_info=True)
                 return []
 
         # Never cache an empty vector. Empty means the provider failed
@@ -275,7 +312,12 @@ class EmbeddingService:
 
         if self._l2_cache is not None:
             try:
-                self._l2_cache.put(key, vector, model=self._cache_model)
+                # L2 write is a pickled SQLite write — keep it off the event
+                # loop (it can take 10-100ms per vector on a large cache).
+                await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda: self._l2_cache.put(key, vector, model=self._cache_model),
+                )
             except Exception:
                 logger.debug("L2 cache write failed", exc_info=True)
 
@@ -291,12 +333,26 @@ class EmbeddingService:
         call 404s, remote key revoked, …). ``/api/health`` calls this
         behind its own short TTL + single-flight, so the extra provider
         round-trip happens at most a couple of times a minute.
+
+        A known-unreachable provider fails fast (returns ``False``) inside
+        the connectivity cooldown shared with :meth:`embed` — otherwise a
+        dead endpoint would make every health/TTL window pay the full
+        connect timeout. Recovery is still detected: after the cooldown
+        expires the next probe hits the provider again.
         """
+        if time.monotonic() < self._connectivity_cooldown_until:
+            return False
         async with self._provider_semaphore:
             try:
                 vector = await self._provider.embed(self._PROBE_TEXT, model=self._model)
-            except Exception:
-                logger.debug("Embedding readiness probe failed", exc_info=True)
+            except Exception as exc:
+                if is_connectivity_error(exc):
+                    self._connectivity_cooldown_until = (
+                        time.monotonic() + self._CONNECTIVITY_COOLDOWN_SECONDS
+                    )
+                    logger.debug("Embedding readiness probe skipped — provider cooling down")
+                else:
+                    logger.debug("Embedding readiness probe failed", exc_info=True)
                 return False
         return bool(vector)
 

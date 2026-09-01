@@ -9,7 +9,6 @@ import {
   respondToAvoidanceProbe,
   fetchEditState,
   submitProfileEdit,
-  submitInsightFeedback,
 } from "../api.js";
 import {
   normalizeProfileSummary,
@@ -19,6 +18,8 @@ import {
   getContextPatternRows,
   getMbtiDisplayState,
   getProfileStyleDisplay,
+  getAvoidanceProbeMessageActions,
+  getProbeMessageActions,
   formatRelativeTimestamp,
 } from "../view-models.js";
 import { state, patchState } from "../state.js";
@@ -231,14 +232,14 @@ function render() {
 
   // Active insights
   if (p.active_insights.length) {
-    const insHtml = p.active_insights.map((i, idx) => {
+    const insHtml = p.active_insights.map((i) => {
       let extra = "";
       if (i.evidence.length) {
         extra += `<div class="insight-evidence">${i.evidence.map((e) => `<div>\u2022 ${esc(e)}</div>`).join("")}</div>`;
       }
       const confPct = Math.round(i.confidence * 100);
       return `
-        <div class="insight-item" data-insight-idx="${idx}">
+        <div class="insight-item insight-readonly">
           <div class="insight-label">\u{1F4A1} Insight
             <span class="insight-confidence">${confPct}%</span>
             ${i.validated ? `<span class="insight-validated">\u2713 \u5DF2\u9A8C\u8BC1</span>` : ""}
@@ -246,13 +247,12 @@ function render() {
           <div>${esc(i.hypothesis)}</div>
           ${extra}
           ${i.created_at ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${esc(formatRelativeTimestamp(i.created_at))}</div>` : ""}
-          <div class="insight-actions" style="display:flex;gap:8px;margin-top:8px">
-            <button class="spec-btn confirm" data-action="confirm" title="\u8FD9\u4E2A\u731C\u6D4B\u51C6">\u51C6</button>
-            <button class="spec-btn reject" data-action="reject" title="\u8FD9\u4E2A\u731C\u6D4B\u4E0D\u51C6">\u4E0D\u51C6</button>
-          </div>
         </div>`;
     }).join("");
-    html += section("\u6D3B\u8DC3\u6D1E\u5BDF", insHtml);
+    html += section(
+      "\u6D3B\u8DC3\u6D1E\u5BDF",
+      `<p class="insight-readonly-note">请在「聊聊口味」的待聊确认入口处理</p>${insHtml}`,
+    );
   }
 
   // Recent awareness
@@ -274,7 +274,6 @@ function render() {
   $root.querySelector("#load-more-cognition")?.addEventListener("click", loadMoreCognition);
   bindSpecInterestActions();
   bindSpecAvoidanceActions();
-  bindInsightActions();
   bindCognitionExpand();
 }
 
@@ -324,9 +323,25 @@ function renderExplorationBar(value) {
 }
 
 // ── Speculative Interests ────────────────────────────────────
+function renderProbeActionMarkup(actions, extraClass = "") {
+  return actions
+    .filter((action) => action.action !== "chat")
+    .map((action) => {
+      const classes = [
+        "spec-btn",
+        extraClass,
+        action.primary ? "confirm" : action.action,
+      ].filter(Boolean).join(" ");
+      return `
+        <button type="button" class="${classes}" data-action="${action.action}">${esc(action.label)}</button>`;
+    })
+    .join("");
+}
+
 function renderSpecInterests(interests) {
   return interests.map((si) => {
     const canAct = si.status === "active" || si.status === "pending";
+    const actionMarkup = renderProbeActionMarkup(getProbeMessageActions());
     const progressPct = si.confirmation_threshold > 0
       ? Math.round((si.confirmation_count / si.confirmation_threshold) * 100)
       : 0;
@@ -341,21 +356,21 @@ function renderSpecInterests(interests) {
         </div>
         ${canAct ? `
         <div class="spec-interest-actions">
-          <button class="spec-btn confirm" data-action="confirm">\u2713</button>
-          <button class="spec-btn reject" data-action="reject">\u2717</button>
+          ${actionMarkup}
         </div>` : ""}
       </div>`;
   }).join("");
 }
 
 function bindSpecInterestActions() {
-  for (const btn of $root.querySelectorAll(".spec-interest .spec-btn")) {
+  for (const btn of $root.querySelectorAll(".spec-interest:not(.spec-avoidance) .spec-btn")) {
     btn.addEventListener("click", async (e) => {
       const row = e.target.closest(".spec-interest");
       const domain = row?.dataset.domain;
       const action = e.target.dataset.action;
       if (!domain || !action) return;
-      btn.disabled = true;
+      const buttons = [...row.querySelectorAll(".spec-btn")];
+      for (const actionButton of buttons) actionButton.disabled = true;
       rememberHandledProbe(domain, "interest.probe");
       try {
         await respondToProbe(domain, action, { surface: "profile" });
@@ -371,40 +386,7 @@ function bindSpecInterestActions() {
         render();
       } catch {
         forgetHandledProbe(domain, "interest.probe");
-        btn.disabled = false;
-      }
-    });
-  }
-}
-
-function bindInsightActions() {
-  for (const btn of $root.querySelectorAll(".insight-item .spec-btn")) {
-    btn.addEventListener("click", async (e) => {
-      const row = e.target.closest(".insight-item");
-      const idx = Number(row?.dataset.insightIdx);
-      const action = e.target.dataset.action;
-      const insight = state.profile?.active_insights?.[idx];
-      if (!insight || !action) return;
-      for (const b of row.querySelectorAll(".spec-btn")) b.disabled = true;
-      try {
-        const res = await submitInsightFeedback(insight.hypothesis, action);
-        const p = state.profile;
-        if (p?.active_insights && res?.matched) {
-          const updated = p.active_insights.map((it, i) =>
-            i === idx
-              ? {
-                  ...it,
-                  validated: Boolean(res.validated),
-                  confidence:
-                    typeof res.confidence === "number" ? res.confidence : it.confidence,
-                }
-              : it,
-          );
-          patchState({ profile: { ...p, active_insights: updated } });
-        }
-        render();
-      } catch {
-        for (const b of row.querySelectorAll(".spec-btn")) b.disabled = false;
+        for (const actionButton of buttons) actionButton.disabled = false;
       }
     });
   }
@@ -414,6 +396,10 @@ function bindInsightActions() {
 function renderSpecAvoidances(avoidances) {
   return avoidances.map((item) => {
     const canAct = item.status === "active" || item.status === "pending";
+    const actionMarkup = renderProbeActionMarkup(
+      getAvoidanceProbeMessageActions(),
+      "spec-avoidance-btn",
+    );
     const progressPct = item.confirmation_threshold > 0
       ? Math.round((item.confirmation_count / item.confirmation_threshold) * 100)
       : 0;
@@ -429,8 +415,7 @@ function renderSpecAvoidances(avoidances) {
         </div>
         ${canAct ? `
         <div class="spec-interest-actions">
-          <button class="spec-btn spec-avoidance-btn confirm" data-action="confirm">\u2713</button>
-          <button class="spec-btn spec-avoidance-btn reject" data-action="reject">\u2717</button>
+          ${actionMarkup}
         </div>` : ""}
       </div>`;
   }).join("");
@@ -443,7 +428,8 @@ function bindSpecAvoidanceActions() {
       const domain = row?.dataset.domain;
       const action = e.target.dataset.action;
       if (!domain || !action) return;
-      btn.disabled = true;
+      const buttons = [...row.querySelectorAll(".spec-btn")];
+      for (const actionButton of buttons) actionButton.disabled = true;
       rememberHandledProbe(domain, "avoidance.probe");
       try {
         await respondToAvoidanceProbe(domain, action);
@@ -459,7 +445,7 @@ function bindSpecAvoidanceActions() {
         render();
       } catch {
         forgetHandledProbe(domain, "avoidance.probe");
-        btn.disabled = false;
+        for (const actionButton of buttons) actionButton.disabled = false;
       }
     });
   }
@@ -597,22 +583,61 @@ function renderListEditField(path, label, field) {
     </div>`;
 }
 
+function editSpecificName(item) {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") return item.name || item.label || "";
+  return "";
+}
+
+function hasSpecificEdits(field) {
+  const edits = field?.specific_edits;
+  if (!edits || typeof edits !== "object") return false;
+  return Object.values(edits).some((edit) => {
+    if (!edit || typeof edit !== "object") return false;
+    return (edit.add?.length || 0) > 0 || (edit.remove?.length || 0) > 0;
+  });
+}
+
 function renderInterestEditField(path, label, field) {
   const domains = Array.isArray(field.domains) ? field.domains : [];
-  const edited = (field.removed_domains?.length || 0) > 0 || domains.some((d) => d?.user_added);
-  const chips = domains.length
+  const edited =
+    (field.removed_domains?.length || 0) > 0 ||
+    domains.some((d) => d?.user_added) ||
+    hasSpecificEdits(field);
+  const tree = domains.length
     ? domains
-        .map(
-          (d) =>
-            `<span class="edit-chip">${esc(d.domain)}${d.user_added ? " ＋" : ""}<button class="edit-chip-remove" data-edit-remove="${escAttr(path)}" data-edit-value="${escAttr(d.domain)}">✕</button></span>`,
-        )
+        .map((d) => {
+          if (!d?.domain) return "";
+          const specifics = Array.isArray(d.specifics)
+            ? d.specifics.map(editSpecificName).filter(Boolean)
+            : [];
+          const specificChips = specifics.length
+            ? specifics
+                .map(
+                  (specific) =>
+                    `<span class="edit-chip edit-specific-chip">${esc(specific)}<button class="edit-chip-remove" data-edit-remove-specific="${escAttr(path)}" data-edit-parent="${escAttr(d.domain)}" data-edit-value="${escAttr(specific)}">✕</button></span>`,
+                )
+                .join("")
+            : `<p class="edit-empty edit-specific-empty">还没有二级兴趣</p>`;
+          return `
+            <div class="edit-interest-domain">
+              <div class="edit-interest-domain-head">
+                <span class="edit-chip edit-domain-chip">${esc(d.domain)}${d.user_added ? " ＋" : ""}<button class="edit-chip-remove" data-edit-remove="${escAttr(path)}" data-edit-value="${escAttr(d.domain)}">✕</button></span>
+              </div>
+              <div class="edit-specific-list">${specificChips}</div>
+              <div class="edit-add-row edit-specific-add-row">
+                <input class="edit-add-input" data-edit-specific-input="${escAttr(path)}" data-edit-parent="${escAttr(d.domain)}" placeholder="添加二级兴趣" />
+                <button class="edit-add-btn" data-edit-add-specific="${escAttr(path)}" data-edit-parent="${escAttr(d.domain)}">添加</button>
+              </div>
+            </div>`;
+        })
         .join("")
     : `<p class="edit-empty">还没有，添加一个吧</p>`;
   const placeholder = path === "dislikes" ? "添加要避开的领域" : "添加感兴趣的领域";
   return `
     <div class="edit-field">
       <div class="edit-field-head"><span class="edit-field-label">${esc(label)}</span>${edited ? `<span class="edit-badge">已编辑</span>` : ""}</div>
-      <div class="edit-chip-list">${chips}</div>
+      <div class="edit-interest-tree">${tree}</div>
       <div class="edit-add-row">
         <input class="edit-add-input" data-edit-add-input="${escAttr(path)}" placeholder="${esc(placeholder)}" />
         <button class="edit-add-btn" data-edit-add="${escAttr(path)}">添加</button>
@@ -657,6 +682,16 @@ function bindEditActions() {
       void applyEdit({ target: btn.dataset.editRemove, op: "remove", value: btn.dataset.editValue }),
     );
   }
+  for (const btn of $root.querySelectorAll("[data-edit-remove-specific]")) {
+    btn.addEventListener("click", () =>
+      void applyEdit({
+        target: btn.dataset.editRemoveSpecific,
+        op: "remove",
+        value: btn.dataset.editValue,
+        parent: btn.dataset.editParent || "",
+      }),
+    );
+  }
   for (const btn of $root.querySelectorAll("[data-edit-reset]")) {
     btn.addEventListener("click", () => void applyEdit({ target: btn.dataset.editReset, op: "reset" }));
   }
@@ -669,6 +704,19 @@ function bindEditActions() {
       void applyEdit({ target: path, op: "add", value });
     });
   }
+  for (const btn of $root.querySelectorAll("[data-edit-add-specific]")) {
+    btn.addEventListener("click", () => {
+      const input = btn.closest(".edit-add-row")?.querySelector("[data-edit-specific-input]");
+      const value = input?.value.trim();
+      if (!value) return;
+      void applyEdit({
+        target: btn.dataset.editAddSpecific,
+        op: "add",
+        value,
+        parent: btn.dataset.editParent || "",
+      });
+    });
+  }
   for (const input of $root.querySelectorAll("[data-edit-add-input]")) {
     input.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
@@ -676,6 +724,20 @@ function bindEditActions() {
       const value = input.value.trim();
       if (!value) return;
       void applyEdit({ target: input.dataset.editAddInput, op: "add", value });
+    });
+  }
+  for (const input of $root.querySelectorAll("[data-edit-specific-input]")) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const value = input.value.trim();
+      if (!value) return;
+      void applyEdit({
+        target: input.dataset.editSpecificInput,
+        op: "add",
+        value,
+        parent: input.dataset.editParent || "",
+      });
     });
   }
   for (const btn of $root.querySelectorAll("[data-edit-save]")) {

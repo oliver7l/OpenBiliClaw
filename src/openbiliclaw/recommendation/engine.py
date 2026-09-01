@@ -11,7 +11,8 @@ import inspect
 import json
 import logging
 import re
-from collections import Counter, defaultdict
+import time
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol
@@ -234,6 +235,24 @@ class RecommendationEngine:
         # the new batch were also in the previous batch). High
         # carryover signals stale-pool / fatigue-bypass.
         self._last_served_bvids: frozenset[str] = frozenset()
+        # v0.3.x+: pre-computed batch buffer for instant "换一批".
+        # serve() is expensive (pool SQL + embedding diversity + DB insert
+        # under SQLite write contention), so we pre-compute a few batches in
+        # the background and pop them on the user click path — making
+        # reshuffle O(1) instead of the multi-second latency the user hit.
+        self._batch_buffers: dict[str, deque[list[Recommendation]]] = {}
+        self._batch_buffer_locks: dict[str, asyncio.Lock] = {}
+        self._BATCH_BUFFER_TARGET = 4
+        # Negative cache: key -> monotonic deadline until which we know
+        # serve() yields nothing for this key. Without it, every click on a
+        # drained platform (e.g. bilibili with 0 usable candidates) pays the
+        # full cold serve() cost — measured 4.5s — just to return an empty
+        # list, and the UI hangs while doing it. A short TTL self-heals once
+        # the background discovery loop refills the pool.
+        self._batch_empty_until: dict[str, float] = {}
+        # 20s balances two costs: too long and a replenished pool looks empty;
+        # too short and we re-pay the ~4.5s cold serve() for drained keys.
+        self._BATCH_EMPTY_TTL_SECONDS = 20.0
 
     def _xhs_self_nickname(self) -> str:
         """Return the persisted XHS self nickname for pool guards."""
@@ -265,6 +284,28 @@ class RecommendationEngine:
         available = int(self._database.count_pool_candidates(xhs_self_nickname=nickname))
         return {"available": max(0, available), "raw": max(0, available), "pending": 0}
 
+    @staticmethod
+    def _fetch_quality_scores(
+        database: Any,
+        candidates: list[DiscoveredContent],
+    ) -> dict[str, float] | None:
+        """Fetch quality scores from DB for the given candidates.
+
+        Returns bvid → quality_score mapping, or None if no scores found.
+        """
+        if not candidates or not hasattr(database, "batch_get_quality_scores"):
+            return None
+        bvids = [c.bvid for c in candidates if c.bvid]
+        if not bvids:
+            return None
+        try:
+            rows = database.batch_get_quality_scores(bvids)
+            scores = {row["bvid"]: float(row["quality_score"] or 0.0) for row in rows if row.get("quality_score")}
+            return scores if scores else None
+        except Exception:
+            logger.exception("Failed to fetch quality scores for re-ranking")
+            return None
+
     async def serve(
         self,
         profile: SoulProfile,
@@ -272,6 +313,7 @@ class RecommendationEngine:
         limit: int = 5,
         excluded_bvids: frozenset[str] = frozenset(),
         expression_mode: Literal["realtime", "precomputed"] = "precomputed",
+        platform: str | None = None,
     ) -> list[Recommendation]:
         """Unified recommendation entry point — always picks from the pool.
 
@@ -306,7 +348,7 @@ class RecommendationEngine:
             self._last_served_bvids = frozenset()
             return []
 
-        candidates = self._load_pool_candidates(limit=max(limit * multiplier, 40))
+        candidates = self._load_pool_candidates(limit=max(limit * multiplier, 40), platform=platform)
         loaded_count = len(candidates)
         if excluded_bvids:
             candidates = [c for c in candidates if c.bvid not in excluded_bvids]
@@ -367,7 +409,11 @@ class RecommendationEngine:
         amplification_guard: frozenset[str] = frozenset()
         if self._curator is not None:
             context = self._curator.build_context()
-            score_override = self._curator.score_candidates(candidates, context)
+            # Fetch quality scores from DB for re-ranking blend
+            quality_scores = self._fetch_quality_scores(self._database, candidates)
+            score_override = self._curator.score_candidates(
+                candidates, context, quality_scores=quality_scores,
+            )
             amplification_guard = context.over_budget_amplification_keys
 
         # v0.3.44+: pre-fetch embeddings for MMR-based diversification.
@@ -1625,12 +1671,179 @@ class RecommendationEngine:
         *,
         profile: SoulProfile,
         limit: int = 5,
+        platform: str | None = None,
     ) -> list[Recommendation]:
-        """Instantly pick a new batch from the discovery pool.
+        """Instantly pick a new batch from the pre-computed buffer.
 
-        Delegates to :meth:`serve` with ``expression_mode="precomputed"``.
+        v0.3.x+: delegates to :meth:`get_next_batch`, which pops a
+        background-computed batch so the user click path is O(1) — no
+        pool SQL, no embedding diversity I/O, no SQLite write under lock
+        contention. Falls back to a synchronous ``serve()`` only when the
+        buffer is cold/drained, then schedules a background refill.
+        ``platform`` (optional) serves only that ``source_platform``.
         """
-        return await self.serve(profile, limit=limit, expression_mode="precomputed")
+        return await self.get_next_batch(profile=profile, platform=platform, limit=limit)
+
+    # ── Pre-computed batch buffer ────────────────────────────────────────
+    # The user-facing "换一批" must never block on the ~5-11s serve()
+    # pipeline (large pool SQL + MMR embedding diversity + recommendation
+    # insert under SQLite write contention). Instead we keep a small ring
+    # of ready batches per platform, filled by detached background tasks,
+    # and pop one on each click.
+
+    @staticmethod
+    def _batch_key(platform: str | None) -> str:
+        return (platform or "").strip().lower() or "__all__"
+
+    async def get_next_batch(
+        self,
+        *,
+        profile: SoulProfile,
+        platform: str | None = None,
+        limit: int = 10,
+    ) -> list[Recommendation]:
+        """Return a batch instantly from the buffer; refill in the background.
+
+        If a batch is buffered (the warm, normal case) this returns in
+        microseconds with zero DB writes or heavy compute on the user path.
+        Only when the buffer is cold/drained does it compute one batch
+        synchronously, then kicks a background refill.
+        """
+        key = self._batch_key(platform)
+        buf = self._batch_buffers.setdefault(key, deque())
+        if buf:
+            batch = buf.popleft()
+            # Top up so the next click is also instant.
+            self._schedule_refill(profile=profile, key=key, platform=platform, limit=limit)
+            return batch
+        # Negative cache hit: we recently learned this key has nothing to
+        # serve. Return immediately instead of paying the full cold-path cost
+        # (4.5s measured) to rediscover an empty pool on every click.
+        empty_until = self._batch_empty_until.get(key)
+        if empty_until is not None:
+            if time.monotonic() < empty_until:
+                return []
+            # TTL expired — drop it and re-probe once below.
+            self._batch_empty_until.pop(key, None)
+        # Cold path: compute on demand in a worker thread. serve() writes to
+        # SQLite synchronously — running it on the event loop is exactly what
+        # caused the multi-second "换一批" latency (the write blocks every other
+        # request). The event loop only awaits the executor future here.
+        loop = asyncio.get_running_loop()
+        batch = await loop.run_in_executor(None, self._run_serve_sync, profile, platform, limit)
+        if not batch:
+            self._batch_empty_until[key] = (
+                time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
+            )
+        self._schedule_refill(profile=profile, key=key, platform=platform, limit=limit)
+        return batch
+
+    def prefetch_batch_buffer(
+        self,
+        *,
+        profile: SoulProfile,
+        platform: str | None = None,
+        limit: int = 10,
+    ) -> None:
+        """Kick a background top-up of the batch buffer (startup / pool change)."""
+        key = self._batch_key(platform)
+        self._schedule_refill(profile=profile, key=key, platform=platform, limit=limit)
+
+    def _run_serve_sync(
+        self,
+        profile: SoulProfile,
+        platform: str | None,
+        limit: int,
+    ) -> list[Recommendation]:
+        """Run :meth:`serve` in a dedicated worker thread with its own loop.
+
+        ``serve()`` performs synchronous SQLite writes (``batch_insert`` +
+        ``mark_pool_shown``) and pool SQL on the calling thread. Running it on
+        the asyncio event loop blocks every other in-flight request — the root
+        cause of the multi-second "换一批" latency. This wrapper moves that work
+        to a thread-pool worker so the request path stays responsive; callers
+        only ``await`` the executor future.
+
+        The shared DB connection is opened with ``check_same_thread=False`` and
+        ``busy_timeout``, and the pool runs in WAL mode, so using it from a
+        worker thread is safe (reads/writes serialize or see a WAL snapshot).
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(
+                self.serve(profile, limit=limit, expression_mode="precomputed", platform=platform)
+            )
+        finally:
+            loop.close()
+
+    def _schedule_refill(
+        self,
+        *,
+        profile: SoulProfile,
+        key: str,
+        platform: str | None,
+        limit: int,
+    ) -> None:
+        """Top up ``key``'s buffer in the background if it is below target."""
+        buf = self._batch_buffers.setdefault(key, deque())
+        if len(buf) >= self._BATCH_BUFFER_TARGET:
+            return
+        lock = self._batch_buffer_locks.setdefault(key, asyncio.Lock())
+        if lock.locked():
+            return  # a refill for this key is already in flight
+        loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(
+            self._refill_batch_buffer(profile=profile, key=key, platform=platform, limit=limit)
+        )
+        if self.task_registry is not None:
+            try:
+                # NB: ``register`` takes (name, task) — passing only the task
+                # silently registered it as the *name* and raised a TypeError
+                # that this except swallowed, so refills were never tracked.
+                self.task_registry.register(f"batch_buffer_refill.{key}", task)
+            except Exception:
+                pass
+
+    async def _refill_batch_buffer(
+        self,
+        *,
+        profile: SoulProfile,
+        key: str,
+        platform: str | None,
+        limit: int,
+    ) -> None:
+        """Fill ``key``'s buffer up to target with fresh serve() batches."""
+        buf = self._batch_buffers.setdefault(key, deque())
+        lock = self._batch_buffer_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            while len(buf) < self._BATCH_BUFFER_TARGET:
+                try:
+                    loop = asyncio.get_running_loop()
+                    batch = await loop.run_in_executor(None, self._run_serve_sync, profile, platform, limit)
+                except Exception:
+                    logger.exception("Batch buffer refill failed for key=%s", key)
+                    break
+                if not batch:
+                    # Nothing left to serve — stop topping up. This is the
+                    # only correct "empty" signal; the old readiness-count
+                    # gate (count_pool_readiness) was stricter than what
+                    # serve() can actually return and permanently starved the
+                    # buffer, forcing every 换一批 click down the slow cold path.
+                    #
+                    # Record it so the click path can answer instantly
+                    # instead of re-running the (expensive, ~4.5s) cold
+                    # serve() for an empty pool on every single click.
+                    self._batch_empty_until[key] = (
+                        time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
+                    )
+                    break
+                # Got content → any prior "empty" verdict for this key is stale.
+                self._batch_empty_until.pop(key, None)
+                buf.append(batch)
 
     async def append_recommendations(
         self,
@@ -2562,9 +2775,9 @@ class RecommendationEngine:
             for row in rows
         ]
 
-    def _load_pool_candidates(self, *, limit: int) -> list[DiscoveredContent]:
+    def _load_pool_candidates(self, *, limit: int, platform: str | None = None) -> list[DiscoveredContent]:
         rows = self._database.get_pool_candidates(
-            limit=limit, xhs_self_nickname=self._xhs_self_nickname()
+            limit=limit, xhs_self_nickname=self._xhs_self_nickname(), platform=platform
         )
         return self._rows_to_discovered(rows)
 

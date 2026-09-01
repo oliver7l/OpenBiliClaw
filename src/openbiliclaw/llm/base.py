@@ -16,6 +16,68 @@ logger = logging.getLogger(__name__)
 
 LLM_CONNECTIVITY_PROBE_MAX_TOKENS = 1024
 
+# Substrings / exception-type names that identify an *infrastructure* failure
+# (the endpoint is unreachable) as opposed to a content/generation error.
+# Only the former should trip a cooldown — cooling down on a bad request or a
+# content filter would disable a healthy provider for no reason.
+_CONNECTIVITY_MARKERS = (
+    "connection error",
+    "connect error",
+    "connecterror",
+    "connection refused",
+    "connection aborted",
+    "connection reset",
+    "all connection attempts failed",
+    "name or service not known",
+    "nodename nor servname",
+    "temporary failure in name resolution",
+    "network is unreachable",
+    "no route to host",
+    "timed out",
+    "timeout",
+    "unreachable",
+)
+
+_CONNECTIVITY_EXC_TYPES = (
+    "ConnectError",
+    "ConnectTimeout",
+    "ReadTimeout",
+    "WriteTimeout",
+    "PoolTimeout",
+    "TimeoutException",
+    "RemoteProtocolError",
+    "NetworkError",
+    "TransportError",
+    "socket.gaierror",
+    "ConnectionRefusedError",
+)
+
+
+def is_connectivity_error(exc: BaseException) -> bool:
+    """True when ``exc`` (or its cause chain) is an infrastructure failure.
+
+    Providers wrap transport errors as e.g.
+    ``LLMProviderError("openai request failed: Connection error.")``, so both
+    the exception type names and the message text are inspected along the
+    ``__cause__`` / ``__context__`` chain.
+
+    Used by ``LLMRegistry`` (chat completions) and ``EmbeddingService``
+    (which calls ``provider.embed()`` directly and therefore never passes
+    through the registry's fallback/cooldown logic).
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        type_name = type(current).__name__
+        if any(marker in type_name for marker in _CONNECTIVITY_EXC_TYPES):
+            return True
+        message = str(current).lower()
+        if any(marker in message for marker in _CONNECTIVITY_MARKERS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
 
 class LLMProviderError(Exception):
     """Base exception for provider request failures."""
@@ -142,11 +204,23 @@ class LLMRegistry:
     """
 
     _RATE_LIMIT_COOLDOWN_SECONDS = 60.0
+    # Short cooldown applied when a provider is *unreachable* (connection
+    # refused / DNS / timeout) rather than rate-limited. Without it, every
+    # call keeps paying the full connect timeout: with the LLM backend down,
+    # a single ``serve()`` took 0.3–1.2s purely retrying a dead endpoint,
+    # which starved the 换一批 batch buffer. 15s keeps recovery quick while
+    # removing the repeated timeout cost from the user-facing path.
+    _CONNECTIVITY_COOLDOWN_SECONDS = 15.0
 
     def __init__(self) -> None:
         self._providers: dict[str, LLMProvider] = {}
         self._default: str = ""
         self._rate_limited_until: dict[str, float] = {}
+        # Cooldown-warning dedup: while a provider is cooling down, every
+        # blocked call used to log a WARNING (1000+/day under sustained rate
+        # limiting). Log once per cooldown episode per provider; subsequent
+        # blocked calls log at debug.
+        self._cooldown_warned_at: dict[str, float] = {}
         self.fallback_enabled: bool = False
         self.fallback_provider: str = ""
         # Names of providers that should NOT appear in the chat-completion
@@ -249,7 +323,9 @@ class LLMRegistry:
                 last_error = LLMRateLimitError(
                     f"Provider {provider_name} is cooling down after rate limit."
                 )
-                logger.warning("Provider %s is cooling down after rate limit.", provider_name)
+                self._log_cooldown_blocked(
+                    provider_name, "Provider %s is cooling down after rate limit.", provider_name
+                )
                 continue
             provider = self.get(provider_name)
             try:
@@ -270,7 +346,20 @@ class LLMRegistry:
                 logger.warning("Provider %s failed, trying next fallback.", provider_name)
             except (LLMProviderError, LLMTimeoutError) as exc:
                 last_error = exc
-                logger.warning("Provider %s failed, trying next fallback.", provider_name)
+                # An unreachable endpoint would otherwise be retried on every
+                # single call, each time paying the full connect timeout —
+                # with the LLM backend down that added 0.3–1.2s to serve().
+                if self._is_connectivity_error(exc):
+                    self._mark_cooldown(
+                        provider_name, self._CONNECTIVITY_COOLDOWN_SECONDS
+                    )
+                    logger.warning(
+                        "Provider %s unreachable — cooling down for %.0fs.",
+                        provider_name,
+                        self._CONNECTIVITY_COOLDOWN_SECONDS,
+                    )
+                else:
+                    logger.warning("Provider %s failed, trying next fallback.", provider_name)
 
         attempted_list = ", ".join(attempted)
         if last_error is None:
@@ -304,7 +393,9 @@ class LLMRegistry:
                 f"or not chat-capable. Chat-capable providers: {available}"
             )
         if self._provider_on_cooldown(target):
-            logger.warning("Provider %s is cooling down after rate limit.", target)
+            self._log_cooldown_blocked(
+                target, "Provider %s is cooling down after rate limit.", target
+            )
             raise LLMRateLimitError(f"Provider {target} is cooling down after rate limit.")
 
         provider = self.get(target)
@@ -322,6 +413,15 @@ class LLMRegistry:
         except LLMRateLimitError:
             self._mark_rate_limited(target)
             logger.warning("Provider %s rate-limited exact routed call.", target)
+            raise
+        except (LLMProviderError, LLMTimeoutError) as exc:
+            if self._is_connectivity_error(exc):
+                self._mark_cooldown(target, self._CONNECTIVITY_COOLDOWN_SECONDS)
+                logger.warning(
+                    "Provider %s unreachable — cooling down for %.0fs.",
+                    target,
+                    self._CONNECTIVITY_COOLDOWN_SECONDS,
+                )
             raise
 
     async def health_check_all(self) -> dict[str, HealthCheckResult]:
@@ -383,7 +483,29 @@ class LLMRegistry:
         self._rate_limited_until.pop(provider_name, None)
         return False
 
+    def _log_cooldown_blocked(self, provider_name: str, message: str, *args: object) -> None:
+        """Log a call blocked by an active cooldown, rate-limited per provider.
+
+        A blocked call is not a new event — the provider is already known to
+        be cooling down. Emit WARNING at most once per interval per provider
+        and DEBUG otherwise, so sustained rate limiting doesn't flood the log
+        with 1000+ identical warnings per day.
+        """
+        now = time.monotonic()
+        if now - self._cooldown_warned_at.get(provider_name, 0.0) >= 300.0:
+            self._cooldown_warned_at[provider_name] = now
+            logger.warning(message, *args)
+        else:
+            logger.debug(message, *args)
+
+    def _mark_cooldown(self, provider_name: str, seconds: float) -> None:
+        """Put ``provider_name`` on cooldown for ``seconds``."""
+        self._rate_limited_until[provider_name] = time.monotonic() + seconds
+
     def _mark_rate_limited(self, provider_name: str) -> None:
-        self._rate_limited_until[provider_name] = (
-            time.monotonic() + self._RATE_LIMIT_COOLDOWN_SECONDS
-        )
+        self._mark_cooldown(provider_name, self._RATE_LIMIT_COOLDOWN_SECONDS)
+
+    @classmethod
+    def _is_connectivity_error(cls, exc: BaseException) -> bool:
+        """Delegate to the module-level :func:`is_connectivity_error`."""
+        return is_connectivity_error(exc)

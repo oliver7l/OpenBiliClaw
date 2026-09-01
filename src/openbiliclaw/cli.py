@@ -30,6 +30,37 @@ from openbiliclaw.runtime.ollama_supervisor import (
 from openbiliclaw.soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 
 
+def _strip_proxy_env() -> None:
+    """Drop any inherited HTTP(S) proxy env vars from the running process.
+
+    All configured outbound endpoints (Bilibili, sensenova, deepseek,
+    Douyin, image CDNs) are reachable directly from this host. The macOS
+    system proxy (127.0.0.1:7890, e.g. Clash) is restarted often and its
+    downtime takes down every outbound request. Clearing the vars here —
+    inside the Python process, before any httpx client is constructed —
+    guarantees direct connectivity regardless of how the process was
+    launched (PM2 re-injects env that a wrapper ``unset`` cannot always
+    reach). httpx clients that already pass ``trust_env=False`` are doubly
+    safe; this also covers SDKs (e.g. google-genai) that only honour env.
+    """
+    for _var in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "FTP_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "ftp_proxy",
+        "no_proxy",
+    ):
+        os.environ.pop(_var, None)
+
+
+_strip_proxy_env()
+
+
 def _force_utf8_stdout_on_windows() -> None:
     """Reconfigure stdout/stderr to UTF-8 on Windows.
 

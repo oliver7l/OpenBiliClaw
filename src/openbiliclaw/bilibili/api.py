@@ -229,6 +229,10 @@ class BilibiliAPIClient:
                 ),
                 "Referer": "https://www.bilibili.com",
             },
+            # Connect directly to Bilibili — do NOT inherit the macOS system
+            # proxy (127.0.0.1:7890). That proxy is restarted often and its
+            # downtime takes down every outbound request (observed 2026-09-01).
+            trust_env=False,
             timeout=30.0,
         )
         if cookie:

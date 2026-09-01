@@ -75,7 +75,9 @@ _MEANINGFUL_DWELL_MIN_RATIO = 0.3
 _QUICK_EXIT_MAX_SECONDS = 5
 
 # Explicit engagement event types (no dwell needed to read intent).
-_EXPLICIT_POSITIVE_EVENT_TYPES = frozenset({"like", "coin", "favorite", "comment"})
+_EXPLICIT_POSITIVE_EVENT_TYPES = frozenset(
+    {"like", "coin", "favorite", "comment", "article_finished"}
+)
 
 # Feedback metadata vocabulary — set on `feedback` events emitted by the
 # extension's "👍 / 👎" UI and the recommendation feedback endpoint.
@@ -233,6 +235,7 @@ _EVENT_TYPE_LABELS: dict[str, str] = {
     "feedback": "反馈过",
     "comment": "评论过",
     "share": "分享了",
+    "article_finished": "读完了",
 }
 
 _DEFAULT_SIGNAL_STRENGTH_BY_EVENT_TYPE: dict[str, float] = {
@@ -250,6 +253,7 @@ _DEFAULT_SIGNAL_STRENGTH_BY_EVENT_TYPE: dict[str, float] = {
     "scroll": 0.1,
     "snapshot": 0.1,
     "dislike": 1.0,
+    "article_finished": 0.8,
 }
 
 

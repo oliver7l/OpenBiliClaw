@@ -162,7 +162,7 @@ async def refresh_codex_token(
         "client_id": _CODEX_CLIENT_ID,
     }
     if client is None:
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(trust_env=False) as http_client:
             response = await http_client.post(_TOKEN_ENDPOINT, data=data, timeout=30.0)
             refreshed = _credentials_from_refresh_response(response, credentials)
     else:

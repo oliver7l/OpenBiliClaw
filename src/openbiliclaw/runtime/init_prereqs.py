@@ -125,3 +125,32 @@ class InitPrereqs:
             for name in _PLATFORM_SOURCE_FIELDS
             if getattr(getattr(sources, name, None), "enabled", False)
         ]
+
+    # --- Non-blocking peekers for GET /api/init-status -----------------------
+    # The popup polls init-status ~every 3s. A cache-miss probe pays a real
+    # provider round-trip (1–2s when a service is down), and the old
+    # ``asyncio.gather(...)`` made the HTTP response await the slowest probe,
+    # so the poll lagged 1–2s every time a down-provider's fail-TTL re-fired.
+    # These peekers return the last cached value (and whether it is stale)
+    # WITHOUT awaiting any probe; init-status returns them instantly and
+    # schedules a background refresh for only the stale ones.
+
+    def peek_chat(self) -> bool:
+        """Last cached chat-ready value (never blocks / probes)."""
+        return self._chat_value
+
+    def chat_is_stale(self) -> bool:
+        """Whether the chat probe cache has expired and needs a refresh."""
+        ttl = _CHAT_OK_TTL if self._chat_value else _CHAT_FAIL_TTL
+        return time.monotonic() - self._chat_at >= ttl
+
+    def peek_bilibili(self) -> str:
+        """Last cached bilibili-check value (never blocks / probes)."""
+        return self._bili_value
+
+    def bilibili_is_stale(self) -> bool:
+        """Whether the bilibili probe cache has expired and needs a refresh."""
+        if self._bili_value == "checking":
+            return True
+        ttl = _BILI_OK_TTL if self._bili_value == "ok" else _BILI_FAIL_TTL
+        return time.monotonic() - self._bili_at >= ttl

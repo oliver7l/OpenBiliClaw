@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import sqlite3
+import threading
 import time
 from collections import defaultdict
+from contextlib import suppress
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -82,6 +85,45 @@ _DELIGHT_CLAIM_GUARD_SQL = f"""
                       AND COALESCE(delight_hook, '') != ''
                     )
                   )
+"""
+
+# ── Exposure cooldown vs. manual dislike ─────────────────────────────
+# Exposure alone must not permanently filter an item out of the rotation.
+# A served item ('shown') becomes eligible again after this cooldown, so
+# content recycles instead of draining the pool; while the cooldown holds,
+# 换一批 still surfaces new material first. Only a *manual* dislike
+# (feedback_type='dislike', or the pool purge it triggers) filters an
+# item out for good.
+_POOL_RESHOWN_COOLDOWN_SQL = "datetime('now', '-24 hours')"
+
+# Servable pool_status predicate: fresh rows, plus shown/feedbacked rows
+# whose last exposure or feedback is older than the cooldown. Legacy rows
+# without a timestamp revive immediately (2000-01-01 sentinel). Feedback
+# rows re-enter the rotation too — only 'dislike' feedback (handled
+# separately below and by the pool purge) is a permanent filter.
+_POOL_SERVABLE_STATUS_SQL = f"""
+    (
+      COALESCE(pool_status, 'fresh') = 'fresh'
+      OR (
+        pool_status IN ('shown', 'feedbacked')
+        AND COALESCE(feedback_type, '') != 'dislike'
+        AND COALESCE(recommended_at, feedback_at, '2000-01-01')
+              < {_POOL_RESHOWN_COOLDOWN_SQL}
+      )
+    )
+"""
+
+# The recommendations-history guard is bounded by the same cooldown: an
+# item is only blocked while a recommendation row for it is younger than
+# the cooldown (previously *any* historical recommendation row excluded
+# the item forever, which made exposure permanent filtering).
+_POOL_NOT_RECENTLY_RECOMMENDED_SQL = f"""
+              AND NOT EXISTS (
+                SELECT 1
+                FROM recommendations AS r
+                WHERE r.bvid = content_cache.bvid
+                  AND r.created_at >= {_POOL_RESHOWN_COOLDOWN_SQL}
+              )
 """
 
 _LEGACY_STYLE_KEY_MAP: dict[str, str] = {
@@ -425,6 +467,15 @@ class Database:
     def __init__(self, db_path: str | Path) -> None:
         self._db_path = Path(db_path)
         self._conn: sqlite3.Connection | None = None
+        # v0.3.x: per-thread connection slot. The same Database instance is
+        # now touched from more than one OS thread — the FastAPI request
+        # event-loop thread AND the dedicated background-refresh thread (plus
+        # any asyncio.to_thread executor threads). A single shared sqlite3
+        # connection is NOT safe to use concurrently from multiple threads,
+        # so each thread lazily opens its own connection to the same file.
+        # SQLite serializes writers via WAL + busy_timeout, so cross-thread
+        # reads/writes stay consistent without sharing a connection object.
+        self._thread_local = threading.local()
         self._admission_min_score = _DEFAULT_ADMISSION_MIN_SCORE
 
     def set_admission_min_score(self, value: object) -> None:
@@ -438,6 +489,9 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout = 30000")
+        # Bind the primary connection to the initializing thread so it is
+        # reused (not duplicated) by later `self.conn` accesses on this thread.
+        self._thread_local.conn = self._conn
         self._conn.executescript(_SCHEMA_SQL)
         self._ensure_event_satisfaction_columns()
         self._ensure_recommendation_feedback_columns()
@@ -446,8 +500,10 @@ class Database:
         self._ensure_content_cache_topic_columns()
         self._ensure_content_cache_pool_copy_columns()
         self._ensure_content_cache_delight_columns()
+        self._ensure_content_cache_quality_columns()
         self._ensure_content_cache_multisource_columns()
         self._ensure_recommendation_read_indexes()
+        self._ensure_event_read_indexes()
         self._ensure_source_recipes_table()
         self._ensure_xhs_observed_urls_table()
         self._ensure_discovery_candidate_columns()
@@ -457,6 +513,7 @@ class Database:
         self._ensure_watch_later_table()
         self._ensure_discovery_keywords_table()
         self._ensure_favorites_table()
+        self._ensure_saved_sync_tables()
         self._ensure_auth_state_table()
         self._ensure_init_runs_table()
         self.reset_stale_discovery_candidate_evaluations()
@@ -471,11 +528,600 @@ class Database:
         self._conn.commit()
         logger.info("Database initialized at %s", self._db_path)
 
+    def _ensure_saved_sync_tables(self) -> None:
+        """Create the saved-sync (reading library) tables.
+
+        Cross-platform unified saved-item management:
+        - saved_items: normalized metadata for each item (shared across lists)
+        - saved_memberships: membership in favorite/watch_later lists
+        - native_save_states: native-sync (to platform) execution state
+        - native_save_task_items: per-item membership within a sync batch
+        - saved_item_removals: history of removed items for retention
+        """
+        from openbiliclaw.saved_sync.models import NATIVE_SAVE_STATUSES
+
+        self.conn.executescript(f"""
+            CREATE TABLE IF NOT EXISTS saved_item_removals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_kind TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                source_platform TEXT NOT NULL,
+                content_id TEXT NOT NULL,
+                content_url TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                author_name TEXT NOT NULL,
+                cover_url TEXT NOT NULL,
+                removed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_item_removals_removed
+                ON saved_item_removals(removed_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_saved_item_removals_item
+                ON saved_item_removals(item_key, removed_at DESC);
+
+            CREATE TABLE IF NOT EXISTS saved_items (
+                item_key TEXT PRIMARY KEY,
+                source_platform TEXT NOT NULL,
+                content_id TEXT NOT NULL,
+                content_url TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                author_name TEXT NOT NULL,
+                cover_url TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS saved_memberships (
+                list_kind TEXT NOT NULL,
+                item_key  TEXT NOT NULL REFERENCES saved_items(item_key) ON DELETE CASCADE,
+                note      TEXT DEFAULT '',
+                added_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (list_kind, item_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_memberships_item_key
+                ON saved_memberships(item_key);
+
+            CREATE TABLE IF NOT EXISTS native_save_states (
+                list_kind TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                requested_action TEXT NOT NULL,
+                resolved_action TEXT NOT NULL,
+                resolved_target TEXT NOT NULL,
+                status TEXT NOT NULL
+                    CHECK (status IN ({', '.join(f"'{s}'" for s in NATIVE_SAVE_STATUSES)})),
+                task_id TEXT NOT NULL,
+                execution_id TEXT NOT NULL,
+                last_error_code TEXT NOT NULL,
+                last_error_message TEXT NOT NULL,
+                last_attempt_at TIMESTAMP,
+                synced_at TIMESTAMP,
+                PRIMARY KEY (list_kind, item_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS native_save_task_items (
+                task_id TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                list_kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                is_live INTEGER NOT NULL DEFAULT 1,
+                last_error_code TEXT NOT NULL,
+                last_error_message TEXT NOT NULL,
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (task_id, item_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_native_save_task_items_order
+                ON native_save_task_items(updated_at DESC);
+        """);
+
+    @staticmethod
+    def _saved_list_kind(value: str) -> str:
+        if value not in {"favorite", "watch_later"}:
+            raise ValueError(f"invalid saved list kind: {value}, expected favorite/watch_later")
+        return value
+
+    def count_saved_memberships(self, list_kind: str) -> int:
+        """Count items in a saved list."""
+        normalized_kind = self._saved_list_kind(list_kind)
+        self._ensure_fresh_read()
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM saved_memberships WHERE list_kind = ?",
+            (normalized_kind,),
+        ).fetchone()
+        return int(row[0] if row is not None else 0)
+
+    def get_saved_membership(self, list_kind: str, item_key: str) -> dict[str, Any] | None:
+        """Return one normalized membership with its current native-sync state."""
+        normalized_kind = self._saved_list_kind(list_kind)
+        self._ensure_fresh_read()
+        row = self.conn.execute(
+            """
+            SELECT
+                m.list_kind,
+                i.item_key,
+                i.source_platform,
+                i.content_id,
+                i.content_url,
+                i.content_type,
+                COALESCE(NULLIF(i.title, ''), (
+                    SELECT cc.title FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), i.title) AS title,
+                COALESCE(NULLIF(i.author_name, ''), (
+                    SELECT COALESCE(NULLIF(cc.up_name, ''), cc.author_name)
+                    FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), i.author_name) AS author_name,
+                COALESCE(NULLIF(i.cover_url, ''), (
+                    SELECT cc.cover_url FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), '') AS cover_url,
+                i.created_at,
+                i.updated_at,
+                m.note,
+                m.added_at,
+                COALESCE(n.requested_action, '') AS requested_action,
+                COALESCE(n.resolved_action, '') AS resolved_action,
+                COALESCE(n.resolved_target, '') AS resolved_target,
+                COALESCE(n.status, 'pending') AS sync_status,
+                COALESCE(n.task_id, '') AS sync_task_id,
+                COALESCE(n.last_error_code, '') AS last_error_code,
+                COALESCE(n.last_error_message, '') AS last_error_message,
+                n.last_attempt_at,
+                n.synced_at
+            FROM saved_memberships AS m
+            JOIN saved_items AS i ON i.item_key = m.item_key
+            LEFT JOIN native_save_states AS n
+                ON n.list_kind = m.list_kind AND n.item_key = m.item_key
+            WHERE m.list_kind = ? AND m.item_key = ?
+            """,
+            (normalized_kind, item_key.strip()),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def list_saved_memberships(
+        self,
+        list_kind: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List normalized memberships newest first with native-sync state."""
+        normalized_kind = self._saved_list_kind(list_kind)
+        self._ensure_fresh_read()
+        rows = self.conn.execute(
+            """
+            SELECT
+                m.list_kind,
+                i.item_key,
+                i.source_platform,
+                i.content_id,
+                i.content_url,
+                i.content_type,
+                COALESCE(NULLIF(i.title, ''), (
+                    SELECT cc.title FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), i.title) AS title,
+                COALESCE(NULLIF(i.author_name, ''), (
+                    SELECT COALESCE(NULLIF(cc.up_name, ''), cc.author_name)
+                    FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), i.author_name) AS author_name,
+                COALESCE(NULLIF(i.cover_url, ''), (
+                    SELECT cc.cover_url FROM content_cache cc
+                    WHERE cc.bvid = i.content_id OR cc.content_id = i.content_id
+                    LIMIT 1
+                ), '') AS cover_url,
+                i.created_at,
+                i.updated_at,
+                m.note,
+                m.added_at,
+                COALESCE(n.requested_action, '') AS requested_action,
+                COALESCE(n.resolved_action, '') AS resolved_action,
+                COALESCE(n.resolved_target, '') AS resolved_target,
+                COALESCE(n.status, 'pending') AS sync_status,
+                COALESCE(n.task_id, '') AS sync_task_id,
+                COALESCE(n.last_error_code, '') AS last_error_code,
+                COALESCE(n.last_error_message, '') AS last_error_message,
+                n.last_attempt_at,
+                n.synced_at
+            FROM saved_memberships AS m
+            JOIN saved_items AS i ON i.item_key = m.item_key
+            LEFT JOIN native_save_states AS n
+                ON n.list_kind = m.list_kind AND n.item_key = m.item_key
+            WHERE m.list_kind = ?
+            ORDER BY m.added_at DESC, m.item_key ASC
+            LIMIT ? OFFSET ?
+            """,
+            (normalized_kind, limit, offset),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_saved_membership(
+        self,
+        list_kind: str,
+        item: Any,  # SavedItemInput
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Atomically upsert an item snapshot and its local list membership."""
+        normalized_kind = self._saved_list_kind(list_kind)
+        item_key = item.item_key
+        conn = self.open_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                INSERT INTO saved_items (
+                    item_key, source_platform, content_id, content_url, content_type,
+                    title, author_name, cover_url
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_key) DO UPDATE SET
+                    source_platform = excluded.source_platform,
+                    content_id = excluded.content_id,
+                    content_url = excluded.content_url,
+                    content_type = excluded.content_type,
+                    title = excluded.title,
+                    author_name = excluded.author_name,
+                    cover_url = excluded.cover_url,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    item_key,
+                    item.platform,
+                    item.content_id.strip(),
+                    item.content_url.strip(),
+                    item.content_type.strip() or "video",
+                    item.title.strip(),
+                    item.author_name.strip(),
+                    item.cover_url.strip(),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO saved_memberships (list_kind, item_key, note)
+                VALUES (?, ?, ?)
+                ON CONFLICT(list_kind, item_key) DO UPDATE SET
+                    note = excluded.note,
+                    added_at = CURRENT_TIMESTAMP
+                """,
+                (normalized_kind, item_key, note),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        self._ensure_fresh_read()
+        row = self.get_saved_membership(normalized_kind, item_key)
+        if row is None:
+            raise RuntimeError("saved membership disappeared after upsert")
+        return row
+
+    def remove_saved_membership(self, list_kind: str, item_key: str) -> bool:
+        """Remove a normalized membership and any matching legacy compatibility row."""
+        normalized_kind = self._saved_list_kind(list_kind)
+        normalized_key = item_key.strip()
+        legacy_table = "favorites" if normalized_kind == "favorite" else "watch_later"
+        legacy_bvid = (
+            normalized_key.removeprefix("bilibili:")
+            if normalized_key.startswith("bilibili:")
+            else None
+        )
+        conn = self.open_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            removed_snapshot = conn.execute(
+                """
+                SELECT m.list_kind, i.item_key, i.source_platform, i.content_id, i.content_url, i.content_type
+                FROM saved_memberships AS m
+                JOIN saved_items AS i ON i.item_key = m.item_key
+                WHERE m.list_kind = ? AND m.item_key = ?
+                """,
+                (normalized_kind, normalized_key),
+            ).fetchone()
+            active_state = conn.execute(
+                """
+                SELECT task_id
+                FROM native_save_states
+                WHERE list_kind = ? AND item_key = ?
+                  AND status IN ('pending', 'syncing') AND task_id != ''
+                """,
+                (normalized_kind, normalized_key),
+            ).fetchone()
+            if active_state is not None:
+                conn.execute(
+                    """
+                    UPDATE native_save_task_items
+                    SET status = 'failed', is_live = 0,
+                        last_error_code = 'not_saved_locally',
+                        last_error_message = 'Item is not saved locally',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE task_id = ? AND item_key = ? AND is_live = 1
+                      AND status IN ('pending', 'syncing')
+                    """,
+                    (str(active_state["task_id"]), normalized_key),
+                )
+            cursor = conn.execute(
+                "DELETE FROM saved_memberships WHERE list_kind = ? AND item_key = ?",
+                (normalized_kind, normalized_key),
+            )
+            removed = int(cursor.rowcount or 0) > 0
+            if removed and removed_snapshot is not None:
+                conn.execute(
+                    """
+                    INSERT INTO saved_item_removals (
+                        list_kind, item_key, source_platform, content_id,
+                            content_url, content_type, title, author_name, cover_url
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_kind,
+                        normalized_key,
+                        str(removed_snapshot["source_platform"] or ""),
+                        str(removed_snapshot["content_id"] or ""),
+                        str(removed_snapshot["content_url"] or ""),
+                        str(removed_snapshot["content_type"] or "video"),
+                        str(removed_snapshot["title"] or ""),
+                        str(removed_snapshot["author_name"] or ""),
+                        str(removed_snapshot["cover_url"] or ""),
+                    ),
+                )
+            conn.execute(
+                """
+                DELETE FROM saved_item_removals
+                WHERE removed_at < datetime('now', '-30 days')
+                """,
+            )
+            direct_bilibili_clause = "bvid = ? OR" if legacy_bvid else ""
+            legacy_params = (legacy_bvid, normalized_key) if legacy_bvid else (normalized_key,)
+            legacy_cursor = conn.execute(
+                f"""
+                DELETE FROM {legacy_table}
+                WHERE {direct_bilibili_clause} item_key = ?
+                """,
+                legacy_params,
+            )
+            removed = removed or int(legacy_cursor.rowcount or 0) > 0
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        self._ensure_fresh_read()
+        return removed
+
+    def ensure_native_save_state(
+        self,
+        list_kind: str,
+        item_key: str,
+        requested_action: str,
+    ) -> dict[str, Any]:
+        normalized_kind = self._saved_list_kind(list_kind)
+        normalized_key = item_key.strip()
+        conn = self.open_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT status, task_id
+                FROM native_save_states
+                WHERE list_kind = ? AND item_key = ?
+                """,
+                (normalized_kind, normalized_key),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    """
+                    INSERT INTO native_save_states (
+                        list_kind, item_key, requested_action, resolved_action, resolved_target,
+                        status, task_id, execution_id, last_error_code, last_error_message
+                    ) VALUES (?, ?, ?, ?, ?, 'pending', '', '', '', '')
+                    """,
+                    (normalized_kind, normalized_key, requested_action, "", ""),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        self._ensure_fresh_read()
+        row = self.conn.execute(
+            """
+            SELECT status, task_id FROM native_save_states
+            WHERE list_kind = ? AND item_key = ?
+            """,
+            (normalized_kind, normalized_key),
+        ).fetchone()
+        return dict(row) if row is not None else {"status": "pending", "task_id": ""}
+
+    def upsert_native_save_state(
+        self,
+        list_kind: str,
+        item_key: str,
+        requested_action: str,
+        resolved_action: str = "",
+        resolved_target: str = "",
+        status: str = "pending",
+        task_id: str = "",
+        execution_id: str = "",
+        last_error_code: str = "",
+        last_error_message: str = "",
+    ) -> None:
+        normalized_kind = self._saved_list_kind(list_kind)
+        normalized_key = item_key.strip()
+        normalized_task_id = task_id.strip()
+        conn = self.open_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            membership = conn.execute(
+                "SELECT 1 FROM saved_memberships WHERE list_kind = ? AND item_key = ?",
+                (normalized_kind, normalized_key),
+            ).fetchone()
+            if membership is None:
+                raise ValueError(
+                    f"saved membership does not exist: {normalized_kind}/{normalized_key}"
+                )
+            conn.execute(
+                """
+                INSERT INTO native_save_states (
+                    list_kind, item_key, requested_action, resolved_action, resolved_target,
+                    status, task_id, execution_id, last_error_code, last_error_message,
+                    last_attempt_at, synced_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CASE WHEN ? = 'pending' THEN NULL ELSE CURRENT_TIMESTAMP END,
+                    CASE WHEN ? IN ('synced', 'already_synced')
+                        THEN CURRENT_TIMESTAMP ELSE NULL END
+                )
+                ON CONFLICT(list_kind, item_key) DO UPDATE SET
+                    requested_action = excluded.requested_action,
+                    resolved_action = excluded.resolved_action,
+                    resolved_target = excluded.resolved_target,
+                    status = excluded.status,
+                    task_id = excluded.task_id,
+                    execution_id = excluded.execution_id,
+                    last_error_code = excluded.last_error_code,
+                    last_error_message = excluded.last_error_message,
+                    last_attempt_at = CASE
+                        WHEN excluded.status = 'pending' THEN native_save_states.last_attempt_at
+                        ELSE CURRENT_TIMESTAMP
+                    END,
+                    synced_at = CASE
+                        WHEN excluded.status IN ('synced', 'already_synced')
+                            THEN CURRENT_TIMESTAMP
+                        ELSE native_save_states.synced_at
+                    END
+                """,
+                (
+                    normalized_kind,
+                    normalized_key,
+                    requested_action,
+                    resolved_action,
+                    resolved_target,
+                    status,
+                    normalized_task_id,
+                    execution_id,
+                    last_error_code,
+                    last_error_message,
+                    status,
+                    status,
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        self._ensure_fresh_read()
+
+    def release_stale_pending_native_sync_tasks(
+        self, list_kind: str, item_keys: Sequence[str] | None,
+    ) -> None:
+        pass
+
+    def reconcile_stale_native_save_claims_for_list(
+        self, list_kind: str, item_keys: Sequence[str] | None,
+    ) -> None:
+        conn = self.open_connection()
+        try:
+            conn.commit()
+        finally:
+            conn.close()
+
+    def create_native_sync_task_snapshot(
+        self,
+        list_kind: str,
+        selected_keys: Sequence[str] | None,
+        task_id: str,
+        trigger: str,
+    ) -> list[dict[str, Any]]:
+        pass
+
+    def has_sync_task(self, task_id: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM native_save_task_items WHERE task_id = ? AND is_live = 1",
+            (task_id,),
+        ).fetchone()
+        return bool(row)
+
+    def get_sync_task(self, task_id: str) -> dict[str, Any]:
+        rows = self.conn.execute(
+            "SELECT task_id, item_key, list_kind, status, is_live FROM native_save_task_items WHERE task_id = ? AND is_live = 1",
+            (task_id,),
+        ).fetchall()
+        return {
+            "task_id": task_id,
+            "items": [dict(row) for row in rows],
+        }
+
+    def release_native_sync_task(self, task_id: str) -> None:
+        conn = self.open_connection()
+        try:
+            conn.execute(
+                "UPDATE native_save_task_items SET is_live = 0, updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (task_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def discard_native_sync_task(self, task_id: str) -> None:
+        conn = self.open_connection()
+        try:
+            conn.execute(
+                "DELETE FROM native_save_task_items WHERE task_id = ? AND is_live = 0",
+                (task_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def count_favorites_legacy(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])
+
+    def count_watch_later_legacy(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM watch_later").fetchone()[0])
+
+    @staticmethod
+    def _content_row_view_keys(row: dict[str, Any], viewed_content_keys: set[str]) -> set[str]:
+        keys: set[str] = set()
+        raw_bvid = str(row.get("bvid", "") or "").strip()
+        content_id = str(row.get("content_id", "") or "").strip() or raw_bvid
+        for value in {raw_bvid, content_id}:
+            if not value:
+                continue
+            if value.startswith("BV"):
+                keys.add(value)
+        return keys
+
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
-        return self._conn
+        # Per-thread connection (see __init__). Lazily opened on first access
+        # from any thread other than the initializing one; the initializing
+        # thread reuses the primary connection bound in initialize().
+        local_conn = getattr(self._thread_local, "conn", None)
+        if local_conn is None:
+            local_conn = sqlite3.connect(
+                str(self._db_path), timeout=30.0, check_same_thread=False
+            )
+            local_conn.row_factory = sqlite3.Row
+            local_conn.execute("PRAGMA journal_mode=WAL")
+            local_conn.execute("PRAGMA busy_timeout = 30000")
+            self._thread_local.conn = local_conn
+        return local_conn
 
     def _pool_admission_min_score(self) -> float:
         return _normalize_admission_min_score(self._admission_min_score)
@@ -1066,6 +1712,24 @@ class Database:
         sql = f"{sql} GROUP BY event_type ORDER BY event_type ASC"
         cursor = self.conn.execute(sql, params)
         return {str(row["event_type"]): int(row["count"]) for row in cursor.fetchall()}
+
+    def count_events_by_source_platform(self) -> dict[str, int]:
+        """Count behavior events grouped by normalized source platform.
+
+        Uses the ``source_platform`` generated column + index added in
+        :meth:`_ensure_event_read_indexes`, so this is an indexed GROUP BY
+        (~50ms over 800k+ rows) instead of the fallback in
+        ``api.app._count_events_by_source_platform`` which materialized every
+        row and parsed each ``metadata`` JSON in Python — ~1s and a full
+        event-loop block every time the source-share suggestion endpoint opened.
+
+        Returns platform key -> count, including an ``unknown`` bucket for
+        legacy events whose ``metadata`` predates the field.
+        """
+        cursor = self.conn.execute(
+            "SELECT source_platform, COUNT(*) AS n FROM events GROUP BY source_platform"
+        )
+        return {str(row["source_platform"]): int(row["n"]) for row in cursor.fetchall()}
 
     def cache_content(self, bvid: str, **kwargs: Any) -> None:
         """Cache discovered content.
@@ -1974,6 +2638,7 @@ class Database:
         *,
         max_per_topic_group: int = 3,
         xhs_self_nickname: str = "",
+        platform: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get fresh recommendation candidates directly from the discovery pool.
 
@@ -1988,6 +2653,12 @@ class Database:
         room for ~40+ different groups in the candidate window. Pass
         ``max_per_topic_group=0`` to restore the legacy unrestricted
         ordering for callers that need it (e.g. health checks).
+
+        ``platform`` (optional) restricts candidates to a single
+        ``source_platform`` (e.g. ``"bilibili"`` / ``"xiaohongshu"``),
+        letting the recommender serve a platform-filtered batch instead of
+        fetching everything and filtering on the client. Empty/None = all
+        platforms (unchanged behaviour).
 
         Rows claimed by the surprise (delight) channel are excluded via
         ``_DELIGHT_CLAIM_GUARD_SQL`` — a delight that was delivered or is
@@ -2011,11 +2682,15 @@ class Database:
         guard_sql = _xhs_self_author_guard_sql()
         guard_params = _xhs_self_author_guard_params(xhs_self_nickname)
         delight_guard_sql = _DELIGHT_CLAIM_GUARD_SQL
+        platform_clause = ""
+        platform_term: str = (platform or "").strip().lower()
+        if platform_term:
+            platform_clause = " AND source_platform = ?"
         if max_per_topic_group <= 0:
             sql = f"""
                 SELECT *
                 FROM content_cache
-                WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+                WHERE {_POOL_SERVABLE_STATUS_SQL}
                   AND COALESCE(feedback_type, '') != 'dislike'
                   AND COALESCE(relevance_score, 0.0) >= ?
                   AND COALESCE(pool_expression, '') != ''
@@ -2028,11 +2703,8 @@ class Database:
                   )
                   {guard_sql}
                   {delight_guard_sql}
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM recommendations AS r
-                    WHERE r.bvid = content_cache.bvid
-                  )
+                  {platform_clause}
+                  {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
                 ORDER BY
                     CASE candidate_tier WHEN 'primary' THEN 0 ELSE 1 END ASC,
                     relevance_score DESC,
@@ -2042,6 +2714,8 @@ class Database:
                 LIMIT ?
             """
             params: tuple[Any, ...] = (min_score, *guard_params, fetch_limit)
+            if platform_term:
+                params = (min_score, *guard_params, platform_term, fetch_limit)
         else:
             # Per-group rank via window function: keep the top-N classified
             # items of each topic_group, then order the remainder by relevance.
@@ -2057,7 +2731,7 @@ class Database:
                                    bvid ASC
                            ) AS group_rank
                     FROM content_cache
-                    WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+                    WHERE {_POOL_SERVABLE_STATUS_SQL}
                       AND COALESCE(feedback_type, '') != 'dislike'
                       AND COALESCE(relevance_score, 0.0) >= ?
                       AND COALESCE(pool_expression, '') != ''
@@ -2070,11 +2744,8 @@ class Database:
                       )
                       {guard_sql}
                       {delight_guard_sql}
-                      AND NOT EXISTS (
-                        SELECT 1
-                        FROM recommendations AS r
-                        WHERE r.bvid = content_cache.bvid
-                      )
+                      {platform_clause}
+                      {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
                 )
                 SELECT * FROM ranked
                 WHERE group_rank <= ?
@@ -2087,6 +2758,8 @@ class Database:
                 LIMIT ?
             """
             params = (min_score, *guard_params, max_per_topic_group, fetch_limit)
+            if platform_term:
+                params = (min_score, *guard_params, platform_term, max_per_topic_group, fetch_limit)
         cursor = self.conn.execute(sql, params)
         rows = [dict(row) for row in cursor.fetchall()]
         rows = self._exclude_viewed_rows(
@@ -2149,7 +2822,7 @@ class Database:
                                    bvid ASC
                            ) AS group_rank
                     FROM content_cache
-                    WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+                    WHERE {_POOL_SERVABLE_STATUS_SQL}
                       AND COALESCE(feedback_type, '') != 'dislike'
                       AND COALESCE(relevance_score, 0.0) >= ?
                       AND COALESCE(pool_expression, '') != ''
@@ -2162,11 +2835,7 @@ class Database:
                       )
                       {guard_sql}
                       {delight_guard_sql}
-                      AND NOT EXISTS (
-                        SELECT 1
-                        FROM recommendations AS r
-                        WHERE r.bvid = content_cache.bvid
-                      )
+                      {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
                 )
                 SELECT bvid, source, source_platform, content_url
                 FROM ranked
@@ -2179,7 +2848,7 @@ class Database:
                 f"""
                 SELECT bvid, source, source_platform, content_url
                 FROM content_cache
-                WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+                WHERE {_POOL_SERVABLE_STATUS_SQL}
                   AND COALESCE(feedback_type, '') != 'dislike'
                   AND COALESCE(relevance_score, 0.0) >= ?
                   AND COALESCE(pool_expression, '') != ''
@@ -2192,11 +2861,7 @@ class Database:
                   )
                   {guard_sql}
                   {delight_guard_sql}
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM recommendations AS r
-                    WHERE r.bvid = content_cache.bvid
-                  )
+                  {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
                 """,
                 (min_score, *guard_params),
             )
@@ -2313,15 +2978,11 @@ class Database:
             f"""
             SELECT COUNT(*) AS count
             FROM content_cache
-            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+            WHERE {_POOL_SERVABLE_STATUS_SQL}
               AND COALESCE(feedback_type, '') != 'dislike'
               AND COALESCE(relevance_score, 0.0) >= ?
               {guard_sql}
-              AND NOT EXISTS (
-                SELECT 1
-                FROM recommendations AS r
-                WHERE r.bvid = content_cache.bvid
-              )
+              {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
             """,
             (min_score, *guard_params),
         )
@@ -2339,15 +3000,11 @@ class Database:
                 style_key,
                 topic_group
             FROM content_cache
-            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+            WHERE {_POOL_SERVABLE_STATUS_SQL}
               AND COALESCE(feedback_type, '') != 'dislike'
               AND COALESCE(relevance_score, 0.0) >= ?
               {guard_sql}
-              AND NOT EXISTS (
-                SELECT 1
-                FROM recommendations AS r
-                WHERE r.bvid = content_cache.bvid
-              )
+              {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
             """,
             (min_score, *guard_params),
         )
@@ -3319,6 +3976,243 @@ class Database:
         )
         return cursor.rowcount
 
+    def prune_events_by_retention(
+        self,
+        *,
+        retention_days: int,
+        low_value_types: tuple[str, ...] = ("view", "scroll", "hover", "snapshot"),
+        batch_size: int = 5000,
+    ) -> int:
+        """Delete old low-value behavior events to bound ``events`` growth.
+
+        ``events`` is the largest table (800k+ rows, +~12k/day) but the
+        cognition pipeline folds each event into the persistent ``preference``
+        / ``soul`` layers exactly once (read incrementally by ``id`` watermark,
+        never re-derived from raw rows), so raw low-signal events (page views,
+        scrolls, hovers, DOM snapshots) carry no long-term value after they have
+        been processed. Pruning them by age keeps aggregates and the activity
+        feed fast without losing any profiling signal.
+
+        High-signal events (favorite, follow, like, comment, share, search,
+        feedback, click) are intentionally NOT pruned — they are sparse and
+        directly feed interest modeling.
+
+        Args:
+            retention_days: Keep the given types newer than this many days.
+                ``<= 0`` disables pruning (no-op, returns 0).
+            low_value_types: Event types eligible for age-based pruning.
+            batch_size: Rows deleted per statement so each write transaction
+                stays short and avoids a long write lock on the main DB.
+
+        Returns:
+            Total rows deleted.
+        """
+        if retention_days <= 0 or not low_value_types:
+            return 0
+        placeholders = ", ".join("?" for _ in low_value_types)
+        cutoff = f"-{int(retention_days)} days"
+        total = 0
+        while True:
+            cursor = self._execute_write(
+                f"""
+                DELETE FROM events
+                WHERE id IN (
+                    SELECT id FROM events
+                    WHERE event_type IN ({placeholders})
+                      AND created_at < datetime('now', ?)
+                    LIMIT ?
+                )
+                """,
+                (*low_value_types, cutoff, batch_size),
+            )
+            deleted = cursor.rowcount
+            total += deleted
+            if deleted < batch_size:
+                break
+            # Yield the SQLite write lock between batches so request-loop
+            # writers (event ingest, task-result merges) aren't blocked
+            # behind a long prune pass via busy_timeout contention. A heavy
+            # first run (many aged low-value events) would otherwise hold the
+            # lock continuously and stall unrelated requests for seconds.
+            time.sleep(0.02)
+        if total:
+            logger.info(
+                "Pruned %d old low-value events (types=%s, older_than=%dd)",
+                total,
+                low_value_types,
+                retention_days,
+            )
+        return total
+
+    def prune_task_history(
+        self,
+        *,
+        retention_days: int = 30,
+        batch_size: int = 2000,
+    ) -> dict[str, int]:
+        """Delete old terminal rows from the producer task/candidate tables.
+
+        Three append-only tables grow without bound because nothing ever
+        deletes from them:
+
+        - ``zhihu_tasks`` / ``dy_tasks``: crawl task rows (payload_json +
+          result_json ≈ 10KB/row). ``completed``/``failed`` rows are terminal —
+          their results have long since been merged into the pool, so only a
+          short retention is needed for debugging.
+        - ``discovery_candidates``: every evaluated discovery candidate
+          (~1.2k/day, mostly ``rejected_*``). Rejections are terminal; only
+          ``rejected_*`` rows are pruned. ``cached`` rows are kept — they are
+          the dedup ledger that stops already-known content from being
+          re-enqueued.
+
+        Args:
+            retention_days: Delete terminal rows older than this many days.
+                ``<= 0`` disables pruning.
+            batch_size: Rows deleted per statement (short write transactions,
+                yielding the lock between batches).
+
+        Returns:
+            Mapping of table name -> rows deleted (only non-zero entries).
+        """
+        if retention_days <= 0:
+            return {}
+        cutoff = f"-{int(retention_days)} days"
+        targets: tuple[tuple[str, str, tuple[object, ...]], ...] = (
+            (
+                "zhihu_tasks",
+                "DELETE FROM zhihu_tasks WHERE id IN ("
+                "SELECT id FROM zhihu_tasks WHERE status IN ('completed','failed') "
+                "AND created_at < datetime('now', ?) LIMIT ?)",
+                (cutoff, batch_size),
+            ),
+            (
+                "dy_tasks",
+                "DELETE FROM dy_tasks WHERE id IN ("
+                "SELECT id FROM dy_tasks WHERE status IN ('completed','failed') "
+                "AND created_at < datetime('now', ?) LIMIT ?)",
+                (cutoff, batch_size),
+            ),
+            (
+                "discovery_candidates",
+                "DELETE FROM discovery_candidates WHERE id IN ("
+                "SELECT id FROM discovery_candidates "
+                "WHERE status LIKE 'rejected%' "
+                "AND last_seen_at < datetime('now', ?) LIMIT ?)",
+                (cutoff, batch_size),
+            ),
+        )
+        results: dict[str, int] = {}
+        for table, sql, params in targets:
+            total = 0
+            while True:
+                cursor = self._execute_write(sql, params)
+                deleted = cursor.rowcount
+                total += deleted
+                if deleted < batch_size:
+                    break
+                time.sleep(0.02)  # yield the write lock between batches
+            if total:
+                logger.info(
+                    "Pruned %d terminal rows from %s (older_than=%dd)",
+                    total,
+                    table,
+                    retention_days,
+                )
+                results[table] = total
+        return results
+
+    def prune_recommendations(
+        self,
+        *,
+        retention_days: int = 7,
+        batch_size: int = 2000,
+    ) -> int:
+        """Delete old ``recommendations`` rows past their de-dup window.
+
+        The table is only consulted as a 24-hour de-dup ledger
+        (``NOT EXISTS`` against recent ``created_at`` in pool-serve SQL), so
+        rows older than the retention window have zero readers. Pruning keeps
+        the table small and the ``NOT EXISTS`` probe fast.
+
+        Args:
+            retention_days: Delete rows older than this many days.
+                ``<= 0`` disables pruning (no-op, returns 0).
+            batch_size: Rows deleted per statement (short write transactions,
+                yielding the lock between batches).
+
+        Returns:
+            Total rows deleted.
+        """
+        if retention_days <= 0:
+            return 0
+        cutoff = f"-{int(retention_days)} days"
+        total = 0
+        while True:
+            cursor = self._execute_write(
+                "DELETE FROM recommendations WHERE id IN ("
+                "SELECT id FROM recommendations "
+                "WHERE created_at < datetime('now', ?) LIMIT ?)",
+                (cutoff, batch_size),
+            )
+            deleted = cursor.rowcount
+            total += deleted
+            if deleted < batch_size:
+                break
+            time.sleep(0.02)  # yield the write lock between batches
+        if total:
+            logger.info(
+                "Pruned %d old recommendation rows (older_than=%dd)",
+                total,
+                retention_days,
+            )
+        return total
+
+    def prune_llm_usage(
+        self,
+        *,
+        retention_days: int = 90,
+        batch_size: int = 2000,
+    ) -> int:
+        """Delete old ``llm_usage`` accounting rows.
+
+        The table is a write-only cost ledger (``usage_recorder`` appends a
+        row per LLM call; nothing ever reads it back), so rows past the
+        retention window are dead weight. Keeping ~90 days covers recent
+        token/cost auditing without unbounded growth.
+
+        Args:
+            retention_days: Delete rows older than this many days.
+                ``<= 0`` disables pruning (no-op, returns 0).
+            batch_size: Rows deleted per statement (short write transactions,
+                yielding the lock between batches).
+
+        Returns:
+            Total rows deleted.
+        """
+        if retention_days <= 0:
+            return 0
+        cutoff = f"-{int(retention_days)} days"
+        total = 0
+        while True:
+            cursor = self._execute_write(
+                "DELETE FROM llm_usage WHERE id IN ("
+                "SELECT id FROM llm_usage "
+                "WHERE timestamp < datetime('now', ?) LIMIT ?)",
+                (cutoff, batch_size),
+            )
+            deleted = cursor.rowcount
+            total += deleted
+            if deleted < batch_size:
+                break
+            time.sleep(0.02)  # yield the write lock between batches
+        if total:
+            logger.info(
+                "Pruned %d old llm_usage rows (older_than=%dd)",
+                total,
+                retention_days,
+            )
+        return total
+
     def purge_pool_by_disliked_topics(self, topics: list[str]) -> int:
         """Mark fresh pool candidates matching new dislikes as purged.
 
@@ -3773,7 +4667,9 @@ class Database:
                 COALESCE(c.source_platform, '') AS source_platform,
                 COALESCE(c.content_type, 'video') AS content_type,
                 COALESCE(c.body_text, '') AS body_text,
-                COALESCE(c.franchise_key, '') AS franchise_key
+                COALESCE(c.franchise_key, '') AS franchise_key,
+                COALESCE(c.quality_score, 0.0) AS quality_score,
+                COALESCE(c.quality_reason, '') AS quality_reason
             FROM recommendations AS r
             LEFT JOIN content_cache AS c ON c.bvid = COALESCE(
                 (SELECT bvid FROM content_cache WHERE bvid = r.bvid),
@@ -3947,8 +4843,74 @@ class Database:
             recommendation_ids,
         )
 
+    def update_content_quality_score(
+        self, bvid: str, *, quality_score: float, quality_reason: str
+    ) -> None:
+        """Update LLM quality score and recommendation reason for a content item."""
+        self._execute_write(
+            """
+            UPDATE content_cache
+            SET quality_score = ?,
+                quality_reason = ?,
+                last_scored_at = CURRENT_TIMESTAMP
+            WHERE bvid = ?
+            """,
+            (quality_score, quality_reason, bvid),
+        )
+
+    def batch_update_content_quality_scores(
+        self, scores: list[tuple[str, float, str]]
+    ) -> None:
+        """Batch update quality scores for multiple content items."""
+        cursor = self.conn.cursor()
+        try:
+            cursor.executemany(
+                """
+                UPDATE content_cache
+                SET quality_score = ?,
+                    quality_reason = ?,
+                    last_scored_at = CURRENT_TIMESTAMP
+                WHERE bvid = ?
+                """,
+                [(score, reason, bvid) for bvid, score, reason in scores],
+            )
+            self.conn.commit()
+        except Exception:
+            logger.exception("Failed to batch update quality scores")
+            self.conn.rollback()
+
+    def batch_get_quality_scores(
+        self, bvids: list[str]
+    ) -> list[dict[str, object]]:
+        """Fetch quality scores for a batch of bvids.
+
+        Returns list of dicts with bvid and quality_score.
+        """
+        if not bvids:
+            return []
+        placeholders = ",".join("?" for _ in bvids)
+        try:
+            cursor = self.conn.execute(
+                f"""
+                SELECT bvid, quality_score, quality_reason
+                FROM content_cache
+                WHERE bvid IN ({placeholders})
+                AND quality_score > 0.0
+                """,
+                bvids,
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to batch get quality scores")
+            return []
+
     def close(self) -> None:
-        """Close the database connection."""
+        """Close the database connection(s)."""
+        local_conn = getattr(self._thread_local, "conn", None)
+        if local_conn is not None and local_conn is not self._conn:
+            with suppress(Exception):
+                local_conn.close()
+            self._thread_local.conn = None
         if self._conn:
             self._conn.close()
             self._conn = None
@@ -4090,6 +5052,21 @@ class Database:
                 continue
             self.conn.execute(f"ALTER TABLE content_cache ADD COLUMN {column_name} {column_type}")
 
+    def _ensure_content_cache_quality_columns(self) -> None:
+        """Backfill LLM quality scoring fields for existing databases."""
+        existing_columns = {
+            str(row["name"])
+            for row in self.conn.execute("PRAGMA table_info(content_cache)").fetchall()
+        }
+        required_columns = {
+            "quality_score": "REAL DEFAULT 0.0",
+            "quality_reason": "TEXT DEFAULT ''",
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name in existing_columns:
+                continue
+            self.conn.execute(f"ALTER TABLE content_cache ADD COLUMN {column_name} {column_type}")
+
     def _ensure_content_cache_multisource_columns(self) -> None:
         """Add multi-source content identity fields for existing databases."""
         existing_columns = {
@@ -4176,12 +5153,75 @@ class Database:
 
     def _ensure_recommendation_read_indexes(self) -> None:
         """Create indexes used by recommendation and activity-feed reads."""
+        # ``idx_recommendations_bvid`` is load-bearing for pool latency: the
+        # candidate-pool queries filter with
+        #   NOT EXISTS (SELECT 1 FROM recommendations AS r
+        #               WHERE r.bvid = content_cache.bvid)
+        # in ~22 places (get_pool_candidates, count_pool_candidates,
+        # count_pool_readiness, replenishment checks, ...). Without this index
+        # that subquery degrades to a full scan of ``recommendations`` for
+        # EVERY row of ``content_cache`` — O(content_cache x recommendations)
+        # work, ~31M row visits at current sizes and growing quadratically.
+        # Measured on the live DB: pool query 131ms -> 8.5ms (platform-filtered
+        # 85ms -> 6.6ms).
         self.conn.executescript("""
             CREATE INDEX IF NOT EXISTS idx_recommendations_created_id
                 ON recommendations (created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_recommendations_bvid
+                ON recommendations (bvid);
             CREATE INDEX IF NOT EXISTS idx_content_cache_content_id
                 ON content_cache (content_id);
         """)
+
+    def _ensure_event_read_indexes(self) -> None:
+        """Create indexes for the high-volume ``events`` table.
+
+        ``events`` is by far the largest table (816k+ rows at time of writing)
+        and shipped with no indexes at all, so every read was a full scan plus
+        a sort:
+
+        * ``SELECT * FROM events ORDER BY created_at DESC LIMIT ?``
+          (recent-events feed) — 249ms of scanning on every call.
+        * ``SELECT event_type, COUNT(*) FROM events GROUP BY event_type``
+          (event-type breakdown) — 198ms.
+
+        ``events.id`` needs no index: it is the INTEGER PRIMARY KEY, so
+        ``id > ?`` / ``MAX(id)`` already resolve via the rowid B-tree.
+        Measured after adding these: 249ms -> 0.1ms and 198ms -> 33ms.
+
+        ``source_platform`` is stored only inside the ``metadata`` JSON, so any
+        GROUP BY / WHERE on it forced a full 815k-row scan + JSON parse — the
+        source-share suggestion endpoint blocked the event loop ~1s every time
+        it opened. Materialize it as a VIRTUAL generated column and index it:
+        the ALTER is instant (no table rewrite) and the index collapses the
+        platform count to ~50ms and point lookups to <1ms. VIRTUAL (not
+        STORED) is required here — SQLite forbids ``ADD COLUMN ... STORED`` via
+        ``ALTER TABLE``.
+        """
+        self.conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_events_created_at
+                ON events (created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_events_event_type
+                ON events (event_type);
+        """)
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(events)").fetchall()}
+        if "source_platform" not in cols:
+            try:
+                self.conn.execute(
+                    "ALTER TABLE events ADD COLUMN source_platform TEXT "
+                    "GENERATED ALWAYS AS "
+                    "(COALESCE(json_extract(metadata, '$.source_platform'), 'unknown')) VIRTUAL"
+                )
+            except sqlite3.OperationalError as exc:
+                # Tolerate a concurrent initialize() (e.g. a leftover process
+                # still booting when pm2 starts a replacement) that already
+                # added the column — the race would otherwise abort startup
+                # with "duplicate column name".
+                if "duplicate column" not in str(exc).lower():
+                    raise
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_source_platform ON events (source_platform)"
+        )
 
     def _ensure_source_recipes_table(self) -> None:
         """Create the source_recipes table if it does not exist."""
@@ -4998,7 +6038,90 @@ class Database:
             );
             CREATE INDEX IF NOT EXISTS idx_favorites_added
                 ON favorites(added_at DESC);
+            CREATE TABLE IF NOT EXISTS articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL,
+                source_name TEXT DEFAULT '',
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                author TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                published_at TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'unread',
+                reading_percent REAL DEFAULT 0,
+                reading_progress TEXT DEFAULT '',
+                favorited INTEGER DEFAULT 0,
+                ai_summary TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_articles_published_at
+                ON articles(published_at);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type
+                ON articles(source_type);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type_status
+                ON articles(source_type, status);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type_published
+                ON articles(source_type, published_at);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+                title, content_text, tags, author, summary,
+                content='articles', content_rowid='id', tokenize='trigram'
+            );
+            CREATE TRIGGER IF NOT EXISTS articles_fts_ai AFTER INSERT ON articles BEGIN
+                INSERT INTO articles_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS articles_fts_ad AFTER DELETE ON articles BEGIN
+                INSERT INTO articles_fts(articles_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS articles_fts_au AFTER UPDATE ON articles BEGIN
+                INSERT INTO articles_fts(articles_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+                INSERT INTO articles_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
         """)
+        # Backfill columns for existing tables
+        for col, typ, default in [
+            ("tags", "TEXT", "'[]'"),
+            ("status", "TEXT", "'unread'"),
+            ("body_fetch_attempts", "INTEGER", "0"),
+            ("reading_percent", "REAL", "0"),
+            ("reading_progress", "TEXT", "''"),
+            ("favorited", "INTEGER", "0"),
+            ("ai_summary", "TEXT", "''"),
+        ]:
+            try:
+                self.conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typ} DEFAULT {default}")
+            except Exception:
+                pass  # Column already exists
+
+        # 阅读笔记/摘录/高亮：绑定 articles.id，无外键约束（与 favorites 同风格）
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS article_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                quote TEXT DEFAULT '',
+                note TEXT DEFAULT '',
+                color TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_article_notes_article
+                ON article_notes(article_id);
+        """)
+
+        # 全文索引：首次或为空时从 articles 重建（trigram 适配中文子串）
+        try:
+            if self.conn.execute("SELECT count(*) FROM articles_fts").fetchone()[0] == 0:
+                self.conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')")
+                self.conn.commit()
+        except Exception:
+            logger.exception("Failed to rebuild articles FTS")
 
     # ── Auth state (password gate revocation epoch) ──────────────
 
@@ -5336,6 +6459,506 @@ class Database:
             (limit, offset),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def upsert_article(
+        self,
+        source_type: str,
+        source_name: str,
+        title: str,
+        url: str,
+        author: str = "",
+        summary: str = "",
+        content_text: str = "",
+        published_at: str = "",
+        tags: list[str] | None = None,
+    ) -> int | None:
+        """Insert or update an article. Returns row id or None on failure.
+
+        ``tags`` defaults to the source name so every entry is filterable by
+        origin; existing rows keep whatever tags they already have.
+        """
+        import json as _json
+        from datetime import datetime as _dt
+
+        if not published_at:
+            published_at = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        tag_value = _json.dumps(
+            tags if tags else ([source_name] if source_name else []),
+            ensure_ascii=False,
+        )
+        try:
+            cursor = self.conn.execute(
+                """INSERT INTO articles (source_type, source_name, title, url,
+                    author, summary, content_text, published_at, tags)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(url) DO UPDATE SET
+                    title=excluded.title, summary=excluded.summary,
+                    content_text=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_text
+                      ELSE articles.content_text END,
+                    tags=CASE
+                      WHEN articles.tags IS NULL OR articles.tags IN ('', '[]')
+                        THEN excluded.tags ELSE articles.tags END,
+                    updated_at=CURRENT_TIMESTAMP""",
+                (source_type, source_name, title, url, author, summary,
+                 content_text, published_at, tag_value),
+            )
+            self.conn.commit()
+            return cursor.lastrowid
+        except Exception:
+            logger.exception("Failed to upsert article: %s", title)
+            return None
+
+    def inject_article_to_pool(
+        self,
+        bvid: str,
+        title: str,
+        url: str,
+        author: str,
+        source_name: str,
+        description: str,
+        published_at: str,
+        source_platform: str = "rss",
+    ) -> None:
+        """Inject an article into the recommendation pool (content_cache).
+
+        Uses a simplified INSERT that sets only the fields relevant to
+        text-based articles — all numeric / video-only fields are
+        zeroed.  ``ON CONFLICT(bvid) DO NOTHING`` prevents re-insertion
+        on subsequent polling cycles.
+
+        Args:
+            source_platform: Platform identifier, defaults to "rss".
+        """
+        try:
+            self.conn.execute(
+                """INSERT OR IGNORE INTO content_cache (
+                    bvid, title, up_name, up_mid, duration, tags,
+                    topic_key, style_key, franchise_key, description,
+                    cover_url, view_count, like_count, favorite_count,
+                    collect_count, comment_count, share_count, danmaku_count,
+                    reply_count, retweet_count, bookmark_count,
+                    relevance_score, relevance_reason, pool_expression,
+                    pool_topic_label, candidate_tier, source, content_id,
+                    content_url, source_platform, author_name, body_text,
+                    content_type
+                ) VALUES (
+                    ?, ?, ?, 0, 0, '[]',
+                    '', '', '', ?,
+                    '', 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0,
+                    0.0, '', '',
+                    '', 'primary', 'rss_polling', ?,
+                    ?, ?, ?,
+                    '',
+                    'article'
+                )""",
+                (
+                    bvid,
+                    title,
+                    source_name,
+                    (description or "")[:500],
+                    bvid,
+                    url,
+                    source_platform,
+                    author,
+                ),
+            )
+            self.conn.commit()
+        except Exception:
+            logger.exception("Failed to inject article to pool: %s", title)
+
+    def get_recent_articles(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        source_type: str | None = None,
+        status: str | None = None,
+        tag: str | None = None,
+        random_order: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Get recent articles, optionally filtered by source_type, status, or tag."""
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            if random_order:
+                # Do NOT use "ORDER BY RANDOM()": it materializes every
+                # matching row (all selected columns) into a sorter B-tree,
+                # which on a ~80k-row library blows the SQLite page cache and
+                # makes the first shuffle pay a full cold read (~1s). Instead
+                # scan only the rowid (PK) — a few MB at most — sample ids in
+                # Python, then fetch just the sampled rows by PK.
+                id_rows = self.conn.execute(
+                    f"SELECT id FROM articles {where}", tuple(params)
+                ).fetchall()
+                ids = [row["id"] for row in id_rows]
+                if not ids:
+                    return []
+                sample = (
+                    random.sample(ids, limit) if len(ids) > limit else ids
+                )
+                placeholders = ",".join("?" * len(sample))
+                cursor = self.conn.execute(
+                    f"""SELECT id, source_type, source_name, title, url, author,
+                               summary, published_at, tags, status, created_at,
+                               reading_percent, favorited, ai_summary
+                        FROM articles
+                        WHERE id IN ({placeholders})""",
+                    tuple(sample),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            order_sql = "ORDER BY published_at DESC, created_at DESC"
+            cursor = self.conn.execute(
+                f"""SELECT id, source_type, source_name, title, url, author,
+                           summary, published_at, tags, status, created_at,
+                           reading_percent, favorited, ai_summary
+                    FROM articles
+                    {where}
+                    {order_sql}
+                    LIMIT ? OFFSET ?""",
+                (*params, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to query articles")
+            return []
+
+    def count_articles(
+        self,
+        source_type: str | None = None,
+        status: str | None = None,
+        tag: str | None = None,
+    ) -> int:
+        """Count articles matching the same filters as :meth:`get_recent_articles`."""
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            row = self.conn.execute(
+                f"SELECT COUNT(*) AS n FROM articles {where}",
+                tuple(params),
+            ).fetchone()
+            return int(row["n"]) if row else 0
+        except Exception:
+            logger.exception("Failed to count articles")
+            return 0
+
+    def search_articles(
+        self,
+        q: str,
+        limit: int = 30,
+        offset: int = 0,
+        source_type: str | None = None,
+        status: str | None = None,
+        tag: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Full-text search over the reading library.
+
+        Uses the ``articles_fts`` trigram index for queries of 3+ characters
+        (Chinese substring friendly) and falls back to ``LIKE`` for shorter
+        queries or when FTS fails. Respects the same source/status/tag filters
+        as :meth:`get_recent_articles`. Returns the same column shape.
+        """
+        q = (q or "").strip()
+        if not q:
+            return []
+        cols = (
+            "a.id, a.source_type, a.source_name, a.title, a.url, a.author, "
+            "a.summary, a.published_at, a.tags, a.status, a.created_at, "
+            "a.reading_percent, a.favorited, a.ai_summary"
+        )
+        filters: list[str] = []
+        fparams: list[Any] = []
+        if source_type:
+            filters.append("a.source_type = ?")
+            fparams.append(source_type)
+        if status:
+            filters.append("a.status = ?")
+            fparams.append(status)
+        if tag:
+            filters.append("a.tags LIKE ?")
+            fparams.append(f'%"{tag}"%')
+        fsql = (" AND " + " AND ".join(filters)) if filters else ""
+
+        # Trigram FTS for queries >= 3 chars (phrase-quoted to avoid syntax errors)
+        if len(q) >= 3:
+            try:
+                fts_q = '"' + q.replace('"', '""') + '"'
+                cursor = self.conn.execute(
+                    f"""SELECT {cols} FROM articles a
+                        JOIN articles_fts f ON a.id = f.rowid
+                        WHERE articles_fts MATCH ? {fsql}
+                        ORDER BY bm25(articles_fts)
+                        LIMIT ? OFFSET ?""",
+                    (fts_q, *fparams, limit, offset),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            except Exception:
+                logger.exception("FTS search failed, falling back to LIKE")
+
+        # LIKE fallback (short queries or FTS error)
+        like = f"%{q}%"
+        try:
+            cursor = self.conn.execute(
+                f"""SELECT {cols} FROM articles a
+                    WHERE (a.title LIKE ? OR a.content_text LIKE ?
+                          OR a.tags LIKE ? OR a.author LIKE ? OR a.summary LIKE ?)
+                          {fsql}
+                    ORDER BY a.published_at DESC, a.created_at DESC
+                    LIMIT ? OFFSET ?""",
+                (like, like, like, like, like, *fparams, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to search articles")
+            return []
+
+    def get_article(self, article_id: int) -> dict[str, Any] | None:
+        """Fetch a single article including its full body text."""
+        try:
+            cursor = self.conn.execute(
+                """SELECT id, source_type, source_name, title, url, author,
+                           summary, content_text, published_at, tags, status,
+                           reading_percent, reading_progress, favorited,
+                           ai_summary,
+                           created_at, updated_at
+                    FROM articles WHERE id = ?""",
+                (article_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception:
+            logger.exception("Failed to fetch article %d", article_id)
+            return None
+
+    def update_article_tags(self, article_id: int, tags: list[str]) -> bool:
+        """Update tags for an article. Returns True on success."""
+        import json
+        try:
+            self.conn.execute(
+                "UPDATE articles SET tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (json.dumps(tags, ensure_ascii=False), article_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to update tags for article %d", article_id)
+            return False
+
+    #: Canonical reading-library states. Kept in sync with the
+    #: ``/api/articles/{id}`` PATCH endpoint validation.
+    ARTICLE_STATUSES = ("unread", "reading", "finished", "archived")
+
+    def update_article_status(self, article_id: int, status: str) -> bool:
+        """Update reading status for an article. Returns True on success."""
+        if status not in self.ARTICLE_STATUSES:
+            return False
+        try:
+            self.conn.execute(
+                "UPDATE articles SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (status, article_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to update status for article %d", article_id)
+            return False
+
+    # ── 阅读辅助：进度 / 收藏 / 笔记 / AI 摘要 ────────────────────────
+
+    def update_article_reading_progress(
+        self, article_id: int, *, percent: float, progress: str = ""
+    ) -> bool:
+        """Persist reading position (percent 0-100 + optional scroll anchor).
+
+        ``percent`` is clamped to [0, 100]; a finished article keeps its
+        own status but the progress is still recorded for the stats panel.
+        """
+        try:
+            percent = max(0.0, min(100.0, float(percent)))
+            self.conn.execute(
+                "UPDATE articles SET reading_percent = ?, reading_progress = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (percent, (progress or "")[:4000], article_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to save reading progress for article %d", article_id)
+            return False
+
+    def set_article_favorited(self, article_id: int, favorited: bool) -> bool:
+        """Mark / unmark an article as favorited. Returns True on success."""
+        try:
+            self.conn.execute(
+                "UPDATE articles SET favorited = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (1 if favorited else 0, article_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to set favorited for article %d", article_id)
+            return False
+
+    def add_article_note(
+        self,
+        article_id: int,
+        *,
+        quote: str = "",
+        note: str = "",
+        color: str = "",
+    ) -> int | None:
+        """Add a note / highlight to an article. Returns note id or None."""
+        try:
+            cursor = self.conn.execute(
+                "INSERT INTO article_notes (article_id, quote, note, color) VALUES (?, ?, ?, ?)",
+                (article_id, (quote or "")[:2000], (note or "")[:4000], (color or "")[:20]),
+            )
+            self.conn.commit()
+            return cursor.lastrowid or None
+        except Exception:
+            logger.exception("Failed to add note for article %d", article_id)
+            return None
+
+    def get_article_notes(self, article_id: int) -> list[dict[str, Any]]:
+        """Return all notes/highlights for an article, oldest first."""
+        try:
+            cursor = self.conn.execute(
+                """SELECT id, article_id, quote, note, color, created_at, updated_at
+                   FROM article_notes WHERE article_id = ? ORDER BY id ASC""",
+                (article_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to load notes for article %d", article_id)
+            return []
+
+    def delete_article_note(self, note_id: int) -> bool:
+        """Delete one note by its own id. Returns True on success."""
+        try:
+            self.conn.execute("DELETE FROM article_notes WHERE id = ?", (note_id,))
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to delete note %d", note_id)
+            return False
+
+    def update_article_ai_summary(self, article_id: int, ai_summary: str) -> bool:
+        """Store the generated AI summary JSON for an article."""
+        try:
+            self.conn.execute(
+                "UPDATE articles SET ai_summary = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                ((ai_summary or "")[:6000], article_id),
+            )
+            self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("Failed to store AI summary for article %d", article_id)
+            return False
+
+    def get_articles_missing_summary(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent articles that have body text but no AI summary yet."""
+        try:
+            cursor = self.conn.execute(
+                """SELECT id, source_type, source_name, title, url, author,
+                          summary, content_text, tags, status, created_at,
+                          ai_summary
+                   FROM articles
+                   WHERE length(content_text) > 200
+                     AND (ai_summary IS NULL OR ai_summary = '')
+                   ORDER BY created_at DESC
+                   LIMIT ?""",
+                (max(1, int(limit)),),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to list articles missing AI summary")
+            return []
+
+    def get_article_reading_stats(self) -> dict[str, Any]:
+        """Reading-library statistics for the dashboard.
+
+        Returns totals by status, source-type distribution, notes count,
+        finished counts by month (UTC), and the top-10 most-read tags.
+        """
+        import json as _json
+
+        stats: dict[str, Any] = {"by_status": {}, "by_source": {}, "notes": 0, "by_month": {}, "top_tags": []}
+        try:
+            row = self.conn.execute(
+                "SELECT status, COUNT(*) AS n FROM articles GROUP BY status"
+            ).fetchall()
+            stats["by_status"] = {str(r["status"]): int(r["n"]) for r in row}
+            row = self.conn.execute(
+                "SELECT source_type, COUNT(*) AS n FROM articles GROUP BY source_type ORDER BY n DESC"
+            ).fetchall()
+            stats["by_source"] = {str(r["source_type"]): int(r["n"]) for r in row}
+            stats["notes"] = int(
+                self.conn.execute("SELECT COUNT(*) AS n FROM article_notes").fetchone()["n"]
+            )
+            row = self.conn.execute(
+                """SELECT substr(published_at, 1, 7) AS ym, COUNT(*) AS n
+                   FROM articles WHERE status = 'finished' AND published_at != ''
+                   GROUP BY ym ORDER BY ym DESC LIMIT 12"""
+            ).fetchall()
+            stats["by_month"] = {str(r["ym"]): int(r["n"]) for r in row}
+            tag_counter: dict[str, int] = {}
+            for r in self.conn.execute(
+                "SELECT tags FROM articles WHERE tags IS NOT NULL AND tags != '[]' LIMIT 2000"
+            ).fetchall():
+                try:
+                    for t in _json.loads(r["tags"]):
+                        tag_counter[str(t)] = tag_counter.get(str(t), 0) + 1
+                except Exception:
+                    continue
+            stats["top_tags"] = sorted(tag_counter.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            return stats
+        except Exception:
+            logger.exception("Failed to compute reading stats")
+            return stats
+
+    def get_articles_for_reading_stats(self, *, limit: int = 500) -> list[dict[str, Any]]:
+        """Recent finished/reading articles with percent & timestamps.
+
+        Consumed by the dashboard's interest-shift chart: it maps each
+        article's tags onto the current interest profile.
+        """
+        try:
+            cursor = self.conn.execute(
+                """SELECT id, source_type, source_name, title, url, author,
+                          tags, status, reading_percent, published_at,
+                          created_at, updated_at
+                   FROM articles
+                   WHERE status IN ('reading', 'finished')
+                   ORDER BY updated_at DESC
+                   LIMIT ?""",
+                (max(1, int(limit)),),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to load articles for reading stats")
+            return []
 
     def iter_cover_lifecycle(self) -> list[tuple[str, str, bool]]:
         """Return ``(cover_url, pool_status, is_saved)`` for every cached-cover candidate.

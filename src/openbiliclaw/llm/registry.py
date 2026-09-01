@@ -443,6 +443,7 @@ def _maybe_openai_provider(config: Config, overrides: dict[str, LLMProvider]) ->
             model=config.llm.openai.model or "gpt-4o",
             base_url=config.llm.openai.base_url,
             token_provider=_codex_token_provider,
+            reasoning_effort=config.llm.openai.reasoning_effort,
             timeout=float(config.llm.timeout),
         )
     if not config.llm.openai.api_key.strip():
@@ -451,6 +452,7 @@ def _maybe_openai_provider(config: Config, overrides: dict[str, LLMProvider]) ->
         api_key=config.llm.openai.api_key,
         model=config.llm.openai.model or "gpt-4o",
         base_url=config.llm.openai.base_url,
+        reasoning_effort=config.llm.openai.reasoning_effort,
         timeout=float(config.llm.timeout),
     )
 
@@ -616,5 +618,6 @@ def _maybe_openai_compatible_provider(
         model=cfg.model or "gpt-4o-mini",
         base_url=cfg.base_url,
         provider_name="openai_compatible",
+        reasoning_effort=cfg.reasoning_effort,
         timeout=float(config.llm.timeout),
     )

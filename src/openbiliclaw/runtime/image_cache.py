@@ -390,6 +390,9 @@ async def fetch_cover_bytes(url: str) -> tuple[bytes, str]:
         async with httpx.AsyncClient(
             timeout=_FETCH_TIMEOUT_SECONDS,
             follow_redirects=False,
+            # Cover-image CDNs (hdslb.com, etc.) are directly reachable; skip
+            # the macOS system proxy to avoid proxy-downtime image fetch failures.
+            trust_env=False,
         ) as client:
             response = await _send_with_redirects(client, parsed)
             try:

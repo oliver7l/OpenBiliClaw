@@ -3,28 +3,29 @@
 
 /* ── Design Tokens (from extension popup.html) ────────────── */
 :root {
-  --bg-base: #fffafc;
-  --bg-sky: #f2f8ff;
-  --surface: rgba(255, 255, 255, 0.84);
-  --surface-strong: rgba(255, 255, 255, 0.96);
-  --surface-soft: rgba(255, 255, 255, 0.72);
-  --line: rgba(217, 227, 242, 0.95);
-  --line-strong: rgba(247, 173, 202, 0.46);
-  --text-main: #20304a;
-  --text-secondary: #60708c;
-  --text-muted: #8f9bb0;
+  --bg-base: #faf9f7;
+  --bg-sky: #faf9f7;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-soft: #f5f4f1;
+  --line: #e8e6e2;
+  --line-strong: #e0ddd8;
+  --text-main: #1c1c1e;
+  --text-secondary: #6b6b6b;
+  --text-muted: #a8a8a8;
   --brand: #fb7299;
   --brand-strong: #f65788;
-  --brand-soft: rgba(251, 114, 153, 0.12);
+  --brand-soft: rgba(251, 114, 153, 0.1);
+  --brand-ink: #d9456b;
   --sky: #5aa9ff;
-  --sky-soft: rgba(90, 169, 255, 0.14);
-  --lime-soft: rgba(96, 204, 154, 0.16);
-  --warning-soft: rgba(255, 189, 110, 0.2);
+  --sky-soft: rgba(90, 169, 255, 0.1);
+  --lime-soft: rgba(96, 204, 154, 0.12);
+  --warning-soft: rgba(255, 189, 110, 0.16);
   --success: #30b980;
   --danger: #ef7a86;
-  --shadow-lg: 0 20px 40px rgba(56, 76, 112, 0.12);
-  --shadow-sm: 0 10px 22px rgba(73, 93, 130, 0.08);
-  --focus-ring: 0 0 0 3px rgba(90, 169, 255, 0.28);
+  --shadow-lg: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --focus-ring: 0 0 0 3px rgba(251, 114, 153, 0.2);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -34,10 +35,7 @@ html, body {
   overflow: hidden;
   font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   color: var(--text-main);
-  background:
-    radial-gradient(circle at 15% 12%, rgba(251, 114, 153, 0.2), transparent 30%),
-    radial-gradient(circle at 88% 18%, rgba(90, 169, 255, 0.24), transparent 26%),
-    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-sky) 100%);
+  background: var(--bg-base);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -181,11 +179,9 @@ body {
 /* ── Cards ────────────────────────────────────────────────── */
 .card {
   background: var(--surface-strong);
-  border: 1px solid rgba(225, 232, 241, 0.8);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    0 4px 14px rgba(52, 72, 110, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
   overflow: hidden;
   margin-bottom: 12px;
 }
@@ -250,7 +246,7 @@ body {
 
 .card-title {
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.38;
   letter-spacing: -0.01em;
   display: -webkit-box;
@@ -300,14 +296,10 @@ body {
 
 /* ── Recommend Header ─────────────────────────────────────── */
 .recommend-header-card {
-  background:
-    radial-gradient(circle at 10% 20%, rgba(251, 114, 153, 0.06), transparent 50%),
-    var(--surface);
-  border: 1px solid rgba(237, 219, 233, 0.6);
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 6px 18px rgba(52, 72, 110, 0.06);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
   padding: 12px 14px;
   margin-bottom: 12px;
 }
@@ -329,19 +321,19 @@ body {
   width: fit-content;
   padding: 3px 9px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--brand), var(--sky));
-  color: #fff;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
-  box-shadow: 0 4px 10px rgba(251, 114, 153, 0.2);
+  box-shadow: none;
 }
 
 .recommend-title {
   margin-top: 6px;
   font-size: 17px;
   line-height: 1.3;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
@@ -379,27 +371,27 @@ body {
   justify-content: flex-start;
   gap: 6px;
   padding: 5px 10px;
-  border: 1px solid rgba(237, 219, 233, 0.5);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 2px 6px rgba(52, 72, 110, 0.04);
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .recommend-pool-chip[data-tone="brand"] {
-  background: rgba(255, 246, 249, 0.9);
-  border-color: rgba(245, 189, 209, 0.48);
+  background: var(--brand-soft);
+  border-color: var(--line);
 }
 
 .recommend-pool-chip[data-tone="info"] {
-  background: rgba(245, 249, 255, 0.9);
-  border-color: rgba(177, 207, 242, 0.6);
+  background: var(--sky-soft);
+  border-color: var(--line);
 }
 
 .recommend-pool-label {
   font-size: 9px;
   line-height: 1;
   color: var(--text-muted);
-  font-weight: 800;
+  font-weight: 700;
   flex: 0 0 auto;
 }
 
@@ -467,9 +459,10 @@ body {
 
 /* ── Delight Banner ───────────────────────────────────────── */
 .delight-banner {
-  background: linear-gradient(135deg, rgba(251,114,153,0.08), rgba(90,169,255,0.08));
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 10px;
   padding: 12px;
   margin-bottom: 12px;
   position: relative;
@@ -490,19 +483,14 @@ body {
   width: 116px;
   float: left;
   margin: 2px 12px 8px 0;
-  shape-outside: inset(0 round 14px);
+  shape-outside: inset(0 round 10px);
   position: relative;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 10px;
   aspect-ratio: 16 / 10;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 252, 0.94)),
-    linear-gradient(145deg, rgba(251, 114, 153, 0.18), rgba(90, 169, 255, 0.14));
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.74),
-    0 6px 16px rgba(251, 114, 153, 0.14),
-    0 12px 24px rgba(52, 72, 110, 0.08);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -518,12 +506,12 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   color: var(--brand-strong);
   font-size: 12px;
   line-height: 20px;
   text-align: center;
-  box-shadow: 0 2px 6px rgba(251, 114, 153, 0.24);
+  box-shadow: none;
   z-index: 1;
   pointer-events: none;
 }
@@ -533,7 +521,7 @@ body {
   position: absolute;
   inset: auto 0 0;
   height: 34%;
-  background: linear-gradient(180deg, transparent, rgba(32, 48, 74, 0.16));
+  background: none;
   pointer-events: none;
 }
 
@@ -562,20 +550,20 @@ body {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--brand), var(--sky));
-  color: #fff;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 3px 9px;
   border-radius: 999px;
-  box-shadow: 0 6px 14px rgba(251, 114, 153, 0.22);
+  box-shadow: none;
 }
 
 .delight-inline-counter {
   flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--surface-soft);
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
@@ -598,9 +586,9 @@ body {
   z-index: 3;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(251, 114, 153, 0.2);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--surface);
   color: var(--text-muted);
   font-size: 17px;
   line-height: 1;
@@ -608,7 +596,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 16px rgba(73, 93, 130, 0.08);
+  box-shadow: none;
 }
 
 .delight-later-btn:active {
@@ -620,12 +608,12 @@ body {
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
-  border: 1px solid rgba(251, 114, 153, 0.22);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--surface);
   color: var(--brand-strong);
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -640,7 +628,7 @@ body {
 
 .delight-title {
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.35;
   max-height: 2.7em;
   overflow: hidden;
@@ -661,7 +649,7 @@ body {
   align-items: center;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--surface-soft);
   color: var(--text-secondary);
   font-size: 10px;
   line-height: 1;
@@ -691,12 +679,12 @@ body {
   margin-right: 6px;
   padding: 2px 7px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(251, 114, 153, 0.1), rgba(90, 169, 255, 0.08));
-  border: 1px solid rgba(251, 114, 153, 0.15);
-  color: var(--brand-strong);
+  background: var(--brand-soft);
+  border: 1px solid var(--line);
+  color: var(--brand-ink);
   font-size: 10px;
   line-height: 1.4;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .delight-media-only {
@@ -1044,7 +1032,7 @@ body {
 /* ── MBTI ─────────────────────────────────────────────────── */
 .mbti-type {
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--brand);
   text-align: center;
   margin-bottom: 8px;
@@ -1214,7 +1202,7 @@ body {
 .exploration-fill {
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--sky), var(--brand));
+  background: var(--brand);
   transition: width 0.3s;
 }
 
@@ -1403,17 +1391,17 @@ body {
 }
 
 .message-card.is-interest-probe {
-  background: linear-gradient(135deg, #fff8e8, #fff0d5);
+  background: #fdf4e3;
   border-color: rgba(221, 127, 45, 0.28);
 }
 
 .message-card.is-challenge-probe {
-  background: linear-gradient(135deg, #f7f2ff, #ede9fe);
+  background: #f4f0fa;
   border-color: rgba(124, 58, 237, 0.28);
 }
 
 .message-card.is-avoidance-probe {
-  background: linear-gradient(135deg, #eef7ff, #e1effc);
+  background: #ecf3fb;
   border-color: rgba(59, 130, 246, 0.28);
 }
 
@@ -1697,17 +1685,13 @@ body {
 /* ── Delight Tray ─────────────────────────────────────────── */
 .delight-tray {
   position: relative;
-  background:
-    radial-gradient(circle at top right, rgba(251, 114, 153, 0.1), transparent 50%),
-    linear-gradient(180deg, rgba(255, 252, 254, 0.97), rgba(246, 250, 255, 0.93));
-  border: 1px solid rgba(251, 114, 153, 0.3);
-  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 12px;
   padding: 12px;
   margin-bottom: 12px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 8px 20px rgba(251, 114, 153, 0.1),
-    0 18px 36px rgba(52, 72, 110, 0.06);
+  box-shadow: none;
 }
 
 .delight-tray::before {
@@ -1718,7 +1702,7 @@ body {
   right: 14px;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(251, 114, 153, 0.85), rgba(90, 169, 255, 0.65));
+  background: var(--brand);
 }
 
 .delight-actions {

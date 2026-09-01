@@ -11,6 +11,15 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// Placeholders the LLM emits when it has no signal for a text field. Treated as
+// absent so the profile panel falls back to its "still observing" copy.
+const UNKNOWNISH_TEXT = new Set(["", "unknown", "none", "n/a", "未知"]);
+
+function stripPlaceholderText(value) {
+  const text = normalizeText(value);
+  return UNKNOWNISH_TEXT.has(text.toLowerCase()) ? "" : text;
+}
+
 function normalizeStrList(raw) {
   return Array.isArray(raw) ? raw.map(normalizeText).filter(Boolean) : [];
 }
@@ -35,6 +44,7 @@ function round3(value) {
 
 const DEFAULT_TITLE = "这条标题还没对上号";
 const DEFAULT_UP_NAME = "这位 UP 还没认出来";
+const DEFAULT_CREATOR_NAME = "这位创作者还没认出来";
 const DEFAULT_PORTRAIT = "画像还在慢慢攒，先多看一阵。";
 const DEFAULT_DELIGHT_TITLE = "这条惊喜推荐还没起好标题";
 const DEFAULT_DELIGHT_REASON = "这条可能会给你一点意外之喜。";
@@ -121,10 +131,16 @@ const SOURCE_LABEL_MAP = {
   bilibili: "Bilibili",
   xiaohongshu: "Xiaohongshu",
   douyin: "Douyin",
+  weibo: "微博",
   youtube: "YouTube",
   twitter: "X (Twitter)",
   zhihu: "知乎",
+  reddit: "Reddit",
+  bangumi: "Bangumi",
+  linuxdo: "Linux.do",
+  v2ex: "V2EX",
   web: "Web",
+  user_favorite: "我的收藏",
 };
 
 const SOURCE_ALIAS_MAP = {
@@ -136,12 +152,23 @@ const SOURCE_ALIAS_MAP = {
   dy: "douyin",
   douyin: "douyin",
   tiktok: "douyin",
+  wb: "weibo",
+  weibo: "weibo",
   yt: "youtube",
   youtube: "youtube",
   x: "twitter",
   twitter: "twitter",
   zh: "zhihu",
+  user_favorite: "user_favorite",
   zhihu: "zhihu",
+  rd: "reddit",
+  reddit: "reddit",
+  bgm: "bangumi",
+  bangumi: "bangumi",
+  linuxdo: "linuxdo",
+  "linux.do": "linuxdo",
+  v2: "v2ex",
+  v2ex: "v2ex",
 };
 
 const RUNTIME_TOPIC_LABEL_MAP = {
@@ -159,6 +186,12 @@ const RUNTIME_TOPIC_LABEL_MAP = {
   "douyin-search": "抖音搜索",
   "douyin-hot": "抖音热点",
   "douyin-feed": "抖音推荐流",
+  weibo_search: "微博搜索",
+  weibo_hot: "微博热榜",
+  weibo_creator: "微博作者",
+  "weibo-search": "微博搜索",
+  "weibo-hot": "微博热榜",
+  "weibo-creator": "微博作者",
   yt_search: "YouTube 搜索",
   yt_trending: "YouTube 热榜",
   yt_channel: "YouTube 频道",
@@ -175,6 +208,35 @@ const RUNTIME_TOPIC_LABEL_MAP = {
   "zhihu-feed": "知乎首页",
   "zhihu-creator": "知乎作者",
   "zhihu-related": "知乎相关",
+  reddit_search: "Reddit 搜索",
+  reddit_hot: "Reddit 热门",
+  reddit_subreddit: "Reddit 社区",
+  reddit_related: "Reddit 相关",
+  "reddit-search": "Reddit 搜索",
+  "reddit-hot": "Reddit 热门",
+  "reddit-subreddit": "Reddit 社区",
+  "reddit-related": "Reddit 相关",
+  bangumi_search: "Bangumi 搜索",
+  bangumi_ranked: "Bangumi 排名",
+  bangumi_latest: "Bangumi 按日期浏览",
+  "bangumi-search": "Bangumi 搜索",
+  "bangumi-ranked": "Bangumi 排名",
+  "bangumi-latest": "Bangumi 按日期浏览",
+  linuxdo_search: "Linux.do 搜索",
+  linuxdo_hot: "Linux.do 热门",
+  linuxdo_feed: "Linux.do 最新",
+  linuxdo_creator: "Linux.do 作者",
+  linuxdo_related: "Linux.do 相关",
+  "linuxdo-search": "Linux.do 搜索",
+  "linuxdo-hot": "Linux.do 热门",
+  "linuxdo-feed": "Linux.do 最新",
+  "linuxdo-creator": "Linux.do 作者",
+  "linuxdo-related": "Linux.do 相关",
+  "v2ex-search": "V2EX 搜索",
+  "v2ex-node": "V2EX Node",
+  "v2ex-tab": "V2EX Tab",
+  "v2ex-hot": "V2EX 热门",
+  "v2ex-latest": "V2EX 最新",
 };
 
 function urlHostMatches(url, hostnames) {
@@ -198,13 +260,36 @@ export function normalizeSourcePlatform(item) {
     if (lowerUrl.includes("bilibili.com") || lowerUrl.includes("b23.tv")) return "bilibili";
     if (lowerUrl.includes("xiaohongshu.com") || lowerUrl.includes("xhslink.com")) return "xiaohongshu";
     if (lowerUrl.includes("douyin.com")) return "douyin";
+    if (urlHostMatches(url, ["weibo.com", "weibo.cn", "sinaimg.cn", "sinaimg.com"])) return "weibo";
     if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) return "youtube";
     if (urlHostMatches(url, ["x.com", "twitter.com"])) return "twitter";
     if (urlHostMatches(url, ["zhihu.com", "zhuanlan.zhihu.com"])) return "zhihu";
+    if (urlHostMatches(url, ["reddit.com", "redd.it"])) return "reddit";
+    if (urlHostMatches(url, ["bgm.tv", "bangumi.tv"])) return "bangumi";
+    if (urlHostMatches(url, ["linux.do"])) return "linuxdo";
+    if (urlHostMatches(url, ["v2ex.com"])) return "v2ex";
     return "web";
   }
   if (normalizeText(item?.bvid)) return "bilibili";
   return explicit || "bilibili";
+}
+
+/** Preserve canonical saved identity without treating UI row IDs or namespaced IDs as content IDs. */
+export function normalizeSavedIdentity(item = {}) {
+  const sourcePlatform = normalizeSourcePlatform(item);
+  const legacyId = normalizeText(item?.bvid);
+  const contentId = normalizeText(
+    item?.content_id || (legacyId && !legacyId.includes(":") ? legacyId : ""),
+  );
+  return {
+    ...item,
+    item_key: normalizeText(item?.item_key) || (contentId ? `${sourcePlatform}:${contentId}` : ""),
+    source_platform: sourcePlatform,
+    content_id: contentId,
+    content_url: normalizeText(item?.content_url || item?.url),
+    content_type: normalizeText(item?.content_type)
+      || (sourcePlatform === "bilibili" && contentId ? "video" : ""),
+  };
 }
 
 export function getSourceLabel(source) {
@@ -218,7 +303,12 @@ function formatRuntimeTopicLabel(value) {
   if (RUNTIME_TOPIC_LABEL_MAP[key]) return RUNTIME_TOPIC_LABEL_MAP[key];
   if (key.startsWith("xhs-extension-")) return "小红书";
   if (key.startsWith("dy-plugin-") || key.startsWith("douyin-")) return "抖音";
+  if (key.startsWith("weibo-")) return "微博";
   if (key.startsWith("yt-") || key.startsWith("youtube-")) return "YouTube";
+  if (key.startsWith("reddit-")) return "Reddit";
+  if (key.startsWith("bangumi-")) return "Bangumi";
+  if (key.startsWith("linuxdo-")) return "Linux.do";
+  if (key.startsWith("v2ex-")) return "V2EX";
   return text;
 }
 
@@ -264,7 +354,16 @@ export function buildContentUrl(item) {
   if (!vid) return "";
   if (platform === "youtube") return buildYouTubeUrl(vid);
   if (platform === "twitter") return buildTwitterUrl(vid);
-  if (platform === "zhihu") return "";
+  if (platform === "bangumi") return `https://bgm.tv/subject/${encodeURIComponent(vid)}`;
+  if (platform === "linuxdo") {
+    const topicId = vid.replace(/^(?:linuxdo:)?topic[:_]/i, "");
+    return /^[1-9]\d*$/.test(topicId)
+      ? `https://linux.do/t/${encodeURIComponent(topicId)}`
+      : "";
+  }
+  if (platform === "zhihu" || platform === "reddit") return "";
+  if (platform === "v2ex") return `https://www.v2ex.com/t/${encodeURIComponent(vid)}`;
+  if (platform === "zhihu" || platform === "reddit" || platform === "weibo") return "";
   return buildVideoUrl(vid);
 }
 
@@ -286,24 +385,125 @@ export function buildRecommendationClickPayload(item, contentUrl = "") {
 // ── Recommendation Normalization ─────────────────────────────
 
 export function normalizeRecommendation(item) {
+  const bvid = normalizeText(item?.bvid);
+  const sourcePlatform = normalizeSourcePlatform(item);
+  const contentId = normalizeText(item?.content_id)
+    || (bvid && !bvid.includes(":") ? bvid : "");
   return {
     id: Number(item?.id ?? 0),
-    bvid: normalizeText(item?.bvid),
+    bvid,
     title: normalizeText(item?.title) || DEFAULT_TITLE,
-    up_name: normalizeText(item?.up_name) || DEFAULT_UP_NAME,
+    up_name: normalizeText(item?.up_name)
+      || (sourcePlatform === "bangumi"
+        ? ""
+        : sourcePlatform === "bilibili"
+        ? DEFAULT_UP_NAME
+        : DEFAULT_CREATOR_NAME),
     cover_url: normalizeCoverUrl(item?.cover_url),
     expression: normalizeText(item?.expression),
     topic_label: normalizeText(item?.topic_label),
     presented: Boolean(item?.presented),
-    content_id: normalizeText(item?.content_id) || normalizeText(item?.bvid),
+    item_key: normalizeText(item?.item_key),
+    content_id: contentId,
     content_url: normalizeText(item?.content_url) || "",
-    source_platform: normalizeSourcePlatform(item),
-    content_type: normalizeText(item?.content_type) || "video",
+    source_platform: sourcePlatform,
+    content_type: normalizeText(item?.content_type)
+      || (sourcePlatform === "bilibili" && contentId ? "video" : ""),
     body_text: normalizeText(item?.body_text),
+    published_at: normalizeText(item?.published_at),
+    published_label: String(item?.published_label ?? "").replace(/\s+/g, " ").trim().slice(0, 64),
+    view_count: Number(item?.view_count ?? 0),
+    like_count: Number(item?.like_count ?? 0),
+    comment_count: Number(item?.comment_count ?? 0),
+    share_count: Number(item?.share_count ?? 0),
+    favorite_count: Number(item?.favorite_count ?? 0),
+    danmaku_count: Number(item?.danmaku_count ?? 0),
+    rating_score: Number(item?.rating_score ?? 0),
+    rating_count: Number(item?.rating_count ?? 0),
+    source_rank: Number(item?.source_rank ?? 0),
   };
 }
 
-const TEXT_CARD_CONTENT_TYPES = new Set(["tweet", "thread", "answer", "article", "question"]);
+export function reconcileRecommendationReplacement(currentItems, incomingItems) {
+  const current = Array.isArray(currentItems) ? currentItems : [];
+  const incoming = Array.isArray(incomingItems) ? incomingItems : [];
+  const preserved = incoming.length === 0 && current.length > 0;
+  return {
+    items: preserved ? current : incoming,
+    preserved,
+  };
+}
+
+export function formatPublishedTime(item, now = Date.now()) {
+  const parsed = Date.parse(String(item?.published_at || ""));
+  if (Number.isFinite(parsed)) {
+    const diff = now - parsed;
+    if (diff >= -300_000 && diff < 60_000) return "刚刚";
+    if (diff >= 0 && diff < 86_400_000) {
+      return `${Math.max(1, Math.floor(diff / 3_600_000))} 小时前`;
+    }
+    if (diff >= 0 && diff < 604_800_000) {
+      return `${Math.floor(diff / 86_400_000)} 天前`;
+    }
+    const date = new Date(parsed);
+    const current = new Date(now);
+    if (date.getFullYear() === current.getFullYear()) {
+      return `${date.getMonth() + 1}月${date.getDate()}日`;
+    }
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  return String(item?.published_label || "").replace(/\s+/g, " ").trim().slice(0, 64);
+}
+
+export function getPublishedTimeDisplay(item, now = Date.now()) {
+  const text = formatPublishedTime(item, now);
+  if (!text) return null;
+  const parsed = Date.parse(String(item?.published_at || ""));
+  return {
+    text,
+    title: Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : "",
+  };
+}
+
+// ── Engagement stats ─────────────────────────────────────────
+// Condense a raw count into Chinese-style 万/亿 units. Empty string for
+// non-positive values so callers render nothing.
+export function formatCountCn(n) {
+  const value = Math.floor(Number(n) || 0);
+  if (value <= 0) return "";
+  if (value >= 100000000)
+    return `${(Math.floor((value / 100000000) * 10) / 10).toFixed(1).replace(/\.0$/, "")}亿`;
+  if (value >= 10000)
+    return `${(Math.floor((value / 10000) * 10) / 10).toFixed(1).replace(/\.0$/, "")}万`;
+  return String(value);
+}
+
+// Build the "▶ … · 👍 … · 💬 … · ⭐ … · 弹幕 …" stats line. Only counts
+// > 0 appear; when nothing qualifies the result is "" (render nothing).
+export function recommendationStats(item) {
+  const segments = [];
+  const sourceRank = Math.trunc(Number(item?.source_rank) || 0);
+  if (item?.view_count > 0) segments.push(`▶ ${formatCountCn(item.view_count)}`);
+  if (item?.like_count > 0) segments.push(`👍 ${formatCountCn(item.like_count)}`);
+  if (item?.comment_count > 0) segments.push(`💬 ${formatCountCn(item.comment_count)}`);
+  if (item?.share_count > 0) segments.push(`🔁 ${formatCountCn(item.share_count)}`);
+  if (item?.favorite_count > 0) segments.push(`⭐ ${formatCountCn(item.favorite_count)}`);
+  if (item?.danmaku_count > 0) segments.push(`弹幕 ${formatCountCn(item.danmaku_count)}`);
+  if (item?.rating_score > 0) segments.push(`评分 ${Number(item.rating_score).toFixed(1)}`);
+  if (item?.rating_count > 0) segments.push(`${formatCountCn(item.rating_count)} 人评分`);
+  if (sourceRank > 0) segments.push(`排名 #${sourceRank}`);
+  return segments.join(" · ");
+}
+
+const TEXT_CARD_CONTENT_TYPES = new Set([
+  "tweet",
+  "thread",
+  "answer",
+  "article",
+  "question",
+  "post",
+  "comment",
+]);
 
 // Decide the media slot for a recommendation card. Text-first sources
 // (X tweet/thread, Zhihu answer/article/question) render a no-cover text card from
@@ -359,6 +559,8 @@ export function getCommentSubmitUiState(state) {
 export function normalizeDelightCandidate(item) {
   return {
     bvid: normalizeText(item?.bvid),
+    item_key: normalizeText(item?.item_key),
+    content_id: normalizeText(item?.content_id),
     title: normalizeText(item?.title) || DEFAULT_DELIGHT_TITLE,
     delight_reason: normalizeText(item?.delight_reason) || DEFAULT_DELIGHT_REASON,
     delight_score: Number(item?.delight_score ?? 0),
@@ -366,9 +568,23 @@ export function normalizeDelightCandidate(item) {
     cover_url: normalizeCoverUrl(item?.cover_url),
     content_url: normalizeText(item?.content_url),
     source_platform: normalizeSourcePlatform(item),
+    published_at: normalizeText(item?.published_at),
+    published_label: String(item?.published_label ?? "").replace(/\s+/g, " ").trim().slice(0, 64),
+    content_type: normalizeText(item?.content_type),
+    body_text: normalizeText(item?.body_text),
     state: normalizeText(item?.state) || "pending",
     response_message: normalizeText(item?.response_message),
+    response_tone: normalizeText(item?.response_tone) || "info",
     chat_reply: normalizeText(item?.chat_reply),
+    view_count: Number(item?.view_count ?? 0),
+    like_count: Number(item?.like_count ?? 0),
+    comment_count: Number(item?.comment_count ?? 0),
+    share_count: Number(item?.share_count ?? 0),
+    favorite_count: Number(item?.favorite_count ?? 0),
+    danmaku_count: Number(item?.danmaku_count ?? 0),
+    rating_score: Number(item?.rating_score ?? 0),
+    rating_count: Number(item?.rating_count ?? 0),
+    source_rank: Number(item?.source_rank ?? 0),
     // Local UI fields preserved across re-normalizations
     turns: Array.isArray(item?.turns) ? item.turns : [],
     composer_open: Boolean(item?.composer_open),
@@ -382,6 +598,8 @@ export function getDelightUiState(delight, { highlightBvid = "" } = {}) {
   if (!normalized.bvid) {
     return {
       visible: false, highlighted: false, handled: false,
+      show_status: false, show_actions: false,
+      like_pressed: false, like_disabled: false,
       score_label: "", response_tone: "info", response_message: "",
     };
   }
@@ -391,40 +609,50 @@ export function getDelightUiState(delight, { highlightBvid = "" } = {}) {
     score >= 0.65 ? "这条可能会拐到你" :
     "有点出其不意";
   const highlight = normalizeText(highlightBvid) === normalized.bvid;
+  const base = {
+    visible: true,
+    highlighted: highlight,
+    handled: false,
+    show_status: Boolean(normalized.response_message),
+    show_actions: true,
+    like_pressed: false,
+    like_disabled: false,
+    score_label: scoreLabel,
+    response_tone: normalized.response_tone || "info",
+    response_message: normalized.response_message,
+  };
 
   if (normalized.state === "viewed") {
     return {
-      visible: true, highlighted: highlight, handled: true,
-      score_label: scoreLabel, response_tone: "success",
+      ...base, handled: true, show_status: true, show_actions: false,
+      like_disabled: true, response_tone: "success",
       response_message: normalized.response_message || "已打开，阿B 会把这次点击当成强信号。",
     };
   }
   if (normalized.state === "liked") {
     return {
-      visible: true, highlighted: highlight, handled: true,
-      score_label: scoreLabel, response_tone: "success",
+      ...base, show_status: true, show_actions: true,
+      like_pressed: true, like_disabled: true, response_tone: "success",
       response_message: normalized.response_message || "好，这类多来点。",
     };
   }
   if (normalized.state === "rejected") {
     return {
-      visible: true, highlighted: highlight, handled: true,
-      score_label: scoreLabel, response_tone: "info",
+      ...base, handled: true, show_status: true, show_actions: false,
+      like_disabled: true,
       response_message: normalized.response_message || "记下了，这类惊喜先少来点。",
     };
   }
   if (normalized.state === "chatted" || normalized.state === "chatting") {
+    const responseMessage = normalized.response_message
+      || (normalized.state === "chatted" ? "这句已经记下，后面会更会试探。" : "");
     return {
-      visible: true, highlighted: highlight, handled: false,
-      score_label: scoreLabel, response_tone: "info",
-      response_message: normalized.response_message || "这句已经记下，后面会更会试探。",
+      ...base,
+      show_status: Boolean(responseMessage),
+      response_message: responseMessage,
     };
   }
-  return {
-    visible: true, highlighted: highlight, handled: false,
-    score_label: scoreLabel, response_tone: "info",
-    response_message: normalized.response_message,
-  };
+  return base;
 }
 
 /**
@@ -457,16 +685,18 @@ export function getDelightMessageActions() {
 
 export function getProbeMessageActions() {
   return [
-    { label: "喜欢", action: "confirm", primary: true },
-    { label: "不喜欢", action: "reject", primary: false },
+    { label: "确认喜欢", action: "confirm", primary: true },
+    { label: "暂时搁置", action: "defer", primary: false },
+    { label: "确认不喜欢", action: "reject", primary: false },
     { label: "多聊聊", action: "chat", primary: false },
   ];
 }
 
 export function getAvoidanceProbeMessageActions() {
   return [
-    { label: "确实不喜欢", action: "confirm", primary: true },
-    { label: "不是", action: "reject", primary: false },
+    { label: "确认避雷", action: "confirm", primary: true },
+    { label: "搁置避雷", action: "defer", primary: false },
+    { label: "不是雷点", action: "reject", primary: false },
     { label: "多聊聊", action: "chat", primary: false },
   ];
 }
@@ -522,6 +752,10 @@ export function mergeRuntimeStatusEvent(status, event) {
   const runtime = normalizeRuntimeStatus(status);
   const next = { ...runtime };
   if (typeof event?.pool_available_count === "number") {
+    // A pool snapshot can only be emitted by a running, initialized backend.
+    // Promote the partial stream payload so first-load HTTP timeouts do not
+    // hide otherwise authoritative inventory from the mobile header.
+    next.initialized = true;
     next.pool_available_count = Number(event.pool_available_count);
   }
   if (typeof event?.pool_raw_count === "number") {
@@ -586,6 +820,8 @@ export function getPoolStatusSummary(status) {
         ? `刚补进 ${runtime.last_replenished_count} 条`
         : runtime.last_discovered_count > 0
           ? "这轮找到了内容"
+        : runtime.pool_pending_count > 0
+          ? `另有 ${runtime.pool_pending_count} 条素材`
         : poolIsSufficient
           ? "这会儿先不补货"
           : "这轮还没补进",
@@ -594,6 +830,8 @@ export function getPoolStatusSummary(status) {
         ? formatRuntimeTopicList(runtime.recent_pool_topics)
         : runtime.last_discovered_count > 0
           ? "但可立即换的库存还没变"
+          : runtime.pool_pending_count > 0
+            ? "素材已抓到，会按可换库存缺口整理"
           : poolIsSufficient
             ? "先把这一池给你慢慢换开"
             : "还在继续摸你的口味",
@@ -654,7 +892,7 @@ export function getMobileRecommendationHeaderState({
                   : runtime.last_discovered_count > 0
                     ? "已发现"
                     : poolSummary.replenished,
-            label: pendingOnly ? "素材整理" : "最近补进",
+            label: pendingOnly ? "素材整理" : "补货进展",
             tone: "brand",
           },
           {
@@ -936,18 +1174,18 @@ export function getProfileStyleDisplay(style) {
   if (!normalized) return null;
   return {
     ...normalized,
-    preferred_duration: mappedLabel(DURATION_LABELS, normalized.preferred_duration),
-    preferred_pace: mappedLabel(PACE_LABELS, normalized.preferred_pace),
+    preferred_duration: mappedLabel(DURATION_LABELS, stripPlaceholderText(normalized.preferred_duration)),
+    preferred_pace: mappedLabel(PACE_LABELS, stripPlaceholderText(normalized.preferred_pace)),
   };
 }
 
 function normalizeContext(raw) {
   if (!raw) return null;
   return {
-    weekday_patterns: normalizeText(raw.weekday_patterns),
-    weekend_patterns: normalizeText(raw.weekend_patterns),
-    time_of_day_patterns: normalizeText(raw.time_of_day_patterns),
-    session_type: normalizeText(raw.session_type),
+    weekday_patterns: stripPlaceholderText(raw.weekday_patterns),
+    weekend_patterns: stripPlaceholderText(raw.weekend_patterns),
+    time_of_day_patterns: stripPlaceholderText(raw.time_of_day_patterns),
+    session_type: stripPlaceholderText(raw.session_type),
   };
 }
 

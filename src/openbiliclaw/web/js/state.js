@@ -24,9 +24,35 @@ export const state = {
   messages: { notifications: [], delights: [] },
   profile: null,
   chatTurns: [],
+  pendingConfirmationCount: 0,
   pendingChatPolls: new Set(),
   pendingChatContext: null,
 };
+
+/**
+ * Load persisted listMode preference from localStorage.
+ * Returns true if user previously switched to list mode.
+ * Defaults to list mode on first visit.
+ */
+function loadListModePreference() {
+  try {
+    const stored = localStorage.getItem("obc:listMode");
+    if (stored === null) return true; // first visit → default to list mode
+    return stored === "true";
+  } catch {
+    return true;
+  }
+}
+
+/** Persist listMode preference. */
+export function persistListMode(listMode) {
+  try {
+    localStorage.setItem("obc:listMode", String(listMode));
+  } catch { /* storage unavailable */ }
+}
+
+// Apply persisted preference so apps/default state includes it.
+state.listMode = loadListModePreference();
 
 const listeners = new Set();
 

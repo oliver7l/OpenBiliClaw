@@ -31,7 +31,9 @@
       watchLater: "/watch-later",
       favorites: "/favorites",
       profileEdit: "/profile/edit",
-      profileEditState: "/profile/edit-state"
+      profileEditState: "/profile/edit-state",
+      subscriptions: "/subscriptions",
+      subscriptionsStats: "/subscriptions/stats",
     };
 
     const state = {
@@ -262,6 +264,8 @@
 
     const DISMISS_ON_RESHUFFLE_KEY = "openbiliclaw.dismissOnReshuffle";
     state.dismissOnReshuffle = storageGet(DISMISS_ON_RESHUFFLE_KEY) === "1";
+    const DISPLAY_MODE_KEY = "openbiliclaw.displayMode";
+    state.displayMode = storageGet(DISPLAY_MODE_KEY) || "card";
     const SIDE_DRAWER_OPEN_KEY = "openbiliclaw.sideDrawerOpen";
     const DELIGHT_QUEUE_LIMIT_KEY = "openbiliclaw.webui.delightQueueLimit";
     const STAR_REPO_URL = "https://github.com/whiteguo233/OpenBiliClaw";
@@ -566,6 +570,68 @@
 
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+    }
+
+    // 轻量 markdown 渲染：先转义防 XSS；支持 标题/粗斜体/行内与块级代码/引用/有序无序列表/链接/分隔线/段落。不依赖外部库。
+    function renderMarkdown(src) {
+      if (!src) return "";
+      const esc = escapeHtml(src);
+      const fenced = [];
+      let s = esc.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => {
+        const idx = fenced.length;
+        fenced.push('<pre class="md-pre"><code>' + code.replace(/\n$/, "") + "</code></pre>");
+        return "@@FENCE@@" + idx + "@@";
+      });
+      const lines = s.split("\n");
+      const out = [];
+      let i = 0;
+      let inList = null;
+      const flushList = () => { if (inList) { out.push("</" + inList + ">"); inList = null; } };
+      const inline = (text) => {
+        const codes = [];
+        text = text.replace(/`([^`]+)`/g, (m2, c) => { const k = codes.length; codes.push('<code class="md-code">' + c + "</code>"); return "@@IC@@" + k + "@@"; });
+        text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m2, t, url) => {
+          const safe = /^(https?:\/\/|\/|#|mailto:)/i.test(url) ? url : "#";
+          return '<a class="md-link" href="' + safe + '" target="_blank" rel="noopener noreferrer">' + t + "</a>";
+        });
+        text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/__([^_]+)__/g, "<strong>$1</strong>");
+        text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/_([^_]+)_/g, "<em>$1</em>");
+        text = text.replace(/@@IC@@(\d+)@@/g, (m2, k) => codes[+k]);
+        return text;
+      };
+      while (i < lines.length) {
+        const line = lines[i];
+        const fb = line.match(/^@@FENCE@@(\d+)@@$/);
+        if (fb) { flushList(); out.push(fenced[+fb[1]]); i++; continue; }
+        if (/^(---|\*\*\*|___)\s*$/.test(line)) { flushList(); out.push('<hr class="md-hr">'); i++; continue; }
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        if (h) { flushList(); const lvl = h[1].length; out.push("<h" + lvl + ' class="md-h' + lvl + '">' + inline(h[2].trim()) + "</h" + lvl + ">"); i++; continue; }
+        if (/^&gt;\s?/.test(line)) {
+          flushList();
+          const buf = [];
+          while (i < lines.length && /^&gt;\s?/.test(lines[i])) { buf.push(inline(lines[i].replace(/^&gt;\s?/, ""))); i++; }
+          out.push('<blockquote class="md-quote">' + buf.join("<br>") + "</blockquote>");
+          continue;
+        }
+        const ul = line.match(/^[-*+]\s+(.*)$/);
+        const ol = line.match(/^\d+\.\s+(.*)$/);
+        if (ul || ol) {
+          const type = ul ? "ul" : "ol";
+          if (inList !== type) { flushList(); out.push("<" + type + ' class="md-' + type + '">'); inList = type; }
+          out.push("<li>" + inline((ul ? ul[1] : ol[1]).trim()) + "</li>");
+          i++; continue;
+        }
+        if (/^\s*$/.test(line)) { flushList(); i++; continue; }
+        flushList();
+        const para = [line];
+        i++;
+        while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6})\s/.test(lines[i]) && !/^[-*+]\s/.test(lines[i]) && !/^\d+\.\s/.test(lines[i]) && !/^&gt;\s?/.test(lines[i]) && !/^(---|\*\*\*|___)\s*$/.test(lines[i]) && !/^@@FENCE@@\d+@@$/.test(lines[i])) {
+          para.push(lines[i]); i++;
+        }
+        out.push('<p class="md-p">' + inline(para.join("<br>")) + "</p>");
+      }
+      flushList();
+      return out.join("");
     }
 
     // Decode source-provided entities for display text only; every later HTML or attribute output must still escape by context.
@@ -1105,7 +1171,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "watchLaterPage", "favoritesPage", "profilePage", "chatPage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "settingsPage"];
 
     function showMainPage(pageId) {
       MAIN_PAGE_IDS.forEach((id) => {
@@ -1116,8 +1182,46 @@
       });
       document.body.classList.toggle("profile-page-open", pageId === "profilePage");
       document.body.classList.toggle("chat-page-open", pageId === "chatPage");
+      document.body.classList.toggle("library-page-open", pageId === "libraryPage");
+      document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
+      document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
       document.body.classList.toggle("content-page-open", pageId !== "homePage");
+      const tabSync = { homePage: "homeBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", settingsPage: "settingsBtn" };
+      const activeTab = document.getElementById(tabSync[pageId]);
+      document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
     }
+
+    // ── Desktop page routing (independent URLs, no full reload) ──
+    // Each top-level view gets its own URL (/web/library, /web/chat, …).
+    // Clicking a tab uses pushState so the address bar stays in sync and the
+    // page is bookmarkable / refresh-safe, while the backend serves the same
+    // SPA shell for /web/{page} so direct links work too.
+    const DESKTOP_PAGE_ROUTES = {
+      home: () => openHomePage(),
+      delight: () => openDelightPage(),
+      saved: () => openSavedPage(),
+      watchLater: () => openWatchLaterPage(),
+      profile: () => openProfilePage(),
+      chat: () => openChatPage(),
+      library: () => openLibraryPage(),
+      settings: () => openSettingsPage("models"),
+    };
+
+    function routeFromPath() {
+      const match = (location.pathname || "/web").match(/^\/web\/([a-zA-Z]+)\/?$/);
+      const page = match ? match[1] : "home";
+      const params = new URLSearchParams(location.search);
+      const opener = DESKTOP_PAGE_ROUTES[page] || DESKTOP_PAGE_ROUTES.home;
+      opener(params);
+    }
+
+    function navigateTo(path) {
+      if ((location.pathname + location.search) === path) return;
+      history.pushState({ path }, "", path);
+      routeFromPath();
+    }
+
+    window.addEventListener("popstate", () => routeFromPath());
 
     function syncTopbarHeight() {
       const topbar = document.querySelector(".topbar");
@@ -1127,6 +1231,14 @@
 
     function openHomePage() {
       showMainPage("homePage");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openDelightPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("delightPage");
+      if (state.delights.length) setActiveDelight(state.delightIndex);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -1156,9 +1268,413 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
       void renderSourcesStatus();
       void renderSourceCredentials();
+      void loadSubscriptionList();
       void lanAuthControl?.reload();
       void bootAutostartControl?.reload();
       void refreshUpdateStatus();
+    }
+
+    // ── Reading library ───────────────────────────────────────────
+
+    let _librarySourceFilter = "all";
+    let _libraryStatusFilter = "all";
+    let _libraryTagFilter = null;
+    let _librarySearchQuery = "";
+    const LIBRARY_PAGE_SIZE = 50;
+    let _libraryLimit = LIBRARY_PAGE_SIZE;
+    let _librarySearchBound = false;
+
+    // Cross-platform source-type labels for the reading-library filter chips.
+    const SOURCE_LABELS = {
+      zhihu: "知乎", youtube: "YouTube", bilibili: "B站", douyin: "抖音",
+      xiaohongshu: "小红书", rss: "RSS", xiaoyuzhou: "播客", v2ex: "V2EX",
+      wechat: "公众号", reddit: "Reddit", other: "其他",
+    };
+    const VIDEO_SOURCE_TYPES = new Set(["youtube", "bilibili", "douyin"]);
+
+    // Render the source-type filter chips from the live article distribution so
+    // newly synced platforms (bilibili/youtube/douyin/zhihu/...) appear without
+    // a hardcoded list. Keeps the current _librarySourceFilter active.
+    async function renderLibrarySourceFilters() {
+      const box = document.getElementById("libraryFilters");
+      if (!box) return;
+      try {
+        const res = await fetch("/api/reading/sources");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const { sources } = await res.json();
+        const chips = [`<button class="library-filter-btn${_librarySourceFilter === "all" ? " is-active" : ""}" data-filter="all" type="button">全部</button>`];
+        (sources || []).forEach((s) => {
+          const label = SOURCE_LABELS[s.source_type] || s.source_type;
+          chips.push(
+            `<button class="library-filter-btn${_librarySourceFilter === s.source_type ? " is-active" : ""}" data-filter="${s.source_type}" type="button">${label} ${s.count}</button>`
+          );
+        });
+        box.innerHTML = chips.join("");
+      } catch {
+        /* keep whatever is rendered (or empty) on failure */
+      }
+    }
+
+    function openLibraryPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((drawer) => closePanel(drawer.id));
+      showMainPage("libraryPage");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      bindLibrarySearchOnce();
+      void renderLibrarySourceFilters();
+      void loadLibraryItems();
+    }
+
+    function syncLibraryPaging(total, shown) {
+      const countEl = document.getElementById("libraryCount");
+      const moreEl = document.getElementById("libraryMore");
+      if (countEl) {
+        countEl.textContent = total ? `共 ${total} 篇 · 已显示 ${shown} 篇` : "";
+      }
+      if (moreEl) moreEl.hidden = !(total && shown < total);
+    }
+
+    function buildLibraryCard(item, tags) {
+      const status = item.status || "unread";
+      const statusLabel = { unread: "未读", reading: "正在读", finished: "已读完" }[status] || "未读";
+      const card = document.createElement("article");
+      card.className = "video-card is-minimal";
+      card.dataset.itemId = item.id;
+      card.dataset.status = status;
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <p class="video-card-title" style="flex:1">${escapeHtml(item.title || "")}</p>
+          <span class="library-card-status ${status}">${statusLabel}</span>
+        </div>
+        <div class="video-card-meta">
+          <span class="video-card-author">${escapeHtml(item.author || "")}</span>
+          <span class="video-card-tag">${escapeHtml(item.source_name || item.source_type || "")}</span>
+        </div>
+        <div class="video-card-summary">${escapeHtml((item.summary || "").slice(0, 200))}</div>
+        ${tags.length ? `<div class="library-card-tags">${tags.map((t) => `<span class="library-card-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+        <div class="library-card-actions">
+          <button class="icon-btn" data-action="toggle-status" type="button" title="切换阅读状态">${status === "finished" ? "重读" : status === "reading" ? "标为已读" : "开始读"}</button>
+          <button class="icon-btn" data-action="edit-tags" type="button" title="编辑标签">标签</button>
+        </div>`;
+      card.addEventListener("click", (e) => {
+        const actionBtn = e.target.closest("[data-action]");
+        if (actionBtn) {
+          if (actionBtn.dataset.action === "toggle-status") {
+            e.stopPropagation();
+            toggleReadingStatus(item.id, status, card);
+          } else if (actionBtn.dataset.action === "edit-tags") {
+            e.stopPropagation();
+            openTagEditor(item.id, tags);
+          }
+          return;
+        }
+        void openArticleReader(item.id);
+      });
+      return card;
+    }
+
+    function renderLibraryCards(items) {
+      const grid = document.getElementById("libraryGrid");
+      if (!grid) return;
+      if (!items || !items.length) {
+        grid.innerHTML = '<div class="empty-state">没有匹配的内容</div>';
+        return;
+      }
+      const allTags = new Set();
+      items.forEach((item) => {
+        let tags = item.tags;
+        if (typeof tags === "string") { try { tags = JSON.parse(tags); } catch { tags = []; } }
+        if (Array.isArray(tags)) tags.forEach((t) => allTags.add(t));
+      });
+      const tagsEl = document.getElementById("libraryTags");
+      const tagsList = document.getElementById("libraryTagsList");
+      if (tagsEl && tagsList) {
+        if (allTags.size) {
+          tagsEl.hidden = false;
+          tagsList.innerHTML = `<button class="library-tag${_libraryTagFilter === null ? " is-active" : ""}" data-tag="" type="button">全部</button>`
+            + [...allTags].sort().map((t) =>
+                `<button class="library-tag${_libraryTagFilter === t ? " is-active" : ""}" data-tag="${escapeHtml(t)}" type="button">${escapeHtml(t)}</button>`
+              ).join("");
+        } else {
+          tagsEl.hidden = true;
+        }
+      }
+      grid.replaceChildren(...items.map((item) => {
+        let tags = item.tags;
+        if (typeof tags === "string") { try { tags = JSON.parse(tags); } catch { tags = []; } }
+        if (!Array.isArray(tags)) tags = [];
+        return buildLibraryCard(item, tags);
+      }));
+    }
+
+    function loadLibraryItems() {
+      const grid = document.getElementById("libraryGrid");
+      if (!grid) return;
+      const q = (_librarySearchQuery || "").trim();
+      if (q) { void loadLibrarySearch(q); return; }
+      grid.innerHTML = '<div class="empty-state">加载中…</div>';
+
+      const params = new URLSearchParams();
+      if (_librarySourceFilter && _librarySourceFilter !== "all") params.set("source_type", _librarySourceFilter);
+      if (_libraryStatusFilter && _libraryStatusFilter !== "all") params.set("status", _libraryStatusFilter);
+      if (_libraryTagFilter) params.set("tag", _libraryTagFilter);
+      params.set("limit", String(_libraryLimit));
+      const countParams = new URLSearchParams(params);
+      countParams.delete("limit");
+
+      Promise.all([
+        fetch(`/api/reading/items?${params}`)
+          .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }),
+        fetch(`/api/reading/count?${countParams}`)
+          .then((r) => (r.ok ? r.json() : { total: 0 }))
+          .catch(() => ({ total: 0 })),
+      ])
+        .then(([items, countData]) => {
+          const total = Number(countData && countData.total) || 0;
+          syncLibraryPaging(total, items ? items.length : 0);
+          renderLibraryCards(items);
+        })
+        .catch(() => {
+          grid.innerHTML = '<div class="empty-state">加载阅读库失败，请确认后端服务正常</div>';
+        });
+    }
+
+    function loadLibrarySearch(q) {
+      const grid = document.getElementById("libraryGrid");
+      if (!grid) return;
+      grid.innerHTML = '<div class="empty-state">搜索中…</div>';
+      const params = new URLSearchParams();
+      if (_librarySourceFilter && _librarySourceFilter !== "all") params.set("source_type", _librarySourceFilter);
+      if (_libraryStatusFilter && _libraryStatusFilter !== "all") params.set("status", _libraryStatusFilter);
+      if (_libraryTagFilter) params.set("tag", _libraryTagFilter);
+      params.set("q", q);
+      params.set("limit", String(_libraryLimit));
+      fetch(`/api/reading/search?${params}`)
+        .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then((items) => {
+          const shown = items ? items.length : 0;
+          const countEl = document.getElementById("libraryCount");
+          if (countEl) countEl.textContent = `搜索“${q}” 找到 ${shown} 条`;
+          const moreEl = document.getElementById("libraryMore");
+          if (moreEl) moreEl.hidden = true;
+          renderLibraryCards(items);
+        })
+        .catch(() => {
+          grid.innerHTML = '<div class="empty-state">搜索失败，请确认后端服务正常</div>';
+        });
+    }
+
+    function bindLibrarySearchOnce() {
+      if (_librarySearchBound) return;
+      _librarySearchBound = true;
+      const input = document.getElementById("librarySearchInput");
+      const clearBtn = document.getElementById("librarySearchClear");
+      if (!input) return;
+      let timer = null;
+      input.addEventListener("input", () => {
+        _librarySearchQuery = input.value;
+        if (clearBtn) clearBtn.hidden = !input.value;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => loadLibraryItems(), 250);
+      });
+      if (clearBtn) clearBtn.addEventListener("click", () => {
+        input.value = "";
+        _librarySearchQuery = "";
+        clearBtn.hidden = true;
+        loadLibraryItems();
+      });
+    }
+
+    let _currentArticleId = null;
+    let _suppressScroll = false;
+
+    async function openArticleReader(id) {
+      const titleEl = document.getElementById("articleDrawerTitle");
+      const sourceEl = document.getElementById("articleDrawerSource");
+      const metaEl = document.getElementById("articleReaderMeta");
+      const bodyEl = document.getElementById("articleReaderBody");
+      const originBtn = document.getElementById("articleOpenOrigin");
+      _currentArticleId = id;
+      // 先抑制：占位符/正文渲染都会重置 scrollTop 并触发 scroll 事件，
+      // 必须先关掉保存，否则会把已存位置污染成 0
+      _suppressScroll = true;
+      if (titleEl) titleEl.textContent = "载入中…";
+      if (sourceEl) sourceEl.textContent = "Article";
+      if (metaEl) metaEl.textContent = "";
+      if (bodyEl) bodyEl.innerHTML = '<p class="article-reader-placeholder">正在载入正文…</p>';
+      openPanel("articleDrawer");
+      try {
+        const res = await fetch(`/api/articles/${id}`);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        const article = data.article || {};
+        if (titleEl) titleEl.textContent = article.title || "文章";
+        if (sourceEl) sourceEl.textContent = article.source_name || article.source_type || "Article";
+        if (metaEl) {
+          metaEl.textContent = [article.author, article.published_at]
+            .filter(Boolean)
+            .join(" · ");
+        }
+        const isVideo = VIDEO_SOURCE_TYPES.has(article.source_type);
+        const text = (article.content_text || "").trim();
+        if (bodyEl) {
+          const savedPos = loadReaderPos(id);
+          if (text) {
+            bodyEl.innerHTML = renderMarkdown(text);
+          } else {
+            bodyEl.innerHTML = `<p class="article-reader-placeholder">${
+              isVideo
+                ? "这是一段视频，没有可阅读的正文，点击下方按钮打开观看。"
+                : escapeHtml(
+                    article.summary || "这篇内容没有存档正文，可以点下方「打开原文」查看。"
+                  )
+            }</p>`;
+          }
+          restoreReaderScroll(savedPos);
+        }
+        bindReaderProgress();
+        if (originBtn) {
+          if (article.url) {
+            originBtn.hidden = false;
+            originBtn.dataset.url = article.url;
+            originBtn.textContent = isVideo ? "打开视频" : "打开原文";
+          } else {
+            originBtn.hidden = true;
+          }
+        }
+      } catch {
+        if (bodyEl) {
+          bodyEl.innerHTML =
+            '<p class="article-reader-placeholder">正文加载失败，请检查后端服务。</p>';
+        }
+        _suppressScroll = false;
+      }
+    }
+
+    // ── 阅读进度条 + 滚动记忆 ──────
+    function readerPosKey(id) { return "obc:reader:pos:" + id; }
+    function saveReaderPos(id, top) { try { localStorage.setItem(readerPosKey(id), String(top)); } catch (e) {} }
+    function loadReaderPos(id) { try { const v = localStorage.getItem(readerPosKey(id)); return v ? Number(v) || 0 : 0; } catch (e) { return 0; } }
+    function updateReaderProgress(pct) {
+      const bar = document.getElementById("readerProgress");
+      if (bar && bar.firstElementChild) bar.firstElementChild.style.width = Math.max(0, Math.min(100, pct * 100)) + "%";
+    }
+    let _readerScrollBound = false;
+    function bindReaderProgress() {
+      const el = document.getElementById("articleReader");
+      if (!el) return;
+      if (!_readerScrollBound) {
+        el.addEventListener("scroll", () => {
+          if (!_currentArticleId || _suppressScroll) return;
+          const max = el.scrollHeight - el.clientHeight;
+          const pct = max > 0 ? el.scrollTop / max : 0;
+          updateReaderProgress(pct);
+          saveReaderPos(_currentArticleId, el.scrollTop);
+        }, { passive: true });
+        _readerScrollBound = true;
+      }
+      const max = el.scrollHeight - el.clientHeight;
+      updateReaderProgress(max > 0 ? el.scrollTop / max : 0);
+    }
+    // 恢复上次阅读位置：抽屉滑入动画期间布局可能未就绪（max=0），
+    // 故用 rAF 轮询，直到可滚动再应用；并用 _currentArticleId 隔离，
+    // 防止快速切换文章时把上一篇的待恢复位置误套到当前篇。
+    function restoreReaderScroll(pos) {
+      const el = document.getElementById("articleReader");
+      if (!el) return;
+      const targetId = _currentArticleId;
+      _suppressScroll = true;
+      let tries = 0;
+      const apply = () => {
+        if (_currentArticleId !== targetId) { _suppressScroll = false; return true; }
+        const max = el.scrollHeight - el.clientHeight;
+        if (max > 0) {
+          if (pos > 0) {
+            el.scrollTop = Math.min(pos, max);
+            updateReaderProgress(el.scrollTop / max);
+          }
+          _suppressScroll = false;
+          return true;
+        }
+        return false;
+      };
+      const tick = () => {
+        if (apply()) return;
+        if (++tries < 30) requestAnimationFrame(tick);
+        else _suppressScroll = false;
+      };
+      requestAnimationFrame(tick);
+    }
+
+    async function setArticleStatus(status) {
+      if (!_currentArticleId) return;
+      try {
+        const res = await fetch(`/api/reading/items/${_currentArticleId}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        showToast(
+          status === "finished" ? "已标为读完" : status === "reading" ? "已标为正在读" : "已标为未读"
+        );
+        void loadLibraryItems();
+      } catch {
+        showToast("状态更新失败");
+      }
+    }
+
+    function toggleReadingStatus(itemId, currentStatus, cardEl) {
+      const nextStatus = { unread: "reading", reading: "finished", finished: "unread" }[currentStatus] || "unread";
+      fetch(`/api/reading/items/${itemId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+        .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => {
+          cardEl.dataset.status = nextStatus;
+          cardEl.querySelector(".library-card-status").className = `library-card-status ${nextStatus}`;
+          const label = { unread: "未读", reading: "正在读", finished: "已读完" }[nextStatus];
+          cardEl.querySelector(".library-card-status").textContent = label;
+          const btn = cardEl.querySelector('[data-action="toggle-status"]');
+          if (btn) btn.textContent = nextStatus === "finished" ? "重读" : nextStatus === "reading" ? "标为已读" : "开始读";
+        })
+        .catch(() => {});
+    }
+
+    function openTagEditor(itemId, currentTags) {
+      const overlay = document.createElement("div");
+      overlay.className = "tag-editor-overlay";
+      overlay.innerHTML = `
+        <div class="tag-editor">
+          <h3>编辑标签</h3>
+          <input class="tag-editor-input" id="tagEditorInput" value="${escapeHtml(currentTags.join(", "))}" placeholder="输入标签，用逗号分隔" autofocus>
+          <div class="tag-editor-actions">
+            <button class="secondary" id="tagEditorCancel" type="button">取消</button>
+            <button class="primary" id="tagEditorSave" type="button">保存</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const input = overlay.querySelector("#tagEditorInput");
+      const save = () => {
+        const tags = (input.value || "").split(",").map((t) => t.trim()).filter(Boolean);
+        fetch(`/api/reading/items/${itemId}/tags`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tags }),
+        })
+          .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+          .then(() => { overlay.remove(); void loadLibraryItems(); })
+          .catch(() => { overlay.remove(); });
+      };
+      overlay.querySelector("#tagEditorSave").addEventListener("click", save);
+      overlay.querySelector("#tagEditorCancel").addEventListener("click", () => overlay.remove());
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+      window.setTimeout(() => input?.focus(), 100);
+
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
     }
 
     // ── Saved pages: 稍后再看 (watch-later) & 收藏 (favorites) ──────
@@ -1185,41 +1701,61 @@
       }
     }
 
-    function renderSavedList(listId, emptyId, items, onRemove) {
-      const grid = document.getElementById(listId);
-      const empty = document.getElementById(emptyId);
+    // 收藏 / 稍后再看 共用同一套卡片外观（与首页 .video-card 对齐）：
+    // 封面 + 两行标题 + 作者/平台，操作按钮默认隐藏、悬停才显形。
+    function renderSavedList(grid, items, onRemove) {
       if (!grid) return;
       const rows = Array.isArray(items) ? items : [];
       if (!rows.length) {
         grid.replaceChildren();
-        if (empty) empty.removeAttribute("hidden");
         return;
       }
-      if (empty) empty.setAttribute("hidden", "");
       grid.replaceChildren(...rows.map((item) => {
         const card = document.createElement("article");
-        card.className = "video-card saved-card";
+        card.className = "saved-card";
         const url = contentUrl(item);
+        const title = item.title || item.bvid || "";
+        const author = item.up_name || item.author_name || "";
+        const platform = platformName(item.source_platform || item.platform || "");
+        const tag = platform || "原文";
+        const cover = item.cover_url || item.cover || "";
+        const coverHtml = cover
+          ? `<img class="saved-card-cover" src="${escapeHtml(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+          : `<div class="saved-card-cover is-placeholder" aria-hidden="true">${escapeHtml(String(title).slice(0, 1) || "文")}</div>`;
         card.innerHTML = `
-          <button class="cover" data-platform="${escapeHtml(item.source_platform || item.platform || "bilibili")}" type="button" aria-label="打开 ${escapeHtml(item.title || item.bvid)}">
-            ${coverImg(item)}
-            <span class="platform">${escapeHtml(platformName(item.source_platform || item.platform))}</span>
-          </button>
-          <div>
-            <p class="video-title">${escapeHtml(item.title || item.bvid)}</p>
-            <p class="video-meta">${escapeHtml(item.up_name || "")}</p>
+          <div class="saved-card-media">
+            ${coverHtml}
+            <div class="saved-card-actions">
+              <button class="saved-card-action" type="button" aria-label="打开原文" title="打开原文">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg>
+              </button>
+              <button class="saved-card-action is-remove" type="button" aria-label="移除" title="移除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
           </div>
-          <div class="card-actions saved-card-actions">
-            <button class="small-btn saved-remove" type="button">移除</button>
+          <div class="saved-card-body">
+            <h3 class="saved-card-title">${escapeHtml(title)}</h3>
+            <div class="saved-card-meta">
+              <span class="saved-card-author">${escapeHtml(author)}</span>
+              <span class="saved-card-tag">${escapeHtml(tag)}</span>
+            </div>
           </div>`;
-        card.querySelector(".cover").addEventListener("click", () => {
-          if (url) window.open(url, "_blank", "noopener,noreferrer");
-        });
-        card.querySelector(".saved-remove").addEventListener("click", async (e) => {
+        const openBtn = card.querySelector(".saved-card-action:not(.is-remove)");
+        if (url) {
+          card.querySelector(".saved-card-media").addEventListener("click", (e) => {
+            if (e.target.closest(".saved-card-action")) return;
+            window.open(url, "_blank", "noopener,noreferrer");
+          });
+          openBtn.addEventListener("click", () => window.open(url, "_blank", "noopener,noreferrer"));
+        } else {
+          openBtn.disabled = true;
+        }
+        card.querySelector(".is-remove").addEventListener("click", async (e) => {
           const btn = e.currentTarget;
           btn.disabled = true;
           try {
-            await onRemove(item.bvid);
+            await onRemove(item.bvid || item.item_key);
             card.remove();
           } catch {
             btn.disabled = false;
@@ -1229,23 +1765,81 @@
       }));
     }
 
+    // 收藏与稍后再看是两个互相独立的后端集合，现在各自拥有独立页面与 URL。
+    const SAVED_LIST_VIEWS = {
+      favorite: {
+        pageId: "savedPage",
+        grid: "savedList",
+        empty: "savedEmpty",
+        titleBadge: "favCountBadge",
+        navBadge: "favoritesCountBadge",
+        endpoint: () => ENDPOINTS.favorites,
+        emptyText: "还没有收藏的内容，去推荐里点星标收藏吧。",
+      },
+      watch_later: {
+        pageId: "watchLaterPage",
+        grid: "watchLaterList",
+        empty: "watchLaterEmpty",
+        titleBadge: "wlCountBadge",
+        navBadge: "watchLaterCountBadge",
+        endpoint: () => ENDPOINTS.watchLater,
+        emptyText: "还没有稍后再看的内容，去推荐里点时钟图标加入吧。",
+      },
+    };
+
+    async function refreshSavedList(listKind) {
+      const view = SAVED_LIST_VIEWS[listKind];
+      if (!view) return;
+      const endpoint = view.endpoint();
+      const data = await requestJson(`${endpoint}?limit=100&offset=0`).catch(() => null);
+      const items = data?.items || [];
+      const total = data?.total || 0;
+      const grid = document.getElementById(view.grid);
+      const empty = document.getElementById(view.empty);
+      if (!grid) return;
+      if (!items.length) {
+        grid.replaceChildren();
+        if (empty) {
+          empty.textContent = view.emptyText;
+          empty.removeAttribute("hidden");
+        }
+      } else {
+        if (empty) empty.setAttribute("hidden", "");
+        renderSavedList(grid, items, async (itemKey) => {
+          await requestJson(`${endpoint}/${encodeURIComponent(itemKey)}`, { method: "DELETE" });
+          void refreshSavedList(listKind);
+        });
+      }
+      // 页面标题徽章 + 顶栏导航徽章共用本次请求的 total，避免再打一次接口。
+      updateSavedBadge(view.titleBadge, total);
+      updateSavedBadge(view.navBadge, total);
+      return total;
+    }
+
+    function openSavedListView(listKind) {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      const view = SAVED_LIST_VIEWS[listKind] || SAVED_LIST_VIEWS.favorite;
+      showMainPage(view.pageId);
+      void refreshSavedList(listKind);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openSavedPage() {
+      openSavedListView("favorite");
+    }
+
+    function openWatchLaterPage() {
+      openSavedListView("watch_later");
+    }
+
     async function refreshWatchLater() {
       const data = await requestJson(`${ENDPOINTS.watchLater}?limit=100&offset=0`).catch(() => null);
-      renderSavedList("watchLaterList", "watchLaterEmpty", data?.items, async (bvid) => {
-        await requestJson(`${ENDPOINTS.watchLater}/${encodeURIComponent(bvid)}`, { method: "DELETE" });
-        await refreshWatchLater();
-        syncWatchLaterButtons();
-      });
       updateSavedBadge("watchLaterCountBadge", data?.total);
     }
 
     async function refreshFavorites() {
       const data = await requestJson(`${ENDPOINTS.favorites}?limit=100&offset=0`).catch(() => null);
-      renderSavedList("favoritesList", "favoritesEmpty", data?.items, async (bvid) => {
-        await requestJson(`${ENDPOINTS.favorites}/${encodeURIComponent(bvid)}`, { method: "DELETE" });
-        await refreshFavorites();
-        syncFavoriteButtons();
-      });
       updateSavedBadge("favoritesCountBadge", data?.total);
     }
 
@@ -1276,22 +1870,6 @@
         });
         updateSavedBadge("favoritesCountBadge", data?.total);
       }).catch(() => {});
-    }
-
-    function openWatchLaterPage() {
-      closeMobileMenu();
-      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
-      showMainPage("watchLaterPage");
-      void refreshWatchLater();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    function openFavoritesPage() {
-      closeMobileMenu();
-      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
-      showMainPage("favoritesPage");
-      void refreshFavorites();
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function setSideDrawerOpen(open, { persist = true } = {}) {
@@ -1408,6 +1986,15 @@
       });
     }
 
+    // Map the active platform filter label back to a backend source_platform
+    // key (e.g. "B 站" -> "bilibili"). Returns null for "全部" so the
+    // recommender serves a mixed batch.
+    function platformKeyForFilter() {
+      if (state.filter === "全部") return null;
+      const def = sourceFilterDefinitions.find((source) => source.label === state.filter);
+      return def ? def.key : null;
+    }
+
     function setDismissOnReshuffle(enabled, { persist = true, toast = false } = {}) {
       state.dismissOnReshuffle = Boolean(enabled);
       if (persist) storageSet(DISMISS_ON_RESHUFFLE_KEY, state.dismissOnReshuffle ? "1" : "0");
@@ -1433,7 +2020,7 @@
         btn.className = `chip${state.filter === name ? " is-active" : ""}`;
         btn.type = "button";
         btn.textContent = name;
-        btn.addEventListener("click", () => { state.filter = name; renderAll(); });
+        btn.addEventListener("click", () => { state.filter = name; reshuffle(); });
         return btn;
       }));
       const resetButton = $("#resetFiltersBtn");
@@ -1542,6 +2129,35 @@
         .join(" · ");
     }
 
+    /* ── MindBack-style card mode ─────────────────────────── */
+    function mindbackCardHtml(item) {
+      var cover = item.cover_url || "";
+      var title = item.title || "";
+      var up = item.up_name || item.author_name || "";
+      var src = (item.source_platform || item.platform || "").toLowerCase();
+      var srcLabel = platformName(src);
+      var url = item.content_url || item.url || "";
+
+      return [
+        '<div class="mindback-cover-wrap">',
+          cover ? '<img class="mindback-cover" src="' + escapeHtml(cover) + '" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'no-cover\');this.remove()">' : '<div class="mindback-cover no-cover"></div>',
+          url ? '<a class="mindback-origin-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener" title="原文" onclick="event.stopPropagation()">原文</a>' : "",
+          '<span class="mindback-platform-badge">' + escapeHtml(srcLabel) + '</span>',
+        '</div>',
+        '<div class="mindback-body">',
+          '<div class="mindback-title">' + escapeHtml(title) + '</div>',
+          up ? '<div class="mindback-author">' + escapeHtml(up) + '</div>' : "",
+        '</div>',
+      ].join("");
+    }
+
+    function bindMindbackCardEvents(card, item) {
+      var url = item.content_url || item.url || "";
+      card.addEventListener("click", function () {
+        if (url) { reportRecommendationClick(item, card); window.open(url, "_blank"); }
+      });
+    }
+
     function renderVideos() {
       if (shouldShowInitOnboarding(state.runtimeStatus)) {
         renderInitOnboarding();
@@ -1555,96 +2171,65 @@
           ? `没有找到包含“${escapeHtml(state.query.trim())}”的推荐。`
           : state.videos.length
             ? "当前筛选下没有推荐。"
-            : "当前列表里的推荐都已处理，可以加载更多推荐或等待后端补货。";
+            : "当前列表里的推荐都已处理，可以换一批推荐或等待后端补货。";
         grid.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
       }
-      grid.replaceChildren(...items.map((item) => {
+      grid.classList.add("is-minimal");
+      // Bulk query saved states to avoid N round trips
+      const bvids = items.map((item) => item.bvid || item.id).filter(Boolean);
+      const [wlPromise, favPromise] = [
+        Promise.all(bvids.map(watchLaterStatus)).catch(() => bvids.map(() => null)),
+        Promise.all(bvids.map(favoriteStatus)).catch(() => bvids.map(() => null)),
+      ];
+      grid.replaceChildren(...items.map((item, i) => {
         const card = document.createElement("article");
-        card.className = "video-card";
+        card.className = "video-card is-minimal";
         card.dataset.bvid = item.bvid || item.id;
+        const platform = platformName(item.platform);
+        const author = item.up_name || item.author_name || "";
         card.innerHTML = `
-          <button class="cover${recommendationCoverClass(item)}" data-platform="${escapeHtml(item.platform)}" type="button" aria-label="打开 ${escapeHtml(item.title)}">
-            ${recommendationMediaHtml(item)}
-            <span class="platform">${escapeHtml(platformName(item.platform))}</span>
-          </button>
-          <div>
-            <p class="video-title">${escapeHtml(item.title)}</p>
-            <p class="video-meta">${escapeHtml(recommendationMeta(item))}</p>
+          <p class="video-card-title">${escapeHtml(item.title)}</p>
+          <div class="video-card-meta">
+            <span class="video-card-author">${escapeHtml(author)}</span>
+            <span class="video-card-tag">${escapeHtml(platform)}</span>
           </div>
-          <p class="reason" role="button" tabindex="0" aria-expanded="false" title="${escapeHtml(item.reason)}"><span class="reason-text">${escapeHtml(item.reason)}</span></p>
-          <div class="card-actions" aria-label="推荐反馈操作">
-            <div class="card-feedback-icons" aria-label="喜欢或不感兴趣">
-              <button class="feedback-icon-btn" data-action="like" type="button" aria-label="喜欢" title="喜欢">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 10v10"/><path d="M15 5.2 14 10h5.4a1.8 1.8 0 0 1 1.7 2.2l-1.5 6A2.4 2.4 0 0 1 17.3 20H7"/><path d="M7 10l4.5-5.3A2 2 0 0 1 15 6v4"/></svg>
-              </button>
-              <span class="feedback-separator" aria-hidden="true">/</span>
-              <button class="feedback-icon-btn" data-action="dislike" type="button" aria-label="不感兴趣" title="不感兴趣">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M17 14V4"/><path d="M9 18.8 10 14H4.6a1.8 1.8 0 0 1-1.7-2.2l1.5-6A2.4 2.4 0 0 1 6.7 4H17"/><path d="M17 14l-4.5 5.3A2 2 0 0 1 9 18v-4"/></svg>
-              </button>
-              <span class="feedback-separator" aria-hidden="true">/</span>
-              <button class="feedback-icon-btn" data-action="dismiss" type="button" aria-label="忽略" title="忽略">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M9.84 9.91A3 3 0 0 0 12 15c.82 0 1.57-.33 2.11-.87M6.5 6.65A10.45 10.45 0 0 0 2.46 12C3.73 16.06 7.52 19 12 19c1.99 0 3.84-.58 5.4-1.58M11 5.05c.33-.03.66-.05 1-.05 4.48 0 8.27 2.94 9.54 7a10.5 10.5 0 0 1-1.19 2.5"/></svg>
-              </button>
-              <span class="feedback-separator" aria-hidden="true">/</span>
-              <button class="feedback-icon-btn watch-later-btn" data-action="watch-later" type="button" aria-label="稍后再看" title="稍后再看" aria-pressed="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 1.9"/></svg>
-              </button>
-              <span class="feedback-separator" aria-hidden="true">/</span>
-              <button class="feedback-icon-btn favorite-btn" data-action="favorite" type="button" aria-label="收藏" title="收藏" aria-pressed="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.1l-5.31 2.8 1.01-5.9L3.41 9.83l5.93-.86z"/></svg>
-              </button>
-            </div>
-            <div class="comment-field"><input placeholder="想围绕这条聊什么？" aria-label="想围绕这条聊什么？"></div>
-            <button class="small-btn composer-cancel" data-action="cancel-comment" type="button" aria-label="返回" title="返回">‹</button>
-            <button class="small-btn chat-action" data-action="comment" type="button">聊一聊</button>
-          </div>
-          <p class="status-line"></p>`;
-        const reason = card.querySelector(".reason");
-        const toggleReason = () => {
-          const expanded = reason.classList.toggle("is-expanded");
-          reason.setAttribute("aria-expanded", expanded ? "true" : "false");
-        };
-        reason.addEventListener("click", toggleReason);
-        reason.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggleReason();
-          }
+          ${item.quality_reason ? `<p class="video-card-reason">${escapeHtml(item.quality_reason)}</p>` : ""}
+          <div class="video-card-actions">
+            <button class="feedback-icon-btn" data-action="like" type="button" aria-label="喜欢" title="喜欢">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 10v10"/><path d="M15 5.2 14 10h5.4a1.8 1.8 0 0 1 1.7 2.2l-1.5 6A2.4 2.4 0 0 1 17.3 20H7"/><path d="M7 10l4.5-5.3A2 2 0 0 1 15 6v4"/></svg>
+            </button>
+            <button class="feedback-icon-btn" data-action="dislike" type="button" aria-label="不感兴趣" title="不感兴趣">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M17 14V4"/><path d="M9 18.8 10 14H4.6a1.8 1.8 0 0 1-1.7-2.2l1.5-6A2.4 2.4 0 0 1 6.7 4H17"/><path d="M17 14l-4.5 5.3A2 2 0 0 1 9 18v-4"/></svg>
+            </button>
+            <button class="feedback-icon-btn watch-later-btn" data-action="watch-later" type="button" aria-label="稍后再看" title="稍后再看" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 1.9"/></svg>
+            </button>
+            <button class="feedback-icon-btn favorite-btn" data-action="favorite" type="button" aria-label="收藏" title="收藏" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.1l-5.31 2.8 1.01-5.9L3.41 9.83l5.93-.86z"/></svg>
+            </button>
+          </div>`;
+        card.addEventListener("click", (e) => {
+          if (e.target.closest("[data-action]")) return;
+          const url = contentUrl(item);
+          if (url) { openRecommendation(item, card); window.open(url, "_blank"); }
         });
-        card.querySelector(".cover").addEventListener("click", () => openRecommendation(item, card));
         card.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => handleCardAction(btn.dataset.action, item, card)));
-        card.querySelector(".comment-field input").addEventListener("keydown", (event) => {
-          if (event.key === "Enter") handleCardAction("send-comment", item, card);
-          if (event.key === "Escape") closeCardComposer(card);
-        });
-        card.querySelector(".comment-field input").addEventListener("blur", (event) => {
-          autoCollapseComposer(card.querySelector(".card-actions"), event, () => closeCardComposer(card));
-        });
-        // Lazy-load watch-later state
+        // Update saved state after bulk promise resolves
+        const bvid = item.bvid || item.id;
         const wlBtn = card.querySelector('[data-action="watch-later"]');
-        if (wlBtn) {
-          const bvid = item.bvid || item.id;
-          watchLaterStatus(bvid).then((res) => {
-            if (res && res.saved) {
-              wlBtn.setAttribute("aria-pressed", "true");
-              wlBtn.title = "\u53D6\u6D88\u7A0D\u540E\u518D\u770B";
-            }
-          }).catch(() => {});
-        }
-        // Lazy-load favorite state
         const favBtn = card.querySelector('[data-action="favorite"]');
-        if (favBtn) {
-          const bvid = item.bvid || item.id;
-          favoriteStatus(bvid).then((res) => {
-            if (res && res.saved) {
-              favBtn.setAttribute("aria-pressed", "true");
-              favBtn.title = "\u53D6\u6D88\u6536\u85CF";
-            }
-          }).catch(() => {});
-        }
+        wlPromise.then(results => {
+          const res = results[i];
+          if (wlBtn && res && res.saved) { wlBtn.setAttribute("aria-pressed", "true"); wlBtn.title = "取消稍后再看"; }
+        });
+        favPromise.then(results => {
+          const res = results[i];
+          if (favBtn && res && res.saved) { favBtn.setAttribute("aria-pressed", "true"); favBtn.title = "取消收藏"; }
+        });
         return card;
       }));
+      return;
     }
 
     function trackRecommendationClick(item) {
@@ -3348,14 +3933,18 @@
       return { total: visibleItems.length, ok: dismissedKeys.size, failed: visibleItems.length - dismissedKeys.size };
     }
 
-    async function reshuffle() {
+    async function reshuffle(platformOverride) {
       const reshuffleButton = $("#reshuffleBtn");
       const dismissToggle = $("#dismissOnReshuffleToggle");
       if (reshuffleButton) reshuffleButton.disabled = true;
       if (dismissToggle) dismissToggle.disabled = true;
       try {
         const dismissResult = state.dismissOnReshuffle ? await dismissVisibleRecommendationsBeforeReshuffle() : null;
-        const payload = await requestJson(ENDPOINTS.reshuffle, { method: "POST" });
+        // platformOverride lets callers force a platform; otherwise we serve
+        // the currently-selected platform filter (null = mixed batch).
+        const platform = platformOverride !== undefined ? platformOverride : platformKeyForFilter();
+        const url = platform ? `${ENDPOINTS.reshuffle}?platform=${encodeURIComponent(platform)}` : ENDPOINTS.reshuffle;
+        const payload = await requestJson(url, { method: "POST" });
         if (payload?.items?.length) {
           state.videos = normalizeRecommendationList(payload.items);
           renderAll();
@@ -3367,7 +3956,15 @@
           }
         } else {
           renderAll();
-          showToast("换一批失败：请检查后端连接");
+          // Distinguish "pool is drained" (200 + empty items) from a real
+          // connectivity failure (requestJson resolves to null). Reporting a
+          // drained pool as a connection error sent people hunting for a
+          // backend problem that did not exist.
+          if (payload) {
+            showToast("暂时没有新内容了，后台正在补货，稍后再试");
+          } else {
+            showToast("换一批失败：请检查后端连接");
+          }
         }
       } finally {
         if (reshuffleButton) reshuffleButton.disabled = false;
@@ -4249,23 +4846,37 @@
     }
 
     async function hydrateFromBackend() {
-      const [health, recs, runtime, activity, profile, delights, notification, chatTurns, delightChatTurns, config, initStatus] = await Promise.all([
-        requestJson(ENDPOINTS.health),
-        requestJson(ENDPOINTS.recommendations),
-        requestJson(ENDPOINTS.runtimeStatus),
-        requestJson(`${ENDPOINTS.activityFeed}?limit=5`),
-        requestJson(ENDPOINTS.profile),
-        requestJson(ENDPOINTS.delightBatch),
-        requestJson(ENDPOINTS.notificationPending),
-        requestJson(`${ENDPOINTS.chatTurns}?session=webui&scope=chat&limit=20`),
-        requestJson(`${ENDPOINTS.chatTurns}?session=webui&scope=delight&limit=80`),
-        requestJson(ENDPOINTS.config),
-        requestJson(ENDPOINTS.initStatus)
+      // 先并行获取推荐和健康检查，尽快渲染
+      // 每次打开/刷新首页都重新换一批（POST /recommendations/reshuffle 会从池子
+      // serve 新一批并写入历史；GET 是幂等的，刷新会一直看到同一批，不符合预期）。
+      const [health, recs] = await Promise.all([
+        requestJson(ENDPOINTS.health).catch(() => null),
+        requestJson(ENDPOINTS.reshuffle, { method: "POST" }).catch(() => null)
       ]);
       if (health) $("#statusLabel").textContent = "已连接本地后端";
-      if (initStatus) state.initStatus = initStatus;
-      const recommendationItems = Array.isArray(recs) ? recs : asArray(recs?.items);
+      let recommendationItems = Array.isArray(recs) ? recs : asArray(recs?.items);
+      // 池子为空（罕见，如首次部署/刚耗尽）时，回退到 GET 的 bootstrap 逻辑保证首屏有内容
+      if (!recommendationItems.length) {
+        const fallback = await requestJson(ENDPOINTS.recommendations).catch(() => null);
+        recommendationItems = Array.isArray(fallback) ? fallback : asArray(fallback?.items);
+      }
       state.videos = normalizeRecommendationList(recommendationItems);
+      // 推荐先渲染，其他数据后台加载
+      renderAll();
+
+      // 后台加载其余数据，不阻塞页面展示
+      const [runtime, activity, profile, delights, notification, chatTurns, delightChatTurns, config, initStatus] = await Promise.all([
+        requestJson(ENDPOINTS.runtimeStatus).catch(() => null),
+        requestJson(`${ENDPOINTS.activityFeed}?limit=5`).catch(() => null),
+        requestJson(ENDPOINTS.profile).catch(() => null),
+        requestJson(ENDPOINTS.delightBatch).catch(() => null),
+        requestJson(ENDPOINTS.notificationPending).catch(() => null),
+        requestJson(`${ENDPOINTS.chatTurns}?session=webui&scope=chat&limit=20`).catch(() => null),
+        requestJson(`${ENDPOINTS.chatTurns}?session=webui&scope=delight&limit=80`).catch(() => null),
+        requestJson(ENDPOINTS.config).catch(() => null),
+        requestJson(ENDPOINTS.initStatus).catch(() => null)
+      ]);
+      if (initStatus) state.initStatus = initStatus;
       if (activity) {
         state.activity = activity;
         state.activityItems = asArray(activity.items);
@@ -4292,6 +4903,7 @@
       for (const turn of delightChatItems.filter(Boolean)) applyTurnToDelight({ ...turn, scope: turn.scope || "delight" });
       if (notification?.item) mergeMessages([{ ...notification.item, type: "notification" }]);
       applyConfig(config?.config || config);
+      // 后台数据加载完成后，重新渲染非推荐部分
       renderAll();
     }
 
@@ -4775,6 +5387,157 @@
       if (closeId) closePanel(closeId);
     });
 
+    // ── Subscription management ──────────────────────────────────
+    let _activeSubTab = "rss";
+
+    function setActiveSubTab(tabName) {
+      _activeSubTab = tabName;
+      document.querySelectorAll("[data-sub-tab]").forEach((tab) => {
+        const isActive = tab.dataset.subTab === tabName;
+        tab.classList.toggle("is-active", isActive);
+      });
+      renderSubscriptionList();
+    }
+
+    async function loadSubscriptionList() {
+      const container = document.getElementById("subscriptionList");
+      const loading = document.getElementById("subscriptionLoading");
+      if (!container) return;
+      if (loading) loading.textContent = "加载中...";
+      try {
+        const data = await requestJson(ENDPOINTS.subscriptions + "/stats");
+        window._subscriptionData = data;
+        renderSubscriptionList();
+        if (loading) loading.textContent = "";
+      } catch (e) {
+        // Fallback to basic list
+        try {
+          const data = await requestJson(ENDPOINTS.subscriptions);
+          window._subscriptionData = data;
+          renderSubscriptionList();
+        } catch (e2) {
+          if (loading) loading.textContent = "加载失败: " + e2.message;
+        }
+      }
+    }
+
+    function formatLastFetchTime(t) {
+      if (!t) return "";
+      try {
+        const d = new Date(t);
+        if (isNaN(d.getTime())) return t;
+        const now = new Date();
+        const diffMs = now - d;
+        const diffMin = Math.floor(diffMs / 60000);
+        if (diffMin < 1) return "刚刚";
+        if (diffMin < 60) return `${diffMin} 分钟前`;
+        const diffHour = Math.floor(diffMin / 60);
+        if (diffHour < 24) return `${diffHour} 小时前`;
+        const diffDay = Math.floor(diffHour / 24);
+        if (diffDay < 7) return `${diffDay} 天前`;
+        return d.toLocaleDateString("zh-CN");
+      } catch {
+        return t;
+      }
+    }
+
+    function renderSubscriptionList() {
+      const container = document.getElementById("subscriptionList");
+      if (!container) return;
+      const data = window._subscriptionData || { rss: [], xiaoyuzhou: [], wechat: [] };
+      const items = data[_activeSubTab] || [];
+      if (!items.length) {
+        container.innerHTML = '<p class="settings-note-inline" style="color:var(--text-tertiary);">暂无订阅源，请在上方添加</p>';
+        return;
+      }
+      container.innerHTML = items.map((item, idx) => {
+        const lastFetched = formatLastFetchTime(item.last_fetched_at);
+        const count = item.item_count != null ? item.item_count : "-";
+        return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle);">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name || "")}</div>
+            <div style="font-size:12px;color:var(--text-tertiary, #888);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.url || "")}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;font-size:12px;color:var(--text-tertiary, #888);line-height:1.4;">
+            <div>${count} 条内容</div>
+            <div>${lastFetched ? "上次: " + lastFetched : "暂无抓取"}</div>
+          </div>
+          <button class="pill-btn" style="flex-shrink:0;color:var(--danger, #e74c3c);" data-sub-del="${_activeSubTab}" data-sub-url="${escapeHtml(item.url || "")}">删除</button>
+        </div>
+      `}).join("");
+
+      // Attach delete handlers
+      container.querySelectorAll("[data-sub-del]").forEach((btn) => {
+        btn.addEventListener("click", () => deleteSubscription(btn.dataset.subDel, btn.dataset.subUrl));
+      });
+    }
+
+    async function deleteSubscription(sourceType, url) {
+      if (!confirm(`确定删除此订阅源？\n${url}`)) return;
+      try {
+        const res = await fetch(ENDPOINTS.subscriptions, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_type: sourceType, url }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "HTTP " + res.status);
+        }
+        setSubStatus("已删除", "success");
+        await loadSubscriptionList();
+      } catch (e) {
+        setSubStatus("删除失败: " + e.message, "error");
+      }
+    }
+
+    function setSubStatus(msg, type = "info") {
+      const el = document.getElementById("subStatus");
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = type === "error" ? "var(--danger, #e74c3c)" : type === "success" ? "var(--success, #27ae60)" : "var(--text-tertiary, #888)";
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Subscription tab switching
+    document.querySelectorAll("[data-sub-tab]").forEach((tab) => {
+      tab.addEventListener("click", () => setActiveSubTab(tab.dataset.subTab));
+    });
+
+    // Add subscription button
+    document.getElementById("addSubBtn")?.addEventListener("click", async () => {
+      const name = document.getElementById("subName")?.value?.trim();
+      const url = document.getElementById("subUrl")?.value?.trim();
+      if (!name || !url) {
+        setSubStatus("请填写名称和 URL", "error");
+        return;
+      }
+      const sourceType = _activeSubTab;
+      try {
+        const res = await fetch(ENDPOINTS.subscriptions, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_type: sourceType, name, url }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "HTTP " + res.status);
+        }
+        document.getElementById("subName").value = "";
+        document.getElementById("subUrl").value = "";
+        setSubStatus("已添加", "success");
+        await loadSubscriptionList();
+      } catch (e) {
+        setSubStatus("添加失败: " + e.message, "error");
+      }
+    });
+
     function setActiveSettingsPanel(panelName = "models") {
       document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
         const isActive = tab.dataset.settingsTab === panelName;
@@ -4834,12 +5597,61 @@
       button.addEventListener("click", returnToMobileMenu);
     });
 
-    safeBind("#profileBtn", "click", openProfilePage);
-    safeBind("#homeBtn", "click", openHomePage);
-    safeBind("#watchLaterBtn", "click", openWatchLaterPage);
-    safeBind("#favoritesBtn", "click", openFavoritesPage);
+    safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
+    safeBind("#homeBtn", "click", () => navigateTo("/web"));
+    safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
+    safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);
-    safeBind("#chatBtn", "click", openChatPage);
+    safeBind("#chatBtn", "click", () => navigateTo("/web/chat"));
+    safeBind("#libraryBtn", "click", () => navigateTo("/web/library"));
+    safeBind("#libraryPage", "click", (event) => {
+      const filterBtn = event.target.closest(".library-filter-btn");
+      if (filterBtn) {
+        document.querySelectorAll(".library-filter-btn").forEach((b) => b.classList.remove("is-active"));
+        filterBtn.classList.add("is-active");
+        _librarySourceFilter = filterBtn.dataset.filter;
+        _libraryTagFilter = null;
+        document.querySelectorAll(".library-status-btn").forEach((b) => b.classList.remove("is-active"));
+        document.querySelector('[data-status="all"]')?.classList.add("is-active");
+        _libraryStatusFilter = "all";
+        _libraryLimit = LIBRARY_PAGE_SIZE;
+        void loadLibraryItems();
+        return;
+      }
+      const statusBtn = event.target.closest(".library-status-btn");
+      if (statusBtn) {
+        document.querySelectorAll(".library-status-btn").forEach((b) => b.classList.remove("is-active"));
+        statusBtn.classList.add("is-active");
+        _libraryStatusFilter = statusBtn.dataset.status;
+        _libraryTagFilter = null;
+        _libraryLimit = LIBRARY_PAGE_SIZE;
+        void loadLibraryItems();
+        return;
+      }
+      const tagBtn = event.target.closest(".library-tag");
+      if (tagBtn) {
+        document.querySelectorAll(".library-tag").forEach((b) => b.classList.remove("is-active"));
+        tagBtn.classList.add("is-active");
+        _libraryTagFilter = tagBtn.dataset.tag || null;
+        _libraryLimit = LIBRARY_PAGE_SIZE;
+        void loadLibraryItems();
+      }
+    });
+    safeBind("#libraryMoreBtn", "click", () => {
+      _libraryLimit += LIBRARY_PAGE_SIZE;
+      void loadLibraryItems();
+    });
+    safeBind("#articleDrawer", "click", (event) => {
+      const statusBtn = event.target.closest("[data-article-status]");
+      if (statusBtn) {
+        void setArticleStatus(statusBtn.dataset.articleStatus);
+        return;
+      }
+    });
+    safeBind("#articleOpenOrigin", "click", () => {
+      const url = document.getElementById("articleOpenOrigin")?.dataset.url;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    });
     safeBind("#messagesBtn", "click", () => {
       closeSideDrawer();
       hydrateInboxFromSpeculations(state.profile?.speculative_interests);
@@ -4857,19 +5669,71 @@
     bindStarButton();
     syncTopbarHeight();
     window.addEventListener("resize", syncTopbarHeight);
+    document.getElementById("homeBtn")?.classList.add("is-active");
     ["#dismissOnReshuffleToggle", "#dismissOnReshuffleSetting"].forEach((selector) => {
       safeBind(selector, "change", (event) => {
         setDismissOnReshuffle(Boolean(event.target.checked), { toast: true });
       });
     });
     safeBind("#reshuffleBtn", "click", reshuffle);
-    safeBind("#loadMoreBtn", "click", appendMore);
+    safeBind("#loadMoreBtn", "click", reshuffle);
     safeBind("#delightThumb", "click", () => respondDelight(state.delight, "view"));
     safeBind("#delightThumb", "keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       respondDelight(state.delight, "view");
     });
+    function setCoverVisible(show) {
+      document.body.classList.toggle("no-cover", !show);
+      localStorage.setItem("openbiliclaw.hideCover", show ? "0" : "1");
+      [["#coverOnBtn", show], ["#coverOffBtn", !show]].forEach(([selector, active]) => {
+        const btn = $(selector);
+        if (!btn) return;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      if (!show) showToast("封面已隐藏");
+    }
+    // 调节按钮已移除：固定显示封面（保留函数仅用于初始化 body 状态）
+    setCoverVisible(true);
+    const CARD_SIZES = ["md", "lg", "sm"];
+    const SIZE_BTN_MAP = { sm: "#sizeSmBtn", md: "#sizeMdBtn", lg: "#sizeLgBtn" };
+    function applyCardSize(size) {
+      if (!CARD_SIZES.includes(size)) size = "md";
+      document.body.classList.remove("card-sm", "card-md", "card-lg");
+      document.body.classList.add(`card-${size}`);
+      localStorage.setItem("openbiliclaw.cardSize", size);
+      CARD_SIZES.forEach((key) => {
+        const btn = $(SIZE_BTN_MAP[key]);
+        if (!btn) return;
+        const active = key === size;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+    // 卡片尺寸调节已移除：固定中等卡片
+    applyCardSize("md");
+    const CARD_DISPLAY_MODES = ["card", "mindback", "list"];
+    function setDisplayMode(mode) {
+      if (!CARD_DISPLAY_MODES.includes(mode)) mode = "card";
+      state.displayMode = mode;
+      storageSet(DISPLAY_MODE_KEY, mode);
+      grid.classList.remove("mindback-mode", "list-mode");
+      if (mode === "mindback") grid.classList.add("mindback-mode");
+      if (mode === "list") grid.classList.add("list-mode");
+      const pairs = [["#modeCardBtn", "card"], ["#modeMindbackBtn", "mindback"], ["#modeListBtn", "list"]];
+      pairs.forEach(([selector, key]) => {
+        const btn = $(selector);
+        if (!btn) return;
+        const active = key === mode;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      renderVideos();
+    }
+    // 显示模式调节已移除：固定网格卡片模式
+    setDisplayMode("card");
+    safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
     safeBind("#delightCommentInput", "keydown", (event) => {
       if (event.key === "Enter") respondDelight(state.delight, "send-comment");
       if (event.key === "Escape") closeDelightComposer();
@@ -4877,7 +5741,7 @@
     safeBind("#delightCommentInput", "blur", (event) => {
       autoCollapseComposer(document.querySelector(".delight-main-actions"), event, closeDelightComposer);
     });
-    safeBind("#resetFiltersBtn", "click", () => { state.query = ""; state.filter = "全部"; const input = $("#searchInput"); if (input) input.value = ""; renderAll(); });
+    safeBind("#resetFiltersBtn", "click", () => { state.query = ""; state.filter = "全部"; const input = $("#searchInput"); if (input) input.value = ""; reshuffle(); });
     safeBind("#searchInput", "input", (event) => { state.query = event.target.value || ""; renderAll(); });
     safeBind("#searchForm", "submit", (event) => { event.preventDefault(); state.query = $("#searchInput")?.value || ""; renderAll(); });
     window.addEventListener("resize", scheduleActivityRailHeightSync);
@@ -4969,6 +5833,7 @@
       await respondDelight(state.delight, response);
     }));
 
+    routeFromPath();
     restoreBackendEndpoint();
     restoreFrontendSettings();
     setSideDrawerOpen(!isMobileViewport() && storageGet(SIDE_DRAWER_OPEN_KEY) !== "0", { persist: false });

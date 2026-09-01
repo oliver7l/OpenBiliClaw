@@ -276,6 +276,7 @@ class ContinuousRefreshController:
     youtube_producer: Any | None = None
     x_producer: Any | None = None
     zhihu_producer: Any | None = None
+    rss_adapter_registry: Any | None = None
     scheduler_config: Any = field(default_factory=SchedulerConfig)
     presence: PresenceTracker = field(default_factory=PresenceTracker)
     # gui-init D1: optional init-aware gate. When it returns True (a guided init
@@ -1077,6 +1078,9 @@ class ContinuousRefreshController:
             asyncio.create_task(self._loop_youtube_producer()),
             asyncio.create_task(self._loop_x_producer()),
             asyncio.create_task(self._loop_zhihu_producer()),
+            asyncio.create_task(self._loop_rss_polling()),
+            asyncio.create_task(self._loop_xiaoyuzhou_polling()),
+            asyncio.create_task(self._loop_wechat_polling()),
             asyncio.create_task(self._loop_proactive_push()),
             asyncio.create_task(self._loop_keyword_planner()),
             asyncio.create_task(self._loop_image_cache_cleanup()),
@@ -1339,6 +1343,71 @@ class ContinuousRefreshController:
             with suppress(Exception):
                 await self._tick_zhihu_producer()
             await asyncio.sleep(self.check_interval_seconds)
+
+    async def _loop_rss_polling(self) -> None:
+        """RSS feed polling — fetch articles from configured RSS/Atom feeds.
+
+        Unlike other producers, RSS polling doesn't need LLM or quota
+        tracking. It runs on a fixed 1-hour interval.
+        """
+        while True:
+            subscriptions = getattr(self.scheduler_config, "rss_subscriptions", [])
+            if subscriptions and self.rss_adapter_registry is not None:
+                from openbiliclaw.sources.rss_tasks import run_rss_polling
+
+                with suppress(Exception):
+                    await run_rss_polling(
+                        self.rss_adapter_registry,
+                        self.database,
+                        subscriptions,
+                    )
+            await asyncio.sleep(3600)
+
+    async def _loop_xiaoyuzhou_polling(self) -> None:
+        """Xiaoyuzhou (小宇宙) podcast polling — fetch episodes from
+        configured podcast RSS feeds and inject into recommendation pool.
+
+        Runs on a fixed 2-hour interval.
+        """
+        while True:
+            subscriptions = getattr(
+                self.scheduler_config, "xiaoyuzhou_subscriptions", []
+            )
+            if subscriptions and self.rss_adapter_registry is not None:
+                from openbiliclaw.sources.xiaoyuzhou_tasks import (
+                    run_xiaoyuzhou_polling,
+                )
+
+                with suppress(Exception):
+                    await run_xiaoyuzhou_polling(
+                        self.rss_adapter_registry,
+                        self.database,
+                        subscriptions,
+                    )
+            await asyncio.sleep(7200)
+
+    async def _loop_wechat_polling(self) -> None:
+        """WeChat (微信公众号) RSS polling — fetch articles from configured
+        wechat2rss feeds and inject into recommendation pool.
+
+        Runs on a fixed 2-hour interval.
+        """
+        while True:
+            subscriptions = getattr(
+                self.scheduler_config, "wechat_subscriptions", []
+            )
+            if subscriptions and self.rss_adapter_registry is not None:
+                from openbiliclaw.sources.wechat_tasks import (
+                    run_wechat_polling,
+                )
+
+                with suppress(Exception):
+                    await run_wechat_polling(
+                        self.rss_adapter_registry,
+                        self.database,
+                        subscriptions,
+                    )
+            await asyncio.sleep(7200)
 
     async def _loop_keyword_planner(self) -> None:
         """P1.6: deficit-pulled merged keyword generation (flag-gated).
@@ -2060,6 +2129,49 @@ class ContinuousRefreshController:
                 max_per_group=max(3, self.pool_target_count // 10),
             )
             self.database.evict_stale_pool_items(max_age_days=14)
+            # Bound growth of the high-volume ``events`` table: low-value
+            # behavior events (views/scrolls/hovers/snapshots) are folded into
+            # the persistent soul/preference layers by the cognition watermark,
+            # so pruning them by age loses no profiling signal. Runs on this
+            # background loop, never the request loop.
+            _events_retention = int(
+                getattr(self.scheduler_config, "events_retention_days", 0) or 0
+            )
+            if _events_retention > 0:
+                try:
+                    self.database.prune_events_by_retention(retention_days=_events_retention)
+                except Exception:
+                    logger.debug("events retention prune failed", exc_info=True)
+            # Same maintenance pass: bound the terminal crawl-task rows
+            # (zhihu_tasks/dy_tasks) and rejected discovery_candidates, which
+            # previously grew without bound (~10KB/row payloads).
+            _task_retention = int(
+                getattr(self.scheduler_config, "task_history_retention_days", 0) or 0
+            )
+            if _task_retention > 0:
+                try:
+                    self.database.prune_task_history(retention_days=_task_retention)
+                except Exception:
+                    logger.debug("task history prune failed", exc_info=True)
+            # Same maintenance pass: bound ``recommendations`` (24h de-dup
+            # ledger, no readers past that window) and ``llm_usage`` (write-
+            # only cost ledger). Both grew without bound before.
+            _rec_retention = int(
+                getattr(self.scheduler_config, "recommendations_retention_days", 0) or 0
+            )
+            if _rec_retention > 0:
+                try:
+                    self.database.prune_recommendations(retention_days=_rec_retention)
+                except Exception:
+                    logger.debug("recommendations prune failed", exc_info=True)
+            _usage_retention = int(
+                getattr(self.scheduler_config, "llm_usage_retention_days", 0) or 0
+            )
+            if _usage_retention > 0:
+                try:
+                    self.database.prune_llm_usage(retention_days=_usage_retention)
+                except Exception:
+                    logger.debug("llm_usage prune failed", exc_info=True)
             # Snapshot delight count BEFORE precompute so we can detect
             # net new above-threshold delights and push a refresh event
             # to the popup (no per-item chrome notification — popup
