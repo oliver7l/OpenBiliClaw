@@ -42,6 +42,8 @@ data/
 user_profiles/
 memory_store/
 behavior_logs/
+# 已读库归档正文（archive_zhihu_readlib.py 写到仓库根 notes/），个人内容、非源码
+/notes/
 
 # Secrets / local config (never commit)
 config.toml
