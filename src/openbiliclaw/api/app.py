@@ -10218,7 +10218,9 @@ Keep keywords focused and specific. Remove stop words."""
             return JSONResponse({"source_types": [], "total": 0})
         try:
             rows = database.conn.execute(
-                "SELECT source_type, COUNT(*) AS n FROM articles GROUP BY source_type ORDER BY n DESC"
+                "SELECT source_type, COUNT(*) AS n FROM articles "
+                "WHERE COALESCE(status, 'unread') != 'hidden' "
+                "GROUP BY source_type ORDER BY n DESC"
             ).fetchall()
         except Exception:
             logger.exception("Failed to read article facets")
@@ -10252,7 +10254,7 @@ Keep keywords focused and specific. Remove stop words."""
     ) -> JSONResponse:
         """Update an article's reading status and/or tags."""
         # Mirrors Database.ARTICLE_STATUSES — keep the two in sync.
-        valid = {"unread", "reading", "finished", "archived"}
+        valid = {"unread", "reading", "finished", "archived", "hidden"}
         if payload.status is not None and payload.status not in valid:
             return JSONResponse(
                 {
@@ -10317,6 +10319,38 @@ Keep keywords focused and specific. Remove stop words."""
         return JSONResponse({"ok": ok, "id": article_id})
 
     @app.get("/api/articles/{article_id}/notes")
+            # 屏蔽回流画像：hidden 是用户主动表达的负向信号，插入事件由
+            # soul 管道作为「避开这类内容」的证据消费。失败不阻塞主操作。
+            if ok and payload.status == "hidden":
+                try:
+                    row = database.get_article(article_id)
+                    if row:
+                        from openbiliclaw.sources.event_format import (
+                            format_event_context,
+                        )
+
+                        context = format_event_context(
+                            event_type="article_dismissed",
+                            source_platform=str(row.get("source_type") or "阅读库"),
+                            title=str(row.get("title") or ""),
+                            author=str(row.get("author") or ""),
+                        )
+                        database.insert_event(
+                            "article_dismissed",
+                            url=str(row.get("url") or ""),
+                            title=str(row.get("title") or ""),
+                            context=context,
+                            metadata={
+                                "article_id": article_id,
+                                "source_type": str(row.get("source_type") or ""),
+                                "source_name": str(row.get("source_name") or ""),
+                                "author": str(row.get("author") or ""),
+                                "tags": row.get("tags") or "[]",
+                                "signal_strength": 0.8,
+                            },
+                        )
+                except Exception:
+                    logger.exception("Failed to record article_dismissed event")
     def list_article_notes(article_id: int) -> JSONResponse:
         """List notes / highlights for an article."""
         database = getattr(ctx, "database", None)

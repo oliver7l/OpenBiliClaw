@@ -1,5 +1,6 @@
 """Tests for the reading-library enhancement layer (progress / favorites /
-notes / AI summary / stats) and the article_finished event classification."""
+notes / AI summary / stats), the article_finished / article_dismissed event
+classification, and the terminal ``hidden`` (block / 不再出现) state."""
 
 from __future__ import annotations
 
@@ -133,3 +134,52 @@ def test_list_articles_includes_new_fields() -> None:
     item = next(i for i in items if i["id"] == aid)
     assert item["reading_percent"] == pytest.approx(30)
     assert item["favorited"] == 1
+
+
+def test_hidden_article_is_excluded_from_default_views() -> None:
+    """屏蔽后：列表 / 计数 / 搜索 / 来源分布都不再出现，但显式过滤仍可查。"""
+    db, _ = _make_db()
+    aid = _first_article_id(db)
+    assert db.update_article_status(aid, "hidden") is True
+
+    assert db.get_recent_articles(limit=10) == []
+    assert db.count_articles() == 0
+    assert db.search_articles(q="测试文章标题") == []
+    facets = db.conn.execute(
+        "SELECT COUNT(*) AS n FROM articles "
+        "WHERE COALESCE(status, 'unread') != 'hidden'"
+    ).fetchone()
+    assert int(facets["n"]) == 0
+
+    # 显式按 hidden 过滤仍能定位到，便于将来做「已屏蔽」管理视图。
+    hidden = db.get_recent_articles(limit=10, status="hidden")
+    assert [row["id"] for row in hidden] == [aid]
+    assert db.count_articles(status="hidden") == 1
+
+
+def test_hidden_survives_resync_of_same_url() -> None:
+    """重新抓取同一 URL 不得把已屏蔽文章拉回可见池：upsert 不触碰 status。"""
+    db, _ = _make_db()
+    aid = _first_article_id(db)
+    db.update_article_status(aid, "hidden")
+
+    db.upsert_article(
+        "rss", "观察站", "测试文章标题（更新）", "https://example.com/1",
+        author="作者A", summary="新摘要", content_text="新正文。" * 40,
+        tags=["科技"],
+    )
+    assert db.get_article(aid)["status"] == "hidden"
+    assert db.get_recent_articles(limit=10) == []
+
+
+def test_article_dismissed_classified_negative() -> None:
+    category, reason = classify_event_satisfaction(
+        {
+            "event_type": "article_dismissed",
+            "url": "https://example.com/1",
+            "title": "测试",
+            "metadata": {"article_id": 1, "source_type": "rss"},
+        }
+    )
+    assert category == "negative"
+    assert reason == "explicit_aversion"

@@ -28,9 +28,16 @@
     body {
       background: var(--bg);
       color: var(--ink);
-      font: 14px/1.6 "STKaiti", "KaiTi", "楷体", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, -apple-system, sans-serif;
+      /* STKaiti/KaiTi 只覆盖中文字形，拉丁字母与数字会回退到后面的
+         PingFang/system-ui 变成黑体。在楷体后插入 Georgia（衬线西文，
+         与楷体书卷气质协调），让英文/数字也保持手写衬线风格。 */
+      font-family: "STKaiti", "KaiTi", "楷体", Georgia, "Times New Roman", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, -apple-system, serif;
+      font-size: 14px;
+      line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
+    /* button/select/option/input 默认用浏览器 UI 字体，显式继承以保持全页统一。 */
+    button, select, option, input, textarea { font-family: inherit; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -130,6 +137,17 @@
     }
     .rl-fav:hover { background: var(--chip); }
     .rl-fav.on { color: var(--accent); }
+    .rl-block {
+      border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1;
+      color: var(--faint); padding: 2px 4px; border-radius: 6px;
+    }
+    .rl-block:hover { color: var(--danger, #b0564f); background: color-mix(in oklab, var(--danger, #b0564f), transparent 90%); }
+    .rl-origin {
+      font-size: 12px; line-height: 1.6; color: var(--muted); text-decoration: none;
+      border: 1px solid var(--line-strong); border-radius: 20px; padding: 2px 9px;
+      white-space: nowrap; background: var(--panel);
+    }
+    .rl-origin:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
     .rl-card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .rl-meta { color: var(--muted); font-size: 12px; }
     .rl-meta .rl-author::before { content: " · "; }
@@ -552,7 +570,30 @@
         ev.stopPropagation();
         toggleFav(a, fav);
       });
+      if (a.url) {
+        var origin = document.createElement("a");
+        origin.className = "rl-origin";
+        origin.href = a.url;
+        origin.target = "_blank";
+        origin.rel = "noopener noreferrer";
+        origin.textContent = "↗ 原文";
+        origin.title = "在新标签页打开原文";
+        origin.setAttribute("aria-label", "打开原文");
+        origin.addEventListener("click", function (ev) { ev.stopPropagation(); });
+        right.appendChild(origin);
+      }
       right.appendChild(fav);
+      var block = document.createElement("button");
+      block.className = "rl-block";
+      block.type = "button";
+      block.textContent = "⊘";
+      block.title = "屏蔽：以后不再出现";
+      block.setAttribute("aria-label", "屏蔽此内容，以后不再出现");
+      block.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        blockArticle(a, c);
+      });
+      right.appendChild(block);
       top.appendChild(right);
       c.appendChild(top);
 
@@ -634,6 +675,25 @@
           toast(next ? "已收藏" : "已取消收藏");
         } else { toast("操作失败"); }
       }).catch(function () { toast("操作失败"); });
+    }
+
+    function blockArticle(a, cardEl) {
+      fetch("/api/articles/" + a.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "hidden" })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) { toast("屏蔽失败"); return; }
+        if (cardEl && cardEl.parentNode) {
+          cardEl.style.transition = "opacity .18s";
+          cardEl.style.opacity = "0";
+          var host = cardEl.parentNode;
+          setTimeout(function () { if (cardEl.parentNode === host) host.removeChild(cardEl); }, 180);
+        }
+        state.total = Math.max(0, (state.total || 1) - 1);
+        els.total.textContent = state.total ? "· 共 " + state.total.toLocaleString() + " 篇" : "";
+        toast("已屏蔽，以后不再出现");
+      }).catch(function () { toast("屏蔽失败"); });
     }
 
     function updatePager(n) {

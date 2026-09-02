@@ -1176,11 +1176,12 @@ class ArticleUpdateIn(BaseModel):
     """Update a reading-library article.
 
     All fields are optional so a single endpoint covers status transitions
-    (unread → reading → finished → archived), manual tag edits, reading
-    progress, and favoriting in one PATCH.
+    (unread → reading → finished → archived, plus the terminal ``hidden``
+    "不再出现" block), manual tag edits, reading progress, and favoriting in
+    one PATCH.
     """
 
-    status: str | None = None  # 'unread' | 'reading' | 'finished' | 'archived'
+    status: str | None = None  # 'unread' | 'reading' | 'finished' | 'archived' | 'hidden'
     tags: list[str] | None = None
     percent: float | None = None  # 0-100 reading progress
     progress: str | None = None  # scroll anchor / position marker

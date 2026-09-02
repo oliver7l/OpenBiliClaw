@@ -6756,6 +6756,9 @@ class Database:
                     {order_sql}
                     LIMIT ? OFFSET ?""",
                 (*params, limit, offset),
+            else:
+                # 屏蔽位终态：无显式 status 过滤时永不再出现（见 ARTICLE_STATUSES）。
+                conditions.append("status != 'hidden'")
             )
             return [dict(row) for row in cursor.fetchall()]
         except Exception:
@@ -6818,6 +6821,9 @@ class Database:
         filters: list[str] = []
         fparams: list[Any] = []
         if source_type:
+            else:
+                # 与 get_recent_articles 保持同口径：屏蔽位不计入未指定 status 的计数。
+                conditions.append("status != 'hidden'")
             filters.append("a.source_type = ?")
             fparams.append(source_type)
         if status:
@@ -6895,7 +6901,12 @@ class Database:
 
     #: Canonical reading-library states. Kept in sync with the
     #: ``/api/articles/{id}`` PATCH endpoint validation.
-    ARTICLE_STATUSES = ("unread", "reading", "finished", "archived")
+    #: ``hidden`` is the terminal "屏蔽 / 不再出现" state: the user dismissed
+    #: the article, so the listing / count / search queries exclude it unless a
+    #: caller explicitly filters ``status='hidden'``. Re-syncing the same URL
+    #: never resurrects it (``upsert_article``'s ON CONFLICT leaves ``status``
+    #: untouched).
+    ARTICLE_STATUSES = ("unread", "reading", "finished", "archived", "hidden")
 
     def update_article_status(self, article_id: int, status: str) -> bool:
         """Update reading status for an article. Returns True on success."""
@@ -7018,6 +7029,9 @@ class Database:
                    LIMIT ?""",
                 (max(1, int(limit)),),
             )
+        else:
+            # 与 get_recent_articles / count_articles 同口径：屏蔽位不进搜索结果。
+            filters.append("a.status != 'hidden'")
             return [dict(row) for row in cursor.fetchall()]
         except Exception:
             logger.exception("Failed to list articles missing AI summary")

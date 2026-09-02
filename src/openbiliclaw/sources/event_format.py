@@ -79,6 +79,11 @@ _EXPLICIT_POSITIVE_EVENT_TYPES = frozenset(
     {"like", "coin", "favorite", "comment", "article_finished"}
 )
 
+# Explicit aversion event types — the user actively signalled "never again",
+# so intent is unambiguous without any dwell heuristics. Mirrors
+# ``article_finished``: the reading-library block button emits this.
+_EXPLICIT_NEGATIVE_EVENT_TYPES = frozenset({"article_dismissed"})
+
 # Feedback metadata vocabulary — set on `feedback` events emitted by the
 # extension's "👍 / 👎" UI and the recommendation feedback endpoint.
 _POSITIVE_FEEDBACK_TYPES = frozenset({"like"})
@@ -128,6 +133,9 @@ def classify_event_satisfaction(event: dict[str, Any]) -> tuple[SatisfactionCate
 
     if event_type in _EXPLICIT_POSITIVE_EVENT_TYPES:
         return ("positive", "explicit_engagement")
+
+    if event_type in _EXPLICIT_NEGATIVE_EVENT_TYPES:
+        return ("negative", "explicit_aversion")
 
     if event_type == "feedback":
         feedback_type = str(metadata.get("feedback_type") or "").strip().lower()
@@ -236,6 +244,7 @@ _EVENT_TYPE_LABELS: dict[str, str] = {
     "comment": "评论过",
     "share": "分享了",
     "article_finished": "读完了",
+    "article_dismissed": "屏蔽了",
 }
 
 _DEFAULT_SIGNAL_STRENGTH_BY_EVENT_TYPE: dict[str, float] = {
@@ -254,6 +263,7 @@ _DEFAULT_SIGNAL_STRENGTH_BY_EVENT_TYPE: dict[str, float] = {
     "snapshot": 0.1,
     "dislike": 1.0,
     "article_finished": 0.8,
+    "article_dismissed": 0.8,
 }
 
 
