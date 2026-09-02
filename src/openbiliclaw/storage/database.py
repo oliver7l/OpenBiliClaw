@@ -7646,7 +7646,7 @@ class Database:
 
     def get_feedback_aggregated(self) -> list[dict[str, Any]]:
         """Aggregate feedback per topic_group with like/dislike counts."""
-        return self.conn.execute("""
+        rows = self.conn.execute("""
             SELECT topic_group,
                    SUM(CASE WHEN action = 'like' THEN 1 ELSE 0 END) as likes,
                    SUM(CASE WHEN action = 'dislike' THEN 1 ELSE 0 END) as dislikes
@@ -7655,6 +7655,14 @@ class Database:
             GROUP BY topic_group
             ORDER BY likes DESC
         """).fetchall()
+        return [
+            {
+                "topic_group": str(r["topic_group"] or ""),
+                "likes": int(r["likes"] or 0),
+                "dislikes": int(r["dislikes"] or 0),
+            }
+            for r in rows
+        ]
 
     def get_interest_tags(self, limit: int = 20) -> list[dict[str, Any]]:
         """Aggregate interest tags from liked content.
@@ -7746,13 +7754,20 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_view_history_viewed_at
                 ON view_history(viewed_at);
         """)
+        # v0.3.x implicit feedback: dwell seconds per view
+        existing_cols = {
+            r["name"] for r in self.conn.execute("PRAGMA table_info(view_history)").fetchall()
+        }
+        if "dwell_seconds" not in existing_cols:
+            self.conn.execute("ALTER TABLE view_history ADD COLUMN dwell_seconds REAL DEFAULT 0")
+            self.conn.commit()
 
     def insert_view_history(self, item: dict[str, Any]) -> None:
         """Record a content view / click."""
         self.conn.execute(
             """INSERT INTO view_history
-               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(item.get("bvid", "")),
                 str(item.get("title", "") or ""),
@@ -7762,9 +7777,73 @@ class Database:
                 str(item.get("up_name", "") or item.get("author_name", "") or ""),
                 float(item.get("quality_score", 0) or 0),
                 float(item.get("fit_score", 0) or 0),
+                float(item.get("dwell_seconds", 0) or 0),
             ),
         )
         self.conn.commit()
+
+    def update_view_dwell(self, bvid: str, dwell_seconds: float) -> bool:
+        """Attach dwell seconds to the most recent view of bvid."""
+        row = self.conn.execute(
+            "SELECT id FROM view_history WHERE bvid = ? ORDER BY id DESC LIMIT 1",
+            (bvid,),
+        ).fetchone()
+        if not row:
+            return False
+        self.conn.execute(
+            "UPDATE view_history SET dwell_seconds = ? WHERE id = ?",
+            (float(dwell_seconds), row["id"]),
+        )
+        self.conn.commit()
+        return True
+
+    def get_dwell_scores(self, days: int = 14) -> dict[str, float]:
+        """Aggregate dwell-weighted interest per topic_group (implicit feedback).
+
+        Dwell per view is capped at 600s (10 min) so long abandoned tabs
+        don't dominate. A topic accumulates toward 1.0 with ~30 min of
+        total capped dwell.
+        """
+        import datetime
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        try:
+            rows = self.conn.execute(
+                """SELECT topic_group,
+                          SUM(MIN(dwell_seconds, 600)) AS dwell_sum,
+                          COUNT(*) AS views,
+                          SUM(CASE WHEN dwell_seconds >= 60 THEN 1 ELSE 0 END) AS deep_views,
+                          SUM(CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END) AS quick_exits
+                   FROM view_history
+                   WHERE viewed_at >= ? AND COALESCE(topic_group, '') != ''
+                   GROUP BY topic_group""",
+                (cutoff,),
+            ).fetchall()
+        except Exception:
+            return {}
+        scores: dict[str, float] = {}
+        for r in rows:
+            dwell_sum = float(r["dwell_sum"] or 0)
+            deep = int(r["deep_views"] or 0)
+            quick = int(r["quick_exits"] or 0)
+            # base: capped dwell accumulation, quick exits erode interest
+            base = min(1.0, dwell_sum / 1800.0)
+            penalty = 0.05 * quick
+            boost = 0.1 * deep
+            scores[str(r["topic_group"])] = max(0.0, min(1.0, base + boost - penalty))
+        return scores
+
+    def get_total_view_count(self, days: int = 30) -> int:
+        """Count views recorded in the last N days (implicit feedback volume)."""
+        import datetime
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        try:
+            row = self.conn.execute(
+                "SELECT COUNT(*) AS cnt FROM view_history WHERE viewed_at >= ?",
+                (cutoff,),
+            ).fetchone()
+            return int(row["cnt"]) if row else 0
+        except Exception:
+            return 0
 
     def get_recent_views(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get the most recent view history."""

@@ -159,6 +159,39 @@ class RankAgent:
             return {}
 
     @staticmethod
+    def compute_dwell_scores(db: Any) -> dict[str, float]:
+        """Compute implicit dwell-weighted interest per topic_group.
+
+        Backed by view_history dwell aggregation: topics the user reads
+        longer score higher; quick-exit topics erode.
+        """
+        try:
+            return db.get_dwell_scores(days=14) or {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def compute_dwell_beta(db: Any) -> float:
+        """Compute beta (0-0.15) — confidence in implicit dwell signals.
+
+        Formula: beta = min(0.15, views / (views + 30) * 0.15 * 1.15)
+        The Michaelis-Menten ramp is scaled by (200+30)/200 = 1.15 so the
+        cap engages at 200 views (the old form asymptoted to 0.15 but never
+        reached it). Concave, so a few views already teach meaningfully.
+        - 0 views   → beta = 0.0 (no implicit data, pure rules)
+        - 10 views  → beta ≈ 0.043
+        - 50 views  → beta ≈ 0.108
+        - 200+      → beta = 0.15 (cap)
+        """
+        try:
+            views = db.get_total_view_count(days=30)
+            if views <= 0:
+                return 0.0
+            return min(0.15, views / (views + 30) * 0.15 * 1.15)
+        except Exception:
+            return 0.0
+
+    @staticmethod
     def _profile_fit_score(text: str, profile_keywords: list[tuple[str, float]]) -> float:
         """Compute fit_score from profile keyword matching."""
         if not profile_keywords or not text:
@@ -177,9 +210,14 @@ class RankAgent:
         db: Any,
         profile_keywords: list[tuple[str, float]],
         q_embed: list[float] | None = None,
-        emb_service: Any = None,
+        content_embeds: dict[str, list[float]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Score candidates and return ranked list with diversity mix."""
+        """Score candidates and return ranked list with diversity mix.
+
+        ``content_embeds`` maps bvid → pre-computed embedding vector. It
+        must be computed by the caller in an async context — embedding
+        inside this sync method would deadlock the event loop.
+        """
 
         profile_domains = {k for k, w in profile_keywords if w >= 0.5}
 
@@ -206,48 +244,40 @@ class RankAgent:
                 "semantic_score": 0.0,
             })
 
-        # --- semantic re-ranking ---
-        if q_embed and emb_service and any(q_embed):
+        # --- semantic re-ranking (embeddings pre-computed by the caller) ---
+        if q_embed and any(q_embed) and content_embeds:
             from openbiliclaw.llm.embedding import cosine_similarity
             for s in scored_items:
-                r = s["row"]
-                content_text = " ".join(filter(None, [
-                    str(r["title"] or ""),
-                    str(r["body_text"] or "")[:500],
-                    str(r["topic_group"] or ""),
-                ]))
-                if not content_text.strip():
-                    continue
-                try:
-                    import asyncio
-                    c_embed = asyncio.run_coroutine_threadsafe(
-                        emb_service.embed(content_text),
-                        asyncio.get_event_loop(),
-                    ).result()
-                    if c_embed and any(c_embed):
-                        s["semantic_score"] = cosine_similarity(q_embed, c_embed)
-                except Exception:
-                    pass
+                c_embed = content_embeds.get(str(s["row"]["bvid"] or ""))
+                if c_embed and any(c_embed):
+                    s["semantic_score"] = cosine_similarity(q_embed, c_embed)
 
-        # --- alpha decay: hybrid scoring ---
+        # --- alpha decay + implicit dwell: hybrid scoring ---
         alpha = RankAgent.compute_learning_level(db)
         learned_scores = RankAgent.compute_learned_scores(db) if alpha > 0 else {}
+        beta = RankAgent.compute_dwell_beta(db)
+        dwell_scores = RankAgent.compute_dwell_scores(db) if beta > 0 else {}
 
         for s in scored_items:
             r = s["row"]
             f = s["fit_score"]
             sem = s["semantic_score"]
             qs = s["quality_score"]
-            topic = str(r.get("topic_group", ""))
+            topic = str(r["topic_group"] or "")
             learned = learned_scores.get(topic, 0.5)
+            dwell = dwell_scores.get(topic, 0.5) if dwell_scores else 0.5
 
             if sem > 0:  # semantic available
                 rule_combined = f * 0.5 + sem * 0.3 + qs * 0.2
             else:
                 rule_combined = f * 0.6 + qs * 0.4
 
-            rule_weight = 1.0 - alpha
-            s["combined"] = rule_combined * rule_weight + learned * alpha
+            rule_weight = max(0.0, 1.0 - alpha - beta)
+            s["combined"] = (
+                rule_combined * rule_weight
+                + learned * alpha
+                + dwell * beta
+            )
 
         # --- sort ---
         scored_items.sort(key=lambda x: x["combined"], reverse=True)
@@ -259,10 +289,10 @@ class RankAgent:
         random.shuffle(high_fit)
         random.shuffle(low_fit)
 
-        return {"high_fit": high_fit, "low_fit": low_fit, "alpha": alpha}
+        return {"high_fit": high_fit, "low_fit": low_fit, "alpha": alpha, "beta": beta}
 
     @staticmethod
-    def build_context_text(intent: dict[str, Any], alpha: float) -> str:
+    def build_context_text(intent: dict[str, Any], alpha: float, beta: float = 0.0) -> str:
         """Build a human-readable session context string."""
         parts = []
         if intent.get("platform_filter"):
@@ -276,7 +306,9 @@ class RankAgent:
         if intent.get("keywords"):
             parts.append(f"「{' '.join(intent['keywords'])}」")
         if alpha > 0.01:
-            parts.append(f"学习: {alpha:.0%}")
+            parts.append(f"点赞学习: {alpha:.0%}")
+        if beta > 0.01:
+            parts.append(f"停留学习: {beta:.0%}")
         return " · ".join(parts) if parts else ""
 
 

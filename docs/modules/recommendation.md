@@ -70,6 +70,8 @@
 | v0.3.144 推荐理由缓存前缀保护 | ✅ | 批量池文案、单条实时文案和备用 delight reason 的 prompt 已经携带完整结构化画像；调用 `LLMService.complete_structured_task()` 时会在支持路径上设置 `inject_core_memory=False`，避免再追加一份 core memory，减少 token 并稳定 provider prompt-cache 前缀 |
 | v0.3.144 推荐理由双 worker + 默认 30 | ✅ | `_drain_expression_copy()` 不再对所有待生成 batch 一次性 `gather`，而是默认 batch_size=30、用 2 个 worker 顺序领取 batch；真实 provider 并发测试显示 45 条推荐文案偶发 JSON 解析失败，因此推荐理由保持保守批量；批量解析失败会在当前 worker 内先拆半重试，半批仍失败才退到单条兜底；`_expression_lock` 仍串行化多入口，热重载 / shutdown 的 `CancelledError` 不会被当作普通 batch 失败吞掉 |
 | v0.3.x XHS 自发布内容过滤 | ✅ | `get_pool_candidates` / `count_pool_candidates` / `count_pool_readiness` 及后台整理查询（evaluation / copy / delight）在 SQL 层排除已知的自发布小红书行；`_purge_self_authored_pool_items` 同时匹配 `up_name` 和 `author_name`；self_info 首次到达或变更时立即 purge 已入池内容。`RecommendationEngine` 通过 `xhs_self_info_provider` 回调从 runtime state 获取 nickname，`Database` 保持纯存储层不直接读 runtime state |
+| v0.3.152 agent-recommend 隐式停留（dwell）反馈 | ✅ | 桌面 Web 新增 `POST /api/view-record`（浏览即隐式反馈，可带 `dwell_seconds`）、`POST /api/view-dwell`（把停留时长写回该 bvid 最近一条 view，带 `ge=0 / le=86400` 校验）、`GET /api/view-history`；`view_history` 迁移新增 `dwell_seconds REAL DEFAULT 0`。`RankAgent.score_and_rank` 加入停留置信度 `beta`（`compute_dwell_beta = min(0.15, views/(views+30)*0.15*1.15)`，1.15 归一使 **200 views 正好封顶** 0.15，旧式渐近永不触顶），dwell 按 `topic_group` 聚合（`get_dwell_scores`：单次停留 600s 封顶、`base=SUM(capped)/1800`、deep≥60s +0.1、quick<15s −0.05）；最终 `combined = rule_combined*max(0,1-alpha-beta) + learned*alpha + dwell*beta`。池子排序还会排除近 7 天已看内容（候选足够时才排，避免空结果） |
+| v0.3.152 agent-recommend 热路径死锁 / 延迟修复 | ✅ | 修 `/api/agent-recommend` 事件循环死锁与串行延迟：内容向量不再在同步 `RankAgent` 内 `asyncio.run` 实时打 provider API，改为**只读 MMR 预热缓存** `EmbeddingService.lookup_cached`（cache key 统一走 `llm.embedding.mmr_cache_text(title, description[:160])`，`RecommendationEngine._mmr_embedding_text` 已委托同一函数，预热侧与 agent 侧命中同一 L2 key）；整段 `score_and_rank`（含其内部 `compute_learning_level / compute_learned_scores / compute_dwell_*` 同步 DB 聚合）包进 `run_in_executor` 工作线程，热路径零 API、零事件循环阻塞。`/api/agent-recommend` 的候选 SELECT 补 `description` 列以对齐缓存 key；未命中预热的候选回退到 fit+quality+dwell（无语义分）。新增 `tests/test_recommendation_rankagent.py` / `test_view_history_dwell.py` / `test_api_view_feedback.py` 覆盖此前 0 测试的排序内核、dwell 存储与 view-* 路由 |
 
 ## 公开 API
 
@@ -305,6 +307,28 @@ Content-Type: application/json
 正向保留跨重灌生效：`GET /api/delight/pending-batch` 以 `include_liked=True` 调用 `get_delight_candidates`，已点喜欢（`feedback_type='like'`）的候选在 popup 重开 / `delight.refreshed` 重灌后仍保留队列位置，并以 `state="liked"` 下发供三端恢复「已喜欢」展示；`view` / `dismiss` / `dislike`（置 `delight_notified=1`）会让候选退出重灌队列。WS 主动推送（`get_pending_delight`）、候选计数与 CLI 仍排除已喜欢项，避免把喜欢过的内容当新惊喜重复推送。
 
 惊喜与普通推荐互斥：被惊喜通道认领的内容（已作为惊喜送达过，或当前满足惊喜队列条件——delight 分数达阈值且 reason/hook 非空）会被 `get_pool_candidates` / `count_pool_candidates` 的 servable 闸门排除，普通推荐 serve 与「还有 N 条」计数都不会再出同一条内容。
+
+### RankAgent（会话式 `/api/agent-recommend` 排序）
+
+```python
+from openbiliclaw.recommendation.agents import RankAgent
+```
+
+`RankAgent` 承载 `/api/agent-recommend` 这条**会话式**排序路径，与主推荐的 `RecommendationEngine.serve()` 有意分离（两条链路各自独立，不共享排序逻辑）。它按规则分 + 语义分 + 学习分（点赞 `alpha`）+ 隐式停留分（`beta`）混合打分，再做 80/20 多样性配比。
+
+```python
+RankAgent.score_and_rank(
+    rows, intent, db, profile_keywords,
+    q_embed=None,        # 查询向量：调用方在 async 上下文用 emb_service.embed(q) 算好
+    content_embeds=None, # {bvid: 向量}：调用方**必须**在 async 侧预计算
+) -> {"high_fit", "low_fit", "alpha", "beta"}
+```
+
+- `content_embeds` 只能由调用方预先算好传入——**旧的 `emb_service=` 形参已移除**：在同步的 `score_and_rank` 内实时打 embedding 会死锁事件循环。`app.py` 用 `EmbeddingService.lookup_cached(mmr_cache_text(title, description))` **只读** MMR 预热缓存填充它，热路径零 API；未命中预热的候选 `semantic_score=0`，回退 fit+quality+dwell。整段 `score_and_rank`（含下列 DB 聚合）在 `run_in_executor` 工作线程里执行，不阻塞事件循环。
+- `compute_dwell_beta(db) -> float`：`min(0.15, views/(views+30)*0.15*1.15)`，随近 30 天浏览量单调升到 0.15，**200 views 正好封顶**（1.15 归一系数修正了旧式永不触顶的问题）。
+- `compute_dwell_scores(db) -> dict[topic_group, 0..1]`：委托 `db.get_dwell_scores(days=14)`。
+- `build_context_text(intent, alpha, beta=0.0) -> str`：拼会话上下文标签，`alpha>0.01` 显示「点赞学习 x%」、`beta>0.01` 显示「停留学习 x%」。
+- 缓存 key 单一来源：`openbiliclaw.llm.embedding.mmr_cache_text(title, description)`（`RecommendationEngine._mmr_embedding_text` 已委托它），确保预热侧与 agent 侧写/读同一 L2 key，否则永不命中。
 
 ### PoolCurator
 

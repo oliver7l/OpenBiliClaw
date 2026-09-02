@@ -341,7 +341,7 @@ class RecommendationEngine:
             return None
         try:
             rows = database.batch_get_quality_scores(bvids)
-            scores = {row["bvid"]: float(row["quality_score"] or 0.0) for row in rows if row.get("quality_score")}
+            scores = {row["bvid"]: float(row["quality_score"] or 0.0) for row in rows if row["quality_score"]}
             return scores if scores else None
         except Exception:
             logger.exception("Failed to fetch quality scores for re-ranking")
@@ -2116,7 +2116,9 @@ class RecommendationEngine:
         agree on the cache key — otherwise the warm side fills L2 with
         one shape while serve() looks up a different one and never hits.
         """
-        return (f"{content.title or ''} {(content.description or '')[:160]}").strip()[:200]
+        from openbiliclaw.llm.embedding import mmr_cache_text
+
+        return mmr_cache_text(content.title, content.description)
 
     async def _fetch_candidate_embeddings(
         self,

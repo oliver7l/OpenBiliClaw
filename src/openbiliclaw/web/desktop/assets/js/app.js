@@ -40,6 +40,7 @@
     ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
     ENDPOINTS.interestTags = "/api/interest-tags";
     ENDPOINTS.viewRecord = "/api/view-record";
+    ENDPOINTS.viewDwell = "/api/view-dwell";
     ENDPOINTS.viewHistory = "/api/view-history";
 
     const state = {
@@ -3969,8 +3970,8 @@
             card.innerHTML = agentRecommendCardHtml(item, query);
             card.addEventListener("click", (e) => {
               if (e.target.closest("[data-action]") || e.target.closest(".feedback-btn") || e.target.closest(".video-card-link")) return;
-              // Track view (implicit feedback)
-              trackAgentRecommendView(item);
+              // Track view + dwell (implicit feedback)
+              beginDwellTracking(item);
               const url = item.content_url;
               if (url) window.open(url, "_blank", "noopener,noreferrer");
             });
@@ -4070,23 +4071,76 @@
         .join("");
     }
 
-    // --- Feedback (like / dislike) ---
-    function trackAgentRecommendView(item) {
+    // --- Implicit feedback: dwell-time tracking (停留时长) ---
+    const DWELL_CAP_SECONDS = 1800; // cap at 30 min per view
+    const DWELL_MIN_SECONDS = 1;    // ignore accidental clicks
+
+    function getPendingDwell() {
+      try { return JSON.parse(sessionStorage.getItem("pendingDwell") || "null"); }
+      catch { return null; }
+    }
+
+    function setPendingDwell(entry) {
+      try { sessionStorage.setItem("pendingDwell", JSON.stringify(entry)); }
+      catch { /* ignore */ }
+    }
+
+    function clearPendingDwell() {
+      try { sessionStorage.removeItem("pendingDwell"); }
+      catch { /* ignore */ }
+    }
+
+    function sendDwellReport(bvid, dwellSeconds, useBeacon) {
+      if (!bvid || dwellSeconds < DWELL_MIN_SECONDS) return;
+      const payload = JSON.stringify({ bvid, dwell_seconds: Math.round(dwellSeconds) });
+      if (useBeacon && navigator.sendBeacon) {
+        try {
+          navigator.sendBeacon(ENDPOINTS.viewDwell, new Blob([payload], { type: "application/json" }));
+          return;
+        } catch { /* fall through to fetch */ }
+      }
+      void requestJson(ENDPOINTS.viewDwell, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).catch(() => {});
+    }
+
+    // Settle the pending view: compute dwell since open and report it.
+    function finalizePendingDwell(useBeacon = false) {
+      const pending = getPendingDwell();
+      if (!pending || !pending.openedAt) { clearPendingDwell(); return; }
+      clearPendingDwell();
+      const dwellSeconds = Math.min((Date.now() - pending.openedAt) / 1000, DWELL_CAP_SECONDS);
+      sendDwellReport(pending.bvid, dwellSeconds, useBeacon);
+    }
+
+    // Record the view immediately, then track dwell until user returns.
+    function beginDwellTracking(item) {
       if (!item || !item.bvid) return;
+      finalizePendingDwell();
       void requestJson(ENDPOINTS.viewRecord, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bvid: item.bvid,
           title: item.title || "",
-          source_platform: item.source_platform || "",
-          topic_group: item.topic_group || "",
+          source_platform: item.source_platform || item.platform || "",
+          topic_group: item.topic_group || item.topic || item.topic_label || "",
           content_url: item.content_url || "",
-          up_name: item.up_name || "",
+          up_name: item.up_name || item.up || "",
           quality_score: item.quality_score || 0,
         }),
       }).catch(() => {});
+      setPendingDwell({ bvid: item.bvid, openedAt: Date.now() });
     }
+
+    // User returns to this tab → settle the pending dwell.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") finalizePendingDwell();
+    });
+    // Page closed with a pending view → best-effort beacon report.
+    window.addEventListener("pagehide", () => finalizePendingDwell(true));
 
     function sendFeedback(bvid, action, item) {
       const payload = { bvid, action };
@@ -4178,6 +4232,7 @@
       const url = contentUrl(item);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       trackRecommendationClick(item);
+      beginDwellTracking(item);
       const statusLine = card?.querySelector(".status-line");
       if (statusLine) statusLine.textContent = url ? "已打开真实内容链接，点击信号会在后台记录。" : "后端没有返回可打开链接；点击信号会在后台记录。";
       showToast(url ? `打开：${item.title}` : "后端没有返回可打开链接");

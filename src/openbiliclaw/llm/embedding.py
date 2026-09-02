@@ -52,6 +52,19 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def mmr_cache_text(title: str, description: str) -> str:
+    """Canonical text shape for the content-embedding cache key.
+
+    Single source of truth shared by the MMR prewarm side and the
+    ``/api/agent-recommend`` (RankAgent) side so both fill/look up the
+    same L2 keys. Must stay identical to
+    ``RecommendationEngine._mmr_embedding_text`` (which delegates here):
+    ``title + description[:160]``, trimmed to 200. ``EmbeddingService``
+    applies ``.strip().lower()[:200]`` normalization on top.
+    """
+    return f"{title or ''} {(description or '')[:160]}".strip()[:200]
+
+
 class EmbeddingCache:
     """SQLite-backed persistent embedding cache (L2).
 

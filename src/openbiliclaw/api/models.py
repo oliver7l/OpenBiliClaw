@@ -811,6 +811,40 @@ class WatchLaterAddIn(BaseModel):
     note: str = ""
 
 
+class ViewRecordIn(BaseModel):
+    """Payload to record a content view (implicit feedback)."""
+
+    bvid: str = Field(min_length=1)
+    title: str = ""
+    source_platform: str = ""
+    topic_group: str = ""
+    content_url: str = ""
+    up_name: str = ""
+    quality_score: float = 0.0
+    fit_score: float = 0.0
+    dwell_seconds: float = 0.0
+
+
+class ViewDwellIn(BaseModel):
+    """Payload to attach dwell seconds to the latest view of a bvid."""
+
+    bvid: str = Field(min_length=1)
+    dwell_seconds: float = Field(ge=0.0, le=86400.0)
+
+
+class ViewHistoryOut(BaseModel):
+    """One row in the view history (implicit feedback log)."""
+
+    bvid: str
+    title: str = ""
+    source_platform: str = ""
+    topic_group: str = ""
+    content_url: str = ""
+    up_name: str = ""
+    viewed_at: str = ""
+    dwell_seconds: float = 0.0
+
+
 class WatchLaterStateResponse(BaseModel):
     """Whether a single video is bookmarked, plus the total count."""
 

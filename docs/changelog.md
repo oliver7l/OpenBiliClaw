@@ -4,6 +4,15 @@
 
 ---
 
+## v0.3.152: agent-recommend 隐式停留反馈与热路径修复（2026-09-02）
+
+后端源码走 `backend-v0.3.152`。
+
+- **`/api/agent-recommend` 隐式停留（dwell）反馈**：桌面 Web 新增 `POST /api/view-record`（浏览即隐式反馈，可带 `dwell_seconds`）、`POST /api/view-dwell`（把停留时长写回该 bvid 最近一条 view）、`GET /api/view-history`；`view_history` 迁移新增 `dwell_seconds REAL` 列。`RankAgent.score_and_rank` 引入停留置信度 `beta`，按 `topic_group` 聚合 dwell（单次 600s 封顶、deep≥60s 加权、quick<15s 侵蚀），最终打分 `combined = rule*(1-alpha-beta) + learned*alpha + dwell*beta`；池子排序在候选充足时排除近 7 天已看内容。
+- **修复 `/api/agent-recommend` 事件循环死锁与串行延迟**：内容 embedding 不再在同步 `RankAgent` 内 `asyncio.run` 实时打 provider API，改为只读 MMR 预热缓存（`EmbeddingService.lookup_cached`），并把整段 `score_and_rank`（含其内部同步 DB 聚合）放进 `run_in_executor` 工作线程执行；候选 SELECT 补 `description` 列。MMR embedding 缓存 key 收敛为单一来源 `llm.embedding.mmr_cache_text`，预热侧与 agent 侧命中同一 L2 key。
+- **修正 dwell `beta` 封顶**：`compute_dwell_beta` 由 `min(0.15, views/(views+30)*0.15)`（渐近、永不触顶）改为 `*1.15` 归一，使 200 views 正好达到 0.15 上限。
+- **补齐测试**：新增 `test_recommendation_rankagent.py` / `test_view_history_dwell.py` / `test_api_view_feedback.py`，覆盖此前 0 测试的排序内核、dwell 存储与 view-* 路由（27 例）。
+
 ## v0.3.146 / extension v0.3.97 / desktop v0.3.146: 知乎长 ID 链接保真（2026-06-26）
 
 后端源码走 `backend-v0.3.146`，浏览器插件走 `extension-v0.3.97`，桌面安装包走 `desktop-v0.3.146`。

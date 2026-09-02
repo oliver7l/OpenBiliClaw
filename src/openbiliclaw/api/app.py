@@ -7,6 +7,7 @@ import ipaddress
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import shutil
@@ -126,6 +127,9 @@ from openbiliclaw.api.models import (
     UpdateApplyIn,
     UpdateCheckIn,
     UpdateStatusResponse,
+    ViewDwellIn,
+    ViewHistoryOut,
+    ViewRecordIn,
     WatchLaterAddIn,
     WatchLaterItem,
     WatchLaterListResponse,
@@ -4250,15 +4254,6 @@ def create_app(
         except Exception:
             return InterestTagsResponse(tags=[])
 
-    class ViewHistoryOut(BaseModel):
-        bvid: str
-        title: str = ""
-        source_platform: str = ""
-        topic_group: str = ""
-        content_url: str = ""
-        up_name: str = ""
-        viewed_at: str = ""
-
     @app.get("/api/view-history")
     async def get_view_history(
         limit: int = Query(default=50, ge=1, le=200),
@@ -4271,17 +4266,8 @@ def create_app(
             rows = db.get_recent_views(limit=limit)
             return [ViewHistoryOut(**r) for r in rows]
         except Exception:
+            logger.exception("view-history failed")
             return []
-
-    class ViewRecordIn(BaseModel):
-        bvid: str = Field(min_length=1)
-        title: str = ""
-        source_platform: str = ""
-        topic_group: str = ""
-        content_url: str = ""
-        up_name: str = ""
-        quality_score: float = 0.0
-        fit_score: float = 0.0
 
     @app.post("/api/view-record")
     async def record_view(payload: ViewRecordIn) -> dict:
@@ -4293,6 +4279,20 @@ def create_app(
             db.insert_view_history(payload.model_dump())
             return {"ok": True}
         except Exception:
+            logger.exception("view-record failed")
+            return {"ok": False}
+
+    @app.post("/api/view-dwell")
+    async def report_view_dwell(payload: ViewDwellIn) -> dict:
+        """Attach dwell seconds to the latest view of a bvid (implicit feedback)."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return {"ok": False}
+        try:
+            updated = db.update_view_dwell(payload.bvid, payload.dwell_seconds)
+            return {"ok": updated}
+        except Exception:
+            logger.exception("view-dwell failed")
             return {"ok": False}
 
     # Multi-turn session cache: {session_id: {where_clauses, params, keywords}}
@@ -4451,7 +4451,7 @@ Keep keywords focused and specific. Remove stop words."""
             fetch_limit = min(limit * 3, 200)  # fetch more for sorting + diversity
             sql = f"""
                 SELECT bvid, title, up_name, source_platform, content_type,
-                       cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
+                       cover_url, content_url, body_text, description, pool_status, quality_score, quality_reason,
                        topic_group, pool_expression
                 FROM content_cache
                 WHERE {' AND '.join(where_clauses)}
@@ -4464,26 +4464,60 @@ Keep keywords focused and specific. Remove stop words."""
             if not rows:
                 return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
 
+            # Implicit feedback: exclude content viewed in the last 7 days,
+            # but only when enough candidates remain (avoid empty results).
+            try:
+                viewed_bvids = await loop.run_in_executor(None, lambda: db.get_viewed_bvids(days=7))
+            except Exception:
+                viewed_bvids = set()
+            if viewed_bvids and len(rows) > limit:
+                unviewed = [r for r in rows if str(r["bvid"]) not in viewed_bvids]
+                if len(unviewed) >= max(1, limit // 2):
+                    rows = unviewed
+
             # --- 6. RankAgent: score, semantic re-rank, diversity mix ---
             profile_keywords = _load_interest_keywords()
 
-            # Get query embedding for semantic search
+            # Semantic search: embed only the query (single, cache-backed
+            # await). Content vectors are read from the MMR prewarm cache via
+            # lookup_cached using the canonical key — never an API round-trip
+            # on this hot path. All synchronous work (cache reads + RankAgent's
+            # DB aggregation queries) runs in a worker thread so it does not
+            # block the event loop.
             emb_service = getattr(soul_engine, "_embedding_service", None) if soul_engine else None
             q_embed = None
             if emb_service is not None:
                 try:
                     q_embed = await emb_service.embed(q)
                 except Exception:
-                    pass
+                    q_embed = None
 
-            rank_result = RankAgent.score_and_rank(
-                rows=rows,
-                intent=intent,
-                db=db,
-                profile_keywords=profile_keywords,
-                q_embed=q_embed,
-                emb_service=emb_service,
-            )
+            def _rank_offloop() -> dict[str, Any]:
+                content_embeds: dict[str, list[float]] = {}
+                if emb_service is not None and q_embed and any(q_embed):
+                    from openbiliclaw.llm.embedding import mmr_cache_text
+
+                    lookup = getattr(emb_service, "lookup_cached", None)
+                    if callable(lookup):
+                        for r in rows:  # cache-only: no API, cheap even for full pool
+                            ctext = mmr_cache_text(
+                                str(r["title"] or ""), str(r["description"] or "")
+                            )
+                            if not ctext:
+                                continue
+                            vec = lookup(ctext)
+                            if vec and any(vec):
+                                content_embeds[str(r["bvid"] or "")] = vec
+                return RankAgent.score_and_rank(
+                    rows=rows,
+                    intent=intent,
+                    db=db,
+                    profile_keywords=profile_keywords,
+                    q_embed=q_embed,
+                    content_embeds=content_embeds,
+                )
+
+            rank_result = await loop.run_in_executor(None, _rank_offloop)
             alpha = rank_result.get("alpha", 0.0)
             high_fit = rank_result["high_fit"]
             low_fit = rank_result["low_fit"]
@@ -4529,7 +4563,7 @@ Keep keywords focused and specific. Remove stop words."""
                 ))
             # Build session context with RankAgent
             intent["keywords"] = keywords
-            session_context = RankAgent.build_context_text(intent, alpha)
+            session_context = RankAgent.build_context_text(intent, alpha, rank_result.get("beta", 0.0))
             if session_id:
                 _agent_session_cache[session_id] = {
                     "exclude_platforms": list(exclude_platforms),
@@ -4542,6 +4576,7 @@ Keep keywords focused and specific. Remove stop words."""
                 }
             return PoolAllResponse(items=final_items, total=total, available=total, raw=0, pending=0, session_context=session_context)
         except Exception:
+            logger.exception("agent-recommend failed (q=%r)", q)
             return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
 
     @app.get("/api/runtime-status", response_model=RuntimeStatusResponse)
