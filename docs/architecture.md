@@ -73,6 +73,7 @@ OpenBiliClaw 采用分层架构设计，从上到下依次为：
 - 推荐排序与朋友式推荐表达生成；统一从候选池读取
 - `/api/recommendation-click` 会保留 `content_id / content_url / source_platform`：插件、移动 Web 或桌面 Web 打开推荐内容后，后端把点击写成对应来源的统一事件和 `recommendation_click` 强画像信号；只传 `recommendation_id` 时会从 `recommendations + content_cache` 回填跨源字段，避免 YouTube / 抖音等 ID 被套成 B 站 URL。
 - `PoolCurator` 五维评分（relevance · freshness · topic_fatigue · source_monotony · serendipity）
+- 探索轴（`bandit.py`，默认关闭）：五维全是确定性评分，`topic_fatigue` 只压热门不抬冷门，未点过的兴趣会永久沉底。`SlidingWindowThompsonSampler` 按 `(source_strategy, topic_group)` 分臂，在 `Database.get_bandit_impressions()` 给出的最近 `ts_window_days` 天曝光上维护 Beta 后验（奖励 = 显式 `like/save/favorite` 或单次停留 ≥ `ts_deep_dwell_seconds`，与 `get_dwell_scores` 同口径），评分追加 `weight × (θ − posterior_mean)` 的**零均值**项——只在后验不确定的臂上注入方差，不系统性重排池子。臂快照走 `ScoringContext.arm_stats`，同步 / 异步两条评分路径共用；`[recommendation].thompson_sampling_enabled` 为 `false` 时分数逐字不变，查询异常降级为空臂集合不影响服务
 - v0.3.1 双轴 fatigue：`recent_topic_keys` (细) + `recent_topic_groups` (粗) 取 max；曲线 `count^1.5/len*5`，count=2 即触发 0.47 强抑制
 - 新兴趣 amplification guard：刚确认的探针兴趣会用 domain/specific/topic key 形成 guard，`PoolCurator` 做 24h rolling budget 软降权，最终批选择做 `max(1, floor(limit*0.25))` 硬上限
 - `_merge_topic_supergroups` — serve 时基于 embedding 把 `动漫杂谈/补番/解说` 等近义 topic 合并为同一聚类

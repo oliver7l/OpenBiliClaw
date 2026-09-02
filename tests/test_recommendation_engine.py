@@ -651,7 +651,15 @@ async def test_generate_recommendations_balances_topics_from_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_recommendations_does_not_repeat_history() -> None:
+async def test_generate_recommendations_can_repeat_within_short_cooldown() -> None:
+    """v0.3.153+ (dd09b3d0): the 24h repeat guard became a 1-second window.
+
+    Generating again immediately can re-serve the same top item — the
+    exposure-based lockout was deliberately removed so six-platform feed
+    content flows into recommendations without waiting. (The *serve* path
+    still avoids same-batch repeats via its in-memory last-served set and
+    batch diversity constraints.)
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         db = Database(Path(tmpdir) / "test.db")
         db.initialize()
@@ -685,7 +693,8 @@ async def test_generate_recommendations_does_not_repeat_history() -> None:
         )
 
         assert [item.content.bvid for item in first] == ["BV1B"]
-        assert [item.content.bvid for item in second] == ["BV1A"]
+        # No 24h lockout: the top item is servable again right away.
+        assert [item.content.bvid for item in second] == ["BV1B"]
 
 
 @pytest.mark.asyncio

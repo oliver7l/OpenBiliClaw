@@ -1523,7 +1523,15 @@ class TestDatabase:
 
             db.close()
 
-    def test_get_pool_candidates_skips_shown_and_feedbacked_items(self) -> None:
+    def test_get_pool_candidates_excludes_dislikes_but_recycles_shown_rows(self) -> None:
+        """v0.3.153+ (dd09b3d0): exposure-based exclusion is effectively off.
+
+        With the 1-second re-show window, a *shown* row and a row that
+        already entered the recommendations table are immediately servable
+        again; only a manual ``dislike`` is a permanent filter. This is what
+        lets the six-platform feed producers' content keep flowing into
+        recommendations without a 24h lockout.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -1579,8 +1587,13 @@ class TestDatabase:
 
             items = db.get_pool_candidates(limit=10)
 
-            assert [item["bvid"] for item in items] == ["BV1FRESH"]
-            assert db.count_pool_candidates() == 1
+            # Shown and recommended rows recycle; only the dislike is gone.
+            assert [item["bvid"] for item in items] == [
+                "BV1SHOWN",
+                "BV1FRESH",
+                "BV1REC",
+            ]
+            assert db.count_pool_candidates() == 3
 
             db.close()
 
@@ -1826,8 +1839,13 @@ class TestDatabase:
 
             db.close()
 
-    def test_count_pool_candidates_respects_default_topic_group_window(self) -> None:
-        """The public available count uses the same topic_group cap as pool load."""
+    def test_count_pool_candidates_topic_group_cap_is_opt_in(self) -> None:
+        """v0.3.153+ (dd09b3d0): the topic-group cap is opt-in, not default.
+
+        ``count_pool_candidates()`` / ``get_pool_candidates()`` no longer
+        cap per-``topic_group`` head counts by default; callers that want
+        the concentration limit pass ``max_per_topic_group`` explicitly.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -1850,17 +1868,30 @@ class TestDatabase:
                 relevance_score=0.75,
             )
 
-            assert db.count_pool_candidates() == 4
+            # Default: no cap — all 6 rows count and load.
+            assert db.count_pool_candidates() == 6
             assert db.count_pool_candidates(max_per_topic_group=0) == 6
             rows = db.get_pool_candidates(limit=10)
-            assert len(rows) == 4
-            assert [row["topic_group"] for row in rows].count("人工智能") == 3
+            assert len(rows) == 6
+            assert [row["topic_group"] for row in rows].count("人工智能") == 5
+
+            # Opt-in cap still works and matches the load path.
+            assert db.count_pool_candidates(max_per_topic_group=3) == 4
+            capped_rows = db.get_pool_candidates(limit=10, max_per_topic_group=3)
+            assert len(capped_rows) == 4
+            assert [row["topic_group"] for row in capped_rows].count("人工智能") == 3
 
             db.close()
 
     def test_count_pool_available_candidates_by_source_uses_global_topic_window(
         self,
     ) -> None:
+        """The per-source availability counts share one global topic window.
+
+        v0.3.153+ (dd09b3d0): without an explicit cap there is no window, so
+        all rows count; passing ``max_per_topic_group=3`` caps the shared
+        topic across sources (top-3 by relevance: 2 bilibili + 1 xhs).
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -1917,8 +1948,15 @@ class TestDatabase:
 
             counts = db.count_pool_available_candidates_by_source()
 
-            assert counts == {"bilibili": 2, "xiaohongshu": 1, "douyin": 1}
+            # Default (no cap): all 5 rows count, grouped by source family.
+            assert counts == {"bilibili": 2, "xiaohongshu": 2, "douyin": 1}
             assert sum(counts.values()) == db.count_pool_candidates()
+
+            # Opt-in global topic window: 共享主题 capped to its top-3 by
+            # relevance (BV-SHARED-1 0.99 / xhs-shared-1 0.98 / BV-SHARED-2
+            # 0.97), shared across the bilibili and xiaohongshu families.
+            capped = db.count_pool_available_candidates_by_source(max_per_topic_group=3)
+            assert capped == {"bilibili": 2, "xiaohongshu": 1, "douyin": 1}
             db.close()
 
     def test_count_pool_raw_material_counts_pending_xhs_and_excludes_viewed_rows(
@@ -2007,7 +2045,14 @@ class TestDatabase:
 
     def test_count_pool_candidates_refreshes_stale_read_snapshot(self) -> None:
         """Runtime status must not report stale availability after another
-        connection consumes a pool row."""
+        connection consumes a pool row.
+
+        v0.3.153+: inserting a recommendation row no longer removes the
+        item from availability (the 24h dedup guard became a 1-second
+        window), so the "consumption" here is a manual dislike — the one
+        exclusion that is still permanent. The point of the test is the
+        cross-connection read-snapshot refresh, not the exclusion itself.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
             db_a = Database(db_path)
@@ -2025,12 +2070,13 @@ class TestDatabase:
 
             db_b = Database(db_path)
             db_b.initialize()
-            db_b.insert_recommendation(
-                "BVSTALE",
-                confidence=0.9,
-                expression="已经进入推荐历史",
-                topic="测试主题",
+            db_b.conn.execute(
+                "UPDATE content_cache "
+                "SET pool_status = 'feedbacked', feedback_type = 'dislike', "
+                "feedback_at = CURRENT_TIMESTAMP "
+                "WHERE bvid = 'BVSTALE'"
             )
+            db_b.conn.commit()
 
             assert db_a.count_pool_candidates() == 0
 

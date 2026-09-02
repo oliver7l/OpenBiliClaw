@@ -40,8 +40,9 @@ def test_build_pool_snapshot_marks_saturated_topics_and_styles(tmp_path):
         source_targets={"bilibili": 48, "xiaohongshu": 6, "douyin": 6},
     )
 
-    # 12 AI items capped to 3 by max_per_topic_group + 3 doc items = 6 servable
-    assert snapshot.pool_available_count == 6
+    # v0.3.153+ (dd09b3d0): the topic-group cap is opt-in now, so all
+    # 12 AI + 3 doc items count as available (no 3-per-group trimming).
+    assert snapshot.pool_available_count == 15
     assert "AI 编程" in snapshot.saturated_topics
     assert "deep_focus" in snapshot.saturated_styles
     assert "deep_dive" not in snapshot.saturated_styles
