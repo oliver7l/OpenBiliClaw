@@ -517,6 +517,26 @@ X 源健康状态（`ok` / `missing_cookie` / `expired_cookie` / `rate_limited` 
 >
 > 非法 / 缺失 / 超范围的数值字段都会回退到上表默认值（与 `[scheduler]` 数值字段同一套 `_normalize_scheduler_int` 规范化）；`discovery` 写成非表（标量）时整段回退默认。
 
+### `[recommendation]`
+
+**推荐池排序旋钮**（`RecommendationScoringConfig`）。本段决定**候选怎么排**；`[llm.recommendation]` 只决定推荐文案用哪个 provider / 模型，两者是独立的表。当前唯一的旋钮组是滑动窗口 Thompson 采样探索轴，用于打破确定性五维评分造成的过滤气泡（设计见 [`docs/modules/recommendation.md`](recommendation.md) 的「滑动窗口 Thompson 采样」一节）。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `thompson_sampling_enabled` | bool | `false` | 探索轴总开关。`false` 时排序仍是确定性的五维评分，分数与开启前**逐字一致**；`true` 时每批排序引入少量随机性，「换一批」不再可复现 |
+| `ts_window_days` | int | `30` | 臂后验的曝光窗口（天）。合法范围 `1..365`，超范围回退默认值。窗口即 SWTS 的自我遗忘机制：兴趣迁移后旧臂计数会自然滑出 |
+| `ts_exploration_weight` | float | `0.15` | 探索项对单条候选分数的最大 \|Δ\| 贡献。合法范围 `[0, 1]`（允许 `0` = 只利用不探索），非法值回退默认值 |
+| `ts_exploitation_weight` | float | `0.0` | 按后验均值相对先验的偏移排序的强度。默认 `0`：`relevance` / `feedback` 两轴已经在利用，再叠一次会双计。合法范围 `[0, 1]` |
+| `ts_deep_dwell_seconds` | float | `60` | 判定为隐式喜欢（计为奖励）的最短停留秒数。合法范围 `(0, 600]`，超范围回退默认值。与画像侧 `get_dwell_scores` 的 deep-view 口径一致 |
+
+> **臂与奖励的定义**：臂 = `(发现策略 source_strategy, 话题大类 topic_group)`，与 `topic_fatigue` 同粒度；奖励 = 显式 `like` / `save` / `favorite`，或该 bvid 在窗口内最长停留 ≥ `ts_deep_dwell_seconds`。后验为 `Beta(1 + 奖励数, 1 + 无奖励曝光数)`。
+>
+> **为什么是零均值**：探索项取 `weight × (θ_sample − posterior_mean)`，期望为 0，因此不会像加性 bonus 那样系统性重排整个池子，只在后验不确定性大的臂上注入方差。曝光充分且稳定的臂 Δ≈0，从未出现的臂方差最大、最先获得探索机会。
+>
+> **降级行为**：`view_history` 表缺失（旧库迁移中）或聚合查询异常时，臂集合降级为空并记 debug 日志，推荐链路照常服务——空臂集等价于「所有臂都处于先验」，即最大方差的纯探索，而非评分故障。
+>
+> **环境变量覆盖**：与 `[discovery]` 同理，本段字段全是多词键，通用 `OPENBILICLAW_SECTION_KEY` 按 `_` 拆分后落不到字段上，请直接改 `config.toml`。
+
 ### `[storage]`
 
 | 键 | 类型 | 默认值 | 说明 |

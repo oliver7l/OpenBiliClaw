@@ -8,15 +8,25 @@ Discovery's relevance_score does not capture.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from openbiliclaw.discovery.engine import DiscoveredContent
     from openbiliclaw.llm.embedding import SupportsEmbeddingService
+    from openbiliclaw.recommendation.bandit import (
+        ArmStats,
+        SlidingWindowThompsonSampler,
+    )
     from openbiliclaw.storage.database import Database
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +83,11 @@ class ScoringContext:
     feedback: FeedbackSignals = field(default_factory=FeedbackSignals)
     newly_confirmed_amplification_keys: frozenset[str] = field(default_factory=frozenset)
     over_budget_amplification_keys: frozenset[str] = field(default_factory=frozenset)
+    # ``arm_key → ArmStats`` snapshot for the sliding-window Thompson sampling
+    # exploration term. Empty when the sampler is off or the window query
+    # failed; an absent arm is not "zero data" but "prior data", so an empty
+    # map still yields sane (max-variance) exploration on every arm.
+    arm_stats: Mapping[str, ArmStats] = field(default_factory=dict)
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -118,6 +133,11 @@ class PoolCurator:
 
     The curator never mutates its inputs — it returns new score mappings
     that the engine uses as an overlay on top of the raw candidates.
+
+    Beyond the five weighted dimensions it can add a sixth, orthogonal axis:
+    zero-mean Thompson-sampling exploration over ``(strategy, topic_group)``
+    arms, supplied through ``ts_sampler``. It is off by default so behaviour is
+    byte-identical until ``[recommendation].thompson_sampling_enabled`` is set.
     """
 
     def __init__(
@@ -126,10 +146,12 @@ class PoolCurator:
         *,
         weights: ScoringWeights = _DEFAULT_WEIGHTS,
         history_window: int = 30,
+        ts_sampler: SlidingWindowThompsonSampler | None = None,
     ) -> None:
         self._database = database
         self._weights = weights
         self._history_window = history_window
+        self._ts_sampler = ts_sampler
 
     # ------------------------------------------------------------------
     # Public API
@@ -229,7 +251,31 @@ class PoolCurator:
             ),
             newly_confirmed_amplification_keys=normalized_amplification_keys,
             over_budget_amplification_keys=frozenset(over_budget_keys),
+            arm_stats=self._load_bandit_arms(),
         )
+
+    def _load_bandit_arms(self) -> Mapping[str, ArmStats]:
+        """Load sliding-window arm posteriors, or nothing when the sampler is off.
+
+        A missing ``view_history`` table (legacy DBs mid-migration) or a failed
+        query must never break serving, so every error degrades to an empty map
+        — which the sampler reads as "all arms at the prior", i.e. pure
+        max-variance exploration rather than a scoring outage.
+        """
+        sampler = self._ts_sampler
+        if sampler is None or not sampler.enabled:
+            return {}
+        config = sampler.config
+        try:
+            rows = self._database.get_bandit_impressions(
+                since=datetime.now(UTC) - timedelta(days=config.window_days),
+                positive_feedback_types=config.positive_feedback_types,
+                deep_dwell_seconds=config.deep_dwell_seconds,
+            )
+        except Exception:
+            logger.debug("Bandit arm load failed; scoring without exploration", exc_info=True)
+            return {}
+        return sampler.build_arms(rows)
 
     def score_candidates(
         self,
@@ -272,6 +318,8 @@ class PoolCurator:
 
             # Feedback adjustments (additive, outside weight system)
             score += self._feedback_adjustment(item, context.feedback)
+            # Bandit exploration (additive, zero-mean, outside weight system)
+            score += self._bandit_adjustment(item, context)
             if candidate_amplification_keys(item) & context.over_budget_amplification_keys:
                 score -= 0.35
 
@@ -410,6 +458,26 @@ class PoolCurator:
             adj -= _FEEDBACK_DISLIKE_FRANCHISE_PENALTY
         return adj
 
+    def _bandit_adjustment(
+        self,
+        item: DiscoveredContent,
+        context: ScoringContext,
+    ) -> float:
+        """Zero-mean Thompson-sampling exploration delta for one candidate.
+
+        Returns 0.0 whenever the sampler is absent or disabled, so the default
+        scoring path stays byte-identical. When enabled, the term contributes
+        nothing for well-observed arms (posterior variance has collapsed) and
+        up to ``±exploration_weight`` for arms the user has barely seen — which
+        is the point: the five weighted dimensions cannot surface an interest
+        that has no evidence yet, this axis gives it a bounded, mean-neutral
+        chance to appear and earn that evidence.
+        """
+        sampler = self._ts_sampler
+        if sampler is None or not sampler.enabled:
+            return 0.0
+        return sampler.score(item, context.arm_stats)
+
     async def score_candidates_async(
         self,
         candidates: list[DiscoveredContent],
@@ -513,6 +581,9 @@ class PoolCurator:
                 score += adj
             else:
                 score += self._feedback_adjustment(item, context.feedback)
+
+            # Bandit exploration, same term as the sync path.
+            score += self._bandit_adjustment(item, context)
 
             scores[item.bvid] = max(0.0, score)
         return scores

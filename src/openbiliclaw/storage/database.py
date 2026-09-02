@@ -97,9 +97,10 @@ _DELIGHT_CLAIM_GUARD_SQL = f"""
 
 # ── Exposure cooldown vs. manual dislike ─────────────────────────────
 # Exposure alone must not permanently filter an item out of the rotation.
-# A served item ('shown') becomes eligible again after this cooldown, so
-# content recycles instead of draining the pool; while the cooldown holds,
-# 换一批 still surfaces new material first. Only a *manual* dislike
+# v0.3.153+ (dd09b3d0): the window shrank from 24h to 1 second, so served
+# ('shown') and feedbacked rows recycle essentially immediately — that is
+# what lets the six-platform feed producers' content flow into
+# recommendations without a lockout. Only a *manual* dislike
 # (feedback_type='dislike', or the pool purge it triggers) filters an
 # item out for good.
 _POOL_RESHOWN_COOLDOWN_SQL = "datetime('now', '+1 seconds')"
@@ -2683,11 +2684,13 @@ class Database:
         produces a top-50 shortlist concentrated in ~10 head groups,
         because high-relevance candidates cluster around the user's
         primary interests; long-tail groups (197 with a single item each
-        in the typical pool) never reach the candidate window. Cap of 5
-        lets obvious favourites keep a strong presence while opening
-        room for different groups in the candidate window. Pass
-        ``max_per_topic_group=0`` to restore the legacy unrestricted
-        ordering for callers that need it (e.g. health checks).
+        in the typical pool) never reach the candidate window. A cap lets
+        obvious favourites keep a strong presence while opening room for
+        different groups in the candidate window.
+
+        v0.3.153+ (dd09b3d0): the default is ``0`` (unrestricted) — the
+        cap is opt-in now. Callers that want concentrated-topic head
+        trimming pass an explicit cap (e.g. ``max_per_topic_group=5``).
 
         ``platform`` (optional) restricts candidates to a single
         ``source_platform`` (e.g. ``"bilibili"`` / ``"xiaohongshu"``),
@@ -4663,6 +4666,66 @@ class Database:
             LIMIT ?
             """,
             (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_bandit_impressions(
+        self,
+        *,
+        since: datetime,
+        positive_feedback_types: Sequence[str] = ("like", "save", "favorite"),
+        deep_dwell_seconds: float = 60.0,
+    ) -> list[dict[str, Any]]:
+        """Aggregate per-``(source strategy, topic_group)`` bandit impressions.
+
+        Feeds :class:`openbiliclaw.recommendation.bandit.SlidingWindowThompsonSampler`:
+        one row per arm with the exposure (presentation) count and reward count
+        inside the sliding window.
+
+        A presentation is a *reward* when the user gave explicit positive
+        feedback, or stayed on the item at least ``deep_dwell_seconds`` — the
+        same implicit-positive definition :meth:`get_dwell_scores` uses, so the
+        two implicit-feedback signals cannot diverge. Dwell per bvid is capped
+        at 600s and taken as the longest view in the window, mirroring how the
+        dwell aggregator treats abandoned long-lived tabs.
+
+        Recommendations that never made it into ``content_cache`` (deleted pool
+        rows) drop out via the inner join — they carry no arm labels anyway.
+        """
+        self._ensure_fresh_read()
+        since_text = since.isoformat(sep=" ")
+        placeholders = ", ".join("?" for _ in positive_feedback_types)
+        cursor = self.conn.execute(
+            f"""
+            WITH dwell AS (
+                SELECT bvid, MAX(MIN(dwell_seconds, 600)) AS dwell_max
+                FROM view_history
+                WHERE viewed_at >= ?
+                GROUP BY bvid
+            )
+            SELECT COALESCE(c.source, '') AS source,
+                   COALESCE(c.topic_group, '') AS topic_group,
+                   COUNT(*) AS exposures,
+                   SUM(CASE
+                         WHEN r.feedback_type IN ({placeholders}) THEN 1
+                         WHEN COALESCE(d.dwell_max, 0) >= ? THEN 1
+                         ELSE 0
+                       END) AS rewards
+            FROM recommendations AS r
+            JOIN content_cache AS c ON c.bvid = COALESCE(
+                (SELECT bvid FROM content_cache WHERE bvid = r.bvid),
+                (SELECT bvid FROM content_cache WHERE content_id = r.bvid LIMIT 1)
+            )
+            LEFT JOIN dwell AS d ON d.bvid = c.bvid
+            WHERE COALESCE(r.presented_at, r.created_at) >= ?
+            GROUP BY COALESCE(c.source, ''), COALESCE(c.topic_group, '')
+            """,
+            (
+                since_text,
+                *positive_feedback_types,
+                float(deep_dwell_seconds),
+                since_text,
+            ),
         )
         return [dict(row) for row in cursor.fetchall()]
 

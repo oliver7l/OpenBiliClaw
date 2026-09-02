@@ -491,9 +491,13 @@ class RuntimeContext:
             set_emb(new_embedding_service)
 
         # 6. Recommendation engine
+        from openbiliclaw.recommendation.bandit import sampler_from_scoring_config
         from openbiliclaw.recommendation.curator import PoolCurator
 
-        new_curator = PoolCurator(self.database)
+        new_curator = PoolCurator(
+            self.database,
+            ts_sampler=sampler_from_scoring_config(getattr(new_config, "recommendation", None)),
+        )
 
         def _xhs_self_info_provider() -> dict[str, object] | None:
             state = self.memory_manager.load_discovery_runtime_state()

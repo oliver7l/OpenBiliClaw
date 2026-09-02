@@ -119,11 +119,15 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         concurrency=llm_concurrency,
     )
     from openbiliclaw.llm.registry import build_embedding_service
+    from openbiliclaw.recommendation.bandit import sampler_from_scoring_config
     from openbiliclaw.recommendation.curator import PoolCurator
 
     embedding_service = build_embedding_service(config, llm_registry)
 
-    curator = PoolCurator(database)
+    curator = PoolCurator(
+        database,
+        ts_sampler=sampler_from_scoring_config(getattr(config, "recommendation", None)),
+    )
     recommendation_engine = RecommendationEngine(
         llm=llm_service,
         database=database,

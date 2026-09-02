@@ -353,6 +353,36 @@ class DiscoveryConfig:
 
 
 @dataclass
+class RecommendationScoringConfig:
+    """Recommendation-side ranking knobs (top-level ``[recommendation]``).
+
+    Distinct from ``[llm.recommendation]``, which only picks the provider /
+    model for recommendation copy. These govern how the candidate pool is
+    ordered.
+
+    ``thompson_sampling_enabled`` adds a sixth, mean-neutral ordering axis on
+    top of the curator's five weighted dimensions (see
+    :mod:`openbiliclaw.recommendation.bandit`). It is off by default so the
+    scoring path stays byte-identical until the operator opts in.
+    """
+
+    thompson_sampling_enabled: bool = False
+    # Sliding impression window for arm posteriors. Short enough that a
+    # moved-on interest self-forgets, long enough to accumulate counts.
+    ts_window_days: int = 30
+    # Max |Δ| the exploration term can contribute to a candidate score.
+    # Compared against ``ScoringWeights`` this is a mid-sized axis: strong enough
+    # to move a cold arm past a mid-relevance one, too weak to override a
+    # dislike penalty.
+    ts_exploration_weight: float = 0.15
+    # Ranks by posterior mean as well as by uncertainty. Defaults to 0.0
+    # because relevance / feedback axes already exploit.
+    ts_exploitation_weight: float = 0.0
+    # Dwell at or past this many seconds counts as an implicit positive reward.
+    ts_deep_dwell_seconds: float = 60.0
+
+
+@dataclass
 class AutostartConfig:
     """Boot autostart configuration."""
 
@@ -690,6 +720,9 @@ class Config:
     # Top-level `[discovery]` carries the unified keyword planner / backpressure
     # knobs (P1). Distinct from `[llm.discovery]` (per-module provider override).
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
+    # Top-level `[recommendation]` carries pool-ordering knobs (bandit
+    # exploration etc.); `[llm.recommendation]` only picks the provider/model.
+    recommendation: RecommendationScoringConfig = field(default_factory=RecommendationScoringConfig)
     autostart: AutostartConfig = field(default_factory=AutostartConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -1139,6 +1172,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
             }
         ),
         discovery=_build_discovery(discovery_raw),
+        recommendation=_build_recommendation(raw.get("recommendation")),
         autostart=AutostartConfig(
             enabled=_coerce_bool(autostart_raw.get("enabled"), default=False),
             manage_ollama=_coerce_bool(autostart_raw.get("manage_ollama"), default=True),
@@ -1241,6 +1275,75 @@ def _build_discovery(discovery_raw: dict[str, Any]) -> DiscoveryConfig:
             max_value=20,
         ),
     )
+
+
+def _build_recommendation(recommendation_raw: object) -> RecommendationScoringConfig:
+    """Assemble ``RecommendationScoringConfig`` from the raw ``[recommendation]`` table.
+
+    Same bounded-coercion discipline as :func:`_build_discovery`: a missing,
+    malformed, or out-of-range value falls back to the documented default rather
+    than raising. Every knob here is multi-word, so the generic
+    ``OPENBILICLAW_SECTION_KEY`` env expansion cannot reach them (it splits on
+    ``_``); ``[recommendation]`` is TOML-only, like the ``[discovery]`` knobs.
+    ``ts_exploitation_weight`` uses the closed-interval normalizer because
+    ``0.0`` is a meaningful "axis off" value there, unlike a probability floor.
+    """
+    table = recommendation_raw if isinstance(recommendation_raw, dict) else {}
+    return RecommendationScoringConfig(
+        thompson_sampling_enabled=_coerce_bool(
+            table.get("thompson_sampling_enabled"),
+            default=False,
+        ),
+        ts_window_days=_normalize_scheduler_int(
+            table.get("ts_window_days"),
+            default=30,
+            min_value=1,
+            max_value=365,
+        ),
+        ts_exploration_weight=_normalize_unit_float(
+            table.get("ts_exploration_weight"),
+            default=0.15,
+        ),
+        ts_exploitation_weight=_normalize_unit_float(
+            table.get("ts_exploitation_weight"),
+            default=0.0,
+        ),
+        ts_deep_dwell_seconds=_normalize_positive_float(
+            table.get("ts_deep_dwell_seconds"),
+            default=60.0,
+            max_value=600.0,
+        ),
+    )
+
+
+def _normalize_unit_float(value: object, *, default: float) -> float:
+    """Normalize a TOML float in the closed interval ``[0, 1]``.
+
+    Unlike :func:`_normalize_probability` this admits ``0.0``, which is the
+    meaningful "axis disabled" value for the bandit weights.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number < 0.0 or number > 1.0:
+        return default
+    return number
+
+
+def _normalize_positive_float(value: object, *, default: float, max_value: float) -> float:
+    """Normalize a TOML float in ``(0, max_value]``, falling back on bad input."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number <= 0.0 or number > max_value:
+        return default
+    return number
 
 
 def _normalize_probability(value: object, *, default: float) -> float:
@@ -2301,6 +2404,18 @@ def _render_config_toml(
         f"multimodal_image_quality = {config.discovery.multimodal_image_quality}",
         "multimodal_image_timeout_seconds = "
         f"{config.discovery.multimodal_image_timeout_seconds}",
+        "",
+        "[recommendation]",
+        "# 推荐池排序旋钮（与 [llm.recommendation] 只选模型不同）。",
+        "# Thompson 采样按 (发现策略 × 话题大类) 分桶，在最近 ts_window_days 的",
+        "# 曝光/奖励后验上采样，给「几乎没被展示过」的兴趣一个均值中性的探索机会。",
+        "# 默认关闭：排序保持确定性的五维评分。",
+        "thompson_sampling_enabled = "
+        f"{_toml_bool(config.recommendation.thompson_sampling_enabled)}",
+        f"ts_window_days = {config.recommendation.ts_window_days}",
+        f"ts_exploration_weight = {config.recommendation.ts_exploration_weight:g}",
+        f"ts_exploitation_weight = {config.recommendation.ts_exploitation_weight:g}",
+        f"ts_deep_dwell_seconds = {config.recommendation.ts_deep_dwell_seconds:g}",
         "",
         *_autostart_lines(
             config,

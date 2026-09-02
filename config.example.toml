@@ -456,6 +456,29 @@ multimodal_image_max_px = 384
 multimodal_image_quality = 72
 multimodal_image_timeout_seconds = 6
 
+[recommendation]
+# 推荐池排序旋钮（区别于 [llm.recommendation]：那个只选文案生成的模型）。
+#
+# 滑动窗口 Thompson 采样：按 (发现策略 × 话题大类) 分桶，用最近 ts_window_days 的
+# 曝光/奖励计数维护 Beta 后验，每轮排序从后验采样一次。它给「几乎没被展示过」的兴趣
+# 一个均值中性的探索机会——期望上不改变排序，只在后验不确定性大的臂上注入方差，
+# 因此不会系统性抬掉高相关结果。奖励口径与画像侧一致：显式 like/save/favorite，
+# 或单次停留 >= ts_deep_dwell_seconds（隐式喜欢）。
+#
+# 默认 false：排序保持确定性的五维评分，行为与开启前逐字一致。开启后同一批候选的
+# 排序会带轻微随机性（每次「换一批」不再可复现）。
+thompson_sampling_enabled = false
+# 臂后验的曝光窗口（天）。太短则计数攒不起来，太长则兴趣漂移自我遗忘变慢。
+ts_window_days = 30
+# 探索项对单条候选分数的最大 |Δ| 贡献。相比五维权重属中等强度：足以让冷启动臂
+# 越过一条中等相关候选，也不足以翻越一条 dislike 惩罚。合法范围 0..1。
+ts_exploration_weight = 0.15
+# 按后验均值排序的强度。默认 0：relevance / feedback 两轴已经在利用(exploit)，
+# 再叠一次会重复计分。建议先只用离线评测验证收益后再调大。合法范围 0..1。
+ts_exploitation_weight = 0.0
+# 判定为隐式喜欢的最短停留秒数。
+ts_deep_dwell_seconds = 60
+
 [autostart]
 # 登录系统后是否自动拉起 OpenBiliClaw 后端。默认关闭；请通过设置页或
 # `openbiliclaw autostart enable` 开启，以便同步注册/反注册 OS 自启动项。

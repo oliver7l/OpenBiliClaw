@@ -72,6 +72,7 @@
 | v0.3.x XHS 自发布内容过滤 | ✅ | `get_pool_candidates` / `count_pool_candidates` / `count_pool_readiness` 及后台整理查询（evaluation / copy / delight）在 SQL 层排除已知的自发布小红书行；`_purge_self_authored_pool_items` 同时匹配 `up_name` 和 `author_name`；self_info 首次到达或变更时立即 purge 已入池内容。`RecommendationEngine` 通过 `xhs_self_info_provider` 回调从 runtime state 获取 nickname，`Database` 保持纯存储层不直接读 runtime state |
 | v0.3.152 agent-recommend 隐式停留（dwell）反馈 | ✅ | 桌面 Web 新增 `POST /api/view-record`（浏览即隐式反馈，可带 `dwell_seconds`）、`POST /api/view-dwell`（把停留时长写回该 bvid 最近一条 view，带 `ge=0 / le=86400` 校验）、`GET /api/view-history`；`view_history` 迁移新增 `dwell_seconds REAL DEFAULT 0`。`RankAgent.score_and_rank` 加入停留置信度 `beta`（`compute_dwell_beta = min(0.15, views/(views+30)*0.15*1.15)`，1.15 归一使 **200 views 正好封顶** 0.15，旧式渐近永不触顶），dwell 按 `topic_group` 聚合（`get_dwell_scores`：单次停留 600s 封顶、`base=SUM(capped)/1800`、deep≥60s +0.1、quick<15s −0.05）；最终 `combined = rule_combined*max(0,1-alpha-beta) + learned*alpha + dwell*beta`。池子排序还会排除近 7 天已看内容（候选足够时才排，避免空结果） |
 | v0.3.152 agent-recommend 热路径死锁 / 延迟修复 | ✅ | 修 `/api/agent-recommend` 事件循环死锁与串行延迟：内容向量不再在同步 `RankAgent` 内 `asyncio.run` 实时打 provider API，改为**只读 MMR 预热缓存** `EmbeddingService.lookup_cached`（cache key 统一走 `llm.embedding.mmr_cache_text(title, description[:160])`，`RecommendationEngine._mmr_embedding_text` 已委托同一函数，预热侧与 agent 侧命中同一 L2 key）；整段 `score_and_rank`（含其内部 `compute_learning_level / compute_learned_scores / compute_dwell_*` 同步 DB 聚合）包进 `run_in_executor` 工作线程，热路径零 API、零事件循环阻塞。`/api/agent-recommend` 的候选 SELECT 补 `description` 列以对齐缓存 key；未命中预热的候选回退到 fit+quality+dwell（无语义分）。新增 `tests/test_recommendation_rankagent.py` / `test_view_history_dwell.py` / `test_api_view_feedback.py` 覆盖此前 0 测试的排序内核、dwell 存储与 view-* 路由 |
+| v0.3.152 池子排序探索轴（滑动窗口 Thompson 采样） | ✅ | 五维权重全为确定性，只压热门不抬冷门，未点过的兴趣会永久不可见。新增 `recommendation/bandit.py`：按 `(source_strategy, topic_group)` 分臂，在最近 `ts_window_days` 曝光上维护 Beta 后验（Jeffreys 先验），奖励口径为显式 `like/save/favorite` 或单次停留 ≥ `ts_deep_dwell_seconds`（与 `get_dwell_scores` 一致）；评分加 `exploration_weight × (θ − posterior_mean)` 的**零均值**项，只在后验不确定的臂上注入方差。`Database.get_bandit_impressions()` 一条 SQL 出臂级聚合，`ScoringContext.arm_stats` 承载快照，同步 / 异步两条评分路径共用。由 `[recommendation].thompson_sampling_enabled` 控制，**默认 false**（关闭时分数逐字不变），查询异常降级为空臂集合、不影响服务 |
 
 ## 公开 API
 
@@ -361,6 +362,7 @@ from openbiliclaw.recommendation.curator import PoolCurator
 - `recent_sources` — 近期已推荐来源列表
 - `newly_confirmed_amplification_keys` — 刚确认兴趣及其 specifics/topic aliases 的归一化键集合
 - `over_budget_amplification_keys` — 最近 24h 推荐占比已达到 25% 的新兴趣方向集合
+- `arm_stats` — `arm_key → ArmStats` 快照，供 Thompson 采样探索轴使用；禁用或读取失败时为空 dict
 - `feedback` — `FeedbackSignals` 实例
 
 #### 新兴趣 Amplification Guard
@@ -377,6 +379,30 @@ from openbiliclaw.recommendation.curator import PoolCurator
 - `Database.get_recent_recommendation_signals_since()` 提供最近推荐窗口，优先使用 `presented_at`，旧记录用 `created_at` 兜底。
 - `PoolCurator.build_context(newly_confirmed_amplification_keys=..., rolling_window_hours=24)` 计算 24h rolling share，share `>= 0.25` 的 key 进入 `over_budget_amplification_keys` 并在评分中降权。
 - `RecommendationEngine._select_diversified_batch()` 和 MMR 选择负责最终硬上限：每个新方向最多 `max(1, floor(limit * 0.25))` 条。Curator 是软降权，最终 selector 是安全阀。
+
+#### 滑动窗口 Thompson 采样（探索轴）
+
+五维权重全是确定性的：同样的候选池 + 同样的历史，永远选出同一批 top-K。`topic_fatigue` 只会压制「已经出太多」的话题，没有任何一项会主动抬高「几乎没出过」的话题——于是一个用户从未点过的新兴趣会永久不可见。探索轴用上下文老虎机（contextual bandit）补上这个缺口。
+
+实现位于 `recommendation/bandit.py`（`SlidingWindowThompsonSampler`），评分侧只加一个可加项：
+
+| 概念 | 取值 |
+|------|------|
+| 臂（arm） | `(发现策略 source_strategy, 话题大类 topic_group)`，与疲劳轴同粒度 |
+| 后验 | Bernoulli 奖励上的 Beta 后验，Jeffreys 先验 `Beta(1, 1)` |
+| 窗口 | 最近 `ts_window_days` 天的曝光（SWTS），兴趣漂移自我遗忘 |
+| 奖励 | 显式 `like` / `save` / `favorite`，或单次停留 ≥ `ts_deep_dwell_seconds`（与画像侧 `get_dwell_scores` 同口径） |
+| 融合 | `Δ = exploration_weight × (θ_sample − posterior_mean)`，θ ~ Beta(α, β) |
+
+关键点在于融合式是**零均值**的：`E[Δ] = 0`，所以它不会像加性 bonus 那样系统性重排整个池子，只在后验不确定性大的臂上注入方差。曝光充分、CTR 稳定的臂 `Δ ≈ 0`；从未出现的臂方差最大，最先拿到探索机会。另有 `ts_exploitation_weight` 按后验均值相对先验的偏移排序，默认 `0.0`（relevance / feedback 两轴已经在利用，重复叠加会双计）。
+
+数据与接线：
+
+- `Database.get_bandit_impressions(since=..., positive_feedback_types=..., deep_dwell_seconds=...)` 一条 SQL 出臂级聚合（`recommendations ⋈ content_cache`，`LEFT JOIN` view_history 的 dwell CTE）。
+- `PoolCurator.build_context()` 经 `_load_bandit_arms()` 填充 `ScoringContext.arm_stats`；同步与异步两条评分路径共用同一项。
+- `sampler_from_scoring_config()` 由 `api/runtime_context.py`（含热重载）和 `integrations/openclaw/bootstrap.py` 接线。
+
+默认关闭（`[recommendation].thompson_sampling_enabled = false`），关闭时分数与开启前逐字一致；`view_history` 表缺失或查询异常时降级为空臂集合并继续服务，不会让推荐链路 500。
 
 #### 常量
 
