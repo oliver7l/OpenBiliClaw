@@ -14,14 +14,16 @@ import socket
 import subprocess
 import time
 import uuid
+from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from pydantic import BaseModel, Field
 
 from openbiliclaw.api.models import (
     ActivityFeedItemOut,
@@ -102,6 +104,8 @@ from openbiliclaw.api.models import (
     RecommendationOut,
     RecommendationRefreshResponse,
     RecommendationReshuffleResponse,
+    PoolAllResponse,
+    PoolItemOut,
     RuntimeStatusResponse,
     SchedulerConfigOut,
     SubscriptionAddIn,
@@ -132,7 +136,15 @@ from openbiliclaw.api.models import (
     XStatusResponse,
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
+    ObservabilityResponse,
+    PlatformPoolStats,
+    ScoreDistribution,
+    TopicGroupStats,
+    LLMUsageSummary,
+    DiscoveryCandidateStats,
+    PoolPipelineStats,
 )
+from openbiliclaw.recommendation.agents import IntentAgent, InterestSyncer, RankAgent
 from openbiliclaw.recommendation.quality_scorer import QualityScorer
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
 from openbiliclaw.runtime.image_cache import (
@@ -876,6 +888,8 @@ def _fallback_recommendation_click_url(
         return f"https://x.com/i/status/{quote(item_id, safe='')}"
     if source_platform == "bilibili":
         return f"https://www.bilibili.com/video/{quote(bvid or item_id, safe='')}"
+    if source_platform == "xiaohongshu":
+        return f"https://www.xiaohongshu.com/explore/{quote(item_id, safe='')}"
     return ""
 
 
@@ -2675,6 +2689,33 @@ def create_app(
             for item in items
         ]
 
+    def _enrich_xhs_urls(
+        serialized: list[RecommendationOut],
+        database: Any,
+    ) -> None:
+        """Post-process serialized recommendations to fix Xiaohongshu URLs.
+
+        Xiaohongshu explore-feed cards carry ``xsec_token`` in the URL but
+        search-result pages don't. Items that entered the pool via the search
+        path may have a bare URL that triggers a login wall on click. This
+        helper looks up ``xhs_observed_urls`` for a tokenized variant and
+        swaps it in — mutates ``serialized`` in place.
+        """
+        for rec in serialized:
+            if rec.source_platform != "xiaohongshu":
+                continue
+            if "xsec_token=" in rec.content_url:
+                continue
+            note_id = rec.content_url.rstrip("/").rsplit("/", 1)[-1]
+            if not note_id:
+                continue
+            try:
+                better = _pick_best_xhs_url(database, note_id, rec.content_url)
+                if better != rec.content_url:
+                    rec.content_url = better
+            except Exception:
+                continue
+
     @app.websocket("/api/runtime-stream")
     async def runtime_stream(websocket: WebSocket) -> None:
         # The http auth middleware does NOT cover the websocket scope, so the
@@ -3500,29 +3541,38 @@ def create_app(
         _fire_and_forget_tasks.add(task)
         task.add_done_callback(_fire_and_forget_tasks.discard)
 
-        return RecommendationListResponse(
-            items=[
-                RecommendationOut(
-                    id=int(row["id"]),
-                    bvid=str(row.get("bvid", "")),
-                    title=str(row.get("title", "")),
-                    up_name=str(row.get("up_name", "")),
-                    cover_url=str(row.get("cover_url", "")),
-                    expression=str(row.get("expression", "")),
-                    topic_label=str(row.get("topic", "")),
-                    presented=bool(row.get("presented", 0)),
-                    feedback_type=str(row.get("feedback_type", "") or ""),
-                    content_id=str(row.get("content_id", "") or row.get("bvid", "")),
-                    content_url=str(row.get("content_url", "") or ""),
-                    source_platform=str(row.get("source_platform", "") or "bilibili"),
-                    content_type=str(row.get("content_type", "") or "video"),
-                    body_text=str(row.get("body_text", "") or ""),
-                    quality_score=float(row.get("quality_score", 0.0) or 0.0),
-                    quality_reason=str(row.get("quality_reason", "") or ""),
-                )
-                for row in rows
-            ]
-        )
+        reshuffle_items = []
+        for row in rows:
+            item_url = str(row.get("content_url", "") or "")
+            item_platform = str(row.get("source_platform", "") or "bilibili")
+            # xiaohongshu: try to upgrade bare URL with xsec_token
+            if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
+                note_id = str(row.get("bvid", "") or row.get("content_id", "") or "")
+                if note_id:
+                    try:
+                        item_url = _pick_best_xhs_url(ctx.database, note_id, item_url)
+                    except Exception:
+                        pass
+            reshuffle_items.append(RecommendationOut(
+                id=int(row["id"]),
+                bvid=str(row.get("bvid", "")),
+                title=str(row.get("title", "")),
+                up_name=str(row.get("up_name", "")),
+                cover_url=str(row.get("cover_url", "")),
+                expression=str(row.get("expression", "")),
+                topic_label=str(row.get("topic", "")),
+                presented=bool(row.get("presented", 0)),
+                feedback_type=str(row.get("feedback_type", "") or ""),
+                content_id=str(row.get("content_id", "") or row.get("bvid", "")),
+                content_url=item_url,
+                source_platform=item_platform,
+                content_type=str(row.get("content_type", "") or "video"),
+                body_text=str(row.get("body_text", "") or ""),
+                quality_score=float(row.get("quality_score", 0.0) or 0.0),
+                quality_reason=str(row.get("quality_reason", "") or ""),
+            ))
+
+        return RecommendationListResponse(items=reshuffle_items)
 
     # ── Watch-later (稍后再看) ────────────────────────────────────
 
@@ -3896,6 +3946,7 @@ def create_app(
     @app.post("/api/recommendations/reshuffle", response_model=RecommendationReshuffleResponse)
     async def reshuffle_recommendations(
         platform: str | None = Query(default=None, description="Restrict the fresh batch to this source_platform (e.g. bilibili, xiaohongshu)."),
+        limit: int = Query(default=10, ge=1, le=5000, description="Number of recommendations to return per batch."),
     ) -> RecommendationReshuffleResponse:
         if ctx.recommendation_engine is None or ctx.soul_engine is None:
             return RecommendationReshuffleResponse(items=[])
@@ -3912,8 +3963,9 @@ def create_app(
             profile = await ctx.soul_engine.get_profile()
         except Exception:
             return RecommendationReshuffleResponse(items=[])
-        items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=10, platform=platform)
+        items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=limit, platform=platform)
         _serialized = _serialize_recommendation_items(items)
+        _enrich_xhs_urls(_serialized, ctx.database)
         # Best-effort post-processing — explicitly kept OFF the user's
         # latency path. serve() already consumed pool inventory and the
         # batch buffer refills asynchronously, so we must not block the
@@ -3950,7 +4002,9 @@ def create_app(
         )
         await _publish_pool_status_snapshot()
         await _trigger_replenishment_if_needed()
-        return RecommendationReshuffleResponse(items=_serialize_recommendation_items(items))
+        _serialized = _serialize_recommendation_items(items)
+        _enrich_xhs_urls(_serialized, ctx.database)
+        return RecommendationReshuffleResponse(items=_serialized)
 
     @app.post("/api/recommendations/refresh", response_model=RecommendationRefreshResponse)
     async def refresh_recommendations() -> RecommendationRefreshResponse:
@@ -3968,6 +4022,527 @@ def create_app(
             state=str(result.get("state", "idle")),
             reason=str(result.get("reason", "")),
         )
+
+    @app.get("/api/pool/all", response_model=PoolAllResponse)
+    async def pool_all(
+        platform: str | None = Query(default=None, description="Filter by source_platform."),
+        source: str | None = Query(default=None, description="Filter by source (e.g. xhs-feed)."),
+        status: str | None = Query(default=None, description="Filter by pool_status (fresh, shown, stale, suppressed, pending)."),
+        shuffle: bool = Query(default=False, description="Randomize the result order."),
+        limit: int = Query(default=10000, ge=1, le=10000, description="Max items to return."),
+        min_score: float | None = Query(default=None, ge=0.0, le=1.0, description="Minimum quality_score filter."),
+        max_score: float | None = Query(default=None, ge=0.0, le=1.0, description="Maximum quality_score filter."),
+        scored_only: bool = Query(default=False, description="Only items with quality_score > 0."),
+        unscored_only: bool = Query(default=False, description="Only items with quality_score = 0."),
+        topic_group: str | None = Query(default=None, description="Filter by topic_group."),
+        has_url: bool | None = Query(default=None, description="Filter by content_url presence (true=has url, false=no url)."),
+        has_expression: bool | None = Query(default=None, description="Filter by pool_expression presence."),
+        date_from: str | None = Query(default=None, description="Filter by discovered_at >= YYYY-MM-DD."),
+        date_to: str | None = Query(default=None, description="Filter by discovered_at <= YYYY-MM-DD."),
+    ) -> PoolAllResponse:
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+        try:
+            loop = asyncio.get_running_loop()
+            pool_counts = await loop.run_in_executor(None, db.count_pool_readiness)
+            available = int(pool_counts.get("available", 0))
+            raw = int(pool_counts.get("raw", 0))
+            pending = int(pool_counts.get("pending", 0))
+
+            where_clauses = ["pool_status IS NOT NULL", "COALESCE(pool_status, '') != ''", "COALESCE(pool_status, '') != 'purged_by_dislike'"]
+            params = []
+            if platform:
+                where_clauses.append("source_platform = ?")
+                params.append(platform)
+            if source:
+                where_clauses.append("source = ?")
+                params.append(source)
+            if status:
+                where_clauses.append("pool_status = ?")
+                params.append(status)
+            if min_score is not None:
+                where_clauses.append("quality_score >= ?")
+                params.append(min_score)
+            if max_score is not None:
+                where_clauses.append("quality_score <= ?")
+                params.append(max_score)
+            if scored_only:
+                where_clauses.append("quality_score > 0.0")
+            if unscored_only:
+                where_clauses.append("(quality_score IS NULL OR quality_score = 0.0)")
+            if topic_group:
+                where_clauses.append("topic_group = ?")
+                params.append(topic_group)
+            if has_url is True:
+                where_clauses.append("COALESCE(content_url, '') != ''")
+            elif has_url is False:
+                where_clauses.append("(content_url IS NULL OR content_url = '')")
+            if has_expression is True:
+                where_clauses.append("COALESCE(pool_expression, '') != ''")
+            elif has_expression is False:
+                where_clauses.append("(pool_expression IS NULL OR pool_expression = '')")
+            if date_from:
+                where_clauses.append("discovered_at >= ?")
+                params.append(date_from)
+            if date_to:
+                where_clauses.append("discovered_at <= ?")
+                params.append(date_to)
+
+            # 先查总数
+            count_sql = f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
+            total_row = await loop.run_in_executor(None, lambda: db.conn.execute(count_sql, params).fetchall())
+            total = int(total_row[0]["cnt"]) if total_row else 0
+
+            # 排序：随机或按状态+质量分
+            order_clause = "ORDER BY RANDOM()" if shuffle else """
+                ORDER BY
+                  CASE pool_status
+                    WHEN 'fresh' THEN 1
+                    WHEN 'feedbacked' THEN 2
+                    WHEN 'shown' THEN 3
+                    WHEN 'stale' THEN 4
+                    WHEN 'suppressed' THEN 5
+                    ELSE 6
+                  END,
+                  quality_score DESC,
+                  bvid DESC
+            """
+            sql = f"""
+                SELECT bvid, title, up_name, source_platform, content_type,
+                       cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
+                       topic_group, pool_expression
+                FROM content_cache
+                WHERE {' AND '.join(where_clauses)}
+                {order_clause}
+                LIMIT ?
+            """
+            params.append(limit)
+            rows = await loop.run_in_executor(None, lambda: db.conn.execute(sql, params).fetchall())
+            items = []
+            for r in rows:
+                item_url = str(r["content_url"] or "")
+                item_platform = str(r["source_platform"] or "")
+                # xiaohongshu: try to upgrade bare URL with xsec_token
+                if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
+                    note_id = str(r["bvid"] or "")
+                    if note_id:
+                        try:
+                            item_url = _pick_best_xhs_url(db, note_id, item_url)
+                        except Exception:
+                            pass
+                items.append(PoolItemOut(
+                    bvid=str(r["bvid"]),
+                    title=str(r["title"] or ""),
+                    up_name=str(r["up_name"] or ""),
+                    source_platform=item_platform,
+                    content_type=str(r["content_type"] or "video"),
+                    cover_url=str(r["cover_url"] or ""),
+                    content_url=item_url,
+                    body_text=str(r["body_text"] or ""),
+                    pool_status=str(r["pool_status"] or ""),
+                    quality_score=float(r["quality_score"] or 0.0),
+                    quality_reason=str(r["quality_reason"] or ""),
+                    topic_group=str(r["topic_group"] or ""),
+                    pool_expression=str(r["pool_expression"] or ""),
+                ))
+            return PoolAllResponse(items=items, total=total, available=available, raw=raw, pending=pending)
+        except Exception:
+            logger.exception("pool_all failed")
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+    class UserFeedbackIn(BaseModel):
+        bvid: str = Field(min_length=1)
+        action: str = Field(pattern=r"^(like|dislike)$")
+        source_platform: str = ""
+        title: str = ""
+        topic_group: str = ""
+        body_text: str = ""
+
+    class UserFeedbackOut(BaseModel):
+        ok: bool
+        action: str
+        bvid: str
+
+    class InterestTagOut(BaseModel):
+        tag: str
+        weight: int
+        source_platforms: list[str] = []
+        count: int
+
+    class InterestTagsResponse(BaseModel):
+        tags: list[InterestTagOut]
+
+    @app.post("/api/user-feedback")
+    async def post_user_feedback(
+        bvid: str = Body(..., embed=True),
+        action: str = Body(..., embed=True),
+        source_platform: str = Body("", embed=True),
+        title: str = Body("", embed=True),
+        topic_group: str = Body("", embed=True),
+        body_text: str = Body("", embed=True),
+    ) -> dict:
+        """Record a like or dislike for a content item."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return {"ok": False, "action": action, "bvid": bvid}
+        try:
+            ok = db.insert_user_feedback(
+                bvid, action,
+                source_platform=source_platform,
+                title=title,
+                topic_group=topic_group,
+                body_text=body_text,
+            )
+            # After successful feedback insertion, sync interest to soul_profile
+            if ok:
+                try:
+                    profile_path = os.path.join(ctx.config.data_dir, "memory", "soul_profile.json")
+                    if os.path.exists(profile_path):
+                        InterestSyncer.sync(db, profile_path)
+                except Exception:
+                    # Don't fail the request if sync fails
+                    pass
+            return {"ok": ok, "action": action, "bvid": bvid}
+        except Exception:
+            return {"ok": False, "action": action, "bvid": bvid}
+
+    @app.delete("/api/user-feedback")
+    async def delete_user_feedback(
+        bvid: str = Query(min_length=1),
+        action: str = Query(pattern=r"^(like|dislike)$"),
+    ) -> dict:
+        """Remove a feedback action for a content item."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return {"ok": False, "action": action, "bvid": bvid}
+        try:
+            ok = db.remove_user_feedback(bvid, action)
+            return {"ok": ok, "action": action, "bvid": bvid}
+        except Exception:
+            return {"ok": False, "action": action, "bvid": bvid}
+
+    @app.get("/api/user-feedback/batch")
+    async def get_user_feedback_batch(bvids: str = Query(description="Comma-separated bvid list")) -> dict:
+        """Get feedback status for a batch of bvids."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return {}
+        bvid_list = [b.strip() for b in bvids.split(",") if b.strip()]
+        if not bvid_list:
+            return {}
+        try:
+            return db.get_user_feedback_batch(bvid_list)
+        except Exception:
+            return {}
+
+    @app.get("/api/interest-tags", response_model=InterestTagsResponse)
+    async def get_interest_tags(
+        limit: int = Query(default=20, ge=1, le=50),
+    ) -> InterestTagsResponse:
+        """Get aggregated interest tags from liked content."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return InterestTagsResponse(tags=[])
+        try:
+            tags = db.get_interest_tags(limit=limit)
+            return InterestTagsResponse(tags=[InterestTagOut(**t) for t in tags])
+        except Exception:
+            return InterestTagsResponse(tags=[])
+
+    class ViewHistoryOut(BaseModel):
+        bvid: str
+        title: str = ""
+        source_platform: str = ""
+        topic_group: str = ""
+        content_url: str = ""
+        up_name: str = ""
+        viewed_at: str = ""
+
+    @app.get("/api/view-history")
+    async def get_view_history(
+        limit: int = Query(default=50, ge=1, le=200),
+    ) -> list[ViewHistoryOut]:
+        """Get recent view history."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return []
+        try:
+            rows = db.get_recent_views(limit=limit)
+            return [ViewHistoryOut(**r) for r in rows]
+        except Exception:
+            return []
+
+    class ViewRecordIn(BaseModel):
+        bvid: str = Field(min_length=1)
+        title: str = ""
+        source_platform: str = ""
+        topic_group: str = ""
+        content_url: str = ""
+        up_name: str = ""
+        quality_score: float = 0.0
+        fit_score: float = 0.0
+
+    @app.post("/api/view-record")
+    async def record_view(payload: ViewRecordIn) -> dict:
+        """Record a content view (implicit feedback)."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return {"ok": False}
+        try:
+            db.insert_view_history(payload.model_dump())
+            return {"ok": True}
+        except Exception:
+            return {"ok": False}
+
+    # Multi-turn session cache: {session_id: {where_clauses, params, keywords}}
+    _agent_session_cache: dict[str, dict[str, Any]] = {}
+
+    @app.get("/api/agent-recommend")
+    async def agent_recommend(
+        q: str = Query(default="", description="Natural language query, e.g. 'AI 创业 播客'."),
+        limit: int = Query(default=20, ge=1, le=100, description="Max items to return."),
+        shuffle: bool = Query(default=True, description="Randomize the result order."),
+        session_id: str | None = Query(default=None, description="Session ID for multi-turn context continuation."),
+    ) -> PoolAllResponse:
+        """对话式推荐入口。
+
+        Accept a natural language query, extract keywords, and search across
+        content_cache (title, body_text, topic_group, up_name, source_platform).
+        """
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+        q = (q or "").strip()
+        if not q:
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+        try:
+            loop = asyncio.get_running_loop()
+
+            # --- 1. keyword extraction (LLM-enhanced) ---
+            import re
+            keywords = []
+            platform_filter = None
+            content_type_filter = None
+
+            # Try LLM-based intent extraction if available
+            soul_engine = getattr(ctx, "soul_engine", None)
+            llm_available = soul_engine is not None and hasattr(soul_engine, "llm_ask") and callable(soul_engine.llm_ask)
+            llm_used = False
+
+            if llm_available and len(q) >= 3:
+                try:
+                    sys_prompt = """You are a query intent parser. Given a user's natural language query, extract:
+1. keywords: the search keywords (list of strings, split compound terms if useful)
+2. platform: the target platform (null if unspecified). Valid values: bilibili, zhihu, xiaohongshu, youtube, v2ex, xiaoyuzhou
+3. content_type: the content type (null if unspecified). Valid values: video, podcast, article
+
+Respond ONLY with valid JSON: {"keywords": [...], "platform": null, "content_type": null}
+Keep keywords focused and specific. Remove stop words."""
+                    llm_result = await soul_engine.llm_ask(sys_prompt, q)
+                    if llm_result:
+                        parsed = json.loads(llm_result)
+                        kw = parsed.get("keywords", [])
+                        if kw:
+                            keywords = [str(k).strip() for k in kw if str(k).strip()]
+                            platform_name = parsed.get("platform")
+                            if platform_name and platform_name.lower() in {
+                                "bilibili", "zhihu", "xiaohongshu", "youtube", "v2ex", "xiaoyuzhou",
+                            }:
+                                platform_filter = platform_name.lower()
+                            ct_name = parsed.get("content_type")
+                            if ct_name and ct_name.lower() in {"video", "podcast", "article"}:
+                                content_type_filter = ct_name.lower()
+                            llm_used = True
+                except Exception:
+                    pass
+
+            if not llm_used:
+                # Fallback to keyword-based extraction
+                raw_tokens = re.split(r"[,，、\s;；]+", q)
+                keywords = [t.strip() for t in raw_tokens if len(t.strip()) >= 1]
+
+                platform_map = {
+                    "b站": "bilibili", "bilibili": "bilibili", "哔哩哔哩": "bilibili",
+                    "知乎": "zhihu", "zhihu": "zhihu",
+                    "小红书": "xiaohongshu", "xhs": "xiaohongshu", "xiaohongshu": "xiaohongshu",
+                    "youtube": "youtube", "youtube": "youtube", "油管": "youtube",
+                    "v2ex": "v2ex",
+                    "小宇宙": "xiaoyuzhou", "播客": "xiaoyuzhou", "podcast": "xiaoyuzhou",
+                }
+                content_type_map = {
+                    "视频": "video", "video": "video",
+                    "播客": "podcast", "podcast": "podcast", "音频": "podcast",
+                    "文章": "article", "article": "article",
+                }
+
+                remaining_keywords = []
+                for kw in keywords:
+                    kw_lower = kw.lower().strip()
+                    if kw_lower in platform_map:
+                        platform_filter = platform_map[kw_lower]
+                    elif kw_lower in content_type_map:
+                        content_type_filter = content_type_map[kw_lower]
+                    else:
+                        remaining_keywords.append(kw)
+                keywords = remaining_keywords or keywords
+
+            if not keywords:
+                return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+            # --- 2. IntentAgent: parse exclude filters from original query ---
+            intent = IntentAgent.parse(q)
+            if session_id and session_id in _agent_session_cache:
+                intent = IntentAgent.merge_session_context(intent, _agent_session_cache[session_id])
+
+            exclude_platforms = list(intent["exclude_platforms"])
+            exclude_content_types = list(intent["exclude_content_types"])
+            exclude_keywords = list(intent["exclude_keywords"])
+
+            # --- 3. build WHERE clauses ---
+            where_clauses = [
+                "pool_status IS NOT NULL",
+                "COALESCE(pool_status, '') != ''",
+                "COALESCE(pool_status, '') != 'purged_by_dislike'",
+            ]
+            params: list[Any] = []
+
+            if platform_filter:
+                where_clauses.append("source_platform = ?")
+                params.append(platform_filter)
+
+            if content_type_filter:
+                where_clauses.append("content_type = ?")
+                params.append(content_type_filter)
+
+            # Exclusion filters
+            for ep in exclude_platforms:
+                where_clauses.append("source_platform != ?")
+                params.append(ep)
+            for ect in exclude_content_types:
+                where_clauses.append("content_type != ?")
+                params.append(ect)
+
+            # LIKE search across multiple fields
+            like_parts: list[str] = []
+            for kw in keywords:
+                kw_escaped = kw.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+                like_pattern = f"%{kw_escaped}%"
+                like_parts.append(
+                    f"(title LIKE ? ESCAPE '!' "
+                    f"OR body_text LIKE ? ESCAPE '!' "
+                    f"OR topic_group LIKE ? ESCAPE '!' "
+                    f"OR up_name LIKE ? ESCAPE '!' "
+                    f"OR source_platform LIKE ? ESCAPE '!')"
+                )
+                for _ in range(5):
+                    params.append(like_pattern)
+
+            if like_parts:
+                where_clauses.append(f"({' OR '.join(like_parts)})")
+
+            # --- 5. count & fetch ---
+            count_sql = f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
+            total_row = await loop.run_in_executor(None, lambda: db.conn.execute(count_sql, params).fetchall())
+            total = int(total_row[0]["cnt"]) if total_row else 0
+
+            fetch_limit = min(limit * 3, 200)  # fetch more for sorting + diversity
+            sql = f"""
+                SELECT bvid, title, up_name, source_platform, content_type,
+                       cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
+                       topic_group, pool_expression
+                FROM content_cache
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY quality_score DESC
+                LIMIT ?
+            """
+            params.append(fetch_limit)
+            rows = await loop.run_in_executor(None, lambda: db.conn.execute(sql, params).fetchall())
+
+            if not rows:
+                return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+            # --- 6. RankAgent: score, semantic re-rank, diversity mix ---
+            profile_keywords = _load_interest_keywords()
+
+            # Get query embedding for semantic search
+            emb_service = getattr(soul_engine, "_embedding_service", None) if soul_engine else None
+            q_embed = None
+            if emb_service is not None:
+                try:
+                    q_embed = await emb_service.embed(q)
+                except Exception:
+                    pass
+
+            rank_result = RankAgent.score_and_rank(
+                rows=rows,
+                intent=intent,
+                db=db,
+                profile_keywords=profile_keywords,
+                q_embed=q_embed,
+                emb_service=emb_service,
+            )
+            alpha = rank_result.get("alpha", 0.0)
+            high_fit = rank_result["high_fit"]
+            low_fit = rank_result["low_fit"]
+
+            # --- 7. diversity mix: 80% high-fit, 20% exploration ---
+            final_items: list[PoolItemOut] = []
+            high_count = min(len(high_fit), int(limit * 0.8))
+            low_count = min(len(low_fit), limit - high_count)
+            # Ensure at least 1 exploration item if available
+            if low_count == 0 and low_fit and len(high_fit) >= limit:
+                high_count = limit - 1
+                low_count = 1
+
+            selected = high_fit[:high_count] + low_fit[:low_count]
+            random.shuffle(selected)  # final shuffle for presentation
+
+            for s in selected:
+                r = s["row"]
+                item_url = str(r["content_url"] or "")
+                item_platform = str(r["source_platform"] or "")
+                if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
+                    note_id = str(r["bvid"] or "")
+                    if note_id:
+                        try:
+                            item_url = _pick_best_xhs_url(db, note_id, item_url)
+                        except Exception:
+                            pass
+                final_items.append(PoolItemOut(
+                    bvid=str(r["bvid"]),
+                    title=str(r["title"] or ""),
+                    up_name=str(r["up_name"] or ""),
+                    source_platform=item_platform,
+                    content_type=str(r["content_type"] or "video"),
+                    cover_url=str(r["cover_url"] or ""),
+                    content_url=item_url,
+                    body_text=str(r["body_text"] or ""),
+                    pool_status=str(r["pool_status"] or ""),
+                    quality_score=float(r["quality_score"] or 0.0),
+                    fit_score=float(s["fit_score"] or 0.0),
+                    quality_reason=str(r["quality_reason"] or ""),
+                    topic_group=str(r["topic_group"] or ""),
+                    pool_expression=str(r["pool_expression"] or ""),
+                ))
+            # Build session context with RankAgent
+            intent["keywords"] = keywords
+            session_context = RankAgent.build_context_text(intent, alpha)
+            if session_id:
+                _agent_session_cache[session_id] = {
+                    "exclude_platforms": list(exclude_platforms),
+                    "exclude_content_types": list(exclude_content_types),
+                    "exclude_keywords": list(exclude_keywords),
+                    "keywords": list(keywords),
+                    "platform_filter": platform_filter,
+                    "content_type_filter": content_type_filter,
+                    "session_context": session_context,
+                }
+            return PoolAllResponse(items=final_items, total=total, available=total, raw=0, pending=0, session_context=session_context)
+        except Exception:
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
 
     @app.get("/api/runtime-status", response_model=RuntimeStatusResponse)
     async def runtime_status() -> RuntimeStatusResponse:
@@ -3992,7 +4567,339 @@ def create_app(
             payload.update(get_update_status())
         return RuntimeStatusResponse(**payload)
 
-    def _backend_update_status() -> BackendUpdateStatusOut:
+    @app.get("/api/observability", response_model=ObservabilityResponse)
+    async def observability() -> ObservabilityResponse:
+        """Aggregate observability data for the dashboard page."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return ObservabilityResponse(
+                pipeline=PoolPipelineStats(total_items=0, fresh=0, shown=0, stale=0, suppressed=0, feedbacked=0, pending=0, discovery_candidates_pending=0, discovery_candidates_evaluated=0, items_with_quality_score=0, items_without_quality_score=0),
+                platforms=[], score_distribution=[], topic_groups=[], llm_usage=LLMUsageSummary(), discovery_candidates=[],
+            )
+
+        def _query() -> ObservabilityResponse:
+            # ── 1. Master content_cache aggregate (single query replaces 9+ separate queries) ──
+            master = db.conn.execute("""
+                SELECT
+                  COUNT(*) AS total,
+                  AVG(CASE WHEN quality_score > 0.0 THEN quality_score END) AS avg_score,
+                  SUM(CASE WHEN quality_score > 0.0 THEN 1 ELSE 0 END) AS scored_count,
+                  SUM(CASE WHEN pool_status = 'fresh' THEN 1 ELSE 0 END) AS fresh,
+                  SUM(CASE WHEN pool_status = 'shown' THEN 1 ELSE 0 END) AS shown,
+                  SUM(CASE WHEN pool_status = 'stale' THEN 1 ELSE 0 END) AS stale,
+                  SUM(CASE WHEN pool_status = 'suppressed' THEN 1 ELSE 0 END) AS suppressed,
+                  SUM(CASE WHEN pool_status = 'feedbacked' THEN 1 ELSE 0 END) AS feedbacked,
+                  SUM(CASE WHEN pool_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                  SUM(CASE WHEN COALESCE(pool_expression, '') != '' THEN 1 ELSE 0 END) AS with_expr,
+                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,
+                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,
+                  SUM(CASE WHEN delight_score > 0.0 THEN 1 ELSE 0 END) AS delight_candidates,
+                  SUM(CASE WHEN delight_notified = 1 THEN 1 ELSE 0 END) AS delight_notified,
+                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,
+                  SUM(CASE WHEN quality_score <= 0.0 THEN 1 ELSE 0 END) AS bucket_0,
+                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,
+                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,
+                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,
+                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,
+                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10
+                FROM content_cache
+            """).fetchone()
+            m_total = int(master["total"]) if master else 0
+            m_avg = float(master["avg_score"]) if master and master["avg_score"] is not None else 0.0
+            m_scored = int(master["scored_count"]) if master else 0
+
+            pipeline = PoolPipelineStats(
+                total_items=m_total,
+                fresh=int(master["fresh"]) if master else 0,
+                shown=int(master["shown"]) if master else 0,
+                stale=int(master["stale"]) if master else 0,
+                suppressed=int(master["suppressed"]) if master else 0,
+                feedbacked=int(master["feedbacked"]) if master else 0,
+                pending=int(master["pending"]) if master else 0,
+                discovery_candidates_pending=0,
+                discovery_candidates_evaluated=0,
+                items_with_quality_score=m_scored,
+                items_without_quality_score=m_total - m_scored,
+                avg_quality_score=round(m_avg, 4),
+            )
+
+            # ── 2. Per-platform breakdown ──
+            plat_rows = db.conn.execute("""
+                SELECT source_platform, pool_status, COUNT(*) AS c
+                FROM content_cache
+                GROUP BY source_platform, pool_status
+                ORDER BY source_platform
+            """).fetchall()
+            plat_map: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+            for r in plat_rows:
+                plat = str(r["source_platform"]) or "unknown"
+                status = str(r["pool_status"]) or "unknown"
+                plat_map[plat][status] += int(r["c"])
+            platforms = [
+                PlatformPoolStats(
+                    platform=plat,
+                    total=sum(s.values()),
+                    fresh=s.get("fresh", 0), shown=s.get("shown", 0), stale=s.get("stale", 0),
+                    suppressed=s.get("suppressed", 0), feedbacked=s.get("feedbacked", 0), pending=s.get("pending", 0),
+                )
+                for plat, s in sorted(plat_map.items())
+            ]
+
+            # ── 3. Score distribution (from master) ──
+            score_buckets = [
+                ("0 (未评分)", "bucket_0"), ("0~0.2", "bucket_02"), ("0.2~0.4", "bucket_04"),
+                ("0.4~0.6", "bucket_06"), ("0.6~0.8", "bucket_08"), ("0.8~1.0", "bucket_10"),
+            ]
+            score_dist = [ScoreDistribution(bucket=b, count=int(master[col]) if master else 0) for b, col in score_buckets]
+
+            # ── 4. Topic groups ──
+            topic_rows = db.conn.execute("""
+                SELECT topic_group, COUNT(*) AS c
+                FROM content_cache
+                WHERE topic_group != '' AND topic_group IS NOT NULL
+                GROUP BY topic_group ORDER BY c DESC LIMIT 30
+            """).fetchall()
+            topic_groups = [TopicGroupStats(topic=str(r["topic_group"]), count=int(r["c"])) for r in topic_rows]
+
+            # ── 5. Discovery candidates ──
+            disc_rows = db.conn.execute("""
+                SELECT status, COUNT(*) AS c
+                FROM discovery_candidates GROUP BY status ORDER BY c DESC
+            """).fetchall()
+            disc_stats = [DiscoveryCandidateStats(status=str(r["status"]), count=int(r["c"])) for r in disc_rows]
+
+            # Discovery candidates pipeline counts (from disc_rows)
+            disc_pending = 0
+            disc_evaluated = 0
+            for r in disc_rows:
+                st = str(r["status"])
+                if st in ("pending_eval", "evaluating"):
+                    disc_pending += int(r["c"])
+                elif st == "evaluated":
+                    disc_evaluated += int(r["c"])
+            pipeline.discovery_candidates_pending = disc_pending
+            pipeline.discovery_candidates_evaluated = disc_evaluated
+
+            # ── 6. LLM usage (combined: by_caller covers all 7d, derive today from it) ──
+            caller_rows = db.conn.execute("""
+                SELECT caller, COUNT(*) AS calls,
+                       COALESCE(SUM(estimated_cost_cny), 0) AS cost_cny,
+                       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost
+                FROM llm_usage
+                WHERE timestamp >= datetime('now', '-7 day', 'localtime')
+                GROUP BY caller ORDER BY cost_cny DESC LIMIT 20
+            """).fetchall()
+            by_caller: list[dict[str, object]] = []
+            total_7d_calls = 0
+            total_7d_cost = 0.0
+            total_today_calls = 0
+            total_today_cost = 0.0
+            for r in caller_rows:
+                calls = int(r["calls"]); cost = float(r["cost_cny"])
+                t_calls = int(r["today_calls"]); t_cost = float(r["today_cost"])
+                total_7d_calls += calls; total_7d_cost += cost
+                total_today_calls += t_calls; total_today_cost += t_cost
+                by_caller.append({
+                    "caller": str(r["caller"] or "unknown"), "calls": calls,
+                    "cost_cny": round(cost, 4), "prompt_tokens": int(r["prompt_tokens"]),
+                    "completion_tokens": int(r["completion_tokens"]),
+                })
+            llm_usage = LLMUsageSummary(
+                today_calls=total_today_calls, today_cost_cny=round(total_today_cost, 4),
+                total_calls_7d=total_7d_calls, total_cost_7d=round(total_7d_cost, 4),
+                by_caller=by_caller,
+            )
+
+            # ── 7. Runtime snapshot ──
+            runtime: dict[str, object] = {}
+            get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
+            if callable(get_runtime_status):
+                with suppress(Exception):
+                    st = get_runtime_status()
+                    if isinstance(st, dict):
+                        for k in ("last_refresh_at", "last_discovered_count", "last_replenished_count",
+                                  "pool_available_count", "pool_raw_count", "pool_target_count",
+                                  "recommendation_count", "recent_pool_topics", "pending_delight_count",
+                                  "last_delight_notification_at", "manual_refresh_state", "pending_signal_events"):
+                            if k in st:
+                                runtime[k] = st[k]
+
+            # ── 8. Keywords stats ──
+            kw_rows = db.conn.execute("""
+                SELECT platform, status, COUNT(*) AS c
+                FROM discovery_keywords GROUP BY platform, status ORDER BY platform, status
+            """).fetchall()
+            keywords = [{"platform": str(r["platform"] or "unknown"), "status": str(r["status"] or "unknown"), "count": int(r["c"])} for r in kw_rows]
+
+            # ── 9. Eval stats (combined single query) ──
+            eval_row = db.conn.execute("""
+                SELECT COUNT(*) AS total, COALESCE(SUM(eval_attempts), 0) AS attempts
+                FROM discovery_candidates
+            """).fetchone()
+            eval_total_c = int(eval_row["total"]) if eval_row else 0
+            eval_stats = {
+                "total_candidates": eval_total_c,
+                "total_eval_attempts": int(eval_row["attempts"]) if eval_row else 0,
+                "candidates_accepted": int(master["candidates_accepted"]) if master else 0,
+                "acceptance_rate": round(int(master["candidates_accepted"]) / max(eval_total_c, 1) * 100, 1) if eval_total_c else 0,
+            }
+
+            # ── 10. Event stats (combined single query) ──
+            event_rows = db.conn.execute("""
+                SELECT event_type, source_platform, inferred_satisfaction, COUNT(*) AS c
+                FROM events
+                GROUP BY event_type, source_platform, inferred_satisfaction
+            """).fetchall()
+            event_types: dict[str, int] = defaultdict(int)
+            event_platforms: dict[str, int] = defaultdict(int)
+            sat_map: dict[str, int] = defaultdict(int)
+            for r in event_rows:
+                et = str(r["event_type"] or "unknown")
+                sp = str(r["source_platform"]) or None
+                sat = str(r["inferred_satisfaction"]) or None
+                c = int(r["c"])
+                event_types[et] += c
+                if sp:
+                    event_platforms[sp] += c
+                if sat:
+                    sat_map[sat] += c
+            event_total = sum(event_types.values())
+            event_stats = {"total_events": event_total, "by_type": dict(event_types), "by_platform": dict(event_platforms)}
+            satisfaction_distribution = [{"satisfaction": k, "count": v} for k, v in sorted(sat_map.items(), key=lambda x: -x[1])]
+
+            # ── 11. Feedback stats ──
+            fb_rows = db.conn.execute("""
+                SELECT feedback_type, COUNT(*) AS c FROM content_cache
+                WHERE feedback_type != '' AND feedback_type IS NOT NULL
+                GROUP BY feedback_type ORDER BY c DESC
+            """).fetchall()
+            fb_types = {str(r["feedback_type"]): int(r["c"]) for r in fb_rows}
+            feedback_stats = {"total_feedback": sum(fb_types.values()), "by_type": fb_types}
+
+            # ── 12. Expression / Delight (from master) ──
+            expression_coverage = {
+                "with_expression": int(master["with_expr"]) if master else 0,
+                "without_expression": int(master["without_expr"]) if master else 0,
+                "with_topic_group": int(master["with_topic"]) if master else 0,
+                "with_quality_score": m_scored,
+            }
+            delight_stats = {
+                "delight_candidates": int(master["delight_candidates"]) if master else 0,
+                "delight_notified": int(master["delight_notified"]) if master else 0,
+                "pending_delight": runtime.get("pending_delight_count", 0),
+                "last_delight_notification": runtime.get("last_delight_notification_at", ""),
+            }
+
+            # ── 13. Soul profile (pre-fetched) ──
+            soul_profile = _soul_profile_cache
+
+            # ── 14. Scheduler loop health ──
+            scheduler_loops: list[dict[str, object]] = []
+            try:
+                controller = getattr(ctx, "runtime_controller", None)
+                if controller is not None and hasattr(controller, "get_loop_health"):
+                    scheduler_loops = controller.get_loop_health()
+            except Exception:
+                pass
+
+            # ── 15. Auth sources ──
+            auth_sources: list[dict[str, object]] = []
+            try:
+                ss_resp = sources_status()
+                if isinstance(ss_resp, SourcesStatusResponse):
+                    for s in ss_resp.sources:
+                        auth_sources.append({
+                            "platform": s.platform, "label": s.label, "status": s.status,
+                            "last_ok_at": s.last_ok_at or "", "error": s.error or "",
+                            "cookie_age_hours": s.cookie_age_hours,
+                        })
+            except Exception:
+                pass
+
+            # ── 16. Style distribution ──
+            style_rows = db.conn.execute("""
+                SELECT style_key, COUNT(*) AS c FROM content_cache
+                WHERE style_key != '' AND style_key IS NOT NULL
+                GROUP BY style_key ORDER BY c DESC LIMIT 20
+            """).fetchall()
+            style_distribution = [{"style": str(r["style_key"]), "count": int(r["c"])} for r in style_rows]
+
+            # ── 17. Suppressed (quota-managed) qualification breakdown ──
+            # One GROUP BY over source_platform × qualification bucket so the
+            # dashboard can explain WHY items sit outside the rotation pool:
+            # qualified = passed admission line + full precompute + linkable
+            # (could re-enter if reactivated), below_threshold = LLM scored
+            # them below the 0.60 admission line, unevaluated = no score yet.
+            suppressed_rows = db.conn.execute("""
+                SELECT
+                    source_platform AS platform,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) >= 0.60
+                              AND COALESCE(pool_expression, '') != ''
+                              AND COALESCE(pool_topic_label, '') != ''
+                              AND COALESCE(style_key, '') != ''
+                              AND COALESCE(topic_group, '') != ''
+                              AND COALESCE(content_url, '') != ''
+                        THEN 1 ELSE 0 END) AS qualified,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) > 0
+                              AND COALESCE(relevance_score, 0.0) < 0.60
+                        THEN 1 ELSE 0 END) AS below_threshold,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) = 0
+                        THEN 1 ELSE 0 END) AS unevaluated,
+                    COUNT(*) AS total
+                FROM content_cache
+                WHERE pool_status = 'suppressed'
+                GROUP BY source_platform
+                ORDER BY total DESC
+            """).fetchall()
+            suppressed_breakdown = [
+                {
+                    "platform": str(r["platform"] or "unknown"),
+                    "qualified": int(r["qualified"]),
+                    "below_threshold": int(r["below_threshold"]),
+                    "unevaluated": int(r["unevaluated"]),
+                    "total": int(r["total"]),
+                }
+                for r in suppressed_rows
+            ]
+
+            return ObservabilityResponse(
+                pipeline=pipeline, platforms=platforms, score_distribution=score_dist,
+                topic_groups=topic_groups, llm_usage=llm_usage, discovery_candidates=disc_stats,
+                runtime=runtime, keywords=keywords, eval_stats=eval_stats,
+                event_stats=event_stats, feedback_stats=feedback_stats,
+                expression_coverage=expression_coverage, delight_stats=delight_stats,
+                soul_profile=soul_profile, scheduler_loops=scheduler_loops,
+                auth_sources=auth_sources, style_distribution=style_distribution,
+                satisfaction_distribution=satisfaction_distribution,
+                suppressed_breakdown=suppressed_breakdown,
+            )
+
+        # Pre-fetch soul profile in async context (not inside thread pool executor)
+        _soul_profile_cache: dict[str, object] = {}
+        try:
+            soul_engine = getattr(ctx, "soul_engine", None)
+            if soul_engine is not None and hasattr(soul_engine, "get_profile"):
+                profile = await soul_engine.get_profile()
+                if profile is not None:
+                    interest_tags = len(getattr(profile.interest, "likes", [])) if hasattr(profile, "interest") else 0
+                    awareness_count = len(getattr(profile, "recent_awareness", []))
+                    insights_count = len(getattr(profile, "active_insights", []))
+                    portrait = getattr(profile, "personality_portrait", "")[:100]
+                    _soul_profile_cache = {
+                        "interest_tags_count": interest_tags,
+                        "awareness_notes_count": awareness_count,
+                        "insight_hypotheses_count": insights_count,
+                        "personality_traits": portrait,
+                    }
+        except Exception:
+            _soul_profile_cache = {"error": "profile unavailable"}
+
+        return await asyncio.get_running_loop().run_in_executor(None, _query)
+
+    def _backend_update_status(self) -> BackendUpdateStatusOut:
         get_update_status = getattr(ctx.auto_update_service, "get_update_status", None)
         if callable(get_update_status):
             status = get_update_status()
@@ -9748,6 +10655,7 @@ def create_app(
         _DESKTOP_PAGE_NAMES = {
             "home", "delight", "saved", "profile", "chat", "library", "settings",
             "watchLater", "watchlater",
+            "custom-filter", "pool-all", "pool-filter", "observability", "pool-explore", "xhs-feed", "zhihu-feed", "bili-feed", "youtube-feed", "v2ex-feed", "xiaoyuzhou-feed", "agent-recommend",
         }
 
         @app.get("/web/{page}", include_in_schema=False)

@@ -1752,10 +1752,14 @@ class RecommendationEngine:
         """
         key = self._batch_key(platform)
         buf = self._batch_buffers.setdefault(key, deque())
-        if buf:
+        # Batch buffer holds standard-size (10) batches; a request for a
+        # larger batch must bypass it — popping a 10-item batch would
+        # silently ignore the caller's limit. Cold path computes the full
+        # size directly.
+        if buf and limit <= 10:
             batch = buf.popleft()
             # Top up so the next click is also instant.
-            self._schedule_refill(profile=profile, key=key, platform=platform, limit=limit)
+            self._schedule_refill(profile=profile, key=key, platform=platform, limit=10)
             return batch
         # Negative cache hit: we recently learned this key has nothing to
         # serve. Return immediately instead of paying the full cold-path cost
@@ -1776,7 +1780,9 @@ class RecommendationEngine:
             self._batch_empty_until[key] = (
                 time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
             )
-        self._schedule_refill(profile=profile, key=key, platform=platform, limit=limit)
+        # Refill buffer with standard-size batches regardless of this
+        # request's limit — the next standard click should stay instant.
+        self._schedule_refill(profile=profile, key=key, platform=platform, limit=10)
         return batch
 
     def prefetch_batch_buffer(
@@ -2200,6 +2206,14 @@ class RecommendationEngine:
             ranked = sorted(candidates, key=cls._ranking_key)
         if limit <= 1 or len(ranked) <= 1:
             return ranked[:limit]
+
+        # Browse-mode batches (limit > 30): greedy MMR is O(limit²·|C|) in
+        # pure Python — limit=200 over a 600-candidate pool stalls for
+        # minutes. Relevance ordering + string caps is plenty for
+        # pool-browsing UX, so drop the embeddings and take the fast path.
+        # Also catches the "全部推荐" page which fetches up to 5000.
+        if limit > 30:
+            embeddings = None
 
         # MMR path (v0.3.44+): when embeddings are available, replace the
         # simple relevance-ordered greedy selection with Maximum Marginal

@@ -153,7 +153,7 @@ class SupportsEventDatabase(Protocol):
     def count_pool_readiness(self, *, xhs_self_nickname: str = "") -> dict[str, int]: ...
     def count_pool_candidates_by_source(self) -> dict[str, int]: ...
     def count_pool_available_candidates_by_source(
-        self, *, max_per_topic_group: int = 3, xhs_self_nickname: str = ""
+        self, *, max_per_topic_group: int = 0, xhs_self_nickname: str = ""
     ) -> dict[str, int]: ...
     def count_pool_raw_material_candidates(self) -> int: ...
     def count_pool_raw_material_by_source(self) -> dict[str, int]: ...
@@ -383,6 +383,13 @@ class ContinuousRefreshController:
     # exhausted retries on the first half-hour.
     _init_grace_consumed: bool = False
     _last_llm_gate_allowed: bool = field(default=True, init=False)
+    # Observability: per-loop registry filled by ``_supervise_loop`` and read
+    # by ``get_loop_health`` (the /api/observability 运行时健康 tab). Keys are
+    # stable loop names; values carry the task handle, display label, expected
+    # interval and the last "still alive" probe timestamp.
+    _loop_meta: dict[str, dict[str, object]] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     _signal_event_types = [
         "view",
@@ -724,29 +731,12 @@ class ContinuousRefreshController:
             xhs_self_nickname=self._xhs_self_nickname()
         )
 
-        trim_source_overflow_fn = getattr(self.database, "trim_pool_source_overflow", None)
-        if callable(trim_source_overflow_fn) and pool_available >= self.pool_target_count:
-            try:
-                source_overflow_suppressed = trim_source_overflow_fn(
-                    source_share_quotas=raw_source_targets,
-                )
-                if source_overflow_suppressed > 0:
-                    logger.info(
-                        "enforce_pool_cap: suppressed=%s over-quota source items",
-                        source_overflow_suppressed,
-                    )
-                    self.database.trim_topic_group_overflow(
-                        max_per_group=max(3, self.pool_target_count // 10),
-                    )
-            except Exception:
-                logger.exception("trim_pool_source_overflow failed")
-        elif callable(trim_source_overflow_fn):
-            logger.debug(
-                "enforce_pool_cap: skipped source overflow trim below target "
-                "pool_available=%s target=%s",
-                pool_available,
-                self.pool_target_count,
-            )
+        # Source-overflow suppress pass disabled by request: with the
+        # per-topic-group window removed, availability sits above target and
+        # this pass would immediately re-suppress ~1.3k qualified items
+        # (youtube/zhihu over family quota), fighting the "let everything
+        # into the rotation" policy. Family quotas remain advisory for
+        # discovery planning only.
         raw_ceiling = self._raw_material_ceiling()
         trimmed = 0
         try:
@@ -1068,23 +1058,23 @@ class ContinuousRefreshController:
                 with suppress(Exception):
                     bind_soul(self.soul_engine)
         tasks = [
-            asyncio.create_task(self._loop_refresh()),
-            asyncio.create_task(self._loop_pool_precompute()),
-            asyncio.create_task(self._loop_candidate_eval()),
-            asyncio.create_task(self._loop_soul_pipeline()),
-            asyncio.create_task(self._loop_bilibili_producer()),
-            asyncio.create_task(self._loop_xhs_producer()),
-            asyncio.create_task(self._loop_douyin_producer()),
-            asyncio.create_task(self._loop_youtube_producer()),
-            asyncio.create_task(self._loop_x_producer()),
-            asyncio.create_task(self._loop_zhihu_producer()),
-            asyncio.create_task(self._loop_rss_polling()),
-            asyncio.create_task(self._loop_xiaoyuzhou_polling()),
-            asyncio.create_task(self._loop_wechat_polling()),
-            asyncio.create_task(self._loop_proactive_push()),
-            asyncio.create_task(self._loop_keyword_planner()),
-            asyncio.create_task(self._loop_image_cache_cleanup()),
-            asyncio.create_task(self._loop_cover_prefetch()),
+            self._spawn_loop("refresh", "发现刷新", self.check_interval_seconds, self._loop_refresh()),
+            self._spawn_loop("pool_precompute", "池子预计算", self.check_interval_seconds, self._loop_pool_precompute()),
+            self._spawn_loop("candidate_eval", "候选评估", self.check_interval_seconds, self._loop_candidate_eval()),
+            self._spawn_loop("soul_pipeline", "灵魂管道", self.check_interval_seconds, self._loop_soul_pipeline()),
+            self._spawn_loop("bilibili_producer", "B站内容生产", self.check_interval_seconds, self._loop_bilibili_producer()),
+            self._spawn_loop("xhs_producer", "小红书内容生产", self.check_interval_seconds, self._loop_xhs_producer()),
+            self._spawn_loop("douyin_producer", "抖音内容生产", self.check_interval_seconds, self._loop_douyin_producer()),
+            self._spawn_loop("youtube_producer", "YouTube内容生产", self.check_interval_seconds, self._loop_youtube_producer()),
+            self._spawn_loop("x_producer", "X内容生产", self.check_interval_seconds, self._loop_x_producer()),
+            self._spawn_loop("zhihu_producer", "知乎内容生产", self.check_interval_seconds, self._loop_zhihu_producer()),
+            self._spawn_loop("rss_polling", "RSS轮询", 3600, self._loop_rss_polling()),
+            self._spawn_loop("xiaoyuzhou_polling", "小宇宙轮询", 7200, self._loop_xiaoyuzhou_polling()),
+            self._spawn_loop("wechat_polling", "公众号轮询", 7200, self._loop_wechat_polling()),
+            self._spawn_loop("proactive_push", "主动推送", self.proactive_push_interval_seconds, self._loop_proactive_push()),
+            self._spawn_loop("keyword_planner", "关键词规划", int(getattr(self.keyword_planner, "poll_seconds", 120) or 120), self._loop_keyword_planner()),
+            self._spawn_loop("image_cache_cleanup", "图片缓存清理", _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS, self._loop_image_cache_cleanup()),
+            self._spawn_loop("cover_prefetch", "封面预取", _COVER_PREFETCH_INTERVAL_SECONDS, self._loop_cover_prefetch()),
         ]
         try:
             await asyncio.gather(*tasks)
@@ -1092,6 +1082,90 @@ class ContinuousRefreshController:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _spawn_loop(
+        self,
+        name: str,
+        label: str,
+        interval_seconds: int,
+        loop_coro: Any,
+    ) -> asyncio.Task[None]:
+        return asyncio.ensure_future(
+            self._supervise_loop(name, label, interval_seconds, loop_coro)
+        )
+
+    async def _supervise_loop(
+        self,
+        name: str,
+        label: str,
+        interval_seconds: int,
+        loop_coro: Any,
+    ) -> None:
+        """Wrap a ``while True`` scheduler loop with liveness tracking.
+
+        The wrapped loop runs untouched; the supervisor merely stamps a
+        "still alive" timestamp every probe window so ``get_loop_health``
+        can tell a running loop from a hung one (e.g. blocked for many
+        minutes on a rate-limited upstream). Probe cadence is capped at
+        300s so even 2-6h loops report recent liveness.
+        """
+        task = asyncio.ensure_future(loop_coro)
+        try:
+            task.set_name(f"loop:{name}")
+        except (AttributeError, RuntimeError):
+            pass
+        interval = max(1, int(interval_seconds))
+        self._loop_meta[name] = {
+            "label": label,
+            "interval": interval,
+            "task": task,
+            "last_tick_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        probe = min(interval, 300)
+        try:
+            while not task.done():
+                self._loop_meta[name]["last_tick_at"] = (
+                    datetime.now().isoformat(timespec="seconds")
+                )
+                await asyncio.wait({task}, timeout=probe)
+        except asyncio.CancelledError:
+            task.cancel()
+            with suppress(BaseException):
+                await task
+            raise
+
+    def get_loop_health(self) -> list[dict[str, object]]:
+        """Per-loop liveness snapshot for the observability dashboard."""
+        loops: list[dict[str, object]] = []
+        now = datetime.now()
+        for name, meta in self._loop_meta.items():
+            task = meta.get("task")
+            task_ref = cast("asyncio.Task[None] | None", task)
+            interval = int(meta.get("interval", 0) or 0)
+            last_tick = str(meta.get("last_tick_at", ""))
+            if task_ref is None:
+                status = "not_started"
+            elif task_ref.cancelled():
+                status = "stopped"
+            elif task_ref.done():
+                status = "crashed" if task_ref.exception() is not None else "idle"
+            else:
+                status = "running"
+                if last_tick:
+                    with suppress(ValueError):
+                        age = (now - datetime.fromisoformat(last_tick)).total_seconds()
+                        if age > max(interval * 3, 600):
+                            status = "lagging"
+            loops.append(
+                {
+                    "name": name,
+                    "label": str(meta.get("label", name)),
+                    "interval_seconds": interval,
+                    "last_tick_at": last_tick,
+                    "status": status,
+                }
+            )
+        return loops
 
     async def _loop_refresh(self) -> None:
         """Discovery refresh — fills the candidate pool."""
@@ -2128,7 +2202,7 @@ class ContinuousRefreshController:
             self.database.trim_topic_group_overflow(
                 max_per_group=max(3, self.pool_target_count // 10),
             )
-            self.database.evict_stale_pool_items(max_age_days=14)
+            self.database.evict_stale_pool_items(max_age_days=365)
             # Bound growth of the high-volume ``events`` table: low-value
             # behavior events (views/scrolls/hovers/snapshots) are folded into
             # the persistent soul/preference layers by the cognition watermark,

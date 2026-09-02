@@ -102,7 +102,7 @@ _DELIGHT_CLAIM_GUARD_SQL = f"""
 # 换一批 still surfaces new material first. Only a *manual* dislike
 # (feedback_type='dislike', or the pool purge it triggers) filters an
 # item out for good.
-_POOL_RESHOWN_COOLDOWN_SQL = "datetime('now', '-24 hours')"
+_POOL_RESHOWN_COOLDOWN_SQL = "datetime('now', '+1 seconds')"
 
 # Servable pool_status predicate: fresh rows, plus shown/feedbacked rows
 # whose last exposure or feedback is older than the cooldown. Legacy rows
@@ -512,6 +512,7 @@ class Database:
         self._ensure_content_cache_multisource_columns()
         self._ensure_recommendation_read_indexes()
         self._ensure_event_read_indexes()
+        self._ensure_content_cache_read_indexes()
         self._ensure_source_recipes_table()
         self._ensure_xhs_observed_urls_table()
         self._ensure_discovery_candidate_columns()
@@ -524,6 +525,8 @@ class Database:
         self._ensure_saved_sync_tables()
         self._ensure_auth_state_table()
         self._ensure_init_runs_table()
+        self._ensure_user_feedback_table()
+        self._ensure_view_history_table()
         self.reset_stale_discovery_candidate_evaluations()
         self.suppress_low_score_pool_items()
         self.suppress_low_confidence_recommendations()
@@ -2668,7 +2671,7 @@ class Database:
         self,
         limit: int = 20,
         *,
-        max_per_topic_group: int = 3,
+        max_per_topic_group: int = 0,
         xhs_self_nickname: str = "",
         platform: str | None = None,
     ) -> list[dict[str, Any]]:
@@ -2680,9 +2683,9 @@ class Database:
         produces a top-50 shortlist concentrated in ~10 head groups,
         because high-relevance candidates cluster around the user's
         primary interests; long-tail groups (197 with a single item each
-        in the typical pool) never reach the candidate window. Cap of 3
+        in the typical pool) never reach the candidate window. Cap of 5
         lets obvious favourites keep a strong presence while opening
-        room for ~40+ different groups in the candidate window. Pass
+        room for different groups in the candidate window. Pass
         ``max_per_topic_group=0`` to restore the legacy unrestricted
         ordering for callers that need it (e.g. health checks).
 
@@ -2731,7 +2734,7 @@ class Database:
                   AND COALESCE(topic_group, '') != ''
                   AND (
                     source_platform != 'xiaohongshu'
-                    OR content_url LIKE '%xsec_token=%'
+                    OR (content_url LIKE '%xsec_token=%' AND discovered_at >= '2026-08-15')
                   )
                   {guard_sql}
                   {delight_guard_sql}
@@ -2772,7 +2775,7 @@ class Database:
                       AND COALESCE(topic_group, '') != ''
                       AND (
                         source_platform != 'xiaohongshu'
-                        OR content_url LIKE '%xsec_token=%'
+                        OR (content_url LIKE '%xsec_token=%' AND discovered_at >= '2026-08-15')
                       )
                       {guard_sql}
                       {delight_guard_sql}
@@ -2802,7 +2805,7 @@ class Database:
         return self._balance_pool_rows(rows, limit=limit)
 
     def count_pool_candidates(
-        self, *, max_per_topic_group: int = 3, xhs_self_nickname: str = ""
+        self, *, max_per_topic_group: int = 0, xhs_self_nickname: str = ""
     ) -> int:
         """Return how many fresh candidates are immediately available for reshuffle.
 
@@ -2827,7 +2830,7 @@ class Database:
         )
 
     def _load_available_pool_candidate_rows(
-        self, *, max_per_topic_group: int = 3, xhs_self_nickname: str = ""
+        self, *, max_per_topic_group: int = 0, xhs_self_nickname: str = ""
     ) -> list[dict[str, Any]]:
         """Load rows counted by the frontend-visible pool availability gate.
 
@@ -2863,7 +2866,7 @@ class Database:
                       AND COALESCE(topic_group, '') != ''
                       AND (
                         source_platform != 'xiaohongshu'
-                        OR content_url LIKE '%xsec_token=%'
+                        OR (content_url LIKE '%xsec_token=%' AND discovered_at >= '2026-08-15')
                       )
                       {guard_sql}
                       {delight_guard_sql}
@@ -2889,7 +2892,7 @@ class Database:
                   AND COALESCE(topic_group, '') != ''
                   AND (
                     source_platform != 'xiaohongshu'
-                    OR content_url LIKE '%xsec_token=%'
+                    OR (content_url LIKE '%xsec_token=%' AND discovered_at >= '2026-08-15')
                   )
                   {guard_sql}
                   {delight_guard_sql}
@@ -2915,7 +2918,7 @@ class Database:
         return rows
 
     def count_pool_available_candidates_by_source(
-        self, *, max_per_topic_group: int = 3, xhs_self_nickname: str = ""
+        self, *, max_per_topic_group: int = 0, xhs_self_nickname: str = ""
     ) -> dict[str, int]:
         """Return frontend-visible pool availability grouped by source family."""
         rows = self._load_available_pool_candidate_rows(
@@ -3992,7 +3995,7 @@ class Database:
             clean_bvids,
         )
 
-    def evict_stale_pool_items(self, *, max_age_days: int = 14) -> int:
+    def evict_stale_pool_items(self, *, max_age_days: int = 90) -> int:
         """Mark pool items older than *max_age_days* as stale."""
         cursor = self._execute_write(
             """
@@ -4709,7 +4712,7 @@ class Database:
             )
             WHERE (
                 COALESCE(c.source_platform, '') != 'xiaohongshu'
-                OR COALESCE(c.content_url, '') LIKE '%xsec_token=%'
+                OR (COALESCE(c.content_url, '') LIKE '%xsec_token=%' AND c.discovered_at >= '2026-08-15')
             )
             AND COALESCE(r.confidence, 0.0) >= ?
             {processed_clause}
@@ -5254,6 +5257,35 @@ class Database:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_source_platform ON events (source_platform)"
         )
+        # Composite index for event-stats aggregation (observability: GROUP BY event_type, source_platform, inferred_satisfaction)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_agg_stats ON events (event_type, source_platform, inferred_satisfaction)"
+        )
+
+    def _ensure_content_cache_read_indexes(self) -> None:
+        """Create indexes for content_cache columns used in observability / read queries.
+
+        The observability endpoint runs multiple GROUP BY / filter queries on
+        ``content_cache`` (``source_platform``, ``pool_status``, ``topic_group``,
+        ``feedback_type``, ``style_key``). Without indexes each query scans the
+        full table, multiplying the wall-clock time by the number of GROUP BY queries.
+
+        ``pool_status`` is also heavily used by the recommendation engine
+        (``WHERE pool_status = 'fresh'`` etc.), so the index benefits more than
+        just the observability page.
+        """
+        self.conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_content_cache_pool_status
+                ON content_cache (pool_status);
+            CREATE INDEX IF NOT EXISTS idx_content_cache_source_platform
+                ON content_cache (source_platform, pool_status);
+            CREATE INDEX IF NOT EXISTS idx_content_cache_topic_group
+                ON content_cache (topic_group);
+            CREATE INDEX IF NOT EXISTS idx_content_cache_feedback_type
+                ON content_cache (feedback_type);
+            CREATE INDEX IF NOT EXISTS idx_content_cache_style_key
+                ON content_cache (style_key);
+        """)
 
     def _ensure_source_recipes_table(self) -> None:
         """Create the source_recipes table if it does not exist."""
@@ -7523,3 +7555,240 @@ class Database:
             return rows[:limit]
         filtered = [row for row in rows if not Database._is_viewed_row(row, viewed_content_keys)]
         return filtered[:limit]
+
+    # ── user feedback (like / dislike) ─────────────────────────────────
+
+    def _ensure_user_feedback_table(self) -> None:
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS user_feedback (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                bvid        TEXT NOT NULL,
+                action      TEXT NOT NULL CHECK(action IN ('like', 'dislike')),
+                source_platform TEXT DEFAULT '',
+                title       TEXT DEFAULT '',
+                topic_group TEXT DEFAULT '',
+                body_text   TEXT DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_feedback_bvid
+                ON user_feedback(bvid);
+            CREATE INDEX IF NOT EXISTS idx_user_feedback_action
+                ON user_feedback(action);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_user_feedback_bvid_action
+                ON user_feedback(bvid, action);
+        """)
+
+    def insert_user_feedback(
+        self, bvid: str, action: str, *,
+        source_platform: str = "",
+        title: str = "",
+        topic_group: str = "",
+        body_text: str = "",
+    ) -> bool:
+        """Record a like/dislike for a content item.  Returns True if
+        inserted, False if the same (bvid, action) already exists
+        (upsert-style: replace the existing row)."""
+        existing = self.conn.execute(
+            "SELECT id FROM user_feedback WHERE bvid = ? AND action = ?",
+            (bvid, action),
+        ).fetchone()
+        if existing:
+            # Update timestamp
+            self.conn.execute(
+                "UPDATE user_feedback SET created_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (existing["id"],),
+            )
+            self.conn.commit()
+            return False
+        self.conn.execute(
+            """INSERT INTO user_feedback (bvid, action, source_platform, title, topic_group, body_text)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (bvid, action, source_platform, title, topic_group, body_text),
+        )
+        self.conn.commit()
+        return True
+
+    def remove_user_feedback(self, bvid: str, action: str) -> bool:
+        """Remove a specific feedback action for a content item."""
+        cur = self.conn.execute(
+            "DELETE FROM user_feedback WHERE bvid = ? AND action = ?",
+            (bvid, action),
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def get_user_feedback(self, bvid: str) -> list[dict[str, Any]]:
+        """Get all feedback actions for a content item."""
+        rows = self.conn.execute(
+            "SELECT action, created_at FROM user_feedback WHERE bvid = ? ORDER BY created_at DESC",
+            (bvid,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_user_feedback_batch(self, bvids: list[str]) -> dict[str, str]:
+        """Get the latest feedback action for each bvid. Returns {bvid: action}."""
+        if not bvids:
+            return {}
+        placeholders = ",".join("?" for _ in bvids)
+        rows = self.conn.execute(
+            f"""SELECT bvid, action FROM user_feedback
+                WHERE bvid IN ({placeholders})
+                GROUP BY bvid
+                ORDER BY MAX(created_at) DESC""",
+            bvids,
+        ).fetchall()
+        return {r["bvid"]: r["action"] for r in rows}
+
+    def get_total_feedback_count(self) -> int:
+        """Return total number of feedback entries (likes + dislikes)."""
+        row = self.conn.execute("SELECT COUNT(*) as cnt FROM user_feedback").fetchone()
+        return row["cnt"] if row else 0
+
+    def get_feedback_aggregated(self) -> list[dict[str, Any]]:
+        """Aggregate feedback per topic_group with like/dislike counts."""
+        return self.conn.execute("""
+            SELECT topic_group,
+                   SUM(CASE WHEN action = 'like' THEN 1 ELSE 0 END) as likes,
+                   SUM(CASE WHEN action = 'dislike' THEN 1 ELSE 0 END) as dislikes
+            FROM user_feedback
+            WHERE topic_group != '' AND topic_group IS NOT NULL
+            GROUP BY topic_group
+            ORDER BY likes DESC
+        """).fetchall()
+
+    def get_interest_tags(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Aggregate interest tags from liked content.
+
+        Returns a list of {tag, weight, source_platforms, count}
+        sorted by descending weight.
+        """
+        # Get topic_group from liked items
+        rows = self.conn.execute("""
+            SELECT topic_group, source_platform, COUNT(*) as cnt
+            FROM user_feedback
+            WHERE action = 'like' AND topic_group != '' AND topic_group IS NOT NULL
+            GROUP BY topic_group, source_platform
+            ORDER BY cnt DESC
+            LIMIT ?
+        """, (limit * 3,)).fetchall()
+
+        # Aggregate by topic_group across platforms
+        tags: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            tg = str(r["topic_group"]).strip()
+            if not tg:
+                continue
+            sp = str(r["source_platform"] or "")
+            if tg not in tags:
+                tags[tg] = {"tag": tg, "weight": 0, "source_platforms": [], "count": 0}
+            tags[tg]["count"] += int(r["cnt"])
+            tags[tg]["weight"] = tags[tg]["count"]
+            if sp and sp not in tags[tg]["source_platforms"]:
+                tags[tg]["source_platforms"].append(sp)
+
+        # Also extract keywords from title of liked items
+        title_rows = self.conn.execute("""
+            SELECT title, source_platform FROM user_feedback
+            WHERE action = 'like' AND title != '' AND title IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 100
+        """).fetchall()
+
+        import re
+        # Common Chinese stop words and generic terms
+        stop_words = {"的", "了", "是", "在", "有", "和", "就", "不", "人", "都", "一",
+                      "一个", "这个", "那个", "什么", "怎么", "如何", "为什么", "可以",
+                      "没有", "不是", "就是", "还是", "我们", "他们", "你们", "自己",
+                      "知道", "觉得", "看到", "看到", "可能", "已经", "这样", "通过",
+                      "之后", "因为", "所以", "但是", "而且", "如果", "虽然", "然后"}
+
+        word_counts: dict[str, int] = {}
+        for r in title_rows:
+            title = str(r["title"] or "")
+            # Extract meaningful Chinese words (2-6 chars) and English words
+            words = re.findall(r"[\u4e00-\u9fff]{2,6}|[a-zA-Z][a-zA-Z0-9]{2,}", title)
+            for w in words:
+                wl = w.lower()
+                if wl in stop_words or len(w) < 2:
+                    continue
+                word_counts[wl] = word_counts.get(wl, 0) + 1
+
+        # Merge title keywords into tags (words appearing 2+ times)
+        for w, c in sorted(word_counts.items(), key=lambda x: -x[1]):
+            if c < 2:
+                continue
+            if w not in tags:
+                tags[w] = {"tag": w, "weight": 0, "source_platforms": [], "count": 0}
+            tags[w]["weight"] += c
+            tags[w]["count"] += c
+
+        result = sorted(tags.values(), key=lambda x: -x["weight"])[:limit]
+        return result
+
+    # ── view history (implicit feedback) ────────────────────────────
+
+    def _ensure_view_history_table(self) -> None:
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS view_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                bvid        TEXT NOT NULL,
+                title       TEXT DEFAULT '',
+                source_platform TEXT DEFAULT '',
+                topic_group TEXT DEFAULT '',
+                content_url TEXT DEFAULT '',
+                up_name     TEXT DEFAULT '',
+                quality_score REAL DEFAULT 0.0,
+                fit_score   REAL DEFAULT 0.0,
+                viewed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_view_history_bvid
+                ON view_history(bvid);
+            CREATE INDEX IF NOT EXISTS idx_view_history_viewed_at
+                ON view_history(viewed_at);
+        """)
+
+    def insert_view_history(self, item: dict[str, Any]) -> None:
+        """Record a content view / click."""
+        self.conn.execute(
+            """INSERT INTO view_history
+               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(item.get("bvid", "")),
+                str(item.get("title", "") or ""),
+                str(item.get("source_platform", "") or ""),
+                str(item.get("topic_group", "") or ""),
+                str(item.get("content_url", "") or ""),
+                str(item.get("up_name", "") or item.get("author_name", "") or ""),
+                float(item.get("quality_score", 0) or 0),
+                float(item.get("fit_score", 0) or 0),
+            ),
+        )
+        self.conn.commit()
+
+    def get_recent_views(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Get the most recent view history."""
+        rows = self.conn.execute(
+            """SELECT * FROM view_history
+               ORDER BY viewed_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_view_count(self, bvid: str) -> int:
+        """Get how many times a content item has been viewed."""
+        row = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM view_history WHERE bvid = ?",
+            (bvid,),
+        ).fetchone()
+        return row["cnt"] if row else 0
+
+    def get_viewed_bvids(self, days: int = 30) -> set[str]:
+        """Get bvids viewed in the last N days."""
+        import datetime
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        rows = self.conn.execute(
+            "SELECT DISTINCT bvid FROM view_history WHERE viewed_at >= ?",
+            (cutoff,),
+        ).fetchall()
+        return {r["bvid"] for r in rows}

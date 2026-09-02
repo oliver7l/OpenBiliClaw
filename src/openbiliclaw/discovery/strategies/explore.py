@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -46,6 +47,13 @@ class _SupportsTopicCoverage(Protocol):
 
 logger = logging.getLogger(__name__)
 
+# Explore domains are slow, expensive LLM outputs (~¥1.4/call on sensenova
+# v6.8) that change little between refresh ticks. Reuse them for a full
+# refresh window instead of regenerating on every 60s pool-replenishment
+# cycle — the underlying Bilibili search API stays cheap, so the strategy
+# still probes for new content each cycle without burning the LLM budget.
+_EXPLORE_DOMAINS_REFRESH_HOURS = 12
+
 
 @dataclass
 class ExploreStrategy(DiscoveryStrategy):
@@ -71,6 +79,12 @@ class ExploreStrategy(DiscoveryStrategy):
     queries_per_domain: int = 3
     max_domains: int = 5
     last_intermediates: dict[str, object] = field(default_factory=dict)
+    # Domain-generation cache: the LLM output is reused within one refresh
+    # window so low-pool replenishment cycles don't re-burn the expensive
+    # call every 60s. Populated on first generate; invalidated by age
+    # (``_EXPLORE_DOMAINS_REFRESH_HOURS``) so profile drift is still picked up.
+    _cached_domains: list[dict[str, object]] = field(default_factory=list)
+    _cached_domains_at: float = 0.0
 
     @property
     def name(self) -> str:
@@ -113,7 +127,15 @@ class ExploreStrategy(DiscoveryStrategy):
             )
             return []
 
-        domains = await self._generate_domains(profile)
+        if self._cached_domains and (
+            time.monotonic() - self._cached_domains_at
+        ) < _EXPLORE_DOMAINS_REFRESH_HOURS * 3600:
+            domains = list(self._cached_domains)
+        else:
+            domains = await self._generate_domains(profile)
+            if domains:
+                self._cached_domains = list(domains)
+                self._cached_domains_at = time.monotonic()
         self.last_intermediates = {"domains": list(domains)}
         if not domains:
             return []

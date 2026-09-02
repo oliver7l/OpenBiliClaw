@@ -457,3 +457,77 @@ async def test_explore_strategy_interleaves_domains_for_eval_fairness() -> None:
     # The crucial property: at least one C-domain item appears before BVS2,
     # proving each domain got a turn before the first one finished.
     assert bvids.index("BVC1") < bvids.index("BVS2")
+
+
+@pytest.mark.asyncio
+async def test_explore_strategy_reuses_cached_domains_within_refresh_window() -> None:
+    """Second discover within the refresh window must not re-call the LLM."""
+    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+
+    domains_json = """
+    {
+      "domains": [
+        {
+          "domain": "城市空间与建筑叙事",
+          "why_it_might_resonate": "你偏好系统性理解。",
+          "novelty_level": 0.68,
+          "queries": ["城市 建筑 纪录片"]
+        }
+      ]
+    }
+    """
+    llm_service = FakeLLMService([domains_json, domains_json, domains_json])
+    bilibili_client = FakeBilibiliClient(
+        {"城市 建筑 纪录片": [{"bvid": "BV1A", "title": "城市与建筑", "author": "UP1", "mid": 1}]}
+    )
+    strategy = ExploreStrategy(
+        llm_service=llm_service,
+        bilibili_client=bilibili_client,
+        llm_evaluation=False,
+    )
+
+    await strategy.discover(_build_profile(), limit=20)
+    calls_after_first = len(llm_service.calls)
+    assert calls_after_first >= 1  # domain generation happened
+
+    await strategy.discover(_build_profile(), limit=20)
+    # Cached domains → no extra domain-generation call; total LLM calls unchanged.
+    assert len(llm_service.calls) == calls_after_first
+    # The search API is still queried each cycle (it's free).
+    assert bilibili_client.calls == ["城市 建筑 纪录片", "城市 建筑 纪录片"]
+
+
+@pytest.mark.asyncio
+async def test_explore_strategy_regenerates_domains_after_cache_expiry() -> None:
+    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+
+    domains_json = """
+    {
+      "domains": [
+        {
+          "domain": "城市空间与建筑叙事",
+          "why_it_might_resonate": "你偏好系统性理解。",
+          "novelty_level": 0.68,
+          "queries": ["城市 建筑 纪录片"]
+        }
+      ]
+    }
+    """
+    llm_service = FakeLLMService([domains_json, domains_json])
+    bilibili_client = FakeBilibiliClient(
+        {"城市 建筑 纪录片": [{"bvid": "BV1A", "title": "城市与建筑", "author": "UP1", "mid": 1}]}
+    )
+    strategy = ExploreStrategy(
+        llm_service=llm_service,
+        bilibili_client=bilibili_client,
+        llm_evaluation=False,
+    )
+
+    await strategy.discover(_build_profile(), limit=20)
+    calls_after_first = len(llm_service.calls)
+
+    # Expire the cache: next discover must regenerate domains via the LLM.
+    strategy._cached_domains_at = 0.0
+    await strategy.discover(_build_profile(), limit=20)
+
+    assert len(llm_service.calls) == calls_after_first + 1

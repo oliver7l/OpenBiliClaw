@@ -34,7 +34,13 @@
       profileEditState: "/profile/edit-state",
       subscriptions: "/subscriptions",
       subscriptionsStats: "/subscriptions/stats",
+      poolAll: "/pool/all",
     };
+    ENDPOINTS.userFeedback = "/api/user-feedback";
+    ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
+    ENDPOINTS.interestTags = "/api/interest-tags";
+    ENDPOINTS.viewRecord = "/api/view-record";
+    ENDPOINTS.viewHistory = "/api/view-history";
 
     const state = {
       query: "",
@@ -61,6 +67,17 @@
       sourceCredentials: null,
       runtimeStatus: null,
       runtimeSocket: null,
+      customFilterSources: null,
+      customContentTypes: null,
+      customKeyword: "",
+      customLimit: 50,
+      poolAllItems: [],
+      poolAllLoading: false,
+      poolAllLoadCount: 50,
+      poolFilterItems: [],
+      poolFilterLoading: false,
+      poolFilterPlatform: "全部",
+      poolExploreFilters: {},
       videos: [],
       messages: [],
       messageListSnapshot: null,
@@ -86,10 +103,27 @@
       { key: "douyin", label: "抖音" },
       { key: "youtube", label: "YouTube" },
       { key: "twitter", label: "X (Twitter)" },
-      { key: "zhihu", label: "知乎" }
+      { key: "zhihu", label: "知乎" },
+      { key: "v2ex", label: "V2EX" },
+      { key: "reddit", label: "Reddit" },
+      { key: "wechat", label: "微信公众号" },
+      { key: "xiaoyuzhou", label: "小宇宙" },
+      { key: "rss", label: "RSS" },
+      { key: "user_favorite", label: "用户收藏" },
     ];
     const sourceFilterOrder = sourceFilterDefinitions.map((source) => source.label);
-    const platformLabel = { bilibili: "B 站", youtube: "YouTube", douyin: "抖音", xiaohongshu: "小红书", xhs: "小红书", twitter: "X (Twitter)", x: "X (Twitter)", zhihu: "知乎" };
+    const contentTypeFilterDefinitions = [
+      { key: "video", label: "视频" },
+      { key: "article", label: "文章" },
+      { key: "answer", label: "回答" },
+      { key: "note", label: "笔记" },
+      { key: "topic", label: "话题" },
+      { key: "question", label: "问题" },
+      { key: "post", label: "帖子" },
+      { key: "tweet", label: "推文" },
+      { key: "thread", label: "推文串" },
+    ];
+    const platformLabel = { bilibili: "B 站", youtube: "YouTube", douyin: "抖音", xiaohongshu: "小红书", xhs: "小红书", twitter: "X (Twitter)", x: "X (Twitter)", zhihu: "知乎", v2ex: "V2EX", reddit: "Reddit", wechat: "微信公众号", xiaoyuzhou: "小宇宙", rss: "RSS", user_favorite: "用户收藏" };
     const platformAliases = { bili: "bilibili", bilibili: "bilibili", xhs: "xiaohongshu", xiaohongshu: "xiaohongshu", rednote: "xiaohongshu", dy: "douyin", douyin: "douyin", tiktok: "douyin", yt: "youtube", youtube: "youtube", x: "twitter", twitter: "twitter", zh: "zhihu", zhihu: "zhihu" };
     const textCardContentTypes = new Set(["tweet", "thread", "answer", "article", "question"]);
     // v0.3.118+: bilibili is selectable like every other source — default
@@ -97,11 +131,16 @@
     // stay checked to start.
     const INIT_SOURCE_OPTIONS = [
       { key: "bilibili", label: "B 站", defaultChecked: true },
-      { key: "xiaohongshu", label: "小红书" },
-      { key: "douyin", label: "抖音" },
-      { key: "youtube", label: "YouTube" },
-      { key: "twitter", label: "X" },
-      { key: "zhihu", label: "知乎" }
+      { key: "xiaohongshu", label: "小红书", defaultChecked: true },
+      { key: "douyin", label: "抖音", defaultChecked: true },
+      { key: "youtube", label: "YouTube", defaultChecked: true },
+      { key: "twitter", label: "X", defaultChecked: true },
+      { key: "zhihu", label: "知乎", defaultChecked: true },
+      { key: "v2ex", label: "V2EX", defaultChecked: true },
+      { key: "reddit", label: "Reddit", defaultChecked: true },
+      { key: "wechat", label: "微信公众号", defaultChecked: true },
+      { key: "xiaoyuzhou", label: "小宇宙", defaultChecked: true },
+      { key: "rss", label: "RSS", defaultChecked: true },
     ];
     const INIT_SOURCE_LOGIN_HINT = "勾选要纳入初始化的平台（至少一个）。使用某个平台前，请先在当前浏览器登录该平台账号；勾选会同时开启该来源。";
     const INIT_REASON_TEXT = {
@@ -338,10 +377,19 @@
     }
 
     function safeBind(selector, eventName, handler) {
-      const element = $(selector);
-      if (!element) { showFatal(new Error(`缺少元素 ${selector}`), "绑定交互"); return; }
-      element.addEventListener(eventName, handler);
-    }
+	      const element = $(selector);
+	      if (!element) { showFatal(new Error(`缺少元素 ${selector}`), "绑定交互"); return; }
+	      element.addEventListener(eventName, handler);
+	    }
+
+	    function eventDelegation(parentSelector, childSelector, eventName, handler) {
+	      const parent = $(parentSelector);
+	      if (!parent) { showFatal(new Error(`缺少父元素 ${parentSelector}`), "绑定交互"); return; }
+	      parent.addEventListener(eventName, (event) => {
+	        const target = event.target.closest(childSelector);
+	        if (target) handler(event);
+	      });
+	    }
 
     function locationApiDefault() {
       try {
@@ -566,10 +614,6 @@
         }
         return undefined;
       });
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
     }
 
     // 轻量 markdown 渲染：先转义防 XSS；支持 标题/粗斜体/行内与块级代码/引用/有序无序列表/链接/分隔线/段落。不依赖外部库。
@@ -1171,22 +1215,26 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "settingsPage"];
 
     function showMainPage(pageId) {
       MAIN_PAGE_IDS.forEach((id) => {
         const page = document.getElementById(id);
         if (!page) return;
-        if (id === pageId) page.removeAttribute("hidden");
-        else page.setAttribute("hidden", "");
+        if (id === pageId) {
+          page.removeAttribute("hidden");
+        } else {
+          page.setAttribute("hidden", "");
+        }
       });
       document.body.classList.toggle("profile-page-open", pageId === "profilePage");
       document.body.classList.toggle("chat-page-open", pageId === "chatPage");
       document.body.classList.toggle("library-page-open", pageId === "libraryPage");
+      document.body.classList.toggle("pool-all-page-open", pageId === "poolAllPage" || pageId === "poolFilterPage");
+      document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
-      document.body.classList.toggle("content-page-open", pageId !== "homePage");
-      const tabSync = { homePage: "homeBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", settingsPage: "settingsBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
     }
@@ -1198,6 +1246,18 @@
     // SPA shell for /web/{page} so direct links work too.
     const DESKTOP_PAGE_ROUTES = {
       home: () => openHomePage(),
+      "custom-filter": () => openCustomFilterPage(),
+      "pool-all": () => openPoolAllPage(),
+      "pool-filter": () => openPoolFilterPage(),
+      observability: () => openObservabilityPage(),
+      "pool-explore": () => openPoolExplorePage(),
+      "xhs-feed": () => openXhsFeedPage(),
+      "zhihu-feed": () => openZhihuFeedPage(),
+      "bili-feed": () => openBiliFeedPage(),
+      "youtube-feed": () => openYoutubeFeedPage(),
+      "v2ex-feed": () => openV2exFeedPage(),
+      "xiaoyuzhou-feed": () => openXiaoyuzhouFeedPage(),
+      "agent-recommend": () => openAgentRecommendPage(),
       delight: () => openDelightPage(),
       saved: () => openSavedPage(),
       watchLater: () => openWatchLaterPage(),
@@ -1208,7 +1268,7 @@
     };
 
     function routeFromPath() {
-      const match = (location.pathname || "/web").match(/^\/web\/([a-zA-Z]+)\/?$/);
+      const match = (location.pathname || "/web").match(/^\/web\/([a-zA-Z-]+)\/?$/);
       const page = match ? match[1] : "home";
       const params = new URLSearchParams(location.search);
       const opener = DESKTOP_PAGE_ROUTES[page] || DESKTOP_PAGE_ROUTES.home;
@@ -1231,6 +1291,113 @@
 
     function openHomePage() {
       showMainPage("homePage");
+      renderFilters();
+      renderVideos();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openCustomFilterPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("customFilterPage");
+      // 自定义筛选：全部条件在页面内设置
+      renderCustomFilterPanel();
+      renderFilters();
+      renderVideos();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openPoolAllPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("poolAllPage");
+      loadPoolAllItems();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openPoolFilterPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("poolFilterPage");
+      renderPoolFilterBar();
+      loadPoolFilterItems();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openObservabilityPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("observabilityPage");
+      loadObservabilityData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openPoolExplorePage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("poolExplorePage");
+      state.poolExploreFilters = {};
+      loadPoolExploreData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openXhsFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("xhsFeedPage");
+      loadXhsFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openZhihuFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("zhihuFeedPage");
+      loadZhihuFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openBiliFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("biliFeedPage");
+      loadBiliFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openYoutubeFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("youtubeFeedPage");
+      loadYoutubeFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openV2exFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("v2exFeedPage");
+      loadV2exFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openXiaoyuzhouFeedPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("xiaoyuzhouFeedPage");
+      loadXiaoyuzhouFeedData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openAgentRecommendPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("agentRecommendPage");
+      // Focus the input
+      setTimeout(() => {
+        const input = $("#agentRecommendInput");
+        if (input) input.focus();
+      }, 100);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -1952,16 +2119,9 @@
     }
 
     function configuredSourceFilterLabels() {
-      const sources = state.config?.sources;
-      const shares = state.config?.scheduler?.pool_source_shares || {};
+      // 所有已定义的来源都显示在筛选按钮；如果禁用了，用户选了也会返回空，但至少能看到按钮
+      // 修复：之前只显示后端配置 enabled 的，导致小红书等平台明明爬了内容却看不到按钮
       return sourceFilterDefinitions
-        .filter(({ key }) => {
-          const sourceConfig = sources?.[key];
-          if (sourceConfig && typeof sourceConfig === "object" && !Array.isArray(sourceConfig) && Object.prototype.hasOwnProperty.call(sourceConfig, "enabled")) {
-            return sourceConfig.enabled !== false;
-          }
-          return Number(shares[key] ?? 0) > 0;
-        })
         .map((source) => source.label);
     }
 
@@ -1978,11 +2138,37 @@
 
     function filteredVideos() {
       const q = state.query.trim().toLowerCase();
+      const activePage = document.querySelector(".main-col:not([hidden])");
+      const pageId = activePage?.id || "homePage";
+      const isCustomPage = pageId === "customFilterPage";
       return state.videos.filter((item) => {
         const label = platformName(item.platform);
-        const filterOk = state.filter === "全部" || state.filter === label;
+        let platformOk;
+        if (isCustomPage) {
+          // 自定义页：勾选的平台集合；不勾 = 不限
+          platformOk = !state.customFilterSources || state.customFilterSources.size === 0
+            || state.customFilterSources.has(item.platform);
+        } else {
+          // 首页：零筛选
+          platformOk = true;
+        }
+        // 内容类型（仅自定义页）：勾选的类型集合；不勾 = 不限
+        let typeOk = true;
+        if (isCustomPage && state.customContentTypes && state.customContentTypes.size > 0) {
+          typeOk = state.customContentTypes.has(String(item.content_type || "").toLowerCase());
+        }
+        // 关键词（仅自定义页）：匹配标题/作者/话题/理由/平台
+        let keywordOk = true;
+        const customKeyword = String(state.customKeyword || "").trim().toLowerCase();
+        if (isCustomPage && customKeyword) {
+          keywordOk = [item.title, item.up, item.author_name, item.up_name, item.topic, item.reason, label]
+            .map((part) => String(part || ""))
+            .join(" ")
+            .toLowerCase()
+            .includes(customKeyword);
+        }
         const queryOk = !q || [item.title, item.up, item.topic, item.reason, label].join(" ").toLowerCase().includes(q);
-        return filterOk && queryOk;
+        return platformOk && typeOk && keywordOk && queryOk;
       });
     }
 
@@ -2011,11 +2197,127 @@
       if (settingText) settingText.textContent = state.dismissOnReshuffle ? "开启" : "关闭";
     }
 
+    function renderViewTabs() {
+      // 视图切换已迁移至独立路由：/web/recommendations /web/platform-filter /web/custom-filter
+    }
+
+    function buildCustomCheckbox(options, container, selectedSet, onChange) {
+      // 通用勾选组渲染：options=[{key,label}]，selectedSet 为 Set
+      container.replaceChildren();
+      options.forEach((def) => {
+        const labelEl = document.createElement("label");
+        labelEl.className = `filter-checkbox${selectedSet.has(def.key) ? " is-checked" : ""}`;
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = selectedSet.has(def.key);
+        input.addEventListener("change", () => {
+          if (input.checked) {
+            selectedSet.add(def.key);
+            labelEl.classList.add("is-checked");
+          } else {
+            selectedSet.delete(def.key);
+            labelEl.classList.remove("is-checked");
+          }
+          if (onChange) onChange();
+        });
+        labelEl.appendChild(input);
+        labelEl.appendChild(document.createTextNode(" " + def.label));
+        container.appendChild(labelEl);
+      });
+    }
+
+    function renderCustomFilterPanel() {
+      // 自定义筛选页面内面板：平台 + 内容类型 + 每批数量 + 关键词
+      const platformGroup = $("#customPlatformGroup");
+      const contentTypeGroup = $("#customContentTypeGroup");
+      const limitGroup = $("#customLimitGroup");
+      const keywordInput = $("#customKeywordInput");
+      if (!platformGroup || !contentTypeGroup) return;
+
+      // 默认状态：全部不勾（= 不限制）
+      if (!state.customFilterSources) state.customFilterSources = new Set();
+      if (!state.customContentTypes) state.customContentTypes = new Set();
+
+      const syncHint = () => {
+        const hint = $("#customFilterHint");
+        if (!hint) return;
+        const parts = [];
+        const platformCount = state.customFilterSources.size;
+        const typeCount = state.customContentTypes.size;
+        const keyword = String(state.customKeyword || "").trim();
+        if (platformCount === 0) parts.push("平台不限");
+        else if (platformCount === sourceFilterDefinitions.length) parts.push("全部平台");
+        else parts.push(`平台 ${platformCount} 项`);
+        if (typeCount === 0) parts.push("类型不限");
+        else parts.push(`类型 ${typeCount} 项`);
+        parts.push(`每批 ${state.customLimit || 10} 条`);
+        if (keyword) parts.push(`关键词“${keyword}”`);
+        hint.textContent = parts.join(" · ");
+      };
+
+      buildCustomCheckbox(sourceFilterDefinitions, platformGroup, state.customFilterSources, syncHint);
+      buildCustomCheckbox(contentTypeFilterDefinitions, contentTypeGroup, state.customContentTypes, syncHint);
+
+      // 每批数量：单选 chips
+      if (limitGroup) {
+        const limitOptions = [10, 30, 50, 100, 200];
+        limitGroup.replaceChildren();
+        limitOptions.forEach((value) => {
+          const btn = document.createElement("button");
+          btn.className = `chip${Number(state.customLimit) === value ? " is-active" : ""}`;
+          btn.type = "button";
+          btn.textContent = `${value} 条`;
+          btn.addEventListener("click", () => {
+            state.customLimit = value;
+            limitGroup.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("is-active"));
+            btn.classList.add("is-active");
+            syncHint();
+          });
+          limitGroup.appendChild(btn);
+        });
+      }
+
+      if (keywordInput && keywordInput.value !== (state.customKeyword || "")) {
+        keywordInput.value = state.customKeyword || "";
+      }
+      if (keywordInput && !keywordInput._bound) {
+        keywordInput._bound = true;
+        keywordInput.addEventListener("input", () => {
+          state.customKeyword = keywordInput.value || "";
+          syncHint();
+        });
+        keywordInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            reshuffle();
+          }
+        });
+      }
+      syncHint();
+    }
+
+    function resetCustomFilters() {
+      state.customFilterSources = new Set();
+      state.customContentTypes = new Set();
+      state.customKeyword = "";
+      state.customLimit = 50;
+      renderCustomFilterPanel();
+    }
+
+    function currentCustomFilterPlatform() {
+      // 单个平台时透传给后端；多选或全不选 → null（混合推荐，客户端过滤）
+      if (!state.customFilterSources || state.customFilterSources.size !== 1) {
+        return null;
+      }
+      return Array.from(state.customFilterSources)[0];
+    }
+
     function renderFilters() {
-      const row = $("#filterRow");
+      const bar = $("#platformFilterBar");
+      if (!bar) return;
       const filters = buildFilters();
       if (!filters.includes(state.filter)) state.filter = "全部";
-      row.replaceChildren(...filters.map((name) => {
+      bar.replaceChildren(...filters.map((name) => {
         const btn = document.createElement("button");
         btn.className = `chip${state.filter === name ? " is-active" : ""}`;
         btn.type = "button";
@@ -2023,8 +2325,6 @@
         btn.addEventListener("click", () => { state.filter = name; reshuffle(); });
         return btn;
       }));
-      const resetButton = $("#resetFiltersBtn");
-      if (resetButton) resetButton.hidden = state.filter === "全部" && !String(state.query || "").trim();
     }
 
     function normalizeImageUrl(value) {
@@ -2099,6 +2399,8 @@
       if (item.platform === "bilibili" && item.bvid) return `https://www.bilibili.com/video/${encodeURIComponent(item.bvid)}`;
       if (item.platform === "youtube" && item.content_id) return `https://www.youtube.com/watch?v=${encodeURIComponent(item.content_id)}`;
       if (item.platform === "twitter" && item.content_id) return `https://x.com/i/status/${encodeURIComponent(item.content_id)}`;
+      if (item.platform === "xiaohongshu" && item.content_id) return `https://www.xiaohongshu.com/explore/${encodeURIComponent(item.content_id)}`;
+      if (item.platform === "xiaohongshu" && item.bvid) return `https://www.xiaohongshu.com/explore/${encodeURIComponent(item.bvid)}`;
       return "";
     }
 
@@ -2158,12 +2460,29 @@
       });
     }
 
+    function activeVideoGrid() {
+      const page = document.querySelector(".main-col:not([hidden])");
+      if (!page) return grid;
+      const id = page.id;
+      if (id === "customFilterPage") return $("#customVideoGrid") || grid;
+      return grid;
+    }
+
+    function activeLoadMoreBtn() {
+      const page = document.querySelector(".main-col:not([hidden])");
+      if (!page) return $("#loadMoreBtn");
+      const id = page.id;
+      if (id === "customFilterPage") return $("#customLoadMoreBtn");
+      return $("#loadMoreBtn");
+    }
+
     function renderVideos() {
       if (shouldShowInitOnboarding(state.runtimeStatus)) {
         renderInitOnboarding();
         return;
       }
-      const loadMore = $("#loadMoreBtn");
+      const g = activeVideoGrid();
+      const loadMore = activeLoadMoreBtn();
       if (loadMore) loadMore.hidden = false;
       const items = filteredVideos();
       if (!items.length) {
@@ -2172,17 +2491,17 @@
           : state.videos.length
             ? "当前筛选下没有推荐。"
             : "当前列表里的推荐都已处理，可以换一批推荐或等待后端补货。";
-        grid.innerHTML = `<div class="empty-state">${message}</div>`;
+        g.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
       }
-      grid.classList.add("is-minimal");
+      g.classList.add("is-minimal");
       // Bulk query saved states to avoid N round trips
       const bvids = items.map((item) => item.bvid || item.id).filter(Boolean);
       const [wlPromise, favPromise] = [
         Promise.all(bvids.map(watchLaterStatus)).catch(() => bvids.map(() => null)),
         Promise.all(bvids.map(favoriteStatus)).catch(() => bvids.map(() => null)),
       ];
-      grid.replaceChildren(...items.map((item, i) => {
+      g.replaceChildren(...items.map((item, i) => {
         const card = document.createElement("article");
         card.className = "video-card is-minimal";
         card.dataset.bvid = item.bvid || item.id;
@@ -2212,7 +2531,7 @@
         card.addEventListener("click", (e) => {
           if (e.target.closest("[data-action]")) return;
           const url = contentUrl(item);
-          if (url) { openRecommendation(item, card); window.open(url, "_blank"); }
+          if (url) { openRecommendation(item, card); }
         });
         card.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => handleCardAction(btn.dataset.action, item, card)));
         // Update saved state after bulk promise resolves
@@ -2250,11 +2569,1617 @@
       }).catch(() => {});
     }
 
+    /* ── 池子总览 ──────────────────────────────────────────────── */
+
+    function loadPoolAllItems() {
+      if (state.poolAllLoading) return;
+      state.poolAllLoading = true;
+      const grid = $("#poolAllGrid");
+      if (grid) grid.innerHTML = `<div class="empty-state">正在加载池子数据…</div>`;
+      requestJson(ENDPOINTS.poolAll + "?shuffle=true&limit=6", { timeoutMs: 60000 }).then((data) => {
+        state.poolAllLoading = false;
+        if (!data || !data.items) {
+          if (grid) grid.innerHTML = `<div class="empty-state">加载失败，请稍后重试。</div>`;
+          return;
+        }
+        state.poolAllItems = data.items;
+        // 更新统计卡片
+        const rawEl = $("#poolAllRaw");
+        if (rawEl) rawEl.textContent = String(data.raw) + " (总" + data.total + ")";
+        const availEl = $("#poolAllAvailable");
+        if (availEl) availEl.textContent = String(data.available);
+        const pendEl = $("#poolAllPending");
+        if (pendEl) pendEl.textContent = String(data.pending);
+        const totalEl = $("#poolAllTotal");
+        if (totalEl) totalEl.textContent = String(data.total);
+        renderPoolAllStatusBar();
+        renderPoolAllItems();
+      }).catch(() => {
+        state.poolAllLoading = false;
+        if (grid) grid.innerHTML = `<div class="empty-state">请求失败，请检查后端连接。</div>`;
+      });
+    }
+
+    function renderPoolAllStatusBar() {
+      const bar = $("#poolAllStatusBar");
+      if (!bar || !state.poolAllItems.length) return;
+      const counts = {};
+      state.poolAllItems.forEach((item) => {
+        const s = item.pool_status || "unknown";
+        counts[s] = (counts[s] || 0) + 1;
+      });
+      const total = state.poolAllItems.length;
+      const labels = { fresh: "待推荐", shown: "已展示", stale: "已过期", suppressed: "已抑制", feedbacked: "已反馈", pending: "处理中" };
+      const colors = { fresh: "#4caf50", shown: "#2196f3", stale: "#ff9800", suppressed: "#9e9e9e", feedbacked: "#e91e63", pending: "#ff5722" };
+      const order = ["fresh", "shown", "stale", "suppressed", "feedbacked", "pending"];
+      bar.replaceChildren(
+        ...order
+          .filter((k) => counts[k] > 0)
+          .map((k) => {
+            const pct = ((counts[k] / total) * 100).toFixed(1);
+            const chip = document.createElement("span");
+            chip.className = "pool-status-chip";
+            chip.innerHTML = `<span class="chip-dot" style="background:${colors[k] || '#888'}"></span>${labels[k] || k} <em>${counts[k]}</em><span class="chip-pct">${pct}%</span>`;
+            return chip;
+          })
+      );
+    }
+
+    function renderPoolAllItems() {
+      const grid = $("#poolAllGrid");
+      if (!grid) return;
+      const items = state.poolAllItems;
+      if (!items.length) {
+        grid.innerHTML = `<div class="empty-state">池子为空。</div>`;
+        return;
+      }
+      const statusMeta = {
+        fresh: { label: "待推荐", color: "#4caf50" },
+        shown: { label: "已展示", color: "#2196f3" },
+        stale: { label: "已过期", color: "#ff9800" },
+        suppressed: { label: "已抑制", color: "#9e9e9e" },
+        feedbacked: { label: "已反馈", color: "#e91e63" },
+        pending: { label: "处理中", color: "#ff5722" },
+      };
+      // 切分批次：先渲染前 50 条，剩余用 IntersectionObserver 懒加载
+      const batchSize = 50;
+      const renderBatch = (start, end) => {
+        const fragment = document.createDocumentFragment();
+        items.slice(start, end).forEach((item) => {
+          const card = document.createElement("article");
+          const meta = statusMeta[item.pool_status] || { label: item.pool_status, color: "#888" };
+          card.className = "video-card is-minimal pool-all-card";
+          card.dataset.bvid = item.bvid;
+          const platform = platformName(item.source_platform);
+          const author = item.up_name || "";
+          const hasReason = !!item.quality_reason;
+          card.innerHTML = `
+            <p class="video-card-title">${escapeHtml(item.title || "无标题")}</p>
+            <div class="video-card-meta">
+              <span class="video-card-author">${escapeHtml(author)}</span>
+              <span class="video-card-tag">${escapeHtml(platform)}</span>
+              <span class="pool-status-badge" style="--badge-bg:${meta.color}">${meta.label}</span>
+            </div>
+            ${hasReason ? `<p class="video-card-reason">${escapeHtml(item.quality_reason)}</p>` : ""}
+            <div class="video-card-actions">
+              <button class="feedback-icon-btn" data-action="open" type="button" aria-label="打开原文" title="打开原文">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </button>
+            </div>`;
+          card.addEventListener("click", (e) => {
+            if (e.target.closest("[data-action]")) return;
+            openRecommendation(item, card);
+          });
+          card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openRecommendation(item, card);
+          });
+          fragment.appendChild(card);
+        });
+        grid.appendChild(fragment);
+      };
+      grid.replaceChildren();
+      renderBatch(0, Math.min(batchSize, items.length));
+      // 懒加载剩余
+      if (items.length > batchSize) {
+        const sentinel = document.createElement("div");
+        sentinel.className = "pool-all-sentinel";
+        grid.after(sentinel);
+        let loaded = batchSize;
+        const observer = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting && loaded < items.length) {
+            const next = Math.min(loaded + batchSize, items.length);
+            renderBatch(loaded, next);
+            loaded = next;
+            if (loaded >= items.length) {
+              observer.disconnect();
+              sentinel.remove();
+            }
+          }
+        }, { rootMargin: "200px" });
+        observer.observe(sentinel);
+      }
+    }
+
+    // ── 池子筛选（按平台） ──────────────────────────────────────────────────
+
+    function loadPoolFilterItems() {
+      state.poolFilterLoading = true;
+      const grid = $("#poolFilterGrid");
+      if (grid) grid.innerHTML = `<div class="empty-state">正在加载池子数据…</div>`;
+      const platform = state.poolFilterPlatform === "全部" ? null : state.poolFilterPlatform;
+      // 获取平台对应的key，如果不能直接匹配则用label本身
+      const def = platform && sourceFilterDefinitions.find((s) => s.label === platform);
+      const platformKey = def ? def.key : platform;
+      const params = new URLSearchParams();
+      params.set("shuffle", "true");
+      params.set("limit", "6");
+      if (platformKey) params.set("platform", platformKey);
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 60000 }).then((data) => {
+        state.poolFilterLoading = false;
+        if (!data || !data.items) {
+          if (grid) grid.innerHTML = `<div class="empty-state">加载失败，请稍后重试。</div>`;
+          return;
+        }
+        state.poolFilterItems = data.items;
+        // 更新统计卡片
+        const rawEl = $("#poolFilterRaw");
+        if (rawEl) rawEl.textContent = String(data.raw) + " (总" + data.total + ")";
+        const availEl = $("#poolFilterAvailable");
+        if (availEl) availEl.textContent = String(data.available);
+        const pendEl = $("#poolFilterPending");
+        if (pendEl) pendEl.textContent = String(data.pending);
+        const totalEl = $("#poolFilterTotal");
+        if (totalEl) totalEl.textContent = String(data.total);
+        renderPoolFilterItems();
+      }).catch(() => {
+        state.poolFilterLoading = false;
+        if (grid) grid.innerHTML = `<div class="empty-state">请求失败，请检查后端连接。</div>`;
+      });
+    }
+
+    function renderPoolFilterBar() {
+      const bar = $("#poolFilterBar");
+      if (!bar) return;
+      const labels = configuredSourceFilterLabels();
+      bar.replaceChildren(
+        ...labels.map((name) => {
+          const btn = document.createElement("button");
+          btn.className = `chip${state.poolFilterPlatform === name ? " is-active" : ""}`;
+          btn.type = "button";
+          btn.textContent = name;
+          btn.addEventListener("click", () => {
+            state.poolFilterPlatform = name;
+            renderPoolFilterBar();
+            loadPoolFilterItems();
+          });
+          return btn;
+        })
+      );
+    }
+
+    function renderPoolFilterItems() {
+      const grid = $("#poolFilterGrid");
+      if (!grid) return;
+      const items = state.poolFilterItems;
+      if (!items.length) {
+        grid.innerHTML = `<div class="empty-state">该平台下池子为空。</div>`;
+        return;
+      }
+      const statusMeta = {
+        fresh: { label: "待推荐", color: "#4caf50" },
+        shown: { label: "已展示", color: "#2196f3" },
+        stale: { label: "已过期", color: "#ff9800" },
+        suppressed: { label: "已抑制", color: "#9e9e9e" },
+        feedbacked: { label: "已反馈", color: "#e91e63" },
+        pending: { label: "处理中", color: "#ff5722" },
+      };
+      grid.replaceChildren(
+        ...items.map((item) => {
+          const card = document.createElement("article");
+          const meta = statusMeta[item.pool_status] || { label: item.pool_status, color: "#888" };
+          card.className = "video-card is-minimal pool-all-card";
+          card.dataset.bvid = item.bvid;
+          const platform = platformName(item.source_platform);
+          const author = item.up_name || "";
+          const hasReason = !!item.quality_reason;
+          card.innerHTML = `
+            <p class="video-card-title">${escapeHtml(item.title || "无标题")}</p>
+            <div class="video-card-meta">
+              <span class="video-card-author">${escapeHtml(author)}</span>
+              <span class="video-card-source">${escapeHtml(platform)}</span>
+              <span class="pool-all-badge" style="background:${meta.color}">${meta.label}</span>
+            </div>
+            ${hasReason ? `<p class="video-card-reason">${escapeHtml(item.quality_reason)}</p>` : ""}
+          `;
+          card.addEventListener("click", () => openRecommendation(item, card));
+          return card;
+        })
+      );
+    }
+
+    // ── 观测面板 ──────────────────────────────────────────────────────────
+
+    function platformLabelHtml(key) {
+      const labels = { bilibili: "B 站", xiaohongshu: "小红书", douyin: "抖音", youtube: "YouTube",
+        twitter: "X", zhihu: "知乎", v2ex: "V2EX", reddit: "Reddit", wechat: "公众号",
+        xiaoyuzhou: "小宇宙", rss: "RSS", user_favorite: "收藏" };
+      return labels[key] || key;
+    }
+
+    function platformLabelClass(key) {
+      const safe = String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "-");
+      return "obs-platform-badge obs-pb-" + safe;
+    }
+
+    function loadObservabilityData() {
+      const body = $("#observabilityBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载观测数据…</div>`;
+      requestJson("/observability", { timeoutMs: 60000 }).then((data) => {
+        if (!data) {
+          body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接。</div>`;
+          return;
+        }
+        renderObservability(data, body);
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接。</div>`;
+      });
+    }
+
+    function renderObservability(data, container) {
+      const p = data.pipeline || {};
+      const platforms = data.platforms || [];
+      const scoreDist = data.score_distribution || [];
+      const topicGroups = data.topic_groups || [];
+      const llmUsage = data.llm_usage || {};
+      const discCandidates = data.discovery_candidates || [];
+      const runtime = data.runtime || {};
+      const keywords = data.keywords || [];
+      const evalStats = data.eval_stats || {};
+      const eventStats = data.event_stats || {};
+      const feedbackStats = data.feedback_stats || {};
+      const exprCoverage = data.expression_coverage || {};
+      const delightStats = data.delight_stats || {};
+      const soulProfile = data.soul_profile || {};
+      const schedulerLoops = data.scheduler_loops || [];
+      const authSources = data.auth_sources || [];
+      const styleDist = data.style_distribution || [];
+      const satDist = data.satisfaction_distribution || [];
+      const suppressedBreakdown = data.suppressed_breakdown || [];
+
+      const tabs = [
+        { id: "obs-tab-overview", label: "管道总览", section: "obs-section-overview" },
+        { id: "obs-tab-discovery", label: "发现管道", section: "obs-section-discovery" },
+        { id: "obs-tab-quality", label: "内容质量", section: "obs-section-quality" },
+        { id: "obs-tab-behavior", label: "用户行为", section: "obs-section-behavior" },
+        { id: "obs-tab-llm", label: "LLM 调用", section: "obs-section-llm" },
+        { id: "obs-tab-health", label: "运行时健康", section: "obs-section-health" },
+      ];
+
+      container.innerHTML = `
+        <div class="obs-tab-bar">
+          ${tabs.map(t => `<button class="obs-tab is-active" data-obs-tab="${t.id}" data-obs-section="${t.section}">${t.label}</button>`).join("")}
+        </div>
+        <div class="obs-tab-content" id="obs-section-overview">${renderOverviewSection(p, platforms, runtime, suppressedBreakdown)}</div>
+        <div class="obs-tab-content" id="obs-section-discovery" hidden>${renderDiscoverySection(discCandidates, keywords, evalStats, p)}</div>
+        <div class="obs-tab-content" id="obs-section-quality" hidden>${renderQualitySection(scoreDist, topicGroups, exprCoverage, styleDist, p)}</div>
+        <div class="obs-tab-content" id="obs-section-behavior" hidden>${renderBehaviorSection(eventStats, feedbackStats, satDist)}</div>
+        <div class="obs-tab-content" id="obs-section-llm" hidden>${renderLLMSection(llmUsage)}</div>
+        <div class="obs-tab-content" id="obs-section-health" hidden>${renderHealthSection(runtime, schedulerLoops, authSources, delightStats, soulProfile)}</div>
+      `;
+
+      container.querySelectorAll(".obs-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          container.querySelectorAll(".obs-tab").forEach(b => b.classList.remove("is-active"));
+          container.querySelectorAll(".obs-tab-content").forEach(s => s.hidden = true);
+          btn.classList.add("is-active");
+          const sec = document.getElementById(btn.dataset.obsSection);
+          if (sec) sec.hidden = false;
+        });
+      });
+    }
+
+    function renderOverviewSection(p, platforms, runtime, suppressedBreakdown) {
+      const suppressedTotal = suppressedBreakdown.reduce((s, r) => s + (r.total || 0), 0);
+      const suppressedQualified = suppressedBreakdown.reduce((s, r) => s + (r.qualified || 0), 0);
+      return `
+        <div class="obs-section">
+          <h3 class="obs-section-title">数据管道总览</h3>
+          <div class="obs-stat-grid">
+            <div class="obs-stat-card"><span class="obs-stat-val">${p.total_items}</span><span class="obs-stat-label">内容总量</span></div>
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${p.fresh}</span><span class="obs-stat-label">待推荐</span></div>
+            <div class="obs-stat-card info"><span class="obs-stat-val">${p.shown}</span><span class="obs-stat-label">已展示</span></div>
+            <div class="obs-stat-card warn"><span class="obs-stat-val">${p.stale}</span><span class="obs-stat-label">已过期</span></div>
+            <div class="obs-stat-card muted"><span class="obs-stat-val">${p.suppressed}</span><span class="obs-stat-label">已抑制</span></div>
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${p.items_with_quality_score}</span><span class="obs-stat-label">已评分</span></div>
+            <div class="obs-stat-card muted"><span class="obs-stat-val">${p.items_without_quality_score}</span><span class="obs-stat-label">未评分</span></div>
+            <div class="obs-stat-card info"><span class="obs-stat-val">${p.avg_quality_score}</span><span class="obs-stat-label">平均分</span></div>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">各平台内容分布</h3>
+          <div class="obs-platform-table-wrap">
+            <table class="obs-platform-table">
+              <thead><tr><th>平台</th><th>总量</th><th>待推荐</th><th>已展示</th><th>已过期</th><th>已抑制</th><th>已反馈</th></tr></thead>
+              <tbody>${platforms.map(plat => {
+                const pct = p.total_items > 0 ? ((plat.total / p.total_items) * 100).toFixed(1) : "0";
+                return `<tr><td><span class="${platformLabelClass(plat.platform)}">${escapeHtml(platformLabelHtml(plat.platform))}</span></td>
+                  <td class="obs-num">${plat.total} <span class="obs-pct">${pct}%</span></td>
+                  <td class="obs-num">${plat.fresh}</td><td class="obs-num">${plat.shown}</td>
+                  <td class="obs-num">${plat.stale}</td><td class="obs-num">${plat.suppressed}</td>
+                  <td class="obs-num">${plat.feedbacked}</td></tr>`;
+              }).join("")}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">配额管理中（被抑制）内容分析</h3>
+          ${suppressedBreakdown.length ? `
+          <div class="obs-meta" style="margin-bottom:10px">
+            <span>共 <b>${suppressedTotal}</b> 条在配额管理中，其中 <b class="accent">${suppressedQualified}</b> 条资格齐全（过准入线+要素完整+可跳转），其余因相关性不足或未评估暂不适合推荐</span>
+          </div>
+          <div class="obs-platform-table-wrap">
+            <table class="obs-platform-table">
+              <thead><tr><th>平台</th><th>总量</th><th>资格齐全</th><th>相关性不足(&lt;0.60)</th><th>未评估</th></tr></thead>
+              <tbody>${suppressedBreakdown.map(r => `
+                <tr><td><span class="${platformLabelClass(r.platform)}">${escapeHtml(platformLabelHtml(r.platform))}</span></td>
+                  <td class="obs-num">${r.total ?? 0}</td>
+                  <td class="obs-num ${r.qualified > 0 ? "accent" : ""}">${r.qualified ?? 0}</td>
+                  <td class="obs-num">${r.below_threshold ?? 0}</td>
+                  <td class="obs-num">${r.unevaluated ?? 0}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>` : `<div class="empty-state">当前没有配额管理中的内容</div>`}
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">运行时快照</h3>
+          <div class="obs-stat-grid obs-small-grid">
+            <div class="obs-stat-card"><span class="obs-stat-val">${runtime.recommendation_count || "—"}</span><span class="obs-stat-label">推荐次数</span></div>
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${runtime.pool_available_count || "—"}</span><span class="obs-stat-label">可用池</span></div>
+            <div class="obs-stat-card info"><span class="obs-stat-val">${runtime.pool_raw_count || "—"}</span><span class="obs-stat-label">原始池</span></div>
+            <div class="obs-stat-card"><span class="obs-stat-val">${runtime.pool_target_count || "—"}</span><span class="obs-stat-label">目标池大小</span></div>
+            <div class="obs-stat-card warn"><span class="obs-stat-val">${runtime.pending_signal_events || "—"}</span><span class="obs-stat-label">待处理事件</span></div>
+            <div class="obs-stat-card"><span class="obs-stat-val">${runtime.last_discovered_count || "—"}</span><span class="obs-stat-label">上次发现</span></div>
+            <div class="obs-stat-card"><span class="obs-stat-val">${runtime.last_replenished_count || "—"}</span><span class="obs-stat-label">上次补货</span></div>
+            <div class="obs-stat-card" style="grid-column:span 2"><span class="obs-stat-val" style="font-size:14px">${runtime.last_refresh_at || "—"}</span><span class="obs-stat-label">最后刷新</span></div>
+          </div>
+          ${(runtime.recent_pool_topics || []).length ? `<div class="obs-meta"><span>近期主题: ${runtime.recent_pool_topics.map(t => escapeHtml(String(t))).join("、")}</span></div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderDiscoverySection(discCandidates, keywords, evalStats, p) {
+      const maxDisc = Math.max(...discCandidates.map(x => x.count), 1);
+      return `
+        <div class="obs-row">
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">发现候选状态</h3>
+            <div class="obs-bar-chart">${discCandidates.map(d => {
+              const pct = (d.count / maxDisc * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(d.status)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${d.count}</span></div>`;
+            }).join("")}</div>
+          </div>
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">评估统计</h3>
+            <div class="obs-stat-grid obs-small-grid">
+              <div class="obs-stat-card"><span class="obs-stat-val">${evalStats.total_candidates || 0}</span><span class="obs-stat-label">候选总数</span></div>
+              <div class="obs-stat-card accent"><span class="obs-stat-val">${evalStats.candidates_accepted || 0}</span><span class="obs-stat-label">已准入</span></div>
+              <div class="obs-stat-card info"><span class="obs-stat-val">${evalStats.acceptance_rate || 0}%</span><span class="obs-stat-label">准入率</span></div>
+              <div class="obs-stat-card warn"><span class="obs-stat-val">${evalStats.total_eval_attempts || 0}</span><span class="obs-stat-label">总评估次数</span></div>
+            </div>
+            <div class="obs-meta">
+              <span>待评估: ${p.discovery_candidates_pending}</span>
+              <span>已评估待入库: ${p.discovery_candidates_evaluated}</span>
+            </div>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">关键词状态（按平台）</h3>
+          <div class="obs-platform-table-wrap">
+            <table class="obs-platform-table">
+              <thead><tr><th>平台</th><th>状态</th><th>数量</th></tr></thead>
+              <tbody>${keywords.map(k => `<tr>
+                <td><span class="${platformLabelClass(k.platform)}">${escapeHtml(platformLabelHtml(k.platform))}</span></td>
+                <td><span class="pex-badge pex-badge-status">${escapeHtml(k.status)}</span></td>
+                <td class="obs-num">${k.count}</td>
+              </tr>`).join("")}</tbody>
+            </table>
+          </div>
+          <div class="obs-meta">关键词生命周期: pending → claimed → executing → used/failed/expired</div>
+        </div>
+      `;
+    }
+
+    function renderQualitySection(scoreDist, topicGroups, exprCoverage, styleDist, p) {
+      const maxScore = Math.max(...scoreDist.map(x => x.count), 1);
+      const maxTopic = Math.max(...topicGroups.map(x => x.count), 1);
+      const maxStyle = Math.max(...styleDist.map(x => x.count), 1);
+      const withExpr = exprCoverage.with_expression || 0;
+      const withoutExpr = exprCoverage.without_expression || 0;
+      const exprTotal = withExpr + withoutExpr;
+      const exprPct = exprTotal > 0 ? (withExpr / exprTotal * 100).toFixed(1) : 0;
+      return `
+        <div class="obs-section">
+          <h3 class="obs-section-title">数据完整度</h3>
+          <div class="obs-stat-grid obs-small-grid">
+            <div class="obs-stat-card info"><span class="obs-stat-val">${withExpr} <span style="font-size:14px">(${exprPct}%)</span></span><span class="obs-stat-label">有推荐理由</span></div>
+            <div class="obs-stat-card muted"><span class="obs-stat-val">${withoutExpr}</span><span class="obs-stat-label">无推荐理由</span></div>
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${exprCoverage.with_topic_group || 0}</span><span class="obs-stat-label">有主题标签</span></div>
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${exprCoverage.with_quality_score || 0}</span><span class="obs-stat-label">有质量评分</span></div>
+          </div>
+        </div>
+        <div class="obs-row">
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">大模型评分分布</h3>
+            <div class="obs-bar-chart">${scoreDist.map(s => {
+              const pct = (s.count / maxScore * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(s.bucket)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${s.count}</span></div>`;
+            }).join("")}</div>
+          </div>
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">主题标签分布</h3>
+            <div class="obs-topic-list">${topicGroups.map(t => {
+              const pct = (t.count / maxTopic * 100).toFixed(0);
+              return `<div class="obs-topic-row"><span class="obs-topic-label">${escapeHtml(t.topic)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill obs-bar-topic" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${t.count}</span></div>`;
+            }).join("")}</div>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">内容风格分布</h3>
+          <div class="obs-bar-chart">${styleDist.map(s => {
+            const pct = (s.count / maxStyle * 100).toFixed(0);
+            return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(s.style)}</span>
+              <div class="obs-bar-track"><div class="obs-bar-fill obs-bar-topic" style="width:${pct}%"></div></div>
+              <span class="obs-bar-val">${s.count}</span></div>`;
+          }).join("")}</div>
+        </div>
+      `;
+    }
+
+    function renderBehaviorSection(eventStats, feedbackStats, satDist) {
+      const eventTypes = eventStats.by_type || {};
+      const eventPlatforms = eventStats.by_platform || {};
+      const fbTypes = feedbackStats.by_type || {};
+      const maxEvent = Math.max(...Object.values(eventTypes), 1);
+      const maxSat = Math.max(...satDist.map(x => x.count), 1);
+      return `
+        <div class="obs-row">
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">行为事件类型</h3>
+            <div class="obs-bar-chart">${Object.entries(eventTypes).map(([k, v]) => {
+              const pct = (v / maxEvent * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(k)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill obs-bar-topic" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${v}</span></div>`;
+            }).join("")}</div>
+            <div class="obs-meta"><span>共 ${eventStats.total_events || 0} 条事件</span></div>
+          </div>
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">事件来源平台</h3>
+            <div class="obs-bar-chart">${Object.entries(eventPlatforms).map(([k, v]) => {
+              const max = Math.max(...Object.values(eventPlatforms), 1);
+              const pct = (v / max * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(platformLabelHtml(k))}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${v}</span></div>`;
+            }).join("")}</div>
+          </div>
+        </div>
+        <div class="obs-row">
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">用户满意度分布</h3>
+            <div class="obs-bar-chart">${satDist.map(s => {
+              const pct = (s.count / maxSat * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(s.satisfaction)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${s.count}</span></div>`;
+            }).join("")}</div>
+          </div>
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">反馈统计</h3>
+            <div class="obs-stat-grid obs-small-grid" style="margin-bottom:8px">
+              <div class="obs-stat-card"><span class="obs-stat-val">${feedbackStats.total_feedback || 0}</span><span class="obs-stat-label">总反馈</span></div>
+            </div>
+            <div class="obs-bar-chart">${Object.entries(fbTypes).map(([k, v]) => {
+              const max = Math.max(...Object.values(fbTypes), 1);
+              const pct = (v / max * 100).toFixed(0);
+              return `<div class="obs-bar-row"><span class="obs-bar-label">${escapeHtml(k)}</span>
+                <div class="obs-bar-track"><div class="obs-bar-fill obs-bar-topic" style="width:${pct}%"></div></div>
+                <span class="obs-bar-val">${v}</span></div>`;
+            }).join("")}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderLLMSection(llmUsage) {
+      const callers = llmUsage.by_caller || [];
+      return `
+        <div class="obs-section">
+          <h3 class="obs-section-title">LLM 调用统计（近7天）</h3>
+          <div class="obs-stat-grid obs-small-grid">
+            <div class="obs-stat-card accent"><span class="obs-stat-val">${llmUsage.today_calls ?? 0}</span><span class="obs-stat-label">今日调用</span></div>
+            <div class="obs-stat-card warn"><span class="obs-stat-val">¥${llmUsage.today_cost_cny ?? 0}</span><span class="obs-stat-label">今日费用</span></div>
+            <div class="obs-stat-card"><span class="obs-stat-val">${llmUsage.total_calls_7d ?? 0}</span><span class="obs-stat-label">7天调用</span></div>
+            <div class="obs-stat-card warn"><span class="obs-stat-val">¥${llmUsage.total_cost_7d ?? 0}</span><span class="obs-stat-label">7天费用</span></div>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">调用方详情</h3>
+          ${callers.length ? `<div class="obs-caller-table-wrap"><table class="obs-platform-table">
+            <thead><tr><th>调用方</th><th>调用次数</th><th>费用</th><th>输入Token</th><th>输出Token</th></tr></thead>
+            <tbody>${callers.map(c => `<tr>
+              <td><code class="obs-caller">${escapeHtml(String(c.caller || "unknown"))}</code></td>
+              <td class="obs-num">${c.calls}</td>
+              <td class="obs-num">¥${c.cost_cny.toFixed ? c.cost_cny.toFixed(4) : c.cost_cny}</td>
+              <td class="obs-num">${c.prompt_tokens}</td>
+              <td class="obs-num">${c.completion_tokens}</td>
+            </tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">暂无数据</div>`}
+        </div>
+      `;
+    }
+
+    function renderHealthSection(runtime, schedulerLoops, authSources, delightStats, soulProfile) {
+      return `
+        <div class="obs-row">
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">惊喜推荐 (Delight)</h3>
+            <div class="obs-stat-grid obs-small-grid">
+              <div class="obs-stat-card accent"><span class="obs-stat-val">${delightStats.delight_candidates || 0}</span><span class="obs-stat-label">候选数</span></div>
+              <div class="obs-stat-card info"><span class="obs-stat-val">${delightStats.delight_notified || 0}</span><span class="obs-stat-label">已推送</span></div>
+              <div class="obs-stat-card warn"><span class="obs-stat-val">${delightStats.pending_delight || 0}</span><span class="obs-stat-label">待推送</span></div>
+              <div class="obs-stat-card"><span class="obs-stat-val" style="font-size:14px">${delightStats.last_delight_notification || "—"}</span><span class="obs-stat-label">上次推送</span></div>
+            </div>
+          </div>
+          <div class="obs-section obs-half">
+            <h3 class="obs-section-title">灵魂画像 (Soul)</h3>
+            <div class="obs-stat-grid obs-small-grid">
+              <div class="obs-stat-card info"><span class="obs-stat-val">${soulProfile.interest_tags_count || "—"}</span><span class="obs-stat-label">兴趣标签</span></div>
+              <div class="obs-stat-card"><span class="obs-stat-val">${soulProfile.awareness_notes_count || "—"}</span><span class="obs-stat-label">感知笔记</span></div>
+              <div class="obs-stat-card accent"><span class="obs-stat-val">${soulProfile.insight_hypotheses_count || "—"}</span><span class="obs-stat-label">洞察假设</span></div>
+              <div class="obs-stat-card" style="grid-column:span 2"><span class="obs-stat-val" style="font-size:14px">${soulProfile.personality_traits || "—"}</span><span class="obs-stat-label">人格特征</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">平台认证状态</h3>
+          <div class="obs-platform-table-wrap">
+            <table class="obs-platform-table">
+              <thead><tr><th>平台</th><th>状态</th><th>Cookie 时长</th><th>最后验证</th><th>错误</th></tr></thead>
+              <tbody>${authSources.length ? authSources.map(a => `<tr>
+                <td><span class="${platformLabelClass(a.platform)}">${escapeHtml(a.label)}</span></td>
+                <td><span class="pex-badge pex-badge-status">${escapeHtml(a.status)}</span></td>
+                <td class="obs-num">${a.cookie_age_hours || "—"}h</td>
+                <td style="font-size:12px">${a.last_ok_at || "—"}</td>
+                <td style="font-size:12px;color:var(--text-secondary)">${escapeHtml(a.error || "")}</td>
+              </tr>`).join("") : `<tr><td colspan="5" style="text-align:center;color:var(--text-secondary)">暂无认证信息</td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">调度循环状态</h3>
+          ${schedulerLoops.length ? `<div class="obs-platform-table-wrap"><table class="obs-platform-table">
+            <thead><tr><th>循环名称</th><th>间隔</th><th>上次运行</th><th>状态</th></tr></thead>
+            <tbody>${schedulerLoops.map(l => `<tr>
+              <td><code class="obs-caller">${escapeHtml(String(l.label || l.name || "unknown"))}</code></td>
+              <td class="obs-num">${l.interval_seconds || "—"}s</td>
+              <td style="font-size:12px">${l.last_tick_at || "—"}</td>
+              <td><span class="pex-badge pex-badge-status">${escapeHtml(l.status || "unknown")}</span></td>
+            </tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">调度循环数据不可用（需要 runtime_controller.get_loop_health()）</div>`}
+        </div>
+      `;
+    }
+
+    // ── 池子探索 ──────────────────────────────────────────────────────────
+
+    function loadPoolExploreData() {
+      const body = $("#poolExploreBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载筛选条件…</div>`;
+
+      // 先获取观测数据中的 topic_group 列表
+      requestJson("/observability", { timeoutMs: 30000 }).then((obs) => {
+        const topicGroups = (obs?.topic_groups || []).map(t => t.topic);
+        renderPoolExploreFilters(body, topicGroups);
+        doPoolExploreQuery(body);
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接。</div>`;
+      });
+    }
+
+    function renderPoolExploreFilters(container, topicGroups) {
+      const f = state.poolExploreFilters || {};
+      const platforms = ["bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu", "v2ex", "reddit", "wechat", "xiaoyuzhou", "rss"];
+      const statuses = ["fresh", "shown", "stale", "suppressed", "feedbacked"];
+
+      container.innerHTML = `
+        <div class="obs-section">
+          <h3 class="obs-section-title">筛选条件</h3>
+          <div class="pex-filter-grid">
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">平台</label>
+              <select class="pex-filter-select" id="pexPlatform">
+                <option value="">全部</option>
+                ${platforms.map(p => `<option value="${p}"${f.platform === p ? " selected" : ""}>${platformLabelHtml(p)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">状态</label>
+              <select class="pex-filter-select" id="pexStatus">
+                <option value="">全部</option>
+                ${statuses.map(s => `<option value="${s}"${f.status === s ? " selected" : ""}>${s}</option>`).join("")}
+              </select>
+            </div>
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">最低评分</label>
+              <select class="pex-filter-select" id="pexMinScore">
+                <option value="">不限</option>
+                <option value="0"${f.min_score === 0 ? " selected" : ""}>0+ (全部)</option>
+                <option value="0.2"${f.min_score === 0.2 ? " selected" : ""}>0.2+</option>
+                <option value="0.4"${f.min_score === 0.4 ? " selected" : ""}>0.4+</option>
+                <option value="0.6"${f.min_score === 0.6 ? " selected" : ""}>0.6+</option>
+                <option value="0.8"${f.min_score === 0.8 ? " selected" : ""}>0.8+</option>
+              </select>
+            </div>
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">评分状态</label>
+              <select class="pex-filter-select" id="pexScored">
+                <option value="">全部</option>
+                <option value="scored"${f.scored_only ? " selected" : ""}>已评分</option>
+                <option value="unscored"${f.unscored_only ? " selected" : ""}>未评分</option>
+              </select>
+            </div>
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">内容链接</label>
+              <select class="pex-filter-select" id="pexHasUrl">
+                <option value="">全部</option>
+                <option value="yes"${f.has_url === true ? " selected" : ""}>有链接</option>
+                <option value="no"${f.has_url === false ? " selected" : ""}>无链接</option>
+              </select>
+            </div>
+            <div class="pex-filter-group">
+              <label class="pex-filter-label">主题标签</label>
+              <select class="pex-filter-select" id="pexTopicGroup">
+                <option value="">全部</option>
+                ${topicGroups.map(t => `<option value="${t}"${f.topic_group === t ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <div class="pex-filter-actions">
+            <button class="pill-btn dark" id="pexApplyBtn" type="button">应用筛选</button>
+            <button class="pill-btn" id="pexResetBtn" type="button">重置</button>
+            <span class="pex-filter-hint" id="pexFilterHint">共 <strong id="pexTotalCount">—</strong> 条匹配</span>
+          </div>
+        </div>
+        <div class="obs-section">
+          <h3 class="obs-section-title">筛选结果</h3>
+          <div class="card-grid" id="pexResultGrid">
+            <div class="empty-state">点击"应用筛选"查看结果</div>
+          </div>
+          <div class="pool-all-footer">随机展示 6 条，共 <span id="pexResultTotal">—</span> 条匹配</div>
+        </div>
+      `;
+
+      safeBind("#pexApplyBtn", "click", () => {
+        readPoolExploreFilters();
+        doPoolExploreQuery(container);
+      });
+      safeBind("#pexResetBtn", "click", () => {
+        state.poolExploreFilters = {};
+        loadPoolExploreData();
+      });
+    }
+
+    function readPoolExploreFilters() {
+      const f = {};
+      const plat = $("#pexPlatform")?.value;
+      if (plat) f.platform = plat;
+      const status = $("#pexStatus")?.value;
+      if (status) f.status = status;
+      const minScore = $("#pexMinScore")?.value;
+      if (minScore !== "" && minScore !== undefined) f.min_score = parseFloat(minScore);
+      const scored = $("#pexScored")?.value;
+      if (scored === "scored") f.scored_only = true;
+      if (scored === "unscored") f.unscored_only = true;
+      const hasUrl = $("#pexHasUrl")?.value;
+      if (hasUrl === "yes") f.has_url = true;
+      if (hasUrl === "no") f.has_url = false;
+      const topic = $("#pexTopicGroup")?.value;
+      if (topic) f.topic_group = topic;
+      state.poolExploreFilters = f;
+    }
+
+    function doPoolExploreQuery(container) {
+      const f = state.poolExploreFilters || {};
+      const params = new URLSearchParams();
+      params.set("shuffle", "true");
+      params.set("limit", "6");
+      if (f.platform) params.set("platform", f.platform);
+      if (f.status) params.set("status", f.status);
+      if (f.min_score !== undefined && f.min_score !== null) params.set("min_score", String(f.min_score));
+      if (f.scored_only) params.set("scored_only", "true");
+      if (f.unscored_only) params.set("unscored_only", "true");
+      if (f.has_url === true || f.has_url === false) params.set("has_url", f.has_url ? "true" : "false");
+      if (f.topic_group) params.set("topic_group", f.topic_group);
+
+      const hint = $("#pexFilterHint");
+      const grid = $("#pexResultGrid");
+      const totalEl = $("#pexResultTotal");
+      if (hint) hint.innerHTML = "查询中…";
+      if (grid) grid.innerHTML = `<div class="empty-state">正在查询…</div>`;
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (hint) hint.innerHTML = `共 <strong>${total}</strong> 条匹配`;
+        if (totalEl) totalEl.textContent = String(total);
+        if (grid) {
+          if (!items.length) {
+            grid.innerHTML = `<div class="empty-state">没有匹配的内容</div>`;
+          } else {
+            grid.replaceChildren(
+              ...items.map((item) => {
+                const card = document.createElement("div");
+                card.className = "video-card is-minimal";
+                card.innerHTML = poolExploreCardHtml(item);
+                card.addEventListener("click", (e) => {
+                  if (e.target.closest("[data-action]")) return;
+                  openRecommendation(item, card);
+                });
+                card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+                  e.stopPropagation();
+                  openRecommendation(item, card);
+                });
+                return card;
+              })
+            );
+          }
+        }
+      }).catch(() => {
+        if (hint) hint.innerHTML = "查询失败";
+        if (grid) grid.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    // ── 小红书推荐流 ──────────────────────────────────────────────────────
+
+    function loadXhsFeedData() {
+      const body = $("#xhsFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "xhs-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "40");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+	          <div class="obs-section">
+	            <div class="xhs-feed-meta">
+	              <div>
+	                <span>共 <strong>${total}</strong> 条推荐内容</span>
+	                <span class="xhs-feed-tag">xhs-feed</span>
+	              </div>
+	              <button class="pill-btn dark" id="xhsFeedRefreshBtn" type="button">换一批</button>
+	            </div>
+	            <div class="card-grid" id="xhsFeedGrid"></div>
+	          </div>`;
+        const grid = $("#xhsFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = xhsFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function xhsFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const cover = escapeHtml(item.cover_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const topic = escapeHtml(item.topic_group || "");
+      const hasCover = cover && !cover.includes("placeholder");
+
+      return `
+        <div class="video-card-cover${hasCover ? "" : " is-empty"}">
+          ${hasCover ? `<img src="${cover}" alt="" loading="lazy">` : `<div class="video-card-cover-ph">${platformLabelHtml("xiaohongshu")}</div>`}
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("xiaohongshu")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    // ── 知乎推荐流 ──────────────────────────────────────────────────────
+
+    function loadZhihuFeedData() {
+      const body = $("#zhihuFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "zhihu-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "20");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+	          <div class="obs-section">
+	            <div class="xhs-feed-meta">
+	              <div>
+	                <span>共 <strong>${total}</strong> 条推荐内容</span>
+	                <span class="xhs-feed-tag zhihu-feed-tag">zhihu-feed</span>
+	              </div>
+	              <button class="pill-btn dark" id="zhihuFeedRefreshBtn" type="button">换一批</button>
+	            </div>
+	            <div class="card-grid" id="zhihuFeedGrid"></div>
+	          </div>`;
+        const grid = $("#zhihuFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = zhihuFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function zhihuFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const topic = escapeHtml(item.topic_group || "");
+      const excerpt = escapeHtml((item.body_text || "").slice(0, 120));
+
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("zhihu")}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          ${excerpt ? `<p class="video-card-excerpt">${excerpt}</p>` : ""}
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("zhihu")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    function loadBiliFeedData() {
+      const body = $("#biliFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "bili-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "20");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+          <div class="obs-section">
+            <div class="xhs-feed-meta">
+              <div>
+                <span>共 <strong>${total}</strong> 条推荐内容</span>
+                <span class="xhs-feed-tag bili-feed-tag">bili-feed</span>
+              </div>
+              <button class="pill-btn dark" id="biliFeedRefreshBtn" type="button">换一批</button>
+            </div>
+            <div class="card-grid" id="biliFeedGrid"></div>
+          </div>`;
+        const grid = $("#biliFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = biliFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function biliFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const topic = escapeHtml(item.topic_group || "");
+      const cover = item.cover_url || "";
+      const viewCount = item.view_count || 0;
+      const duration = item.duration || 0;
+      const durStr = duration ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}` : "";
+      const viewStr = viewCount >= 10000 ? `${(viewCount / 10000).toFixed(1)}万` : String(viewCount);
+
+      return `
+        <div class="video-card-cover${cover ? "" : " is-empty"}">
+          ${cover ? `<img src="${cover}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('is-empty')">` : ""}
+          <div class="video-card-cover-ph${cover ? " is-hidden" : ""}">${platformLabelHtml("bilibili")}</div>
+          ${durStr ? `<span class="video-card-duration">${durStr}</span>` : ""}
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("bilibili")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${viewCount > 0 ? `<span class="video-card-views">${viewStr}播放</span>` : ""}
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    function loadYoutubeFeedData() {
+      const body = $("#youtubeFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "youtube-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "20");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+          <div class="obs-section">
+            <div class="xhs-feed-meta">
+              <div>
+                <span>共 <strong>${total}</strong> 条推荐内容</span>
+                <span class="xhs-feed-tag youtube-feed-tag">youtube-feed</span>
+              </div>
+              <button class="pill-btn dark" id="youtubeFeedRefreshBtn" type="button">换一批</button>
+            </div>
+            <div class="card-grid" id="youtubeFeedGrid"></div>
+          </div>`;
+        const grid = $("#youtubeFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = youtubeFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function youtubeFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const topic = escapeHtml(item.topic_group || "");
+      const viewCount = item.view_count || 0;
+      const viewStr = viewCount >= 10000 ? `${(viewCount / 10000).toFixed(1)}万` : String(viewCount);
+
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("youtube")}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("youtube")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${viewCount > 0 ? `<span class="video-card-views">${viewStr}播放</span>` : ""}
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    function loadV2exFeedData() {
+      const body = $("#v2exFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "v2ex-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "20");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+          <div class="obs-section">
+            <div class="xhs-feed-meta">
+              <div>
+                <span>共 <strong>${total}</strong> 条推荐内容</span>
+                <span class="xhs-feed-tag v2ex-feed-tag">v2ex-feed</span>
+              </div>
+              <button class="pill-btn dark" id="v2exFeedRefreshBtn" type="button">换一批</button>
+            </div>
+            <div class="card-grid" id="v2exFeedGrid"></div>
+          </div>`;
+        const grid = $("#v2exFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = v2exFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function v2exFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const topic = escapeHtml(item.topic_group || "");
+      const replies = item.like_count || 0;
+      const excerpt = escapeHtml((item.body_text || "").slice(0, 120));
+
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("v2ex")}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          ${excerpt ? `<p class="video-card-excerpt">${excerpt}</p>` : ""}
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("v2ex")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${replies > 0 ? `<span class="video-card-views">${replies}回复</span>` : ""}
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    function loadXiaoyuzhouFeedData() {
+      const body = $("#xiaoyuzhouFeedBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
+
+      const params = new URLSearchParams();
+      params.set("source", "xiaoyuzhou-feed");
+      params.set("shuffle", "true");
+      params.set("limit", "20");
+
+      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state">
+                <p>暂无内容，推荐流将在下次抓取后更新（每 3 小时一次）</p>
+              </div>
+            </div>`;
+          return;
+        }
+        body.innerHTML = `
+          <div class="obs-section">
+            <div class="xhs-feed-meta">
+              <div>
+                <span>共 <strong>${total}</strong> 条推荐内容</span>
+                <span class="xhs-feed-tag xiaoyuzhou-feed-tag">小宇宙</span>
+              </div>
+              <button class="pill-btn dark" id="xiaoyuzhouFeedRefreshBtn" type="button">换一批</button>
+            </div>
+            <div class="card-grid" id="xiaoyuzhouFeedGrid"></div>
+          </div>`;
+        const grid = $("#xiaoyuzhouFeedGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.innerHTML = xiaoyuzhouFeedCardHtml(item);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]")) return;
+              openRecommendation(item, card);
+            });
+            card.querySelector("[data-action]")?.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openRecommendation(item, card);
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state">请求失败，请检查后端连接</div>`;
+      });
+    }
+
+    function xiaoyuzhouFeedCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const duration = item.like_count || 0;
+      const minutes = duration > 0 ? Math.round(duration / 60) : 0;
+      const excerpt = escapeHtml((item.body_text || "").slice(0, 120));
+
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("xiaoyuzhou")}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          ${excerpt ? `<p class="video-card-excerpt">${excerpt}</p>` : ""}
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml("xiaoyuzhou")}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${minutes > 0 ? `<span class="video-card-views">${minutes}分钟</span>` : ""}
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    // Session context for multi-turn agent recommendation
+    let _agentSessionId = localStorage.getItem("agentSessionId") || "";
+    if (!_agentSessionId) {
+      _agentSessionId = "sess_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem("agentSessionId", _agentSessionId);
+    }
+
+    function updateAgentSessionContext(data) {
+      const ctx = $("#agentSessionContext");
+      const ctxText = $("#agentSessionContextText");
+      if (!ctx || !ctxText) return;
+      const sc = data?.session_context || "";
+      if (sc) {
+        ctxText.textContent = sc;
+        ctx.style.display = "flex";
+      } else {
+        ctx.style.display = "none";
+      }
+    }
+
+    function resetAgentSession() {
+      _agentSessionId = "sess_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem("agentSessionId", _agentSessionId);
+      const ctx = $("#agentSessionContext");
+      if (ctx) ctx.style.display = "none";
+    }
+
+    function loadAgentRecommendData(query) {
+      const body = $("#agentRecommendBody");
+      if (!body) return;
+      body.innerHTML = `<div class="observability-loading">正在搜索「${escapeHtml(query)}」…</div>`;
+
+      // Save to search history
+      saveAgentSearchHistory(query);
+
+      const params = new URLSearchParams();
+      params.set("q", query);
+      params.set("limit", "20");
+      params.set("shuffle", "true");
+      params.set("session_id", _agentSessionId);
+
+      requestJson(`${ENDPOINTS.poolAll.replace("/pool/all", "/agent-recommend")}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+        const items = data?.items || [];
+        const total = data?.total || 0;
+        // Update session context in UI
+        updateAgentSessionContext(data);
+        if (!items.length) {
+          body.innerHTML = `
+            <div class="obs-section">
+              <div class="empty-state" style="padding: 40px 20px; text-align: center;">
+                <p style="font-size: 16px; margin-bottom: 8px;">没有找到相关内容</p>
+                <p style="font-size: 13px; color: var(--text-secondary);">试试其他关键词，比如「科技」「AI」「搞笑」「美食」</p>
+              </div>
+            </div>`;
+          return;
+        }
+
+        // Count platform distribution
+        const platformCounts = {};
+        for (const item of items) {
+          const p = item.source_platform || "unknown";
+          platformCounts[p] = (platformCounts[p] || 0) + 1;
+        }
+        const platformStatsHtml = Object.entries(platformCounts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([p, c]) => `<span class="agent-platform-stat">${platformLabelHtml(p)} ${c}</span>`)
+          .join("");
+
+        body.innerHTML = `
+          <div class="obs-section">
+            <div class="agent-recommend-meta">
+              <div class="agent-recommend-meta-left">
+                <span>搜索「<strong>${escapeHtml(query)}</strong>」共 <strong>${total}</strong> 条内容</span>
+                <div class="agent-platform-stats">${platformStatsHtml}</div>
+              </div>
+              <div class="agent-recommend-meta-right">
+                <button class="pill-btn dark" id="agentRecommendRefreshBtn" type="button" data-query="${escapeHtml(query)}">换一批</button>
+              </div>
+            </div>
+            <div class="card-grid" id="agentRecommendGrid"></div>
+          </div>`;
+        const grid = $("#agentRecommendGrid");
+        if (!grid) return;
+        grid.replaceChildren(
+          ...items.map((item) => {
+            const card = document.createElement("div");
+            card.className = "video-card is-minimal";
+            card.__itemData = item; // store for feedback button
+            card.innerHTML = agentRecommendCardHtml(item, query);
+            card.addEventListener("click", (e) => {
+              if (e.target.closest("[data-action]") || e.target.closest(".feedback-btn") || e.target.closest(".video-card-link")) return;
+              // Track view (implicit feedback)
+              trackAgentRecommendView(item);
+              const url = item.content_url;
+              if (url) window.open(url, "_blank", "noopener,noreferrer");
+            });
+            return card;
+          })
+        );
+      }).catch(() => {
+        body.innerHTML = `<div class="empty-state" style="padding: 40px 20px; text-align: center;">
+          <p style="font-size: 16px; margin-bottom: 8px;">请求失败</p>
+          <p style="font-size: 13px; color: var(--text-secondary);">请检查后端连接后重试</p>
+          <button class="pill-btn dark" style="margin-top: 12px;" onclick="loadAgentRecommendData('${escapeHtml(query)}')">重试</button>
+        </div>`;
+      });
+    }
+
+    function agentRecommendCardHtml(item, query) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const url = escapeHtml(item.content_url || "");
+      const status = item.pool_status || "";
+      const score = item.quality_score || 0;
+      const platform = item.source_platform || "";
+      const topic = escapeHtml(item.topic_group || "");
+      const excerpt = escapeHtml((item.body_text || "").slice(0, 120));
+
+      // Highlight keywords in title
+      let highlightedTitle = title;
+      if (query) {
+        const keywords = query.split(/[,，、\s]+/).filter(Boolean);
+        for (const kw of keywords) {
+          if (kw.length < 2) continue;
+          const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          highlightedTitle = highlightedTitle.replace(
+            new RegExp(escapedKw, "gi"),
+            (match) => `<mark class="kw-highlight">${escapeHtml(match)}</mark>`
+          );
+        }
+      }
+
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml(platform)}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${highlightedTitle}</p>
+          ${excerpt ? `<p class="video-card-excerpt">${excerpt}</p>` : ""}
+          <div class="video-card-meta">
+            <span class="video-card-author">${author}</span>
+            <span class="video-card-platform">${platformLabelHtml(platform)}</span>
+          </div>
+          <div class="video-card-footer">
+            <span class="video-card-status ${status}">${status}</span>
+            ${score > 0 ? `<span class="video-card-score">${(score * 100).toFixed(0)}</span>` : ""}
+            ${topic ? `<span class="video-card-topic">${topic}</span>` : ""}
+          </div>
+        </div>
+        <div class="video-card-actions">
+          <button class="feedback-btn like-btn" data-bvid="${escapeHtml(item.bvid)}" data-action="like" title="喜欢">👍</button>
+          <button class="feedback-btn dislike-btn" data-bvid="${escapeHtml(item.bvid)}" data-action="dislike" title="不喜欢">👎</button>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    // --- Agent search history ---
+    function getAgentSearchHistory() {
+      try {
+        return JSON.parse(localStorage.getItem("agentSearchHistory") || "[]");
+      } catch { return []; }
+    }
+
+    function saveAgentSearchHistory(query) {
+      const q = query.trim();
+      if (!q) return;
+      let history = getAgentSearchHistory();
+      history = history.filter((h) => h !== q);
+      history.unshift(q);
+      if (history.length > 10) history = history.slice(0, 10);
+      try {
+        localStorage.setItem("agentSearchHistory", JSON.stringify(history));
+      } catch { /* ignore */ }
+      renderAgentSearchHistory();
+    }
+
+    function renderAgentSearchHistory() {
+      const history = getAgentSearchHistory();
+      const container = $("#recentSearchTags");
+      const hints = $("#agentRecentHints");
+      if (!container || !hints) return;
+      if (history.length === 0) {
+        hints.style.display = "none";
+        return;
+      }
+      hints.style.display = "";
+      container.innerHTML = history
+        .map((h) => `<span class="agent-hint" data-hint="${escapeHtml(h)}">${escapeHtml(h)}</span>`)
+        .join("");
+    }
+
+    // --- Feedback (like / dislike) ---
+    function trackAgentRecommendView(item) {
+      if (!item || !item.bvid) return;
+      void requestJson(ENDPOINTS.viewRecord, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bvid: item.bvid,
+          title: item.title || "",
+          source_platform: item.source_platform || "",
+          topic_group: item.topic_group || "",
+          content_url: item.content_url || "",
+          up_name: item.up_name || "",
+          quality_score: item.quality_score || 0,
+        }),
+      }).catch(() => {});
+    }
+
+    function sendFeedback(bvid, action, item) {
+      const payload = { bvid, action };
+      if (item) {
+        payload.source_platform = item.source_platform || "";
+        payload.title = item.title || "";
+        payload.topic_group = item.topic_group || "";
+        payload.body_text = (item.body_text || "").slice(0, 200);
+      }
+      requestJson(ENDPOINTS.userFeedback, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      }).then((res) => {
+        if (res && res.ok) {
+          // Toggle visual state
+          const btn = document.querySelector(`.feedback-btn[data-bvid="${bvid}"][data-action="${action}"]`);
+          if (btn) btn.classList.add("is-active");
+          // Also remove the opposite active state
+          const opposite = action === "like" ? "dislike" : "like";
+          const oppBtn = document.querySelector(`.feedback-btn[data-bvid="${bvid}"][data-action="${opposite}"]`);
+          if (oppBtn) oppBtn.classList.remove("is-active");
+        }
+      }).catch(() => {});
+    }
+
+    function removeFeedback(bvid, action) {
+      requestJson(`${ENDPOINTS.userFeedback}?bvid=${encodeURIComponent(bvid)}&action=${action}`, {
+        method: "DELETE",
+      }).then((res) => {
+        if (res && res.ok) {
+          const btn = document.querySelector(`.feedback-btn[data-bvid="${bvid}"][data-action="${action}"]`);
+          if (btn) btn.classList.remove("is-active");
+        }
+      }).catch(() => {});
+    }
+
+    function loadInterestTags() {
+      const container = $("#agentInterestTags");
+      if (!container) return;
+      requestJson(ENDPOINTS.interestTags + "?limit=20", { timeoutMs: 10000 })
+        .then((data) => {
+          const tags = data?.tags || [];
+          if (!tags.length) {
+            container.style.display = "none";
+            return;
+          }
+          container.style.display = "";
+          container.innerHTML = tags.map((t) => {
+            const platforms = t.source_platforms?.length
+              ? t.source_platforms.map((p) => platformLabelHtml(p)).join(" ")
+              : "";
+            return `<span class="interest-tag" title="${t.count} 次点赞${platforms ? ' · ' + t.source_platforms.join(', ') : ''}">
+              ${escapeHtml(t.tag)} <small>${t.weight}</small>
+              ${platforms ? `<span class="interest-tag-platforms">${platforms}</span>` : ""}
+            </span>`;
+          }).join("");
+        })
+        .catch(() => { container.style.display = "none"; });
+    }
+
+    function poolExploreCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const author = escapeHtml(item.up_name || item.author_name || "");
+      const platform = escapeHtml(item.source_platform || "");
+      const platLabel = platformLabelHtml(platform);
+      const status = item.pool_status || "";
+      const score = item.quality_score ? item.quality_score.toFixed(3) : "—";
+      const topic = escapeHtml(item.topic_group || "");
+      return `
+        <p class="video-card-title">${title}</p>
+        <div class="video-card-meta">
+          <span class="pex-badge pex-badge-${platform}">${platLabel}</span>
+          ${status ? `<span class="pool-status-badge">${status}</span>` : ""}
+          ${author ? `<span class="video-card-author">${author}</span>` : ""}
+        </div>
+        <div class="video-card-stats" style="margin-top:4px;font-size:11px;color:var(--text-secondary)">
+          评分: ${score}${topic ? ` · ${topic}` : ""}
+        </div>
+        <div class="video-card-actions">
+          <button class="feedback-icon-btn" data-action="open" type="button" aria-label="打开原文" title="打开原文">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </button>
+        </div>
+      `;
+    }
+
     function openRecommendation(item, card) {
       const url = contentUrl(item);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       trackRecommendationClick(item);
-      card.querySelector(".status-line").textContent = url ? "已打开真实内容链接，点击信号会在后台记录。" : "后端没有返回可打开链接；点击信号会在后台记录。";
+      const statusLine = card?.querySelector(".status-line");
+      if (statusLine) statusLine.textContent = url ? "已打开真实内容链接，点击信号会在后台记录。" : "后端没有返回可打开链接；点击信号会在后台记录。";
       showToast(url ? `打开：${item.title}` : "后端没有返回可打开链接");
     }
 
@@ -2595,6 +4520,28 @@
       return String(value).split(/[、,\n]+/).map((item) => item.trim()).filter(Boolean);
     }
 
+    function formatTimeAgo(dateStr) {
+      if (!dateStr) return "";
+      try {
+        const date = new Date(dateStr.replace(" ", "T") + (dateStr.includes("Z") ? "" : "Z"));
+        if (isNaN(date.getTime())) return dateStr;
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMin = Math.floor(diffMs / 60000);
+        const diffHour = Math.floor(diffMs / 3600000);
+        const diffDay = Math.floor(diffMs / 86400000);
+        if (diffMin < 1) return "刚刚";
+        if (diffMin < 60) return `${diffMin} 分钟前`;
+        if (diffHour < 24) return `${diffHour} 小时前`;
+        if (diffDay < 7) return `${diffDay} 天前`;
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        return `${month}月${day}日`;
+      } catch {
+        return dateStr;
+      }
+    }
+
     function firstValue(...values) {
       return values.find((value) => value != null && value !== "" && (!Array.isArray(value) || value.length));
     }
@@ -2775,6 +4722,67 @@
       return `<div class="profile-card-list">${list.map((item) => typeof item === "object" ? `<div class="profile-insight"><div class="profile-insight-head"><span class="profile-insight-title">${escapeHtml(item.observation || valueList(item))}</span>${item.date ? `<span class="profile-confidence">${escapeHtml(item.date)}</span>` : ""}</div>${item.trend ? `<p class="video-meta">趋势：${escapeHtml(item.trend)}</p>` : ""}${item.emotion_guess ? `<p class="video-meta">情绪猜测：${escapeHtml(item.emotion_guess)}</p>` : ""}</div>` : `<div class="profile-insight"><div class="profile-insight-head"><span class="profile-insight-title">${escapeHtml(item)}</span></div></div>`).join("")}</div>`;
     }
 
+    function loadUserFeedbackAndViews() {
+      // Load interest tags from likes
+      requestJson(ENDPOINTS.interestTags + "?limit=20", { timeoutMs: 10000 })
+        .then((data) => {
+          const tags = data?.tags || [];
+          const container = $("#profileInterestTagsContainer");
+          const tagsEl = $("#profileInterestTags");
+          if (!container || !tagsEl) return;
+          if (!tags.length) {
+            container.style.display = "none";
+            return;
+          }
+          container.style.display = "";
+          tagsEl.innerHTML = tags.map((t) => {
+            const platforms = t.source_platforms?.length
+              ? t.source_platforms.map((p) => platformLabelHtml(p)).join(" ")
+              : "";
+            return `<span class="interest-tag" title="${t.count} 次点赞${platforms ? ' · ' + t.source_platforms.join(', ') : ''}">
+              ${escapeHtml(t.tag)} <small>${t.weight}</small>
+              ${platforms ? `<span class="interest-tag-platforms">${platforms}</span>` : ""}
+            </span>`;
+          }).join("");
+        })
+        .catch(() => {
+          const container = $("#profileInterestTagsContainer");
+          if (container) container.style.display = "none";
+        });
+
+      // Load recent view history
+      requestJson(ENDPOINTS.viewHistory + "?limit=30", { timeoutMs: 10000 })
+        .then((views) => {
+          const el = $("#profileViewHistory");
+          if (!el) return;
+          if (!views || !views.length) {
+            el.innerHTML = `<p class="video-meta">还没有浏览记录，去 Agent 推荐页面逛逛吧。</p>`;
+            return;
+          }
+          el.innerHTML = `<div class="view-history-list">${views.map((v) => {
+            const title = escapeHtml(v.title || "无标题");
+            const platform = platformLabelHtml(v.source_platform || "");
+            const author = escapeHtml(v.up_name || "");
+            const time = v.viewed_at ? formatTimeAgo(v.viewed_at) : "";
+            const url = v.content_url || "";
+            const topic = escapeHtml(v.topic_group || "");
+            return `<div class="view-history-item">
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="view-history-link">${title}</a>
+              <div class="view-history-meta">
+                ${platform ? `<span class="pex-badge pex-badge-${v.source_platform || ''}">${platform}</span>` : ""}
+                ${author ? `<span class="view-history-author">${escapeHtml(author)}</span>` : ""}
+                ${topic ? `<span class="view-history-topic">${escapeHtml(topic)}</span>` : ""}
+                ${time ? `<span class="view-history-time">${escapeHtml(time)}</span>` : ""}
+              </div>
+            </div>`;
+          }).join("")}</div>`;
+        })
+        .catch(() => {
+          const el = $("#profileViewHistory");
+          if (el) el.innerHTML = `<p class="video-meta">浏览记录加载失败。</p>`;
+        });
+    }
+
     function updateProfileMemoryButton() {
       const button = $("#profileMemoryMoreBtn");
       if (!button) return;
@@ -2805,6 +4813,8 @@
         return;
       }
       syncProfileCognitionState(profile);
+      // Load user feedback and view history for profile page
+      loadUserFeedbackAndViews();
       const html = [
         profileItem("这会儿的你", paragraphsHtml(profile.personality_portrait || profile.summary), "profile-portrait-block"),
         profileLayer("Core — 比较稳定的底色", [
@@ -2830,6 +4840,10 @@
           profileItem("内容口味", styleHtml(firstValue(profile.style, profile.content_style, profile.content_preferences))),
           profileItem("使用场景", contextHtml(firstValue(profile.context, profile.current_context))),
           profileItem("探索开放度", meterHtml("愿意走出既有兴趣圈", firstValue(profile.exploration_openness, profile.openness)))
+        ]),
+        profileLayer("Feedback — 显式反馈和浏览记录", [
+          profileItem("点赞标签聚合", `<div id="profileInterestTagsContainer" style="display:none;"><div id="profileInterestTags" class="profile-interest-tags"></div></div>`, "feedback-section"),
+          profileItem("近期浏览记录", `<div id="profileViewHistory" class="profile-view-history">正在加载...</div>`, "feedback-section")
         ]),
         profileLayer("Speculate — 阿B 在试探的方向", [
           profileItem("猜测兴趣", speculativeHtml(profile.speculative_interests)),
@@ -3940,10 +5954,37 @@
       if (dismissToggle) dismissToggle.disabled = true;
       try {
         const dismissResult = state.dismissOnReshuffle ? await dismissVisibleRecommendationsBeforeReshuffle() : null;
-        // platformOverride lets callers force a platform; otherwise we serve
-        // the currently-selected platform filter (null = mixed batch).
-        const platform = platformOverride !== undefined ? platformOverride : platformKeyForFilter();
-        const url = platform ? `${ENDPOINTS.reshuffle}?platform=${encodeURIComponent(platform)}` : ENDPOINTS.reshuffle;
+        // 根据当前页面决定平台参数：
+        // - 首页 / 全部推荐 → null（零筛选）
+        // - 按平台 → 当前选中的平台filter
+        // - 自定义筛选 → 勾选的平台（仅一个平台时透传，多选/全不选传null由客户端过滤）
+        let platform;
+        if (platformOverride !== undefined) {
+          platform = platformOverride;
+        } else {
+          const activePage = document.querySelector(".main-col:not([hidden])");
+          const pageId = activePage?.id || "homePage";
+          if (pageId === "customFilterPage") {
+            platform = currentCustomFilterPlatform();
+          } else {
+            platform = null;
+          }
+        }
+        // 根据当前页面决定批量大小：
+        // - 自定义筛选 → 用户在页面里设置的每批数量
+        // - 首页 / 按平台 → 默认 10
+        let batchLimit = 10;
+        if (platformOverride === undefined) {
+          const activePage = document.querySelector(".main-col:not([hidden])");
+          const pageId = activePage?.id || "homePage";
+          if (pageId === "customFilterPage" && state.customLimit) {
+            batchLimit = state.customLimit;
+          }
+        }
+        const params = new URLSearchParams();
+        if (platform) params.set("platform", platform);
+        if (batchLimit && batchLimit !== 10) params.set("limit", String(batchLimit));
+        const url = params.size ? `${ENDPOINTS.reshuffle}?${params.toString()}` : ENDPOINTS.reshuffle;
         const payload = await requestJson(url, { method: "POST" });
         if (payload?.items?.length) {
           state.videos = normalizeRecommendationList(payload.items);
@@ -4208,8 +6249,14 @@
 
     // Unified per-source login / cookie status (GET /api/sources/status),
     // rendered with separate scheduling and credential/plugin states.
-    const SOURCE_STATUS_KEYS = ["bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu"];
-    const CURRENT_CREDENTIAL_KEYS = ["bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu"];
+    const SOURCE_STATUS_KEYS = [
+      "bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu",
+      "v2ex", "rss", "reddit", "wechat", "xiaoyuzhou",
+    ];
+    const CURRENT_CREDENTIAL_KEYS = [
+      "bilibili", "xiaohongshu", "douyin", "youtube", "twitter", "zhihu",
+      "v2ex", "rss", "reddit", "wechat", "xiaoyuzhou",
+    ];
     const SOURCE_ENABLE_SELECT_IDS = {
       bilibili: "bilibiliEnabled",
       xiaohongshu: "xhsEnabled",
@@ -4908,7 +6955,7 @@
     }
 
     function renderAll() {
-      const steps = [renderReshuffleToggle, renderFilters, renderVideos, syncSourceMetric, renderRail, renderProfileDetails, renderMessages, renderChat, renderPoolStatus];
+      const steps = [renderViewTabs, renderReshuffleToggle, renderFilters, renderVideos, syncSourceMetric, renderRail, renderProfileDetails, renderMessages, renderChat, renderPoolStatus];
       for (const step of steps) {
         try { step(); } catch (error) { showFatal(error, step.name || "渲染"); }
       }
@@ -5599,6 +7646,7 @@
 
     safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
+    safeBind("#customFilterBtn", "click", () => navigateTo("/web/custom-filter"));
     safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
     safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);
@@ -5677,6 +7725,16 @@
     });
     safeBind("#reshuffleBtn", "click", reshuffle);
     safeBind("#loadMoreBtn", "click", reshuffle);
+    safeBind("#customLoadMoreBtn", "click", reshuffle);
+    safeBind("#customApplyBtn", "click", () => reshuffle());
+    safeBind("#customResetBtn", "click", () => {
+      resetCustomFilters();
+      showToast("已重置全部筛选条件");
+    });
+    safeBind("#poolAllBtn", "click", () => navigateTo("/web/pool-all"));
+    safeBind("#poolFilterBtn", "click", () => navigateTo("/web/pool-filter"));
+    safeBind("#poolAllRefreshBtn", "click", loadPoolAllItems);
+    safeBind("#poolFilterRefreshBtn", "click", loadPoolFilterItems);
     safeBind("#delightThumb", "click", () => respondDelight(state.delight, "view"));
     safeBind("#delightThumb", "keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -5733,6 +7791,108 @@
     }
     // 显示模式调节已移除：固定网格卡片模式
     setDisplayMode("card");
+    safeBind("#observabilityBtn", "click", () => navigateTo("/web/observability"));
+    const scheduleObservabilityRefresh = debounceAsync(() => loadObservabilityData(), 500);
+    safeBind("#observabilityRefreshBtn", "click", () => scheduleObservabilityRefresh());
+    safeBind("#poolExploreBtn", "click", () => navigateTo("/web/pool-explore"));
+    safeBind("#poolExploreRefreshBtn", "click", () => loadPoolExploreData());
+    safeBind("#xhsFeedBtn", "click", () => navigateTo("/web/xhs-feed"));
+    eventDelegation("#xhsFeedBody", "#xhsFeedRefreshBtn", "click", () => loadXhsFeedData());
+    safeBind("#zhihuFeedBtn", "click", () => navigateTo("/web/zhihu-feed"));
+    safeBind("#biliFeedBtn", "click", () => navigateTo("/web/bili-feed"));
+    eventDelegation("#zhihuFeedBody", "#zhihuFeedRefreshBtn", "click", () => loadZhihuFeedData());
+    eventDelegation("#biliFeedBody", "#biliFeedRefreshBtn", "click", () => loadBiliFeedData());
+    safeBind("#youtubeFeedBtn", "click", () => navigateTo("/web/youtube-feed"));
+    eventDelegation("#youtubeFeedBody", "#youtubeFeedRefreshBtn", "click", () => loadYoutubeFeedData());
+    safeBind("#v2exFeedBtn", "click", () => navigateTo("/web/v2ex-feed"));
+    eventDelegation("#v2exFeedBody", "#v2exFeedRefreshBtn", "click", () => loadV2exFeedData());
+    safeBind("#xiaoyuzhouFeedBtn", "click", () => navigateTo("/web/xiaoyuzhou-feed"));
+    eventDelegation("#xiaoyuzhouFeedBody", "#xiaoyuzhouFeedRefreshBtn", "click", () => loadXiaoyuzhouFeedData());
+    safeBind("#agentRecommendBtn", "click", () => {
+      navigateTo("/web/agent-recommend");
+      setTimeout(() => loadInterestTags(), 200);
+    });
+    safeBind("#agentRecommendSearchBtn", "click", () => {
+      const input = $("#agentRecommendInput");
+      if (input && input.value.trim()) {
+        loadAgentRecommendData(input.value.trim());
+      }
+    });
+    safeBind("#agentRecommendInput", "keydown", (e) => {
+      if (e.key === "Enter" && e.target.value.trim()) {
+        loadAgentRecommendData(e.target.value.trim());
+      }
+      if (e.key === "Escape") {
+        e.target.value = "";
+        const clearBtn = $("#agentRecommendClearBtn");
+        if (clearBtn) clearBtn.style.display = "none";
+      }
+    });
+    safeBind("#agentRecommendInput", "input", (e) => {
+      const clearBtn = $("#agentRecommendClearBtn");
+      if (clearBtn) clearBtn.style.display = e.target.value.trim() ? "inline-block" : "none";
+    });
+    safeBind("#agentRecommendClearBtn", "click", () => {
+      const input = $("#agentRecommendInput");
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+      const clearBtn = $("#agentRecommendClearBtn");
+      if (clearBtn) clearBtn.style.display = "none";
+    });
+    safeBind("#agentResetSessionBtn", "click", () => {
+      resetAgentSession();
+      // Clear the input and search results
+      const input = $("#agentRecommendInput");
+      if (input) input.value = "";
+      const body = $("#agentRecommendBody");
+      if (body) body.innerHTML = "";
+      showToast("已重置筛选条件");
+    });
+    eventDelegation("#agentRecommendBody", "#agentRecommendRefreshBtn", "click", (e) => {
+      const query = e.target.getAttribute("data-query") || "";
+      if (query) loadAgentRecommendData(query);
+    });
+    eventDelegation("#agentRecommendPage", ".agent-hint", "click", (e) => {
+      const hint = e.target.getAttribute("data-hint") || "";
+      if (hint) {
+        const input = $("#agentRecommendInput");
+        if (input) input.value = hint;
+        const clearBtn = $("#agentRecommendClearBtn");
+        if (clearBtn) clearBtn.style.display = "inline-block";
+        loadAgentRecommendData(hint);
+      }
+    });
+    // Render search history on page init
+    renderAgentSearchHistory();
+
+    // Feedback button event delegation
+    eventDelegation("#agentRecommendPage", ".feedback-btn", "click", (e) => {
+      e.stopPropagation();
+      const btn = e.target.closest(".feedback-btn");
+      if (!btn) return;
+      const bvid = btn.getAttribute("data-bvid") || "";
+      const action = btn.getAttribute("data-action") || "";
+      if (!bvid || !action) return;
+      if (btn.classList.contains("is-active")) {
+        // Already active -> remove (toggle off)
+        removeFeedback(bvid, action);
+      } else {
+        // Find the item data from the card
+        const card = btn.closest(".video-card");
+        let item = null;
+        if (card) {
+          const idx = Array.from(card.parentNode?.children || []).indexOf(card);
+          const grid = card.closest("#agentRecommendGrid");
+          if (grid) {
+            // We stored items in the card's __itemData property
+            item = card.__itemData;
+          }
+        }
+        sendFeedback(bvid, action, item);
+      }
+    });
     safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
     safeBind("#delightCommentInput", "keydown", (event) => {
       if (event.key === "Enter") respondDelight(state.delight, "send-comment");

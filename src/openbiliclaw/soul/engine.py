@@ -1628,3 +1628,19 @@ class SoulEngine:
             except ValueError:
                 return 0.0
         return 0.0
+
+    async def llm_ask(self, system_prompt: str, user_message: str) -> str:
+        """Simple LLM ask method for ad-hoc queries.
+
+        Sends a system + user message pair to the LLM and returns the text
+        response.  Used by the agent-recommend endpoint for intent extraction.
+        """
+        from openbiliclaw.llm.service import ModuleOverride
+        override = ModuleOverride()
+        result = await self._llm_service.complete_structured_task(
+            task_id="agent-recommend-intent",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            override=override,
+        )
+        return result.content if result else ""

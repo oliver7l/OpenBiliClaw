@@ -136,6 +136,36 @@ class RecommendationRefreshResponse(BaseModel):
     reason: str = ""
 
 
+class PoolItemOut(BaseModel):
+    """A single pool item for the pool overview page."""
+
+    bvid: str
+    title: str = ""
+    up_name: str = ""
+    source_platform: str = ""
+    content_type: str = "video"
+    cover_url: str = ""
+    content_url: str = ""
+    body_text: str = ""
+    pool_status: str = ""
+    quality_score: float = 0.0
+    quality_reason: str = ""
+    fit_score: float = 0.0
+    topic_group: str = ""
+    pool_expression: str = ""
+
+
+class PoolAllResponse(BaseModel):
+    """All items in the recommendation pool."""
+
+    items: list[PoolItemOut]
+    total: int
+    available: int
+    raw: int
+    pending: int
+    session_context: str = ""
+
+
 class RuntimeStatusResponse(BaseModel):
     """Runtime summary for popup and background status checks."""
 
@@ -1330,3 +1360,82 @@ class SourceShareSuggestionResponse(BaseModel):
     event_counts: dict[str, int] = Field(default_factory=dict)
     enabled_sources: dict[str, bool] = Field(default_factory=dict)
     suggested_shares: dict[str, int] = Field(default_factory=dict)
+
+
+class PlatformPoolStats(BaseModel):
+    """Per-platform pool breakdown."""
+    platform: str
+    total: int
+    fresh: int = 0
+    shown: int = 0
+    stale: int = 0
+    suppressed: int = 0
+    feedbacked: int = 0
+    pending: int = 0
+
+
+class ScoreDistribution(BaseModel):
+    """Quality score histogram bucket."""
+    bucket: str
+    count: int
+
+
+class TopicGroupStats(BaseModel):
+    """Topic group distribution."""
+    topic: str
+    count: int
+
+
+class LLMUsageSummary(BaseModel):
+    """LLM usage aggregate."""
+    today_calls: int = 0
+    today_cost_cny: float = 0.0
+    total_calls_7d: int = 0
+    total_cost_7d: float = 0.0
+    by_caller: list[dict[str, object]] = Field(default_factory=list)
+
+
+class DiscoveryCandidateStats(BaseModel):
+    """Discovery candidates by status."""
+    status: str
+    count: int
+
+
+class PoolPipelineStats(BaseModel):
+    """Overall pool pipeline numbers."""
+    total_items: int
+    fresh: int
+    shown: int
+    stale: int
+    suppressed: int
+    feedbacked: int
+    pending: int
+    discovery_candidates_pending: int
+    discovery_candidates_evaluated: int
+    items_with_quality_score: int
+    items_without_quality_score: int
+    avg_quality_score: float = 0.0
+
+
+class ObservabilityResponse(BaseModel):
+    """Full observability dashboard data."""
+    pipeline: PoolPipelineStats
+    platforms: list[PlatformPoolStats]
+    score_distribution: list[ScoreDistribution]
+    topic_groups: list[TopicGroupStats]
+    llm_usage: LLMUsageSummary
+    discovery_candidates: list[DiscoveryCandidateStats]
+    runtime: dict[str, object] = Field(default_factory=dict)
+    # ── 新增扩展指标 ──
+    keywords: list[dict[str, object]] = Field(default_factory=list)
+    eval_stats: dict[str, object] = Field(default_factory=dict)
+    event_stats: dict[str, object] = Field(default_factory=dict)
+    feedback_stats: dict[str, object] = Field(default_factory=dict)
+    expression_coverage: dict[str, int] = Field(default_factory=dict)
+    delight_stats: dict[str, object] = Field(default_factory=dict)
+    soul_profile: dict[str, object] = Field(default_factory=dict)
+    scheduler_loops: list[dict[str, object]] = Field(default_factory=list)
+    auth_sources: list[dict[str, object]] = Field(default_factory=list)
+    style_distribution: list[dict[str, object]] = Field(default_factory=list)
+    satisfaction_distribution: list[dict[str, object]] = Field(default_factory=list)
+    suppressed_breakdown: list[dict[str, object]] = Field(default_factory=list)

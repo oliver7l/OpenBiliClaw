@@ -482,6 +482,8 @@ class DiscoveredContent:
             self.author_name = self.up_name
         if not self.content_url and self.bvid:
             self.content_url = f"https://www.bilibili.com/video/{self.bvid}"
+        if not self.content_url and self.source_platform == "xiaohongshu" and self.content_id:
+            self.content_url = f"https://www.xiaohongshu.com/explore/{self.content_id}"
 
     def to_cache_kwargs(self) -> dict[str, object]:
         """Build the kwargs dict for ``Database.cache_content()``.
