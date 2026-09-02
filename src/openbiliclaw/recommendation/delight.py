@@ -12,10 +12,12 @@ diversity.
 
 from __future__ import annotations
 
+import functools
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from openbiliclaw.llm.generation import generate_structured
 from openbiliclaw.llm.json_utils import extract_llm_json_list
 from openbiliclaw.llm.prompts import build_delight_score_batch_prompt
 
@@ -230,23 +232,17 @@ class LLMDelightScorer:
                 profile_summary=profile_summary,
                 content_batch=content_batch,
             )
-            try:
-                response = await self._llm_service.complete_structured_task(
+            entries = (
+                await generate_structured(
+                    self._llm_service,
                     system_instruction=messages[0]["content"],
                     user_input=messages[1]["content"],
-                    max_tokens=2048,
+                    parse=functools.partial(_parse_delight_entries, expected_count=len(batch)),
                     caller="recommendation.delight_score",
+                    max_tokens=2048,
+                    label="delight_score",
                 )
-            except Exception:
-                logger.warning(
-                    "Delight LLM batch scoring failed for %d candidates",
-                    len(batch),
-                    exc_info=True,
-                )
-                continue
-
-            entries = _extract_delight_entries(
-                str(getattr(response, "content", "")), expected_count=len(batch)
+                or []
             )
             if not entries:
                 logger.warning(
@@ -311,6 +307,17 @@ def _extract_delight_entries(content: str, *, expected_count: int) -> list[dict[
         return []
     result = [dict(item) for item in entries]
     return result[:expected_count] if expected_count > 0 else result
+
+
+def _parse_delight_entries(content: str, *, expected_count: int) -> list[dict[str, Any]] | None:
+    """``parse`` adapter for :func:`generate_structured`.
+
+    Returns ``None`` on an empty extraction so the wrapper treats a truncated /
+    malformed delight batch as a miss (and escalates), rather than accepting a
+    silent zero-row result.
+    """
+    entries = _extract_delight_entries(content, expected_count=expected_count)
+    return entries or None
 
 
 def _build_delight_profile_summary(profile: Any) -> dict[str, object]:

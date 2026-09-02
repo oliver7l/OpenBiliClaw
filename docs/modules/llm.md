@@ -260,6 +260,43 @@ priority≤2 任务。
 - override provider 未注册或不是 chat-capable：按 `(bucket, provider)` INFO 一次，然后走默认 provider 路径；是否跨 provider fallback 取决于 `[llm].fallback_provider` 是否非空。
 - 只填 `model` 不填 `provider`：使用 `registry.default_provider` + per-call model。
 
+### 结构化生成健壮性（generation.py）
+
+```python
+from openbiliclaw.llm.generation import generate_json_list, generate_json_object, generate_structured
+```
+
+把各生成点重复的「调用 → `json_utils` 容错解析 → 手搓兜底」收敛成一个带自愈的封装，新调用应优先复用而非自己 try/except。三者共享同一重试/自愈内核：
+
+```python
+# 列表：返回 list[dict] 或 None（失败）；默认关思考、注入 core memory 关闭
+items = await generate_json_list(
+    service,
+    system_instruction=sys, user_input=usr,
+    caller="recommendation.delight_score",
+    item_predicate=lambda d: "bvid" in d,   # 契约：不满足视为失败
+    wrapper_keys=("results", "items"),
+    max_tokens=2048, max_attempts=2,
+)
+
+# 已有专用解析器时走底层，传入 parse（返回 None 表示未取到结果）：
+result = await generate_structured(
+    service, system_instruction=sys, user_input=usr,
+    parse=lambda c: my_parser(c) or None,
+    caller="…", label="…",
+)
+```
+
+行为要点：
+
+- **默认 `reasoning_effort=""`**：结构化任务关闭思考，避免小 `max_tokens` 预算被 reasoning token 吃光 → 空响应（这是「产出 0 条」的头号诱因）。默认 `inject_core_memory=False`（结构化 prompt 通常自带画像）。
+- **空 / 截断自愈**：空内容、或疑似截断（`usage.completion_tokens` ≥ ~95% 预算、JSON 括号不平衡）时，自动把 `max_tokens` 翻倍（封顶 16384）并强制关思考后重试。
+- **限流**：`is_llm_rate_limit_error` 命中时 backoff（2s）后重试，不逐条打爆。
+- **契约校验**：`item_predicate` 不过 = 失败；well-formed 但不合约定的输出**不重试**（重试无意义），直接判失败。
+- **有界且永不抛**：默认最多 2 次；所有路径 catch，最终失败统一 `logger.warning("LLM <label> produced no valid output …")`，把静默的 0 变可见。调用方拿 `None` 自行决定确定性兜底。
+
+已接入：`recommendation/delight.py` 批量打分（经 `_parse_delight_entries` 适配器复用其既有解析器，空结果转 `None` 以触发重试）。`discovery` 策略（youtube / douyin / bilibili 等，含 youtube 自带的重复解析器）为后续增量迁移对象。
+
 ### 异常体系
 
 ```
