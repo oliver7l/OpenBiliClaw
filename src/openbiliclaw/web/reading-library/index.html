@@ -164,6 +164,18 @@
     .rl-tagchip {
       font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--chip); color: var(--muted);
     }
+    button.rl-tagchip { border: 0; font-family: inherit; cursor: pointer; }
+    button.rl-tagchip:hover { color: var(--accent); }
+    .rl-similar {
+      border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted);
+      border-radius: 20px; font-size: 11px; padding: 2px 8px; cursor: pointer;
+    }
+    .rl-similar:hover { color: var(--accent); border-color: var(--accent); }
+    .rl-sim-row { cursor: pointer; }
+    .rl-sim-row:hover .n { color: var(--accent); }
+    .rl-spark { display: flex; align-items: flex-end; gap: 2px; height: 56px; margin: 6px 0 10px; }
+    .rl-spark i { flex: 1 1 0; min-width: 2px; background: var(--accent); opacity: .45; border-radius: 2px 2px 0 0; }
+    .rl-spark i.zero { opacity: .12; }
     .rl-nobody { color: var(--faint); font-size: 12px; font-style: italic; }
     .rl-progress { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
     .rl-progress i { display: block; height: 100%; background: var(--accent); opacity: .55; }
@@ -354,6 +366,7 @@
       <button class="rl-shuffle" id="shuffleBtn" type="button">换一批</button>
       <div class="rl-tools">
         <button class="rl-tool" id="suggestBtn" type="button">今日建议</button>
+        <button class="rl-tool" id="autoTagBtn" type="button">补标签</button>
         <button class="rl-tool" id="statsBtn" type="button">看板</button>
         <button class="rl-tool" id="blockedBtn" type="button" aria-pressed="false">已屏蔽</button>
       </div>
@@ -449,6 +462,7 @@
       sortSel: document.getElementById("sortSel"),
       shuffleBtn: document.getElementById("shuffleBtn"),
       suggestBtn: document.getElementById("suggestBtn"),
+      autoTagBtn: document.getElementById("autoTagBtn"),
       statsBtn: document.getElementById("statsBtn"),
       blockedBtn: document.getElementById("blockedBtn"),
       platforms: document.getElementById("platforms"),
@@ -637,6 +651,17 @@
         st.textContent = STATUS_LABELS[a.status] || a.status;
         right.appendChild(st);
       }
+      var simBtn = document.createElement("button");
+      simBtn.className = "rl-similar";
+      simBtn.type = "button";
+      simBtn.textContent = "相似";
+      simBtn.title = "找库内相似文章";
+      simBtn.setAttribute("aria-label", "查找库内相似文章");
+      simBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        findSimilar(a);
+      });
+      right.appendChild(simBtn);
       var fav = document.createElement("button");
       fav.className = "rl-fav" + (a.favorited ? " on" : "");
       fav.textContent = a.favorited ? "★" : "☆";
@@ -729,9 +754,18 @@
         var tw = document.createElement("div");
         tw.className = "rl-tags";
         tags.slice(0, 8).forEach(function (t) {
-          var tc = document.createElement("span");
+          var tc = document.createElement("button");
           tc.className = "rl-tagchip";
+          tc.type = "button";
           tc.textContent = t;
+          tc.title = "按标签「" + t + "」筛选";
+          tc.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            els.tagInput.value = t;
+            state.tag = t;
+            state.offset = 0;
+            load();
+          });
           tw.appendChild(tc);
         });
         c.appendChild(tw);
@@ -1203,6 +1237,64 @@
           });
         }
 
+        var wk = st.by_week || {};
+        var wkKeys = Object.keys(wk);
+        if (wkKeys.length) {
+          var hW = document.createElement("div");
+          hW.className = "rl-sub";
+          hW.textContent = "每周读完（近 " + wkKeys.length + " 周）";
+          els.drawerBody.appendChild(hW);
+          var maxW = Math.max.apply(null, wkKeys.map(function (k) { return wk[k]; })) || 1;
+          wkKeys.forEach(function (k) {
+            var row = document.createElement("div");
+            row.className = "rl-row";
+            var n = document.createElement("span");
+            n.className = "n";
+            n.textContent = k.replace(/^(\d{4})-W(\d+)$/, "$1 第$2 周");
+            var p = document.createElement("span");
+            p.textContent = wk[k] + " 篇";
+            row.appendChild(n);
+            row.appendChild(p);
+            els.drawerBody.appendChild(row);
+            var wrap = document.createElement("div");
+            wrap.className = "rl-bar-wrap";
+            var fill = document.createElement("i");
+            fill.style.width = Math.round((wk[k] / maxW) * 100) + "%";
+            wrap.appendChild(fill);
+            els.drawerBody.appendChild(wrap);
+          });
+        }
+
+        var tl = st.timeline || [];
+        if (tl.length) {
+          var hT = document.createElement("div");
+          hT.className = "rl-sub";
+          hT.textContent = "近 60 天 · 每日读完";
+          els.drawerBody.appendChild(hT);
+          var byDate = {};
+          tl.forEach(function (pt) { byDate[pt.date] = pt.count; });
+          var pts = [];
+          var now = new Date();
+          for (var i = 59; i >= 0; i--) {
+            var dd = new Date(now.getTime() - i * 86400000);
+            var key = dd.getUTCFullYear() + "-" +
+              String(dd.getUTCMonth() + 1).padStart(2, "0") + "-" +
+              String(dd.getUTCDate()).padStart(2, "0");
+            pts.push({ date: key, count: byDate[key] || 0 });
+          }
+          var maxC = Math.max.apply(null, pts.map(function (p) { return p.count; })) || 1;
+          var spark = document.createElement("div");
+          spark.className = "rl-spark";
+          pts.forEach(function (p) {
+            var b = document.createElement("i");
+            b.style.height = (p.count > 0 ? Math.max(12, Math.round((p.count / maxC) * 100)) : 4) + "%";
+            if (!p.count) b.className = "zero";
+            b.title = p.date + "：" + p.count + " 篇";
+            spark.appendChild(b);
+          });
+          els.drawerBody.appendChild(spark);
+        }
+
         var top = st.top_tags || [];
         if (top.length) {
           var h3 = document.createElement("div");
@@ -1224,6 +1316,66 @@
       }).catch(function () {
         els.drawerBody.innerHTML = '<div class="rl-empty">加载失败</div>';
       });
+    }
+
+    function findSimilar(a) {
+      els.drawerTitle.textContent = "相似文章 · " + String(a.title || "").slice(0, 20);
+      els.drawerBody.innerHTML = '<div class="rl-empty" style="padding:30px 0">计算相似度…</div>';
+      els.drawer.classList.add("open");
+      fetch("/api/reading/similar?id=" + a.id + "&k=8").then(function (r) { return r.json(); }).then(function (d) {
+        els.drawerBody.innerHTML = "";
+        var items = (d && d.items) || [];
+        if (!d.ok || !items.length) {
+          els.drawerBody.innerHTML = '<div class="rl-empty">库里暂时没有相似的文章（补标签后会更准）</div>';
+          return;
+        }
+        items.forEach(function (it) {
+          var pct = Math.round((it.similarity || 0) * 100);
+          var row = document.createElement("div");
+          row.className = "rl-row rl-sim-row";
+          var t = document.createElement("span");
+          t.className = "n";
+          t.textContent = it.title || "(无标题)";
+          var p = document.createElement("span");
+          p.textContent = pct + "%";
+          row.appendChild(t);
+          row.appendChild(p);
+          row.title = "打开这篇";
+          row.addEventListener("click", function () {
+            els.drawer.classList.remove("open");
+            openReader(it.id);
+          });
+          els.drawerBody.appendChild(row);
+          var wrap = document.createElement("div");
+          wrap.className = "rl-bar-wrap";
+          var fill = document.createElement("i");
+          fill.style.width = pct + "%";
+          wrap.appendChild(fill);
+          els.drawerBody.appendChild(wrap);
+        });
+      }).catch(function () {
+        els.drawerBody.innerHTML = '<div class="rl-empty">加载失败</div>';
+      });
+    }
+
+    function runAutoTag() {
+      var btn = els.autoTagBtn;
+      btn.disabled = true;
+      var prev = btn.textContent;
+      btn.textContent = "补标签…";
+      fetch("/api/reading/auto-tag?only_sparse=true", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) { toast("补标签失败"); return; }
+          if (d.note) { toast("画像还没就绪，先聊聊 / 点赞攒点兴趣再补标签"); return; }
+          toast("扫描 " + (d.scanned || 0) + " 篇 · 为 " + (d.updated || 0) + " 篇新增 " + (d.added || 0) + " 个标签");
+          if ((d.updated || 0) > 0) { state.offset = 0; load(); }
+        })
+        .catch(function () { toast("补标签失败"); })
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = prev;
+        });
     }
 
     /* ── 每日简报 ───────────────────────────────────── */
@@ -1399,6 +1551,7 @@
     els.next.addEventListener("click", function () { state.offset += state.limit; load(); });
     els.readerBack.addEventListener("click", closeReader);
     els.suggestBtn.addEventListener("click", openSuggestions);
+    els.autoTagBtn.addEventListener("click", runAutoTag);
     els.statsBtn.addEventListener("click", openStats);
     els.blockedBtn.addEventListener("click", function () {
       state.blocked = !state.blocked;
