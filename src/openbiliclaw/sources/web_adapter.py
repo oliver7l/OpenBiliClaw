@@ -90,16 +90,25 @@ class WebSourceAdapter:
         )
 
         # Apply recipe source_type and URL/ID backfill from captured anchors.
+        # v0.3.153+: the anchor match is *authoritative*. DiscoveredContent's
+        # ``__post_init__`` now fabricates ``explore/{content_id}`` URLs for
+        # xiaohongshu rows, and llm_extractor falls back to ``title[:32]`` for
+        # content_id when the LLM returns no URL — together those mint garbage
+        # ``explore/<title>`` links that previously made the empty-URL backfill
+        # below unreachable. Overwriting on a *title match* is safe: the LLM
+        # extractor only sees visible text, so a captured anchor with the same
+        # visible text is strictly better provenance than any fabricated URL.
         for item in items:
             if not item.source_platform:
                 item.source_platform = recipe.source_type
-            if not item.content_url:
-                matched = _match_anchor_by_title(snapshot.anchors, item.title)
-                if matched:
-                    item.content_url = matched
-            if item.content_url and (not item.content_id or item.content_id == item.title[:32]):
+            matched = _match_anchor_by_title(snapshot.anchors, item.title)
+            if matched:
+                item.content_url = matched
+            if item.content_url:
                 derived = _extract_content_id(item.content_url)
-                if derived:
+                # Re-derive when the current id is missing or is the known
+                # title-derivative junk pattern (llm_extractor fallback).
+                if derived and (not item.content_id or item.content_id == item.title[:32]):
                     item.content_id = derived
 
         return items[:limit]

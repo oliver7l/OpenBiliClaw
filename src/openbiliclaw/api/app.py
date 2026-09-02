@@ -4934,7 +4934,7 @@ Keep keywords focused and specific. Remove stop words."""
 
         return await asyncio.get_running_loop().run_in_executor(None, _query)
 
-    def _backend_update_status(self) -> BackendUpdateStatusOut:
+    def _backend_update_status() -> BackendUpdateStatusOut:
         get_update_status = getattr(ctx.auto_update_service, "get_update_status", None)
         if callable(get_update_status):
             status = get_update_status()
