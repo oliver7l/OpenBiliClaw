@@ -4309,6 +4309,58 @@ class Database:
         )
         return cursor.rowcount
 
+    def suppress_pool_rows_by_url(self, url: str) -> int:
+        """Suppress fresh pool candidates matching a blocked article's URL.
+
+        Reading-library "屏蔽" is an article-level action, but the same URL is
+        frequently also a live recommendation candidate (RSS items injected via
+        ``inject_article_to_pool``, recommendations whose content the user
+        later filed into the library). Sync-suppressing them makes the block
+        feel immediate instead of waiting for the async soul pipeline.
+
+        Uses ``suppressed`` — not ``purged_by_dislike`` — deliberately:
+        suppressed rows revive to ``fresh`` when discovery re-scores them,
+        which pairs with the un-block ("恢复") action in the management view.
+        Only ``fresh`` rows are touched; shown / feedbacked history rows are
+        preserved for audit.
+
+        Returns:
+            Number of rows moved to ``pool_status = 'suppressed'``.
+        """
+        clean = (url or "").strip()
+        if not clean:
+            return 0
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'suppressed'
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND content_url = ?
+            """,
+            (clean,),
+        )
+        return cursor.rowcount
+
+    def revive_suppressed_pool_rows_by_url(self, url: str) -> int:
+        """Un-block counterpart of :meth:`suppress_pool_rows_by_url`.
+
+        Returns:
+            Number of suppressed rows for *url* moved back to ``fresh``.
+        """
+        clean = (url or "").strip()
+        if not clean:
+            return 0
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'fresh'
+            WHERE COALESCE(pool_status, 'fresh') = 'suppressed'
+              AND content_url = ?
+            """,
+            (clean,),
+        )
+        return cursor.rowcount
+
     def get_fresh_pool_candidates_for_purge_scan(
         self,
         *,

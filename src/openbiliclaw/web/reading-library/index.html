@@ -729,7 +729,8 @@
         }
         state.total = Math.max(0, (state.total || 1) - 1);
         els.total.textContent = state.total ? "· 共 " + state.total.toLocaleString() + " 篇" : "";
-        toast("已屏蔽，以后不再出现");
+        var purged = d.purged_pool_count || 0;
+        toast("已屏蔽，以后不再出现" + (purged > 0 ? "（同步清除推荐池 " + purged + " 条同类候选）" : ""));
       }).catch(function () { toast("屏蔽失败"); });
     }
 
@@ -751,7 +752,8 @@
         }
         state.total = Math.max(0, (state.total || 1) - 1);
         els.total.textContent = state.total ? "· 共 " + state.total.toLocaleString() + " 篇" : "";
-        toast("已恢复到阅读库");
+        var revived = d.revived_pool_count || 0;
+        toast("已恢复到阅读库" + (revived > 0 ? "（放回推荐池 " + revived + " 条候选）" : ""));
       }).catch(function () { toast("恢复失败"); });
     }
 

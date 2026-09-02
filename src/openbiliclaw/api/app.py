@@ -10284,7 +10284,14 @@ Keep keywords focused and specific. Remove stop words."""
                 {"ok": False, "error": "database unavailable"}, status_code=503
             )
         ok = True
+        pool_purged = 0
+        pool_revived = 0
+        previous_status: str | None = None
         if payload.status is not None:
+            previous_row = database.get_article(article_id)
+            previous_status = (
+                str(previous_row.get("status") or "") if previous_row else None
+            )
             ok = bool(database.update_article_status(article_id, payload.status))
             # 读完回流画像：finished 是强正向信号，插入事件由 soul 管道
             # 自然消费（classify_event_satisfaction 已将其归为 positive）。
@@ -10322,6 +10329,7 @@ Keep keywords focused and specific. Remove stop words."""
             # 屏蔽回流画像：hidden 是用户主动表达的负向信号，插入事件由
             # soul 管道作为「避开这类内容」的证据消费。失败不阻塞主操作。
             if ok and payload.status == "hidden":
+                blocked_url = ""
                 try:
                     row = database.get_article(article_id)
                     if row:
@@ -10349,8 +10357,26 @@ Keep keywords focused and specific. Remove stop words."""
                                 "signal_strength": 0.8,
                             },
                         )
+                        blocked_url = str(row.get("url") or "")
                 except Exception:
                     logger.exception("Failed to record article_dismissed event")
+                # 同步清洗候选池：被屏蔽文章若同时是推荐池里的 fresh 候选
+                # （RSS 注入 / 推荐后存入库），立即置为 suppressed，让
+                # 「屏蔽」当场生效而不是等 soul 管道异步学习。suppressed
+                # 会在重新发现时自动复活，与「恢复」操作配对。
+                try:
+                    pool_purged = database.suppress_pool_rows_by_url(blocked_url)
+                except Exception:
+                    logger.exception("Failed to suppress pool rows for blocked article")
+            elif ok and previous_status == "hidden":
+                # 取消屏蔽：把此前被同一 URL 连坐抑制的候选放回 fresh。
+                try:
+                    row = database.get_article(article_id)
+                    pool_revived = database.revive_suppressed_pool_rows_by_url(
+                        str((row or {}).get("url") or "")
+                    )
+                except Exception:
+                    logger.exception("Failed to revive suppressed pool rows")
         if payload.tags is not None and ok:
             ok = bool(database.update_article_tags(article_id, payload.tags))
         if (payload.percent is not None or payload.progress is not None) and ok:
@@ -10363,7 +10389,14 @@ Keep keywords focused and specific. Remove stop words."""
             )
         if payload.favorited is not None and ok:
             ok = bool(database.set_article_favorited(article_id, payload.favorited))
-        return JSONResponse({"ok": ok, "id": article_id})
+        return JSONResponse(
+            {
+                "ok": ok,
+                "id": article_id,
+                "purged_pool_count": pool_purged,
+                "revived_pool_count": pool_revived,
+            }
+        )
 
     @app.get("/api/articles/{article_id}/notes")
     def list_article_notes(article_id: int) -> JSONResponse:

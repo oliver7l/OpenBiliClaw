@@ -183,3 +183,59 @@ def test_article_dismissed_classified_negative() -> None:
     )
     assert category == "negative"
     assert reason == "explicit_aversion"
+
+
+def test_blocking_article_suppresses_matching_pool_rows() -> None:
+    """屏蔽文章时同步清洗候选池：同一 content_url 的 fresh 行被抑制，
+    其它 URL 与已展示的历史行不受影响。"""
+    db, _ = _make_db()
+    aid = _first_article_id(db)  # url = https://example.com/1
+    db.cache_content(
+        "BV1P", title="池内同文", source="rss_polling",
+        content_url="https://example.com/1",
+    )
+    db.cache_content(
+        "BV2P", title="池内无关", source="rss_polling",
+        content_url="https://example.com/other",
+    )
+    db.cache_content(
+        "BV3P", title="池内同文已展示", source="search",
+        content_url="https://example.com/1",
+    )
+    db.conn.execute(
+        "UPDATE content_cache SET pool_status = 'shown', "
+        "recommended_at = CURRENT_TIMESTAMP WHERE bvid = 'BV3P'"
+    )
+    db.conn.commit()
+
+    assert db.suppress_pool_rows_by_url("https://example.com/1") == 1
+    assert db.suppress_pool_rows_by_url("") == 0
+
+    def status(bvid: str) -> str:
+        row = db.conn.execute(
+            "SELECT pool_status FROM content_cache WHERE bvid = ?", (bvid,)
+        ).fetchone()
+        return str(row["pool_status"])
+
+    assert status("BV1P") == "suppressed"
+    assert status("BV2P") == "fresh"
+    assert status("BV3P") == "shown"  # 历史行保留，不连坐
+
+
+def test_unblocking_article_revives_suppressed_pool_rows() -> None:
+    """恢复（取消屏蔽）把此前连坐抑制的候选放回 fresh。"""
+    db, _ = _make_db()
+    aid = _first_article_id(db)
+    db.cache_content(
+        "BV1P", title="池内同文", source="rss_polling",
+        content_url="https://example.com/1",
+    )
+    assert db.suppress_pool_rows_by_url("https://example.com/1") == 1
+    assert db.update_article_status(aid, "hidden") is True
+    assert db.update_article_status(aid, "unread") is True  # 管理视图「恢复」
+
+    assert db.revive_suppressed_pool_rows_by_url("https://example.com/1") == 1
+    row = db.conn.execute(
+        "SELECT pool_status FROM content_cache WHERE bvid = 'BV1P'"
+    ).fetchone()
+    assert row["pool_status"] == "fresh"
