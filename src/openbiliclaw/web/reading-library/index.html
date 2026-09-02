@@ -142,12 +142,15 @@
       color: var(--faint); padding: 2px 4px; border-radius: 6px;
     }
     .rl-block:hover { color: var(--danger, #b0564f); background: color-mix(in oklab, var(--danger, #b0564f), transparent 90%); }
-    .rl-origin {
+    .rl-origin,
+    .rl-restore {
       font-size: 12px; line-height: 1.6; color: var(--muted); text-decoration: none;
       border: 1px solid var(--line-strong); border-radius: 20px; padding: 2px 9px;
-      white-space: nowrap; background: var(--panel);
+      white-space: nowrap; background: var(--panel); cursor: pointer;
     }
-    .rl-origin:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .rl-origin:hover,
+    .rl-restore:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .rl-tool.is-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
     .rl-card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .rl-meta { color: var(--muted); font-size: 12px; }
     .rl-meta .rl-author::before { content: " · "; }
@@ -311,6 +314,7 @@
       <div class="rl-tools">
         <button class="rl-tool" id="suggestBtn" type="button">今日建议</button>
         <button class="rl-tool" id="statsBtn" type="button">看板</button>
+        <button class="rl-tool" id="blockedBtn" type="button" aria-pressed="false">已屏蔽</button>
       </div>
       <nav class="rl-platforms" id="platforms"></nav>
     </div>
@@ -376,9 +380,9 @@
       v2ex: "V2EX", getnote: "GetNote", flomo: "flomo", wechat_book: "微信读书",
       douban: "豆瓣", reddit: "Reddit"
     };
-    var STATUS_LABELS = { unread: "未读", reading: "在读", finished: "读完", archived: "归档" };
+    var STATUS_LABELS = { unread: "未读", reading: "在读", finished: "读完", archived: "归档", hidden: "已屏蔽" };
 
-    var state = { q: "", source: PLATFORM, status: "", tag: "", offset: 0, limit: 30, total: 0, current: [], random: true, sort: "" };
+    var state = { q: "", source: PLATFORM, status: "", tag: "", offset: 0, limit: 30, total: 0, current: [], random: true, sort: "", blocked: false };
     var readerState = { id: 0, article: null, notes: [], percent: 0, lastSave: 0 };
     var FONT_KEY = "rl-font-size";
 
@@ -396,6 +400,7 @@
       shuffleBtn: document.getElementById("shuffleBtn"),
       suggestBtn: document.getElementById("suggestBtn"),
       statsBtn: document.getElementById("statsBtn"),
+      blockedBtn: document.getElementById("blockedBtn"),
       platforms: document.getElementById("platforms"),
       pager: document.getElementById("pager"),
       prev: document.getElementById("prevBtn"),
@@ -463,9 +468,10 @@
       var p = new URLSearchParams();
       if (state.q) p.set("q", state.q);
       if (state.source) p.set("source_type", state.source);
-      if (state.status) p.set("status", state.status);
+      if (state.blocked) p.set("status", "hidden");
+      else if (state.status) p.set("status", state.status);
       if (state.tag) p.set("tag", state.tag);
-      var isRandom = !state.q && state.random;
+      var isRandom = !state.q && state.random && !state.blocked;
       p.set("random", isRandom ? "1" : "0");
       p.set("limit", isRandom ? 10 : 30);
       p.set("offset", isRandom ? 0 : state.offset);
@@ -506,7 +512,7 @@
     }
 
     function load() {
-      var isRandom = !state.q && state.random;
+      var isRandom = !state.q && state.random && !state.blocked;
       els.shuffleBtn.hidden = !isRandom;
       els.pager.hidden = isRandom;
       els.results.innerHTML = '<div class="rl-empty">加载中…</div>';
@@ -522,16 +528,30 @@
       });
     }
 
+    function emptyText() {
+      return state.blocked
+        ? "没有已屏蔽的内容"
+        : (state.q ? "没有匹配「" + state.q + "」的内容" : "暂无内容");
+    }
+
     function render(items) {
       els.results.innerHTML = "";
       if (!items.length) {
         var empty = document.createElement("div");
         empty.className = "rl-empty";
-        empty.textContent = state.q ? "没有匹配「" + state.q + "」的内容" : "暂无内容";
+        empty.textContent = emptyText();
         els.results.appendChild(empty);
         return;
       }
       items.forEach(function (a) { els.results.appendChild(card(a)); });
+    }
+
+    /* 屏蔽/恢复把当前页最后一张卡移走后，网格会空着：收敛 offset 并重新
+       加载——还有别的页就回到有效页，没有就自然落进空态文案。 */
+    function reloadIfDrained() {
+      if (els.results.children.length) return;
+      state.offset = Math.max(0, Math.min(state.offset, state.total - state.limit));
+      load();
     }
 
     function card(a) {
@@ -583,17 +603,31 @@
         right.appendChild(origin);
       }
       right.appendChild(fav);
-      var block = document.createElement("button");
-      block.className = "rl-block";
-      block.type = "button";
-      block.textContent = "⊘";
-      block.title = "屏蔽：以后不再出现";
-      block.setAttribute("aria-label", "屏蔽此内容，以后不再出现");
-      block.addEventListener("click", function (ev) {
-        ev.stopPropagation();
-        blockArticle(a, c);
-      });
-      right.appendChild(block);
+      if (state.blocked) {
+        var restore = document.createElement("button");
+        restore.className = "rl-restore";
+        restore.type = "button";
+        restore.textContent = "↩ 恢复";
+        restore.title = "取消屏蔽，放回阅读库";
+        restore.setAttribute("aria-label", "取消屏蔽，放回阅读库");
+        restore.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          restoreArticle(a, c);
+        });
+        right.appendChild(restore);
+      } else {
+        var block = document.createElement("button");
+        block.className = "rl-block";
+        block.type = "button";
+        block.textContent = "⊘";
+        block.title = "屏蔽：以后不再出现";
+        block.setAttribute("aria-label", "屏蔽此内容，以后不再出现");
+        block.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          blockArticle(a, c);
+        });
+        right.appendChild(block);
+      }
       top.appendChild(right);
       c.appendChild(top);
 
@@ -688,12 +722,37 @@
           cardEl.style.transition = "opacity .18s";
           cardEl.style.opacity = "0";
           var host = cardEl.parentNode;
-          setTimeout(function () { if (cardEl.parentNode === host) host.removeChild(cardEl); }, 180);
+          setTimeout(function () {
+            if (cardEl.parentNode === host) host.removeChild(cardEl);
+            reloadIfDrained();
+          }, 180);
         }
         state.total = Math.max(0, (state.total || 1) - 1);
         els.total.textContent = state.total ? "· 共 " + state.total.toLocaleString() + " 篇" : "";
         toast("已屏蔽，以后不再出现");
       }).catch(function () { toast("屏蔽失败"); });
+    }
+
+    function restoreArticle(a, cardEl) {
+      fetch("/api/articles/" + a.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "unread" })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) { toast("恢复失败"); return; }
+        if (cardEl && cardEl.parentNode) {
+          cardEl.style.transition = "opacity .18s";
+          cardEl.style.opacity = "0";
+          var host = cardEl.parentNode;
+          setTimeout(function () {
+            if (cardEl.parentNode === host) host.removeChild(cardEl);
+            reloadIfDrained();
+          }, 180);
+        }
+        state.total = Math.max(0, (state.total || 1) - 1);
+        els.total.textContent = state.total ? "· 共 " + state.total.toLocaleString() + " 篇" : "";
+        toast("已恢复到阅读库");
+      }).catch(function () { toast("恢复失败"); });
     }
 
     function updatePager(n) {
@@ -1141,6 +1200,13 @@
     els.readerBack.addEventListener("click", closeReader);
     els.suggestBtn.addEventListener("click", openSuggestions);
     els.statsBtn.addEventListener("click", openStats);
+    els.blockedBtn.addEventListener("click", function () {
+      state.blocked = !state.blocked;
+      els.blockedBtn.classList.toggle("is-active", state.blocked);
+      els.blockedBtn.setAttribute("aria-pressed", state.blocked ? "true" : "false");
+      state.offset = 0;
+      load();
+    });
     els.drawerClose.addEventListener("click", function () { els.drawer.classList.remove("open"); });
     els.readerAI.addEventListener("click", requestSummary);
     els.fontMinus.addEventListener("click", function () {
