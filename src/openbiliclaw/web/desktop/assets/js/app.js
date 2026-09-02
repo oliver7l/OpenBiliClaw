@@ -1216,7 +1216,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "readArchivePage", "settingsPage"];
 
     function showMainPage(pageId) {
       MAIN_PAGE_IDS.forEach((id) => {
@@ -1230,12 +1230,12 @@
       });
       document.body.classList.toggle("profile-page-open", pageId === "profilePage");
       document.body.classList.toggle("chat-page-open", pageId === "chatPage");
-      document.body.classList.toggle("library-page-open", pageId === "libraryPage");
+      document.body.classList.toggle("library-page-open", pageId === "libraryPage" || pageId === "readArchivePage");
       document.body.classList.toggle("pool-all-page-open", pageId === "poolAllPage" || pageId === "poolFilterPage");
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", settingsPage: "settingsBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
     }
@@ -1265,6 +1265,7 @@
       profile: () => openProfilePage(),
       chat: () => openChatPage(),
       library: () => openLibraryPage(),
+      "read-archive": () => openReadArchivePage(),
       settings: () => openSettingsPage("models"),
     };
 
@@ -1653,6 +1654,205 @@
       });
     }
 
+    // ── Read archive (已读库) ──────────────────────────────────────
+    // 已读库 = articles 表里 source_type=read-archive 的条目，由
+    // scripts/import_readlib_to_db.py 从 notes/已读库 文件存档导入。
+    let _readArchivePlatform = "all";
+    let _readArchiveQuery = "";
+    let _readArchiveCounts = null;
+    const READ_ARCHIVE_PAGE_SIZE = 24;
+    let _readArchiveLimit = READ_ARCHIVE_PAGE_SIZE;
+    let _readArchiveBound = false;
+    const READ_ARCHIVE_PLATFORMS = ["知乎", "小红书", "V2EX"];
+
+    function openReadArchivePage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((drawer) => closePanel(drawer.id));
+      showMainPage("readArchivePage");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      bindReadArchiveOnce();
+      void refreshReadArchiveCounts();
+      loadReadArchiveItems();
+    }
+
+    function bindReadArchiveOnce() {
+      if (_readArchiveBound) return;
+      _readArchiveBound = true;
+      const input = document.getElementById("readArchiveSearchInput");
+      const clearBtn = document.getElementById("readArchiveSearchClear");
+      if (input) {
+        let timer = null;
+        input.addEventListener("input", () => {
+          _readArchiveQuery = input.value;
+          if (clearBtn) clearBtn.hidden = !input.value;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => loadReadArchiveItems(), 250);
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") { input.value = ""; _readArchiveQuery = ""; if (clearBtn) clearBtn.hidden = true; loadReadArchiveItems(); }
+        });
+      }
+      if (clearBtn) clearBtn.addEventListener("click", () => {
+        input.value = "";
+        _readArchiveQuery = "";
+        clearBtn.hidden = true;
+        loadReadArchiveItems();
+      });
+      const moreBtn = document.getElementById("readArchiveMoreBtn");
+      if (moreBtn) moreBtn.addEventListener("click", () => {
+        _readArchiveLimit += READ_ARCHIVE_PAGE_SIZE;
+        loadReadArchiveItems();
+      });
+    }
+
+    async function refreshReadArchiveCounts() {
+      try {
+        const fetches = [fetch("/api/read-archive/count").then((r) => r.json())];
+        READ_ARCHIVE_PLATFORMS.forEach((p) => {
+          fetches.push(
+            fetch(`/api/read-archive/count?tag=${encodeURIComponent(p)}`).then((r) => r.json())
+          );
+        });
+        const results = await Promise.all(fetches);
+        const counts = { all: Number(results[0].total) || 0 };
+        READ_ARCHIVE_PLATFORMS.forEach((p, i) => { counts[p] = Number(results[i + 1].total) || 0; });
+        _readArchiveCounts = counts;
+        renderReadArchiveFilters();
+      } catch { /* 筛选条保持现状 */ }
+    }
+
+    function renderReadArchiveFilters() {
+      const box = document.getElementById("readArchiveFilters");
+      if (!box) return;
+      const entries = [["all", "全部"]].concat(READ_ARCHIVE_PLATFORMS.map((p) => [p, p]));
+      box.innerHTML = entries.map(([key, label]) => {
+        const n = _readArchiveCounts ? _readArchiveCounts[key] : "";
+        return `<button class="library-filter-btn${_readArchivePlatform === key ? " is-active" : ""}" data-platform="${key}" type="button">${label}${n !== "" ? ` ${n}` : ""}</button>`;
+      }).join("");
+      box.querySelectorAll("[data-platform]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          _readArchivePlatform = btn.dataset.platform;
+          _readArchiveLimit = READ_ARCHIVE_PAGE_SIZE;
+          renderReadArchiveFilters();
+          loadReadArchiveItems();
+        });
+      });
+    }
+
+    function loadReadArchiveItems() {
+      const grid = document.getElementById("readArchiveGrid");
+      if (!grid) return;
+      const q = (_readArchiveQuery || "").trim();
+      grid.innerHTML = '<div class="empty-state">加载中…</div>';
+      const params = new URLSearchParams({ limit: String(_readArchiveLimit) });
+      if (_readArchivePlatform !== "all") params.set("tag", _readArchivePlatform);
+      const countParams = new URLSearchParams(params);
+      countParams.delete("limit");
+      if (q) params.set("q", q);
+      const req = q
+        ? fetch(`/api/read-archive/search?${params}`).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        : Promise.all([
+            fetch(`/api/read-archive/items?${params}`).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }),
+            fetch(`/api/read-archive/count?${countParams}`).then((r) => (r.ok ? r.json() : { total: 0 })).catch(() => ({ total: 0 })),
+          ]).then(([items, countData]) => ({ items, total: countData.total || 0 }));
+      req.then((data) => {
+        const items = Array.isArray(data) ? data : (data.items || []);
+        const total = Array.isArray(data) ? items.length : (Number(data.total) || 0);
+        const countEl = document.getElementById("readArchiveCount");
+        if (countEl) countEl.textContent = total ? (q ? `搜索“${q}” 找到 ${items.length} 条` : `共 ${total} 篇 · 已显示 ${items.length} 篇`) : "";
+        const moreEl = document.getElementById("readArchiveMore");
+        if (moreEl) moreEl.hidden = !(!q && total > items.length);
+        renderReadArchiveCards(items);
+      }).catch(() => {
+        grid.innerHTML = '<div class="empty-state">加载已读库失败，请确认后端服务正常</div>';
+      });
+    }
+
+    function renderReadArchiveCards(items) {
+      const grid = document.getElementById("readArchiveGrid");
+      if (!grid) return;
+      if (!items || !items.length) {
+        grid.innerHTML = '<div class="empty-state">没有匹配的内容</div>';
+        return;
+      }
+      grid.innerHTML = "";
+      items.forEach((item) => {
+        let tags = item.tags;
+        if (typeof tags === "string") { try { tags = JSON.parse(tags); } catch { tags = []; } }
+        if (!Array.isArray(tags)) tags = [];
+        grid.appendChild(buildReadArchiveCard(item, tags));
+      });
+    }
+
+    function buildReadArchiveCard(item, tags) {
+      const card = document.createElement("article");
+      card.className = "video-card is-minimal";
+      card.dataset.itemId = item.id;
+      const date = (item.published_at || "").slice(0, 10);
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <p class="video-card-title" style="flex:1">${escapeHtml(item.title || "")}</p>
+          <span class="library-card-status finished">已读</span>
+        </div>
+        <div class="video-card-meta">
+          <span class="video-card-author">${escapeHtml(item.author || "")}</span>
+          <span class="video-card-tag">${escapeHtml(item.source_name || "")}</span>
+          ${date ? `<span>${escapeHtml(date)}</span>` : ""}
+        </div>
+        ${item.summary ? `<div class="video-card-summary">${escapeHtml(item.summary.slice(0, 160))}</div>` : ""}
+        ${tags.length ? `<div class="library-card-tags">${tags.slice(0, 4).map((t) => `<span class="library-card-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}`;
+      card.addEventListener("click", () => { void openReadArchiveArticleReader(item.id); });
+      return card;
+    }
+
+    async function openReadArchiveArticleReader(id) {
+      const titleEl = document.getElementById("articleDrawerTitle");
+      const sourceEl = document.getElementById("articleDrawerSource");
+      const metaEl = document.getElementById("articleReaderMeta");
+      const bodyEl = document.getElementById("articleReaderBody");
+      const originBtn = document.getElementById("articleOpenOrigin");
+      _currentArticleId = id;
+      _suppressScroll = true;
+      if (titleEl) titleEl.textContent = "载入中…";
+      if (sourceEl) sourceEl.textContent = "已读库";
+      if (metaEl) metaEl.textContent = "";
+      if (bodyEl) bodyEl.innerHTML = '<p class="article-reader-placeholder">正在载入正文…</p>';
+      openPanel("articleDrawer");
+      try {
+        const res = await fetch(`/api/read-archive/articles/${id}`);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        const article = data.article || {};
+        if (titleEl) titleEl.textContent = article.title || "文章";
+        if (sourceEl) sourceEl.textContent = article.source_name || article.source_type || "已读库";
+        if (metaEl) {
+          metaEl.textContent = [article.author, article.published_at].filter(Boolean).join(" · ");
+        }
+        const text = (article.content_text || "").trim();
+        if (bodyEl) {
+          if (text) {
+            bodyEl.innerHTML = renderMarkdown(text);
+          } else {
+            bodyEl.innerHTML = `<p class="article-reader-placeholder">${escapeHtml(article.summary || "这篇内容没有存档正文。")}</p>`;
+          }
+        }
+        if (originBtn) {
+          if (article.url && /^https?:\/\//i.test(article.url)) {
+            originBtn.hidden = false;
+            originBtn.dataset.url = article.url;
+            originBtn.textContent = "打开原文";
+          } else {
+            originBtn.hidden = true;
+          }
+        }
+      } catch {
+        if (titleEl) titleEl.textContent = "加载失败";
+        if (bodyEl) bodyEl.innerHTML = '<p class="article-reader-placeholder">无法加载已读库内容。</p>';
+      } finally {
+        _suppressScroll = false;
+      }
+    }
+
     let _currentArticleId = null;
     let _suppressScroll = false;
 
@@ -1702,7 +1902,8 @@
         }
         bindReaderProgress();
         if (originBtn) {
-          if (article.url) {
+          // local:// 之类的占位链接(无原文的本地存档)不展示"打开原文"
+          if (article.url && /^https?:\/\//i.test(article.url)) {
             originBtn.hidden = false;
             originBtn.dataset.url = article.url;
             originBtn.textContent = isVideo ? "打开视频" : "打开原文";
@@ -7707,6 +7908,7 @@
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);
     safeBind("#chatBtn", "click", () => navigateTo("/web/chat"));
     safeBind("#libraryBtn", "click", () => navigateTo("/web/library"));
+    safeBind("#readArchiveBtn", "click", () => navigateTo("/web/read-archive"));
     safeBind("#libraryPage", "click", (event) => {
       const filterBtn = event.target.closest(".library-filter-btn");
       if (filterBtn) {

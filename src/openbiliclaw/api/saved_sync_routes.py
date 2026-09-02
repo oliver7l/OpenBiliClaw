@@ -298,3 +298,53 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
             source_type=source_type, status=status, tag=tag,
         )
         return JSONResponse(items)
+
+    # ── Read archive (已读库) — standalone table ──────────────────────────
+    @app.get("/api/read-archive/items")
+    async def get_read_archive_items(
+        request: Request,
+        limit: int = 24,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> JSONResponse:
+        db = ctx.database
+        items = db.get_recent_readarchive(
+            limit=limit, offset=offset,
+            source_type=source_type,
+            tag=tag,
+        )
+        return JSONResponse(items)
+
+    @app.get("/api/read-archive/count")
+    async def get_read_archive_count(
+        request: Request,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> JSONResponse:
+        db = ctx.database
+        return JSONResponse({
+            "total": db.count_readarchive(
+                source_type=source_type,
+                tag=tag,
+            )
+        })
+
+    @app.get("/api/read-archive/search")
+    async def search_read_archive_items(
+        request: Request,
+        q: str = "",
+        limit: int = 24,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> JSONResponse:
+        if limit <= 0 or limit > 100:
+            limit = 24
+        if offset < 0:
+            offset = 0
+        items = ctx.database.search_readarchive(
+            q=q, limit=limit, offset=offset,
+            source_type=source_type, tag=tag,
+        )
+        return JSONResponse(items)

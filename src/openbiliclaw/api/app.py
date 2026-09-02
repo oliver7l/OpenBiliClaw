@@ -10248,6 +10248,21 @@ Keep keywords focused and specific. Remove stop words."""
             )
         return JSONResponse({"ok": True, "article": row})
 
+    @app.get("/api/read-archive/articles/{article_id}")
+    def get_read_archive_article(article_id: int) -> JSONResponse:
+        """Fetch a single read-archive article with its full body text."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse(
+                {"ok": False, "error": "database unavailable"}, status_code=503
+            )
+        row = database.get_readarchive_article(article_id)
+        if row is None:
+            return JSONResponse(
+                {"ok": False, "error": "read-archive article not found"}, status_code=404
+            )
+        return JSONResponse({"ok": True, "article": row})
+
     @app.patch("/api/articles/{article_id}")
     async def update_article(
         article_id: int, payload: ArticleUpdateIn
@@ -10304,21 +10319,6 @@ Keep keywords focused and specific. Remove stop words."""
                         )
                 except Exception:
                     logger.exception("Failed to record article_finished event")
-        if payload.tags is not None and ok:
-            ok = bool(database.update_article_tags(article_id, payload.tags))
-        if (payload.percent is not None or payload.progress is not None) and ok:
-            ok = bool(
-                database.update_article_reading_progress(
-                    article_id,
-                    percent=payload.percent if payload.percent is not None else 0.0,
-                    progress=payload.progress or "",
-                )
-            )
-        if payload.favorited is not None and ok:
-            ok = bool(database.set_article_favorited(article_id, payload.favorited))
-        return JSONResponse({"ok": ok, "id": article_id})
-
-    @app.get("/api/articles/{article_id}/notes")
             # 屏蔽回流画像：hidden 是用户主动表达的负向信号，插入事件由
             # soul 管道作为「避开这类内容」的证据消费。失败不阻塞主操作。
             if ok and payload.status == "hidden":
@@ -10351,6 +10351,21 @@ Keep keywords focused and specific. Remove stop words."""
                         )
                 except Exception:
                     logger.exception("Failed to record article_dismissed event")
+        if payload.tags is not None and ok:
+            ok = bool(database.update_article_tags(article_id, payload.tags))
+        if (payload.percent is not None or payload.progress is not None) and ok:
+            ok = bool(
+                database.update_article_reading_progress(
+                    article_id,
+                    percent=payload.percent if payload.percent is not None else 0.0,
+                    progress=payload.progress or "",
+                )
+            )
+        if payload.favorited is not None and ok:
+            ok = bool(database.set_article_favorited(article_id, payload.favorited))
+        return JSONResponse({"ok": ok, "id": article_id})
+
+    @app.get("/api/articles/{article_id}/notes")
     def list_article_notes(article_id: int) -> JSONResponse:
         """List notes / highlights for an article."""
         database = getattr(ctx, "database", None)
@@ -10722,7 +10737,7 @@ Keep keywords focused and specific. Remove stop words."""
             return _desktop_index_response()
 
         _DESKTOP_PAGE_NAMES = {
-            "home", "delight", "saved", "profile", "chat", "library", "settings",
+            "home", "delight", "saved", "profile", "chat", "library", "read-archive", "settings",
             "watchLater", "watchlater",
             "custom-filter", "pool-all", "pool-filter", "observability", "pool-explore", "xhs-feed", "zhihu-feed", "bili-feed", "youtube-feed", "v2ex-feed", "xiaoyuzhou-feed", "agent-recommend",
         }

@@ -6193,6 +6193,46 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_articles_source_type_published
                 ON articles(source_type, published_at);
 
+            CREATE TABLE IF NOT EXISTS read_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL,
+                source_name TEXT DEFAULT '',
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                author TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                published_at TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_readarchive_published_at
+                ON read_archive(published_at);
+            CREATE INDEX IF NOT EXISTS idx_readarchive_source_type
+                ON read_archive(source_type);
+            CREATE INDEX IF NOT EXISTS idx_readarchive_published
+                ON read_archive(published_at);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS read_archive_fts USING fts5(
+                title, content_text, tags, author, summary,
+                content='read_archive', content_rowid='id', tokenize='trigram'
+            );
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_ai AFTER INSERT ON read_archive BEGIN
+                INSERT INTO read_archive_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_ad AFTER DELETE ON read_archive BEGIN
+                INSERT INTO read_archive_fts(read_archive_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_au AFTER UPDATE ON read_archive BEGIN
+                INSERT INTO read_archive_fts(read_archive_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+                INSERT INTO read_archive_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+
             CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
                 title, content_text, tags, author, summary,
                 content='articles', content_rowid='id', tokenize='trigram'
@@ -6716,6 +6756,9 @@ class Database:
             if status:
                 conditions.append("status = ?")
                 params.append(status)
+            else:
+                # 屏蔽位终态：无显式 status 过滤时永不再出现（见 ARTICLE_STATUSES）。
+                conditions.append("status != 'hidden'")
             if tag:
                 conditions.append("tags LIKE ?")
                 params.append(f'%"{tag}"%')
@@ -6756,9 +6799,6 @@ class Database:
                     {order_sql}
                     LIMIT ? OFFSET ?""",
                 (*params, limit, offset),
-            else:
-                # 屏蔽位终态：无显式 status 过滤时永不再出现（见 ARTICLE_STATUSES）。
-                conditions.append("status != 'hidden'")
             )
             return [dict(row) for row in cursor.fetchall()]
         except Exception:
@@ -6781,6 +6821,9 @@ class Database:
             if status:
                 conditions.append("status = ?")
                 params.append(status)
+            else:
+                # 与 get_recent_articles 保持同口径：屏蔽位不计入未指定 status 的计数。
+                conditions.append("status != 'hidden'")
             if tag:
                 conditions.append("tags LIKE ?")
                 params.append(f'%"{tag}"%')
@@ -6793,6 +6836,161 @@ class Database:
         except Exception:
             logger.exception("Failed to count articles")
             return 0
+
+    def count_readarchive(
+        self,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> int:
+        """Count items in the read_archive table, optional filters."""
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            row = self.conn.execute(
+                f"SELECT COUNT(*) AS n FROM read_archive {where}",
+                tuple(params),
+            ).fetchone()
+            return int(row["n"]) if row else 0
+        except Exception:
+            logger.exception("Failed to count read_archive")
+            return 0
+
+    def get_recent_readarchive(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+        random_order: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Get recent items from read_archive, filtered similarly to get_recent_articles.
+
+        read_archive doesn't track reading progress/status, only finished reads.
+        """
+        import random
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            if random_order:
+                id_rows = self.conn.execute(
+                    f"SELECT id FROM read_archive {where}", tuple(params)
+                ).fetchall()
+                ids = [row["id"] for row in id_rows]
+                if not ids:
+                    return []
+                sample = random.sample(ids, limit) if len(ids) > limit else ids
+                placeholders = ",".join("?" * len(sample))
+                cursor = self.conn.execute(
+                    f"""SELECT id, source_type, source_name, title, url, author,
+                               summary, content_text, published_at, tags, created_at,
+                               updated_at
+                        FROM read_archive
+                        WHERE id IN ({placeholders})""",
+                    tuple(sample),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            order_sql = "ORDER BY published_at DESC, created_at DESC"
+            cursor = self.conn.execute(
+                f"""SELECT id, source_type, source_name, title, url, author,
+                           summary, content_text, published_at, tags, created_at,
+                           updated_at
+                    FROM read_archive
+                    {where}
+                    {order_sql}
+                    LIMIT ? OFFSET ?""",
+                (*params, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to get read_archive items")
+            return []
+
+    def search_readarchive(
+        self,
+        q: str,
+        limit: int = 30,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Full-text search over the read_archive table."""
+        q = (q or "").strip()
+        if not q:
+            return []
+        cols = (
+            "a.id, a.source_type, a.source_name, a.title, a.url, a.author, "
+            "a.summary, a.published_at, a.tags, a.created_at"
+        )
+        filters: list[str] = []
+        fparams: list[Any] = []
+        if source_type:
+            filters.append("a.source_type = ?")
+            fparams.append(source_type)
+        if tag:
+            filters.append("a.tags LIKE ?")
+            fparams.append(f'%"{tag}"%')
+        fsql = (" AND " + " AND ".join(filters)) if filters else ""
+
+        if len(q) >= 3:
+            try:
+                fts_q = '"' + q.replace('"', '""') + '"'
+                cursor = self.conn.execute(
+                    f"""SELECT {cols} FROM read_archive a
+                        JOIN read_archive_fts f ON a.id = f.rowid
+                        WHERE read_archive_fts MATCH ? {fsql}
+                        ORDER BY bm25(read_archive_fts)
+                        LIMIT ? OFFSET ?""",
+                    (fts_q, *fparams, limit, offset),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            except Exception:
+                logger.exception("FTS search failed, falling back to LIKE")
+
+        like = f"%{q}%"
+        try:
+            cursor = self.conn.execute(
+                f"""SELECT {cols} FROM read_archive a
+                    WHERE (a.title LIKE ? OR a.content_text LIKE ?
+                          OR a.tags LIKE ? OR a.author LIKE ? OR a.summary LIKE ?)
+                          {fsql}
+                    ORDER BY a.published_at DESC, a.created_at DESC
+                    LIMIT ? OFFSET ?""",
+                (like, like, like, like, like, *fparams, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("LIKE search failed")
+            return []
+
+    def get_readarchive_article(self, article_id: int) -> dict[str, Any] | None:
+        """Fetch a single read_archive article including its full body."""
+        try:
+            cursor = self.conn.execute(
+                """SELECT id, source_type, source_name, title, url, author,
+                           summary, content_text, published_at, tags,
+                           created_at, updated_at
+                    FROM read_archive WHERE id = ?""",
+                (article_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception:
+            logger.exception("Failed to fetch read_archive article %d", article_id)
+            return None
 
     def search_articles(
         self,
@@ -6821,14 +7019,14 @@ class Database:
         filters: list[str] = []
         fparams: list[Any] = []
         if source_type:
-            else:
-                # 与 get_recent_articles 保持同口径：屏蔽位不计入未指定 status 的计数。
-                conditions.append("status != 'hidden'")
             filters.append("a.source_type = ?")
             fparams.append(source_type)
         if status:
             filters.append("a.status = ?")
             fparams.append(status)
+        else:
+            # 与 get_recent_articles / count_articles 同口径：屏蔽位不进搜索结果。
+            filters.append("a.status != 'hidden'")
         if tag:
             filters.append("a.tags LIKE ?")
             fparams.append(f'%"{tag}"%')
@@ -7029,9 +7227,6 @@ class Database:
                    LIMIT ?""",
                 (max(1, int(limit)),),
             )
-        else:
-            # 与 get_recent_articles / count_articles 同口径：屏蔽位不进搜索结果。
-            filters.append("a.status != 'hidden'")
             return [dict(row) for row in cursor.fetchall()]
         except Exception:
             logger.exception("Failed to list articles missing AI summary")

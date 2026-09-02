@@ -919,7 +919,8 @@
   color: var(--fg);
   background: var(--surface-active);
 }
-#libraryGrid {
+#libraryGrid,
+#readArchiveGrid {
   padding: var(--space-2) 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2339,6 +2340,7 @@ body.card-lg { --card-min: 340px; }
 .library-page.content-page > .library-toolbar { grid-column: 2; margin-bottom: 0; }
 .library-page.content-page > .library-tags,
 .library-page.content-page > #libraryGrid,
+.library-page.content-page > #readArchiveGrid,
 .library-page.content-page > .library-more { grid-column: 1 / -1; }
 /* 标题块内部压成一行：eyebrow + 标题横向排列，隐藏说明文字 */
 .library-page .content-page-head > div { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -2366,7 +2368,8 @@ body.card-lg { --card-min: 340px; }
 .library-page .library-status-filters { flex: 0 0 auto; }
 .library-page .library-count { flex: 0 0 auto; white-space: nowrap; }
 .library-page .library-tags { padding-inline: 0; }
-.library-page #libraryGrid { padding-inline: 0; }
+.library-page #libraryGrid,
+.library-page #readArchiveGrid { padding-inline: 0; }
 .library-page .library-search {
   position: relative;
   display: flex;
