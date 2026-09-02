@@ -7288,11 +7288,18 @@ class Database:
         """Reading-library statistics for the dashboard.
 
         Returns totals by status, source-type distribution, notes count,
-        finished counts by month (UTC), and the top-10 most-read tags.
+        finished counts by month (UTC), the top-10 most-read tags, a weekly
+        finished trend (``by_week``) and a last-60-day daily timeline
+        (``timeline``). ``by_week`` / ``timeline`` attribute a finished article
+        to the day it was completed (``date(updated_at)``), matching
+        :meth:`get_daily_reading_summary`.
         """
         import json as _json
 
-        stats: dict[str, Any] = {"by_status": {}, "by_source": {}, "notes": 0, "by_month": {}, "top_tags": []}
+        stats: dict[str, Any] = {
+            "by_status": {}, "by_source": {}, "notes": 0,
+            "by_month": {}, "top_tags": [], "by_week": {}, "timeline": [],
+        }
         try:
             row = self.conn.execute(
                 "SELECT status, COUNT(*) AS n FROM articles GROUP BY status"
@@ -7321,6 +7328,27 @@ class Database:
                 except Exception:
                     continue
             stats["top_tags"] = sorted(tag_counter.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            try:
+                row = self.conn.execute(
+                    """SELECT strftime('%Y-W%W', updated_at) AS yw, COUNT(*) AS n
+                       FROM articles
+                       WHERE status = 'finished' AND updated_at != ''
+                       GROUP BY yw ORDER BY yw DESC LIMIT 14"""
+                ).fetchall()
+                stats["by_week"] = {str(r["yw"]): int(r["n"]) for r in reversed(row)}
+            except Exception:
+                logger.exception("Failed to compute weekly reading trend")
+            try:
+                row = self.conn.execute(
+                    """SELECT date(updated_at) AS d, COUNT(*) AS n
+                       FROM articles
+                       WHERE status = 'finished'
+                         AND date(updated_at) >= date('now', '-60 days')
+                       GROUP BY d ORDER BY d ASC"""
+                ).fetchall()
+                stats["timeline"] = [{"date": str(r["d"]), "count": int(r["n"])} for r in row]
+            except Exception:
+                logger.exception("Failed to compute reading timeline")
             return stats
         except Exception:
             logger.exception("Failed to compute reading stats")
@@ -7346,6 +7374,47 @@ class Database:
             return [dict(row) for row in cursor.fetchall()]
         except Exception:
             logger.exception("Failed to load articles for reading stats")
+            return []
+
+    def iter_articles_for_tagging(
+        self,
+        *,
+        limit: int = 500,
+        status: str | None = None,
+        only_sparse: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Lightweight rows for the auto-tag backfill (id, title, summary,
+        ``content_text`` truncated, raw ``tags`` JSON).
+
+        ``only_sparse`` keeps the scan cheap and focused on under-tagged items
+        (existing tag count <= 1, usually just the source name). ``status='hidden'``
+        is always excluded.
+        """
+        try:
+            limit = max(1, min(int(limit), 2000))
+            conditions = ["COALESCE(status, 'unread') != 'hidden'"]
+            params: list[Any] = []
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            sparse_clause = (
+                " AND (tags IS NULL OR tags = '' OR json_array_length(tags) <= 1)"
+                if only_sparse
+                else ""
+            )
+            where = " AND ".join(conditions)
+            cursor = self.conn.execute(
+                f"""SELECT id, title, substr(content_text, 1, 4000) AS content_text,
+                           summary, tags
+                    FROM articles
+                    WHERE {where}{sparse_clause}
+                    ORDER BY updated_at DESC
+                    LIMIT ?""",
+                (*params, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to scan articles for tagging")
             return []
 
     def get_daily_reading_summary(self, *, day: str) -> dict[str, Any]:

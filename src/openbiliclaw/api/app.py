@@ -10651,6 +10651,104 @@ Keep keywords focused and specific. Remove stop words."""
         )[:10]
         return JSONResponse({"ok": True, "stats": stats, "interest_shift": interest_shift})
 
+    @app.post("/api/reading/auto-tag")
+    def reading_auto_tag(
+        limit: int = 500,
+        status: str | None = None,
+        only_sparse: bool = True,
+        max_new: int = 5,
+        min_weight: float = 0.15,
+    ) -> JSONResponse:
+        """给阅读库补打轻量兴趣标签（确定性规则：画像关键词 + ``#话题``）。
+
+        命中即 merge 进现有 ``tags``（保留来源标签、大小写去重、幂等），
+        零 LLM、零网络。冷画像（无兴趣词）时直接跳过，不臆造标签。
+        """
+        import json as _json
+
+        from openbiliclaw.reading.tags import generate_tags, merge_tag_lists
+
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        keywords = _load_interest_keywords()
+        if not keywords:
+            return JSONResponse(
+                {"ok": True, "scanned": 0, "updated": 0, "added": 0,
+                 "note": "no interest profile yet; skipped"}, status_code=200,
+            )
+        rows = database.iter_articles_for_tagging(
+            limit=limit, status=status, only_sparse=only_sparse
+        )
+        updated = 0
+        added_total = 0
+        for row in rows:
+            try:
+                existing = _json.loads(row.get("tags") or "[]")
+            except Exception:
+                existing = []
+            if not isinstance(existing, list):
+                existing = []
+            new_tags = generate_tags(
+                title=str(row.get("title") or ""),
+                summary=str(row.get("summary") or ""),
+                content_text=str(row.get("content_text") or ""),
+                interest_keywords=keywords,
+                existing=[str(t) for t in existing],
+                max_new=max_new,
+                min_weight=min_weight,
+            )
+            if not new_tags:
+                continue
+            merged = merge_tag_lists([str(t) for t in existing], new_tags)
+            try:
+                if database.update_article_tags(int(row["id"]), merged):
+                    updated += 1
+                    added_total += len(new_tags)
+            except Exception:
+                logger.exception("auto-tag write failed for article id=%s", row.get("id"))
+        return JSONResponse(
+            {"ok": True, "scanned": len(rows), "updated": updated, "added": added_total}
+        )
+
+    @app.get("/api/reading/similar")
+    def reading_similar(id: int, k: int = 8, candidate_limit: int = 500) -> JSONResponse:
+        """库内找相似：按 tag + 标题 bigram 的确定性相似度（零 LLM / 零网络）。"""
+        from openbiliclaw.reading.tags import similarity
+
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        target = database.get_article(id)
+        if not target:
+            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
+        k = max(1, min(int(k), 30))
+        cands = database.get_recent_articles(limit=max(1, min(int(candidate_limit), 1000)))
+        t_title = str(target.get("title") or "")
+        t_tags = target.get("tags")
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for c in cands:
+            if str(c.get("id")) == str(id):
+                continue
+            if str(c.get("status") or "") == "hidden":
+                continue
+            s = similarity(
+                t_title, t_tags,
+                str(c.get("title") or ""), c.get("tags"),
+            )
+            if s > 0:
+                scored.append((s, c))
+        scored.sort(key=lambda kv: kv[0], reverse=True)
+        items = [
+            {
+                "id": c.get("id"), "title": c.get("title"), "url": c.get("url"),
+                "source_type": c.get("source_type"), "tags": c.get("tags"),
+                "similarity": round(s, 3),
+            }
+            for s, c in scored[:k]
+        ]
+        return JSONResponse({"ok": True, "target_id": id, "items": items})
+
     @app.get("/api/subscriptions/stats", response_model=SubscriptionStatsOut)
     def list_subscriptions_with_stats() -> SubscriptionStatsOut:
         """List all subscriptions with item count and last fetch statistics."""
