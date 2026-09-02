@@ -1270,7 +1270,7 @@
     };
 
     function routeFromPath() {
-      const match = (location.pathname || "/web").match(/^\/web\/([a-zA-Z-]+)\/?$/);
+      const match = (location.pathname || "/web").match(/^\/web\/([a-zA-Z0-9-]+)\/?$/);
       const page = match ? match[1] : "home";
       const params = new URLSearchParams(location.search);
       const opener = DESKTOP_PAGE_ROUTES[page] || DESKTOP_PAGE_ROUTES.home;
