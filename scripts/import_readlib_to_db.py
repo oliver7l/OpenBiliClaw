@@ -45,6 +45,7 @@ except ImportError:  # pragma: no cover - 仅在包结构被破坏时触发
 
 PLATFORM_LABELS = {
     "zhihu": "知乎", "xiaohongshu": "小红书", "v2ex": "V2EX",
+    "weixin": "微信",
 }
 SUMMARY_PAT = re.compile(
     r"^>\s*\*{0,2}(导读|一句话核心|内容概要|核心观点)\*{0,2}[：:]\s*(.+)$", re.M
