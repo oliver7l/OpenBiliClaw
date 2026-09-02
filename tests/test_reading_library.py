@@ -239,3 +239,109 @@ def test_unblocking_article_revives_suppressed_pool_rows() -> None:
         "SELECT pool_status FROM content_cache WHERE bvid = 'BV1P'"
     ).fetchone()
     assert row["pool_status"] == "fresh"
+
+
+def test_daily_reading_summary_counts_today_finished() -> None:
+    """每日简报「今日阅读回顾」：当天 finished 计数、来源分布、主题标签。"""
+    import datetime
+
+    db, _ = _make_db()
+    aid = _first_article_id(db)
+    assert db.update_article_status(aid, "finished") is True
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    summary = db.get_daily_reading_summary(day=today)
+    assert summary["finished_today"] == 1
+    assert summary["by_source"] == {"rss": 1}
+    assert "科技" in summary["top_topics"]
+    assert "AI" in summary["top_topics"]
+
+
+def test_daily_reading_summary_excludes_other_days_and_statuses() -> None:
+    """非当天 finished 与 unread/hidden 不计入今日回顾。"""
+    import datetime
+
+    db, _ = _make_db()
+    db.upsert_article(
+        "zhihu", "知乎", "昨天的文章", "https://example.com/2",
+        author="作者B", tags=["历史"],
+    )
+    row2 = db.conn.execute(
+        "SELECT id FROM articles WHERE url = 'https://example.com/2'"
+    ).fetchone()
+    aid2 = int(row2["id"])
+
+    assert db.update_article_status(aid2, "finished") is True
+    # 第二篇拨回昨天：只统计今天
+    yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime(
+        "%Y-%m-%d 00:00:00"
+    )
+    db.conn.execute("UPDATE articles SET updated_at = ? WHERE id = ?", (yesterday, aid2))
+    db.conn.commit()
+    # 第一篇保持 unread：不计数
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    summary = db.get_daily_reading_summary(day=today)
+    assert summary["finished_today"] == 0
+    assert summary["by_source"] == {}
+    assert summary["top_topics"] == []
+
+    # 回到今天后正常计数
+    assert db.update_article_status(aid2, "finished") is True  # 再触发一次更新时间
+    summary = db.get_daily_reading_summary(day=today)
+    assert summary["finished_today"] == 1
+    assert summary["by_source"] == {"zhihu": 1}
+
+
+def test_daily_brief_endpoint_roundtrip(tmp_path) -> None:
+    """端到端：/api/reading/daily-brief 三板块齐活且口径与存储一致。"""
+    from fastapi.testclient import TestClient
+
+    from openbiliclaw.api.app import create_app
+
+    db = Database(tmp_path / "api.db")
+    db.initialize()
+    db.upsert_article(
+        "zhihu", "知乎", "今天的文章", "https://example.com/brief",
+        author="作者C", tags=["科技", "历史"],
+        content_text="正文。" * 20,
+    )
+    aid = int(db.conn.execute("SELECT id FROM articles").fetchone()["id"])
+    assert db.update_article_status(aid, "finished") is True
+    db.upsert_article(
+        "rss", "观察站", "未读好文", "https://example.com/unread",
+        tags=["科技"], content_text="另一篇正文，提到科技。" * 20,
+    )
+
+    import datetime
+    import tempfile
+    from pathlib import Path as _Path
+
+    project_root = _Path(tempfile.mkdtemp()) / "rt"
+    import os
+
+    os.environ["OPENBILICLAW_PROJECT_ROOT"] = str(project_root)
+    try:
+        from openbiliclaw.config import Config, save_config
+
+        save_config(Config(), project_root / "config.toml")
+        app = create_app(memory_manager=object(), database=db, soul_engine=object())
+        client = TestClient(app)
+        resp = client.get("/api/reading/daily-brief")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["date"] == datetime.datetime.now().strftime("%Y-%m-%d")
+        # 今日阅读回顾
+        assert data["reading"]["finished_today"] == 1
+        assert data["reading"]["by_source"] == {"zhihu": 1}
+        assert "历史" in data["reading"]["top_topics"]
+        # 画像板块：object() 没有 load_cognition_updates，降级为空不报错
+        assert data["profile"]["updates"] == []
+        # 明日值得看：未读好文按契合度进入榜单
+        titles = [it["title"] for it in data["tomorrow"]]
+        assert "未读好文" in titles
+        picked = next(it for it in data["tomorrow"] if it["title"] == "未读好文")
+        assert picked["fit_score"] > 0
+    finally:
+        os.environ.pop("OPENBILICLAW_PROJECT_ROOT", None)

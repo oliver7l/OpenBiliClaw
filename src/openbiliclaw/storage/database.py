@@ -7348,6 +7348,51 @@ class Database:
             logger.exception("Failed to load articles for reading stats")
             return []
 
+    def get_daily_reading_summary(self, *, day: str) -> dict[str, Any]:
+        """当日已读回顾（每日简报「今日阅读回顾」板块的数据源）。
+
+        统计本地时区 ``day``（``YYYY-MM-DD``）内被标记为 finished 的文章：
+        读完数、来源分布、主题标签。按 ``date(updated_at)`` 判定——
+        ``update_article_status`` 写 ``CURRENT_TIMESTAMP``，标记读完即归入
+        当天，与用户感知一致。
+        """
+        import json as _json
+
+        summary: dict[str, Any] = {
+            "finished_today": 0,
+            "by_source": {},
+            "top_topics": [],
+        }
+        try:
+            rows = self.conn.execute(
+                """SELECT source_type, tags FROM articles
+                   WHERE status = 'finished' AND date(updated_at) = ?""",
+                (day,),
+            ).fetchall()
+        except Exception:
+            logger.exception("Failed to load daily reading summary for %s", day)
+            return summary
+        tag_counter: dict[str, int] = {}
+        for row in rows:
+            source = str(row["source_type"] or "其他")
+            summary["by_source"][source] = summary["by_source"].get(source, 0) + 1
+            try:
+                tags = _json.loads(row["tags"]) if row["tags"] else []
+            except Exception:
+                tags = []
+            if isinstance(tags, list):
+                for tag in tags:
+                    text = str(tag).strip()
+                    if text:
+                        tag_counter[text] = tag_counter.get(text, 0) + 1
+        summary["finished_today"] = len(rows)
+        summary["top_topics"] = [
+            tag for tag, _ in sorted(
+                tag_counter.items(), key=lambda kv: kv[1], reverse=True
+            )[:6]
+        ]
+        return summary
+
     def iter_cover_lifecycle(self) -> list[tuple[str, str, bool]]:
         """Return ``(cover_url, pool_status, is_saved)`` for every cached-cover candidate.
 

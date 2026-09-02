@@ -10508,22 +10508,14 @@ Keep keywords focused and specific. Remove stop words."""
                 status_code=502,
             )
 
-    @app.get("/api/reading/suggestions")
-    def daily_reading_suggestions(limit: int = 5) -> JSONResponse:
-        """Today's reading picks: unread articles ranked by interest fit.
+    def _rank_unread_by_interest(database: Any, *, limit: int) -> list[dict[str, Any]]:
+        """未读文章按兴趣契合度排序（今日建议与每日简报共用）。
 
-        Samples the most recent unread articles (with body text preferred),
-        scores each against the soul interest profile, and returns the top
-        ``limit`` with a human-readable reason (matched interest names).
+        抽样最近未读文章（优先有正文），按 soul 兴趣画像关键词打分，
+        返回 top ``limit``，附人读得懂的命中理由。
         """
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        limit = max(1, min(int(limit), 20))
         keywords = _load_interest_keywords()
-        cands = database.get_recent_articles(
-            limit=300, status="unread"
-        )
+        cands = database.get_recent_articles(limit=300, status="unread")
         scored: list[tuple[float, dict[str, Any]]] = []
         for item in cands:
             text = " ".join(
@@ -10545,11 +10537,87 @@ Keep keywords focused and specific. Remove stop words."""
                 item["fit_reason"] = reasons
                 scored.append((score, item))
         scored.sort(key=lambda kv: kv[0], reverse=True)
-        items = [it for _, it in scored[:limit]]
+        return [it for _, it in scored[: max(1, int(limit))]]
+
+    @app.get("/api/reading/suggestions")
+    def daily_reading_suggestions(limit: int = 5) -> JSONResponse:
+        """Today's reading picks: unread articles ranked by interest fit."""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        limit = max(1, min(int(limit), 20))
+        items = _rank_unread_by_interest(database, limit=limit)
         return JSONResponse(
             {
                 "ok": True,
                 "items": items,
+                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+
+    @app.get("/api/reading/daily-brief")
+    def reading_daily_brief() -> JSONResponse:
+        """每日简报（确定性聚合，零 LLM）：阅读库页顶部卡片的数据源。
+
+        三个板块：
+        - ``reading``: 今日已读回顾——当天标记 finished 的文章数、来源
+          分布、主题标签（``Database.get_daily_reading_summary``）。
+        - ``profile``: 画像今天学到什么——今天的认知更新（含手动纠偏），
+          与画像页共用 ``memory_manager.load_cognition_updates``；soul
+          未初始化时该板块为空，不阻塞其余板块。
+        - ``tomorrow``: 明日值得看——未读文章按兴趣契合度 top 5
+          （与今日建议共用 ``_rank_unread_by_interest``）。
+        """
+        import datetime as _dt
+
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        today = _dt.datetime.now().strftime("%Y-%m-%d")
+
+        reading = database.get_daily_reading_summary(day=today)
+
+        profile_updates: list[dict[str, Any]] = []
+        load_cognition_updates = getattr(ctx.memory_manager, "load_cognition_updates", None)
+        if callable(load_cognition_updates):
+            with suppress(Exception):
+                for item in load_cognition_updates():
+                    created = str(item.get("created_at") or "")
+                    if not created.startswith(today):
+                        continue
+                    summary_text = str(item.get("summary") or "").strip()
+                    if not summary_text:
+                        continue
+                    profile_updates.append(
+                        {
+                            "summary": summary_text,
+                            "source_label": str(item.get("source_label") or ""),
+                            "created_at": created,
+                        }
+                    )
+                    if len(profile_updates) >= 5:
+                        break
+
+        tomorrow: list[dict[str, Any]] = []
+        with suppress(Exception):
+            tomorrow = [
+                {
+                    "id": it.get("id"),
+                    "title": it.get("title"),
+                    "source_type": it.get("source_type"),
+                    "fit_score": it.get("fit_score"),
+                    "fit_reason": it.get("fit_reason", []),
+                }
+                for it in _rank_unread_by_interest(database, limit=5)
+            ]
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "date": today,
+                "reading": reading,
+                "profile": {"updates": profile_updates},
+                "tomorrow": tomorrow,
                 "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
         )

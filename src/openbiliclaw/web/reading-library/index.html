@@ -168,6 +168,47 @@
     .rl-progress { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
     .rl-progress i { display: block; height: 100%; background: var(--accent); opacity: .55; }
 
+    /* 每日简报（可折叠卡片） */
+    .rl-brief {
+      max-width: var(--content-max); margin: 14px auto -4px; padding: 0 24px;
+    }
+    .rl-brief[hidden] { display: none; }
+    .rl-brief-head {
+      width: 100%; display: flex; align-items: center; gap: 8px;
+      border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+      padding: 10px 16px; cursor: pointer; font-size: 13px; color: var(--ink); text-align: left;
+    }
+    .rl-brief-head:hover { border-color: var(--line-strong); }
+    .rl-brief-head .rl-brief-title { color: var(--accent); white-space: nowrap; }
+    .rl-brief-head .rl-brief-summary { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rl-brief-head .rl-brief-caret { color: var(--faint); white-space: nowrap; }
+    .rl-brief-body {
+      border: 1px solid var(--line); border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+      background: var(--panel); padding: 14px 16px; display: grid;
+      grid-template-columns: repeat(3, 1fr); gap: 16px;
+    }
+    .rl-brief-sec h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+    .rl-brief-sec .rl-brief-num { font-size: 22px; font-weight: 600; }
+    .rl-brief-sec .rl-brief-cap { font-size: 12px; color: var(--muted); }
+    .rl-brief-sec .rl-brief-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .rl-brief-sec .rl-brief-empty { color: var(--faint); font-size: 12px; font-style: italic; }
+    .rl-brief-item {
+      display: flex; align-items: baseline; gap: 6px; padding: 5px 0;
+      border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px;
+    }
+    .rl-brief-item:last-child { border-bottom: none; }
+    .rl-brief-item:hover .rl-brief-item-title { color: var(--accent); }
+    .rl-brief-item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rl-brief-item .rl-brief-fit { color: #a06a2c; font-size: 11px; white-space: nowrap; }
+    .rl-brief-item .rl-brief-src { color: var(--faint); font-size: 11px; white-space: nowrap; }
+    .rl-brief-upd { padding: 4px 0; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); line-height: 1.5; }
+    .rl-brief-upd:last-child { border-bottom: none; }
+    .rl-brief-upd .rl-brief-src-label { color: var(--accent); font-size: 11px; margin-right: 4px; }
+    @media (max-width: 900px) {
+      .rl-brief { padding: 0 16px; }
+      .rl-brief-body { grid-template-columns: 1fr; }
+    }
+
     .rl-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 8px 0 40px; }
     .rl-pager[hidden] { display: none; }
     .rl-pager button {
@@ -320,6 +361,15 @@
     </div>
   </header>
 
+  <section class="rl-brief" id="brief" hidden>
+    <button class="rl-brief-head" id="briefToggle" type="button" aria-expanded="false">
+      <span class="rl-brief-title">📜 每日简报</span>
+      <span class="rl-brief-summary" id="briefSummary"></span>
+      <span class="rl-brief-caret" id="briefCaret">展开 ▾</span>
+    </button>
+    <div class="rl-brief-body" id="briefBody" hidden></div>
+  </section>
+
   <main class="rl-results" id="results"></main>
   <nav class="rl-pager" id="pager">
     <button id="prevBtn" type="button">上一页</button>
@@ -425,6 +475,11 @@
       drawerTitle: document.getElementById("drawerTitle"),
       drawerBody: document.getElementById("drawerBody"),
       drawerClose: document.getElementById("drawerClose"),
+      brief: document.getElementById("brief"),
+      briefToggle: document.getElementById("briefToggle"),
+      briefSummary: document.getElementById("briefSummary"),
+      briefCaret: document.getElementById("briefCaret"),
+      briefBody: document.getElementById("briefBody"),
       toast: document.getElementById("toast")
     };
 
@@ -1171,6 +1226,149 @@
       });
     }
 
+    /* ── 每日简报 ───────────────────────────────────── */
+
+    function briefHeadline(d) {
+      var parts = [];
+      var finished = (d.reading && d.reading.finished_today) || 0;
+      if (finished > 0) parts.push("今天读完 " + finished + " 篇");
+      var learned = (d.profile && d.profile.updates && d.profile.updates.length) || 0;
+      if (learned > 0) parts.push("画像学了 " + learned + " 件新事");
+      var picks = (d.tomorrow && d.tomorrow.length) || 0;
+      if (picks > 0) parts.push(picks + " 篇值得看");
+      return parts.length ? parts.join(" · ") : "今天还没有新动静，先随便逛逛";
+    }
+
+    function briefTagChips(tags) {
+      var tw = document.createElement("div");
+      tw.className = "rl-brief-tags";
+      tags.forEach(function (t) {
+        var tc = document.createElement("span");
+        tc.className = "rl-tagchip";
+        tc.textContent = t;
+        tw.appendChild(tc);
+      });
+      return tw;
+    }
+
+    function briefSection(title) {
+      var sec = document.createElement("div");
+      sec.className = "rl-brief-sec";
+      var h = document.createElement("h4");
+      h.textContent = title;
+      sec.appendChild(h);
+      return sec;
+    }
+
+    function renderBriefBody(d) {
+      els.briefBody.innerHTML = "";
+
+      // 板块一：今日阅读回顾
+      var sec1 = briefSection("今日阅读回顾");
+      var reading = d.reading || {};
+      if (reading.finished_today > 0) {
+        var num = document.createElement("div");
+        num.innerHTML = '<span class="rl-brief-num">' + reading.finished_today + "</span>" +
+          '<span class="rl-brief-cap"> 篇读完</span>';
+        sec1.appendChild(num);
+        var bySrc = reading.by_source || {};
+        var srcKeys = Object.keys(bySrc);
+        if (srcKeys.length) {
+          var cap = document.createElement("div");
+          cap.className = "rl-brief-cap";
+          cap.textContent = srcKeys
+            .sort(function (a, b) { return bySrc[b] - bySrc[a]; })
+            .map(function (k) { return srcLabel(k) + " " + bySrc[k]; })
+            .join(" · ");
+          sec1.appendChild(cap);
+        }
+        if ((reading.top_topics || []).length) {
+          sec1.appendChild(briefTagChips(reading.top_topics));
+        }
+      } else {
+        var e1 = document.createElement("div");
+        e1.className = "rl-brief-empty";
+        e1.textContent = "今天还没标记读完的文章";
+        sec1.appendChild(e1);
+      }
+      els.briefBody.appendChild(sec1);
+
+      // 板块二：画像今天学到什么
+      var sec2 = briefSection("画像今天学到什么");
+      var updates = (d.profile && d.profile.updates) || [];
+      if (updates.length) {
+        updates.forEach(function (u) {
+          var row = document.createElement("div");
+          row.className = "rl-brief-upd";
+          if (u.source_label) {
+            var lab = document.createElement("span");
+            lab.className = "rl-brief-src-label";
+            lab.textContent = u.source_label;
+            row.appendChild(lab);
+          }
+          row.appendChild(document.createTextNode(u.summary));
+          sec2.appendChild(row);
+        });
+      } else {
+        var e2 = document.createElement("div");
+        e2.className = "rl-brief-empty";
+        e2.textContent = "画像今天暂时没有新的认知更新";
+        sec2.appendChild(e2);
+      }
+      els.briefBody.appendChild(sec2);
+
+      // 板块三：明日值得看
+      var sec3 = briefSection("明日值得看");
+      var picks = d.tomorrow || [];
+      if (picks.length) {
+        picks.forEach(function (it) {
+          var row = document.createElement("div");
+          row.className = "rl-brief-item";
+          var t = document.createElement("span");
+          t.className = "rl-brief-item-title";
+          t.textContent = it.title || "(无标题)";
+          row.appendChild(t);
+          if (it.fit_score && it.fit_score > 0) {
+            var f = document.createElement("span");
+            f.className = "rl-brief-fit";
+            f.textContent = "契合 " + Math.round(it.fit_score * 100) + "%";
+            row.appendChild(f);
+          }
+          var s = document.createElement("span");
+          s.className = "rl-brief-src";
+          s.textContent = srcLabel(it.source_type);
+          row.appendChild(s);
+          row.title = "点击打开阅读";
+          row.addEventListener("click", function () {
+            if (it.id) { els.drawer.classList.remove("open"); openReader(it.id); }
+          });
+          sec3.appendChild(row);
+        });
+      } else {
+        var e3 = document.createElement("div");
+        e3.className = "rl-brief-empty";
+        e3.textContent = "未读池里暂无高契合内容";
+        sec3.appendChild(e3);
+      }
+      els.briefBody.appendChild(sec3);
+    }
+
+    function loadBrief() {
+      fetch("/api/reading/daily-brief").then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) return;
+        els.briefSummary.textContent = briefHeadline(d);
+        renderBriefBody(d);
+        els.brief.hidden = false;
+      }).catch(function () { /* 简报失败不阻塞列表 */ });
+    }
+
+    els.briefToggle.addEventListener("click", function () {
+      var open = els.briefBody.hidden;
+      els.briefBody.hidden = !open;
+      els.briefCaret.textContent = open ? "收起 ▴" : "展开 ▾";
+      els.briefToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
     function closeReader() { els.reader.hidden = true; }
 
     // events
@@ -1251,6 +1449,7 @@
     });
 
     loadFacets();
+    loadBrief();
     load();
   })();
   </script>
