@@ -4963,12 +4963,15 @@
       if (!list.length) return `<p class="video-meta">当前没有需要特别展示的活跃洞察。</p>`;
       return `<div class="profile-card-list">${list.map((item, idx) => {
         if (typeof item !== "object") return `<div class="profile-insight"><div class="profile-insight-head"><span class="profile-insight-title">${escapeHtml(item)}</span></div></div>`;
-        const evidence = asArray(item.evidence).join("、");
+        const evidenceItems = asArray(item.evidence).map((e) => String(e || "").trim()).filter(Boolean);
+        const evidenceHtml = evidenceItems.length
+          ? `<details class="profile-insight-evidence"><summary>证据 · ${evidenceItems.length} 条</summary><ul>${evidenceItems.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></details>`
+          : "";
         const hypothesis = item.hypothesis || "";
         const actions = hypothesis
           ? `<div class="insight-actions"><button class="pill-btn" type="button" data-insight-action="confirm" data-insight-idx="${idx}">准</button><button class="pill-btn" type="button" data-insight-action="reject" data-insight-idx="${idx}">不准</button></div>`
           : "";
-        return `<div class="profile-insight" data-insight-idx="${idx}"><div class="profile-insight-head"><span class="profile-insight-title">${escapeHtml(hypothesis || item.observation || valueList(item))}</span><span class="profile-confidence">${formatPercent(item.confidence)}</span></div>${evidence ? `<p class="video-meta">证据：${escapeHtml(evidence)}</p>` : ""}${item.validated ? `<p class="video-meta">已验证</p>` : ""}${actions}</div>`;
+        return `<div class="profile-insight" data-insight-idx="${idx}"><div class="profile-insight-head"><span class="profile-insight-title">${escapeHtml(hypothesis || item.observation || valueList(item))}</span><span class="profile-confidence">${formatPercent(item.confidence)}</span></div>${evidenceHtml}${item.validated ? `<p class="video-meta">已验证</p>` : ""}${actions}</div>`;
       }).join("")}</div>`;
     }
 

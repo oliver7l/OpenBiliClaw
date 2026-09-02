@@ -560,6 +560,20 @@
     .profile-domain-title, .profile-insight-title { font-weight: 750; color: var(--fg); }
     .profile-domain-weight, .profile-confidence, .profile-memory-meta { color: var(--meta); font-family: var(--font-mono); font-size: var(--text-xs); white-space: nowrap; }
     .insight-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+    .profile-insight-evidence { margin-top: var(--space-2); }
+    .profile-insight-evidence summary {
+      display: inline-flex; align-items: center; gap: 4px;
+      list-style: none; cursor: pointer; user-select: none;
+      padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-pill, 20px);
+      color: var(--meta); font-family: var(--font-mono); font-size: var(--text-xs);
+    }
+    .profile-insight-evidence summary::-webkit-details-marker { display: none; }
+    .profile-insight-evidence summary::before { content: "▸"; font-size: 10px; }
+    .profile-insight-evidence[open] summary::before { content: "▾"; }
+    .profile-insight-evidence summary:hover { border-color: var(--accent, var(--fg)); color: var(--fg); }
+    .profile-insight-evidence ul { margin: var(--space-2) 0 0; padding: 0 0 0 var(--space-4); list-style: disc; }
+    .profile-insight-evidence li { color: var(--meta); font-size: var(--text-sm); line-height: var(--leading-body, 1.55); padding: 3px 0; border-bottom: 1px dashed var(--border); overflow-wrap: anywhere; }
+    .profile-insight-evidence li:last-child { border-bottom: none; }
     .insight-actions .pill-btn { min-height: 28px; padding: 0 var(--space-3); font-size: var(--text-xs); }
     .insight-actions .pill-btn:disabled { opacity: 0.5; cursor: default; }
     .profile-domain .profile-chip-list { margin-top: var(--space-2); }
