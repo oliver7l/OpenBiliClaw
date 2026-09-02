@@ -12,6 +12,9 @@
   - summary 优先取笔记里的 导读/一句话核心/内容概要 引言行
   - 幂等: url 已存在且正文>=50字则跳过; 空壳则补全
   - 无原文链接的条目 url 用 local://readlib/<文件夹名> 占位(唯一性约束)
+  - 喂画像: 每条入库条目同步发一条 article_finished 正向事件到 events
+    表(按 URL 去重), soul 管道会异步把「读过这类内容」学进画像;
+    已导入过的存量条目跑一次脚本也会补发(回填)
 """
 import argparse
 import datetime
@@ -24,6 +27,21 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 READLIB = BASE / "notes" / "已读库"
 DB_PATH = BASE / "data" / "openbiliclaw.db"
+
+# format_event_context 与 PATCH /api/articles/{id} 的 finished 分支共用,
+# 保证已读库事件的 context 措辞和阅读库「标记读完」完全一致。event_format
+# 是纯 stdlib 模块, 直连 src/ 即可导入; 导入失败则退回本地近似实现。
+sys.path.insert(0, str(BASE / "src"))
+try:
+    from openbiliclaw.sources.event_format import format_event_context
+except ImportError:  # pragma: no cover - 仅在包结构被破坏时触发
+    def format_event_context(*, event_type: str, source_platform: str,
+                             title: str, author: str = "", extra: str = "") -> str:
+        parts = [f"在{source_platform}" if source_platform else "", "读完了"]
+        parts.append(f"《{title}》" if title else "一条内容")
+        if author:
+            parts.append(f",作者:{author}")
+        return "".join(parts)
 
 PLATFORM_LABELS = {
     "zhihu": "知乎", "xiaohongshu": "小红书", "v2ex": "V2EX",
@@ -128,6 +146,67 @@ def collect_items() -> list[dict]:
     return items
 
 
+def feed_profile_event(
+    cur: sqlite3.Cursor,
+    *,
+    article_id: int,
+    url: str,
+    title: str,
+    platform: str,
+    author: str,
+    tags: list[str],
+) -> bool:
+    """把一条已读库条目写入 events 表作为画像正向信号。
+
+    与 api.update_article 的 finished 分支同构：article_finished 在
+    classify_event_satisfaction 里归为 (positive, explicit_engagement)，
+    soul 管道会异步把它消费进画像。按 URL 幂等去重——重复跑脚本不会
+    重复喂。
+
+    Returns:
+        True 表示本次新插入了一条事件。
+    """
+    existing = cur.execute(
+        "SELECT id FROM events "
+        "WHERE event_type = 'article_finished' AND url = ? LIMIT 1",
+        (url,),
+    ).fetchone()
+    if existing:
+        return False
+    context = format_event_context(
+        event_type="article_finished",
+        source_platform=platform,
+        title=title,
+        author=author,
+    )
+    metadata = {
+        "article_id": article_id,
+        "source_type": "read-archive",
+        "source_name": platform,
+        "author": author,
+        "tags": tags,
+        "signal_strength": 0.8,
+    }
+    # inferred_satisfaction / satisfaction_reason 与 storage.insert_event
+    # 的单一分类口径保持一致（single classification owner）。
+    cur.execute(
+        "INSERT INTO events "
+        "(event_type, url, title, context, metadata, "
+        " inferred_satisfaction, satisfaction_reason) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "article_finished",
+            url,
+            title,
+            context,
+            json.dumps(metadata, ensure_ascii=False),
+            "positive",
+            "explicit_engagement",
+        ),
+    )
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=str(DB_PATH))
@@ -140,7 +219,7 @@ def main() -> None:
 
     conn = sqlite3.connect(args.db)
     cur = conn.cursor()
-    inserted = updated = skipped = 0
+    inserted = updated = skipped = feeded = 0
     for it in items:
         row = cur.execute(
             "SELECT id, content_text FROM read_archive WHERE url = ?",
@@ -153,10 +232,11 @@ def main() -> None:
         tags = [t for t in tags if t]
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        article_id = 0
         if row and len(row[1] or "") >= 50:
             skipped += 1
-            continue
-        if row:
+            article_id = row[0]
+        elif row:
             cur.execute(
                 """UPDATE read_archive SET title=?, author=?, summary=?, content_text=?,
                        tags=?, published_at=?, updated_at=? WHERE id=?""",
@@ -164,6 +244,7 @@ def main() -> None:
                  json.dumps(tags, ensure_ascii=False), it["date"], now, row[0]),
             )
             updated += 1
+            article_id = row[0]
         else:
             cur.execute(
                 """INSERT INTO read_archive (source_type, source_name, title, url, author,
@@ -174,6 +255,21 @@ def main() -> None:
                  now, now),
             )
             inserted += 1
+            article_id = cur.lastrowid or 0
+        # 存量条目（skipped）也补发事件，跑一次即完成全部回填。
+        try:
+            if feed_profile_event(
+                cur,
+                article_id=article_id,
+                url=it["url"],
+                title=it["title"],
+                platform=platform,
+                author=it["author"],
+                tags=tags,
+            ):
+                feeded += 1
+        except sqlite3.Error:
+            print(f"[警告] 喂画像事件失败(不阻塞导入): {it['title']}")
     conn.commit()
 
     total = cur.execute(
@@ -181,6 +277,7 @@ def main() -> None:
     ).fetchone()[0]
     conn.close()
     print(f"[完成] 新增 {inserted} 条, 补全 {updated} 条, 跳过 {skipped} 条")
+    print(f"[画像] 新喂入正向事件 {feeded} 条")
     print(f"[现状] read_archive 表共 {total} 条")
 
 
