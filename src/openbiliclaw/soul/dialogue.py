@@ -67,7 +67,9 @@ class SocraticDialogue:
         self._tool_dispatcher = tool_dispatcher
         self._module_overrides = dict(module_overrides) if module_overrides is not None else None
 
-    async def respond(self, user_message: str) -> str:
+    async def respond(
+        self, user_message: str, *, retrieval_context: str | None = None
+    ) -> str:
         """Generate a Socratic response to a user message.
 
         The response should:
@@ -79,23 +81,31 @@ class SocraticDialogue:
 
         Args:
             user_message: The user's message.
+            retrieval_context: Optional RAG context (e.g. relevant passages from
+                the user's crawled reading library). It is spliced into the LLM
+                prompt for *this turn only* — it is NOT stored in dialogue
+                history, so it never pollutes later turns.
 
         Returns:
             Agent's response.
         """
         from openbiliclaw.llm.service import LLMServiceError
 
+        # History keeps the clean user message; the LLM sees the augmented one.
         self._history.append(DialogueTurn(role="user", content=user_message))
+        effective_message = user_message
+        if retrieval_context:
+            effective_message = f"{user_message}\n\n{retrieval_context}"
 
         try:
             service = self._llm_service or self._build_service()
 
             # If tools are configured, try tool-calling path first
             if self._tools and self._tool_dispatcher:
-                reply = await self._respond_with_tools(service, user_message)
+                reply = await self._respond_with_tools(service, effective_message)
             else:
                 response = await service.complete_socratic_dialogue(
-                    user_message=user_message,
+                    user_message=effective_message,
                     history=self._history_to_messages(),
                     caller="soul.dialogue",
                 )

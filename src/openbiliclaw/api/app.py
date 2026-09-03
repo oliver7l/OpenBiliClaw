@@ -1728,6 +1728,10 @@ def create_app(
     chat_turn_lock = asyncio.Lock()
     fallback_chat_turns: dict[str, dict[str, Any]] = {}
     running_chat_turn_tasks: set[str] = set()
+    # RAG citations per chat turn, keyed by turn_id. Kept in memory: these are
+    # ephemeral UI hints that don't need to survive a restart (the durable
+    # turn row itself is the source of truth for the reply text).
+    chat_turn_references: dict[str, list[dict[str, Any]]] = {}
 
     def _normalize_chat_scope(scope: str) -> str:
         normalized = scope.strip().lower()
@@ -1748,6 +1752,9 @@ def create_app(
             error=str(row.get("error", "") or ""),
             created_at=str(row.get("created_at", "") or ""),
             updated_at=str(row.get("updated_at", "") or ""),
+            references=list(
+                chat_turn_references.get(str(row.get("turn_id", "")), [])
+            ),
         )
 
     def _chat_db_method(name: str) -> Any | None:
@@ -5394,6 +5401,49 @@ Keep keywords focused and specific. Remove stop words."""
             ctx.database.mark_notification_sent(bvid)
         return NotificationAckResponse(ok=True, bvid=bvid)
 
+    async def _rag_retrieve(
+        message: str, top_k: int = 4
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        """Retrieve RAG context + citations for a chat message.
+
+        Returns ``(context_block, references)``. Both are empty when the
+        article index is missing or has nothing relevant, so chat degrades
+        cleanly to its normal (non-grounded) behaviour. The blocking embed +
+        scan runs off the event loop behind a short budget so a slow embedder
+        can never stall a reply.
+        """
+        if not message or not message.strip():
+            return None, []
+        try:
+            from openbiliclaw.rag.retriever import get_retriever
+
+            retr = get_retriever()
+            loop = asyncio.get_running_loop()
+            hits = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, lambda: retr.retrieve_chunks(message, top_k=top_k)
+                ),
+                timeout=15,
+            )
+        except Exception:
+            logger.debug("RAG retrieval skipped for this turn", exc_info=True)
+            return None, []
+        if not hits:
+            return None, []
+        context = retr.format_context(hits)
+        references = [
+            {
+                "title": str(h.get("title", "") or ""),
+                "url": str(h.get("url", "") or ""),
+                "author": str(h.get("author", "") or ""),
+                "source_table": str(h.get("source_table", "") or "articles"),
+                "score": float(h.get("score", 0.0) or 0.0),
+            }
+            for h in hits
+        ]
+        logger.info("RAG context injected for chat (%d refs)", len(references))
+        return context, references
+
     @app.post("/api/chat")
     async def chat(payload: ChatIn) -> Any:
         from fastapi.responses import JSONResponse
@@ -5405,12 +5455,19 @@ Keep keywords focused and specific. Remove stop words."""
         concurrency = getattr(ctx.discovery_engine, "_concurrency", None)
         if concurrency is not None:
             concurrency.chat_active = True
+        # RAG: ground the reply in the user's crawled reading library whenever
+        # the index has something relevant (no-op while the index is still
+        # being built, so chat behaves exactly as before until then).
+        retrieval_context, references = await _rag_retrieve(message, top_k=4)
         try:
             # Bumped from 30s to 120s — deepseek with reasoning_effort=max
             # routinely takes 60-90s for one dialogue turn, so a 30s budget
             # truncated essentially every reply. Extension's AbortController
             # is sized to be generous enough to cover this end-to-end.
-            reply = await asyncio.wait_for(ctx.dialogue.respond(message), timeout=120)
+            reply = await asyncio.wait_for(
+                ctx.dialogue.respond(message, retrieval_context=retrieval_context or None),
+                timeout=120,
+            )
         except TimeoutError:
             reply = "后台正忙，等一下再聊。"
         except Exception:
@@ -5419,7 +5476,7 @@ Keep keywords focused and specific. Remove stop words."""
         finally:
             if concurrency is not None:
                 concurrency.chat_active = False
-        return JSONResponse(content={"reply": reply})
+        return JSONResponse(content={"reply": reply, "references": references})
 
     def _record_probe_cognition(
         summary: str,
@@ -5861,13 +5918,28 @@ Keep keywords focused and specific. Remove stop words."""
         if ctx.dialogue is None:
             return "对话引擎暂不可用。"
 
+        # RAG: ground the reply in the user's crawled reading library. Only the
+        # plain "chat" scope is grounded — delight/probe scopes are feedback
+        # about one specific recommendation, where library passages would just
+        # be noise. References are stashed per turn so the UI can show the
+        # "已参考 N 篇收藏" badge.
+        retrieval_context: str | None = None
+        references: list[dict[str, Any]] = []
+        if turn.scope == "chat":
+            retrieval_context, references = await _rag_retrieve(turn.message, top_k=4)
+            if references:
+                chat_turn_references[str(turn.turn_id)] = references
+
         concurrency = getattr(ctx.discovery_engine, "_concurrency", None)
         if concurrency is not None:
             concurrency.chat_active = True
         try:
             async with chat_turn_lock:
                 reply = await asyncio.wait_for(
-                    ctx.dialogue.respond(_contextual_chat_message(turn)),
+                    ctx.dialogue.respond(
+                        _contextual_chat_message(turn),
+                        retrieval_context=retrieval_context,
+                    ),
                     timeout=120,
                 )
                 reply = str(reply)

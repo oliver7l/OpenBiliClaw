@@ -658,6 +658,9 @@
     .chat-log { display: grid; gap: var(--space-3); margin: var(--space-4) 0; }
     .chat-bubble.user { margin-left: 12%; background: var(--surface-warm); }
     .chat-bubble.agent { margin-right: 12%; background: var(--surface); }
+    /* RAG citation badge: hint that this answer was grounded in the user's
+       crawled library. Kept quiet — hairline top rule, muted text, no chrome. */
+    .chat-refs { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-soft); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.01em; cursor: default; }
     .chat-input { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); position: sticky; bottom: 0; background: var(--bg); padding-top: var(--space-3); }
     .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
     .settings-tabs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-1); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); }

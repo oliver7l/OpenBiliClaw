@@ -6124,7 +6124,15 @@
     }
 
     function chatHtml(messages) {
-      return messages.map((msg) => `<div class="chat-bubble ${msg.role === "user" ? "user" : "agent"}">${escapeHtml(msg.text)}</div>`).join("");
+      return messages.map((msg) => {
+        const refs = Array.isArray(msg.references) ? msg.references.filter((item) => item && item.title) : [];
+        // Only agent turns carry references, and only when the reply was
+        // actually grounded in the crawled library.
+        const badge = refs.length
+          ? `<div class="chat-refs" title="${escapeHtml(refs.map((item) => item.title).join("\n"))}">已参考 ${refs.length} 篇收藏</div>`
+          : "";
+        return `<div class="chat-bubble ${msg.role === "user" ? "user" : "agent"}">${escapeHtml(msg.text)}${badge}</div>`;
+      }).join("");
     }
 
     function renderChat() {
@@ -6167,7 +6175,11 @@
       const poll = async () => {
         const latest = await requestJson(`${ENDPOINTS.chatTurns}/${encodeURIComponent(turn.turn_id)}`);
         if (latest?.status === "completed" || latest?.reply) {
-          state.chat[state.chat.length - 1] = { role: "agent", text: latest.reply || "后端已完成这轮聊天。" };
+          state.chat[state.chat.length - 1] = {
+            role: "agent",
+            text: latest.reply || "后端已完成这轮聊天。",
+            references: Array.isArray(latest?.references) ? latest.references : []
+          };
           renderChat();
           return;
         }

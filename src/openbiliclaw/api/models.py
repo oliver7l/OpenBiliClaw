@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -973,6 +973,11 @@ class ChatTurnOut(BaseModel):
     error: str = ""
     created_at: str = ""
     updated_at: str = ""
+    # RAG citations: which library items were retrieved and fed into this
+    # turn's prompt. Empty when the RAG index has nothing relevant (or is
+    # still being built), which lets the UI show "已参考 N 篇收藏" only when
+    # the answer was actually grounded in the user's crawled content.
+    references: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatTurnListResponse(BaseModel):
