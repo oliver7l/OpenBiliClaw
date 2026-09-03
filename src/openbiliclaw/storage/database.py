@@ -8283,6 +8283,56 @@ class Database:
         except Exception:
             return 0
 
+    def get_interest_centroid_sources(
+        self,
+        *,
+        days: int = 30,
+        min_dwell: float = 60.0,
+    ) -> list[dict[str, Any]]:
+        """Recent positive-signal rows backing the RankAgent interest centroids.
+
+        Two signal kinds, unified shape: explicit likes (``user_feedback``) and
+        deep views (``view_history`` with ``dwell_seconds >= min_dwell``), both
+        windowed to the last ``days`` days. Each row is LEFT JOINed to
+        ``content_cache`` to recover ``description`` so the caller can rebuild
+        the canonical MMR embedding cache key (``title + description``); rows
+        whose content was trimmed from the pool simply yield ``description=''``
+        and become a cache miss downstream. Ordered by signal time DESC.
+        """
+        import datetime
+
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        try:
+            rows = self.conn.execute(
+                """
+                SELECT uf.topic_group AS topic_group,
+                       uf.title       AS title,
+                       COALESCE(cc.description, '') AS description,
+                       uf.created_at  AS signaled_at
+                FROM user_feedback uf
+                LEFT JOIN content_cache cc ON cc.bvid = uf.bvid
+                WHERE uf.action = 'like'
+                  AND uf.created_at >= ?
+                  AND COALESCE(uf.topic_group, '') != ''
+                UNION ALL
+                SELECT vh.topic_group AS topic_group,
+                       vh.title       AS title,
+                       COALESCE(cc.description, '') AS description,
+                       vh.viewed_at   AS signaled_at
+                FROM view_history vh
+                LEFT JOIN content_cache cc ON cc.bvid = vh.bvid
+                WHERE vh.viewed_at >= ?
+                  AND vh.dwell_seconds >= ?
+                  AND COALESCE(vh.topic_group, '') != ''
+                ORDER BY signaled_at DESC
+                """,
+                (cutoff, cutoff, float(min_dwell)),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            logger.exception("Failed to load interest centroid sources")
+            return []
+
     def get_recent_views(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get the most recent view history."""
         rows = self.conn.execute(

@@ -326,6 +326,8 @@ RankAgent.score_and_rank(
 ```
 
 - `content_embeds` 只能由调用方预先算好传入——**旧的 `emb_service=` 形参已移除**：在同步的 `score_and_rank` 内实时打 embedding 会死锁事件循环。`app.py` 用 `EmbeddingService.lookup_cached(mmr_cache_text(title, description))` **只读** MMR 预热缓存填充它，热路径零 API；未命中预热的候选 `semantic_score=0`，回退 fit+quality+dwell。整段 `score_and_rank`（含下列 DB 聚合）在 `run_in_executor` 工作线程里执行，不阻塞事件循环。
+- `compute_interest_centroids(db, embedding_service) -> dict[topic_group, unit vector]`：**兴趣质心**——近期正信号（显式赞 `user_feedback.action='like'` + 深读 `view_history.dwell_seconds>=60`，经 `db.get_interest_centroid_sources` 统一取数并 LEFT JOIN `content_cache` 拿 description 重建 canonical key）的内容向量按 topic 归一化均值。**只读缓存**（`lookup_cached`，键与 MMR 预热同源），热路径零 API；无缓存向量的 topic 直接缺席。正信号随点赞/深读自然积累，冷启动期为空、行为自动回退。
+- `score_and_rank(..., interest_centroids=…)`：传入质心后，每条候选的 fit 变为 **关键词分 50/50 混合其与质心的最大余弦**（结果里新增 `interest_sim` 可观测）；无质心或候选无缓存向量时保持纯关键词分——无质心时行为与引入前**逐字节一致**。fit 由此从「字面子串命中」升级为「语义命中」，agent 路径独立受益，serve 路径不受影响。
 - `compute_dwell_beta(db) -> float`：`min(0.15, views/(views+30)*0.15*1.15)`，随近 30 天浏览量单调升到 0.15，**200 views 正好封顶**（1.15 归一系数修正了旧式永不触顶的问题）。
 - `compute_dwell_scores(db) -> dict[topic_group, 0..1]`：委托 `db.get_dwell_scores(days=14)`。
 - `build_context_text(intent, alpha, beta=0.0) -> str`：拼会话上下文标签，`alpha>0.01` 显示「点赞学习 x%」、`beta>0.01` 显示「停留学习 x%」。

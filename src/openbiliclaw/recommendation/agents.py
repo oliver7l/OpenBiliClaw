@@ -171,6 +171,72 @@ class RankAgent:
             return {}
 
     @staticmethod
+    def compute_interest_centroids(
+        db: Any,
+        embedding_service: Any,
+        *,
+        days: int = 30,
+        per_topic: int = 8,
+        min_dwell: float = 60.0,
+    ) -> dict[str, list[float]]:
+        """Per-topic semantic centroids from recent positive signals.
+
+        A centroid is the unit-normalized mean of content embeddings the user
+        recently liked (explicit) or lingered on (deep dwell) within a
+        ``topic_group`` — a semantic fingerprint of current taste, far beyond
+        keyword substring matching.
+
+        Cache-only by design: vectors are read via
+        ``EmbeddingService.lookup_cached`` on the canonical ``mmr_cache_text``
+        key (the same key the MMR prewarm fills), so building centroids on the
+        hot path costs **zero provider API calls**. Topics without any cached
+        vectors are simply absent — callers fall back to keyword fit.
+        """
+        if embedding_service is None:
+            return {}
+        lookup = getattr(embedding_service, "lookup_cached", None)
+        if not callable(lookup):
+            return {}
+        try:
+            rows = db.get_interest_centroid_sources(
+                days=days, min_dwell=min_dwell
+            )
+        except Exception:
+            return {}
+        import math
+
+        from openbiliclaw.llm.embedding import mmr_cache_text
+
+        sums: dict[str, list[float]] = {}
+        counts: dict[str, int] = {}
+        for row in rows:
+            topic = str(row.get("topic_group") or "")
+            if not topic or counts.get(topic, 0) >= per_topic:
+                continue
+            text = mmr_cache_text(
+                str(row.get("title") or ""), str(row.get("description") or "")
+            )
+            if not text:
+                continue
+            vec = lookup(text)
+            if not vec or not any(vec):
+                continue
+            norm = math.sqrt(sum(x * x for x in vec))
+            if norm <= 0:
+                continue
+            s = sums.setdefault(topic, [0.0] * len(vec))
+            if len(s) != len(vec):  # mixed dims → skip defensively
+                continue
+            for i, x in enumerate(vec):
+                s[i] += x / norm
+            counts[topic] = counts.get(topic, 0) + 1
+        centroids: dict[str, list[float]] = {}
+        for topic, s in sums.items():
+            norm = math.sqrt(sum(x * x for x in s)) or 1.0
+            centroids[topic] = [x / norm for x in s]
+        return centroids
+
+    @staticmethod
     def compute_dwell_beta(db: Any) -> float:
         """Compute beta (0-0.15) — confidence in implicit dwell signals.
 
@@ -211,15 +277,24 @@ class RankAgent:
         profile_keywords: list[tuple[str, float]],
         q_embed: list[float] | None = None,
         content_embeds: dict[str, list[float]] | None = None,
+        interest_centroids: dict[str, list[float]] | None = None,
     ) -> list[dict[str, Any]]:
         """Score candidates and return ranked list with diversity mix.
 
         ``content_embeds`` maps bvid → pre-computed embedding vector. It
         must be computed by the caller in an async context — embedding
         inside this sync method would deadlock the event loop.
+
+        ``interest_centroids`` maps topic_group → unit vector (mean embedding
+        of recently liked / deep-dwelled content, cache-only). When present,
+        each row's fit becomes a 50/50 blend of keyword fit and its best
+        centroid cosine — semantic affinity over literal substring hits.
+        Rows without a cached vector keep the pure keyword fit, and with no
+        centroids at all the behaviour is byte-identical to pre-centroid.
         """
 
         profile_domains = {k for k, w in profile_keywords if w >= 0.5}
+        from openbiliclaw.llm.embedding import cosine_similarity
 
         # --- score each item ---
         scored_items: list[dict[str, Any]] = []
@@ -232,12 +307,23 @@ class RankAgent:
                 str(r["source_platform"] or ""),
             ])
             fit = RankAgent._profile_fit_score(text, profile_keywords) if profile_keywords else 0.0
+            interest_sim = 0.0
+            if interest_centroids and content_embeds:
+                c_embed = content_embeds.get(str(r["bvid"] or ""))
+                if c_embed and any(c_embed):
+                    for centroid in interest_centroids.values():
+                        sim = cosine_similarity(c_embed, centroid)
+                        if sim > interest_sim:
+                            interest_sim = sim
+            if interest_sim > 0:
+                fit = fit * 0.5 + interest_sim * 0.5
             qs = float(r["quality_score"] or 0.0)
             combined = fit * 0.6 + qs * 0.4
             domain_match = any(tag.lower() in text.lower() for tag in profile_domains)
             scored_items.append({
                 "row": r,
                 "fit_score": fit,
+                "interest_sim": interest_sim,
                 "quality_score": qs,
                 "combined": combined,
                 "domain_match": domain_match,
@@ -246,7 +332,6 @@ class RankAgent:
 
         # --- semantic re-ranking (embeddings pre-computed by the caller) ---
         if q_embed and any(q_embed) and content_embeds:
-            from openbiliclaw.llm.embedding import cosine_similarity
             for s in scored_items:
                 c_embed = content_embeds.get(str(s["row"]["bvid"] or ""))
                 if c_embed and any(c_embed):

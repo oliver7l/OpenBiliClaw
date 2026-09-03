@@ -4508,6 +4508,14 @@ Keep keywords focused and specific. Remove stop words."""
                             vec = lookup(ctext)
                             if vec and any(vec):
                                 content_embeds[str(r["bvid"] or "")] = vec
+                try:
+                    interest_centroids: dict[str, list[float]] = (
+                        RankAgent.compute_interest_centroids(db, emb_service)
+                        if emb_service is not None
+                        else {}
+                    )
+                except Exception:
+                    interest_centroids = {}
                 return RankAgent.score_and_rank(
                     rows=rows,
                     intent=intent,
@@ -4515,6 +4523,7 @@ Keep keywords focused and specific. Remove stop words."""
                     profile_keywords=profile_keywords,
                     q_embed=q_embed,
                     content_embeds=content_embeds,
+                    interest_centroids=interest_centroids,
                 )
 
             rank_result = await loop.run_in_executor(None, _rank_offloop)
@@ -4538,7 +4547,10 @@ Keep keywords focused and specific. Remove stop words."""
                 r = s["row"]
                 item_url = str(r["content_url"] or "")
                 item_platform = str(r["source_platform"] or "")
-                if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
+                is_xhs_url = "xiaohongshu.com/explore/" in item_url
+                if item_url and "xsec_token=" not in item_url and (
+                    item_platform == "xiaohongshu" or is_xhs_url
+                ):
                     note_id = str(r["bvid"] or "")
                     if note_id:
                         try:

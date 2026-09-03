@@ -8,7 +8,7 @@ session-context label rendering.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -16,6 +16,10 @@ from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.llm.embedding import mmr_cache_text
 from openbiliclaw.recommendation.agents import RankAgent
 from openbiliclaw.recommendation.engine import RecommendationEngine
+from openbiliclaw.storage.database import Database
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _row(bvid: str, *, topic: str = "", qs: float = 0.5, title: str = "") -> dict[str, Any]:
@@ -186,6 +190,118 @@ def test_score_and_rank_returns_expected_keys(monkeypatch: pytest.MonkeyPatch) -
     assert set(res) == {"high_fit", "low_fit", "alpha", "beta"}
     assert res["alpha"] == pytest.approx(0.2)
     assert res["beta"] == pytest.approx(0.05)
+
+
+# ---------------------------------------------------------------------------
+# interest centroids — semantic affinity over keyword substring
+# ---------------------------------------------------------------------------
+
+
+class _CentroidDB:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def get_interest_centroid_sources(self, *, days: int = 30, min_dwell: float = 60.0):
+        return self._rows
+
+
+class _CacheEmb:
+    """Cache-only embedding stub keyed like EmbeddingService (strip/lower/[:200])."""
+
+    def __init__(self, table: dict[str, list[float]]) -> None:
+        self._table = table
+
+    def lookup_cached(self, text: str) -> list[float]:
+        return self._table.get(text.strip().lower()[:200], [])
+
+
+def test_compute_interest_centroids_mean_and_cap() -> None:
+    rows = [
+        {"topic_group": "科技", "title": "T1", "description": "D1"},
+        {"topic_group": "科技", "title": "T2", "description": "D2"},
+        {"topic_group": "科技", "title": "T3", "description": "D3"},  # cap=2 → skipped
+        {"topic_group": "生活", "title": "T4", "description": "D4"},
+        {"topic_group": "", "title": "T5", "description": "D5"},  # empty topic
+        {"topic_group": "科技", "title": "T6", "description": "D6"},  # no cached vec
+    ]
+    emb = _CacheEmb(
+        {
+            "t1 d1": [1.0, 0.0],
+            "t2 d2": [0.0, 1.0],
+            "t3 d3": [1.0, 1.0],
+            "t4 d4": [1.0, 1.0],
+        }
+    )
+    out = RankAgent.compute_interest_centroids(_CentroidDB(rows), emb, per_topic=2)
+    assert set(out) == {"科技", "生活"}
+    # 科技 = mean(unit[1,0], unit[0,1]) normalized = [√2/2, √2/2]
+    assert out["科技"] == pytest.approx([0.7071, 0.7071], abs=1e-3)
+
+
+def test_centroid_blend_lifts_semantic_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    _pin_dwell(monkeypatch, alpha=0.0, beta=0.0, dwell={})
+    kw = [("关键词X", 0.5)]
+    rows = [
+        _row("v1", topic="A", qs=0.5, title="关键词X 语义相近"),
+        _row("v2", topic="B", qs=0.5, title="关键词X 语义无关"),
+    ]
+    base = RankAgent.score_and_rank(
+        rows=rows,
+        intent={},
+        db=object(),
+        profile_keywords=kw,
+        q_embed=None,
+        content_embeds={},
+    )
+    base_comb = _combined_by_topic(base)
+    assert base_comb["A"] == pytest.approx(base_comb["B"])  # tie without centroids
+
+    lifted = RankAgent.score_and_rank(
+        rows=rows,
+        intent={},
+        db=object(),
+        profile_keywords=kw,
+        q_embed=None,
+        content_embeds={"v1": [1.0, 0.0]},
+        interest_centroids={"A": [1.0, 0.0]},
+    )
+    comb = _combined_by_topic(lifted)
+    assert comb["A"] > comb["B"]  # semantic affinity breaks the tie
+    sims = {s["row"]["bvid"]: s["interest_sim"] for s in lifted["high_fit"] + lifted["low_fit"]}
+    assert sims["v1"] == pytest.approx(1.0) and sims["v2"] == 0.0
+
+
+def test_centroid_absent_row_keeps_keyword_fit(monkeypatch: pytest.MonkeyPatch) -> None:
+    _pin_dwell(monkeypatch, alpha=0.0, beta=0.0, dwell={})
+    rows = [_row("v1", topic="A", qs=0.5, title="关键词X")]
+    res = RankAgent.score_and_rank(
+        rows=rows,
+        intent={},
+        db=object(),
+        profile_keywords=[("关键词X", 0.5)],
+        q_embed=None,
+        content_embeds={},  # no cached vector for v1
+        interest_centroids={"A": [1.0, 0.0]},
+    )
+    s = res["high_fit"][0]
+    assert s["interest_sim"] == 0.0
+    assert s["fit_score"] == pytest.approx(0.5)  # pure keyword fit preserved
+
+
+def test_get_interest_centroid_sources_filters_and_joins(tmp_path: Path) -> None:
+    db = Database(tmp_path / "c.db")
+    db.initialize()
+    db.conn.execute(
+        "INSERT INTO content_cache (bvid, title, description) VALUES ('v1', 'T1', 'DESC1')"
+    )
+    db.conn.commit()
+    db.insert_user_feedback("v1", "like", title="T1", topic_group="科技")
+    db.insert_view_history({"bvid": "v2", "topic_group": "科技", "dwell_seconds": 120})
+    db.insert_view_history({"bvid": "v3", "topic_group": "科技", "dwell_seconds": 5})
+    rows = db.get_interest_centroid_sources(days=30, min_dwell=60)
+    assert len(rows) == 2  # like + deep view; 5s quick view excluded
+    assert all(r["topic_group"] == "科技" for r in rows)
+    assert any(r["description"] == "DESC1" for r in rows)  # join recovered description
 
 
 # ---------------------------------------------------------------------------
