@@ -18,6 +18,7 @@ import uuid
 from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
 
@@ -99,6 +100,7 @@ from openbiliclaw.api.models import (
     RecommendationAppendIn,
     RecommendationClickIn,
     RecommendationClickResponse,
+    TopicCreateIn,
     RecommendationListResponse,
     ArticleUpdateIn,
     ArticleNoteIn,
@@ -171,6 +173,9 @@ from openbiliclaw.soul.dislike_writeback import (
     apply_new_dislikes,
     topics_for_confirmed_avoidance,
 )
+
+# Project root: src/openbiliclaw/api/app.py → ../../..
+_PROJECT_ROOT = _Path(__file__).resolve().parent.parent.parent.parent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -7014,6 +7019,130 @@ Keep keywords focused and specific. Remove stop words."""
             layers_updated=layers_updated,
         )
 
+    # ── Topics (专题) ─────────────────────────────────────────────
+    # User-curated collections (e.g. 广告, 去有风的地方) continuously
+    # collected from multiple sites via scripts/collect_topic.py. The API
+    # exposes list/detail/create and a manual "collect now" trigger.
+
+    @app.get("/api/topics", response_model=None)
+    def api_topics_list() -> list[dict[str, object]]:
+        """List all topics with item counts (newest first)."""
+        import json as _json
+
+        topics = ctx.database.list_topics(include_paused=True)
+        out: list[dict[str, object]] = []
+        for t in topics:
+            out.append(
+                {
+                    "id": t["id"],
+                    "name": t["name"],
+                    "slug": t["slug"],
+                    "description": t.get("description") or "",
+                    "keywords": _json.loads(t.get("keywords") or "[]"),
+                    "platforms": _json.loads(t.get("platforms") or '["bilibili"]'),
+                    "status": t.get("status") or "active",
+                    "item_count": int(t.get("item_count") or 0),
+                    "last_collected_at": t.get("last_collected_at"),
+                    "created_at": t.get("created_at"),
+                    "updated_at": t.get("updated_at"),
+                }
+            )
+        return out
+
+    @app.post("/api/topics", response_model=None)
+    async def api_topics_create(payload: TopicCreateIn) -> dict[str, object]:
+        """Create a new topic. slug must be url-safe; keywords/platforms optional."""
+        import json as _json
+
+        name = (payload.name or "").strip()
+        slug = (payload.slug or "").strip().lower()
+        if not name or not slug:
+            raise HTTPException(status_code=422, detail="name and slug are required.")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+            raise HTTPException(
+                status_code=422, detail="slug 只能包含小写字母、数字和连字符。"
+            )
+        if ctx.database.get_topic_by_slug(slug) is not None:
+            raise HTTPException(status_code=409, detail=f"slug 已存在: {slug}")
+        keywords = list(payload.keywords or [])
+        platforms = list(payload.platforms or ["bilibili"])
+        try:
+            topic_id = ctx.database.create_topic(
+                name=name,
+                slug=slug,
+                description=(payload.description or "").strip(),
+                keywords=keywords,
+                platforms=platforms,
+            )
+        except Exception:
+            logger.exception("create_topic failed")
+            raise HTTPException(
+                status_code=409, detail="专题创建失败（名称或 slug 冲突？）"
+            ) from None
+        topic = ctx.database.get_topic_by_id(topic_id)
+        assert topic is not None  # just created
+        return {
+            "id": topic["id"],
+            "name": topic["name"],
+            "slug": topic["slug"],
+            "description": topic.get("description") or "",
+            "keywords": _json.loads(topic.get("keywords") or "[]"),
+            "platforms": _json.loads(topic.get("platforms") or '["bilibili"]'),
+            "status": topic.get("status") or "active",
+            "item_count": 0,
+        }
+
+    @app.get("/api/topics/{slug}", response_model=None)
+    def api_topic_detail(slug: str) -> dict[str, object]:
+        """Topic detail + collected items (newest first, paginated)."""
+        import json as _json
+
+        topic = ctx.database.get_topic_by_slug(slug)
+        if topic is None:
+            raise HTTPException(status_code=404, detail=f"未找到专题: {slug}")
+        items = ctx.database.get_topic_items(topic["id"], limit=200)
+        return {
+            "id": topic["id"],
+            "name": topic["name"],
+            "slug": topic["slug"],
+            "description": topic.get("description") or "",
+            "keywords": _json.loads(topic.get("keywords") or "[]"),
+            "platforms": _json.loads(topic.get("platforms") or '["bilibili"]'),
+            "status": topic.get("status") or "active",
+            "item_count": int(topic.get("item_count") or 0),
+            "last_collected_at": topic.get("last_collected_at"),
+            "created_at": topic.get("created_at"),
+            "items": items,
+        }
+
+    @app.post("/api/topics/{slug}/collect", response_model=None)
+    async def api_topic_collect(slug: str) -> dict[str, object]:
+        """Trigger a collection pass for one topic (autocli, may take ~30s+)."""
+        topic = ctx.database.get_topic_by_slug(slug)
+        if topic is None:
+            raise HTTPException(status_code=404, detail=f"未找到专题: {slug}")
+        try:
+            import importlib.util as _ilu
+
+            script = _PROJECT_ROOT / "scripts" / "collect_topic.py"
+            spec = _ilu.spec_from_file_location("collect_topic", script)
+            assert spec and spec.loader is not None
+            module = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            stats = module.collect_topic(ctx.database, topic, limit=8)
+        except Exception:
+            logger.exception("topic collect failed")
+            raise HTTPException(status_code=500, detail="专题搜集失败，详见服务日志。") from None
+        return {
+            "ok": True,
+            "slug": slug,
+            "new": stats["new"],
+            "dup": stats["dup"],
+            "failed": stats["failed"],
+            "searches": stats["searches"],
+            "item_count": ctx.database.count_topic_items(topic["id"]),
+        }
+
     @app.post("/api/insights/feedback", response_model=InsightFeedbackResponse)
     async def insight_feedback(payload: InsightFeedbackIn) -> InsightFeedbackResponse:
         """Calibrate an insight hypothesis from a user confirm/reject.
@@ -11338,5 +11467,13 @@ Keep keywords focused and specific. Remove stop words."""
 
     if _reading_dir.is_dir():
         app.mount("/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library")
+
+    # ── Standalone Topics (专题) page ────────────────────────────
+    # Bookmarkable /topics page listing user-curated topic collections with
+    # their continuously collected items; create + collect-now actions hit
+    # the /api/topics* endpoints above.
+    _topics_dir = _web_dir / "topics"
+    if _topics_dir.is_dir():
+        app.mount("/topics", _StaticFiles(directory=_topics_dir, html=True), name="topics-page")
 
     return app

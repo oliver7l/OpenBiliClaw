@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>专题 · 古灵阁</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #ffffff; --ink: #18181b; --muted: #71717a;
+    --faint: #a1a1aa; --line: #f2f2f3; --line-strong: #e4e4e7;
+    --accent: #b5715c; --accent-soft: #f6f6f7; --chip: #f6f6f7; --radius: 10px;
+    --ok: #1a7f4e; --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI",
+                 "Noto Sans CJK SC", system-ui, -apple-system, sans-serif;
+    font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  button, select, option, input, textarea { font-family: inherit; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .tp-head {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: saturate(160%) blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 20px;
+  }
+  .tp-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 1180px; margin: 0 auto; }
+  .tp-bar h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: .5px; }
+  .tp-count { color: var(--faint); font-size: 12px; }
+  .tp-spacer { flex: 1; }
+  .tp-btn {
+    border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink);
+    padding: 6px 14px; border-radius: var(--radius); font-size: 13px; cursor: pointer;
+  }
+  .tp-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tp-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tp-btn.primary:hover { filter: brightness(.96); }
+  .tp-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .tp-btn.small { padding: 3px 10px; font-size: 12px; border-radius: 8px; }
+
+  .tp-main { max-width: 1180px; margin: 0 auto; padding: 20px 20px 60px; }
+
+  /* 列表视图 */
+  .tp-grid { display: flex; gap: 14px; flex-wrap: wrap; }
+  .tp-card {
+    flex: 1 1 300px; min-width: 0; padding: 16px; border: 1px solid var(--line);
+    border-radius: 14px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+  }
+  .tp-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+  .tp-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .tp-card-desc { color: var(--muted); font-size: 13px; margin: 6px 0 10px; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tp-chip { display: inline-block; background: var(--chip); border-radius: 999px;
+    padding: 2px 9px; font-size: 11px; color: var(--muted); margin: 2px 4px 2px 0; }
+  .tp-card-meta { margin-top: 10px; color: var(--faint); font-size: 12px;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .tp-badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; }
+  .tp-badge.active { background: rgba(26,127,78,.1); color: var(--ok); }
+  .tp-badge.paused { background: rgba(180,83,9,.1); color: var(--warn); }
+  .tp-badge.empty { background: var(--chip); color: var(--faint); }
+
+  /* 详情视图 */
+  .tp-detail-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tp-detail-title { font-size: 18px; font-weight: 600; margin: 0; }
+  .tp-detail-desc { color: var(--muted); font-size: 13px; margin: 4px 0 10px; max-width: 760px; }
+  .tp-items { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .tp-item {
+    display: flex; gap: 12px; padding: 12px 14px; border: 1px solid var(--line);
+    border-radius: 12px; align-items: flex-start;
+  }
+  .tp-item-main { flex: 1 1 auto; min-width: 0; }
+  .tp-item-title { font-size: 14px; font-weight: 600; line-height: 1.45; }
+  .tp-item-title a { color: var(--ink); }
+  .tp-item-title a:hover { color: var(--accent); }
+  .tp-item-summary { color: var(--muted); font-size: 12.5px; margin-top: 4px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tp-item-meta { color: var(--faint); font-size: 11.5px; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .tp-empty { color: var(--faint); text-align: center; padding: 48px 0; font-size: 13px; }
+
+  /* 新建面板 */
+  .tp-panel {
+    border: 1px solid var(--line-strong); border-radius: 14px; padding: 16px;
+    margin-bottom: 20px; background: var(--panel);
+  }
+  .tp-panel h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+  .tp-form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tp-field { flex: 1 1 200px; min-width: 0; }
+  .tp-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .tp-field input, .tp-field textarea, .tp-field select {
+    width: 100%; padding: 7px 11px; border: 1px solid var(--line-strong);
+    border-radius: var(--radius); background: var(--panel); color: var(--ink);
+    font-size: 13px; outline: none;
+  }
+  .tp-field textarea { min-height: 56px; resize: vertical; }
+  .tp-hint { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .tp-msg { font-size: 12.5px; margin-top: 8px; }
+  .tp-msg.ok { color: var(--ok); } .tp-msg.err { color: var(--warn); }
+
+  .tp-loading { color: var(--faint); text-align: center; padding: 40px 0; }
+  @media (max-width: 560px) {
+    .tp-card { flex-basis: 100%; }
+    .tp-item { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+  <header class="tp-head">
+    <div class="tp-bar">
+      <h1>专题</h1>
+      <span class="tp-count" id="tpCount"></span>
+      <span class="tp-spacer"></span>
+      <button class="tp-btn" id="btnNew" type="button">＋ 新建专题</button>
+      <button class="tp-btn primary" id="btnCollectAll" type="button">全部收集一次</button>
+    </div>
+  </header>
+
+  <main class="tp-main">
+    <!-- 新建面板（默认隐藏） -->
+    <div class="tp-panel" id="panelNew" style="display:none;">
+      <h2>新建专题</h2>
+      <div class="tp-form-row">
+        <div class="tp-field">
+          <label>名称 *</label>
+          <input id="fName" placeholder="如：广告 / 去有风的地方">
+        </div>
+        <div class="tp-field">
+          <label>slug *（URL 标识，小写字母数字连字符）</label>
+          <input id="fSlug" placeholder="如：advertising">
+        </div>
+      </div>
+      <div class="tp-form-row">
+        <div class="tp-field" style="flex:2 1 320px;">
+          <label>关键词（逗号分隔）</label>
+          <textarea id="fKeywords" placeholder="计算广告, 广告投放, 信息流广告"></textarea>
+        </div>
+        <div class="tp-field">
+          <label>来源平台</label>
+          <select id="fPlatforms" multiple size="6">
+            <option value="bilibili" selected>bilibili（视频）</option>
+            <option value="zhihu">zhihu（知乎）</option>
+            <option value="xiaohongshu">xiaohongshu（小红书）</option>
+            <option value="weibo">weibo（微博）</option>
+            <option value="douban">douban（豆瓣）</option>
+          </select>
+        </div>
+      </div>
+      <div class="tp-form-row">
+        <div class="tp-field" style="flex:2 1 320px;">
+          <label>描述</label>
+          <textarea id="fDesc" placeholder="这个专题关注什么、为什么建"></textarea>
+        </div>
+      </div>
+      <div class="tp-msg" id="newMsg"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="tp-btn primary" id="btnCreate" type="button">创建</button>
+        <button class="tp-btn" id="btnCancel" type="button">取消</button>
+      </div>
+    </div>
+
+    <!-- 列表视图 -->
+    <div id="viewList"></div>
+
+    <!-- 详情视图（默认隐藏） -->
+    <div id="viewDetail" style="display:none;"></div>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+  var state = { view: 'list', slug: null, topics: [], items: [] };
+  var $ = function (id) { return document.getElementById(id); };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fmtTime(t) {
+    if (!t) return '从未收集';
+    var d = new Date(String(t).replace(' ', 'T') + (String(t).includes('Z') ? '' : 'Z'));
+    if (isNaN(d.getTime())) return String(t).slice(0, 16);
+    var now = new Date();
+    var diff = (now - d) / 1000;
+    if (diff < 3600) return Math.max(1, Math.round(diff / 60)) + ' 分钟前';
+    if (diff < 86400) return Math.round(diff / 3600) + ' 小时前';
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
+      String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function chipList(arr) {
+    return (arr || []).map(function (k) { return '<span class="tp-chip">' + esc(k) + '</span>'; }).join('');
+  }
+
+  function cardHtml(t) {
+    var badge = t.status === 'active'
+      ? '<span class="tp-badge active">采集中</span>'
+      : '<span class="tp-badge paused">已暂停</span>';
+    return '<div class="tp-card" data-slug="' + esc(t.slug) + '">' +
+      '<div class="tp-card-name">' + esc(t.name) + ' ' + badge + '</div>' +
+      '<div class="tp-card-desc">' + esc(t.description || '（无描述）') + '</div>' +
+      '<div>' + chipList(t.keywords) + '</div>' +
+      '<div class="tp-card-meta">' +
+        '<span>收录 ' + t.item_count + ' 条</span>' +
+        '<span>' + (t.platforms || []).join(' · ') + '</span>' +
+        '<span>' + fmtTime(t.last_collected_at) + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderList() {
+    var el = $('viewList');
+    $('tpCount').textContent = state.topics.length + ' 个专题';
+    if (!state.topics.length) {
+      el.innerHTML = '<div class="tp-empty">还没有专题。点「新建专题」建第一个，或告诉我你想追踪什么方向。</div>';
+      return;
+    }
+    el.innerHTML = '<div class="tp-grid">' + state.topics.map(cardHtml).join('') + '</div>';
+    el.querySelectorAll('.tp-card').forEach(function (card) {
+      card.addEventListener('click', function () { openDetail(card.getAttribute('data-slug')); });
+    });
+  }
+
+  function itemHtml(it) {
+    var url = it.url || '#';
+    var href = url === '#' ? 'javascript:void(0)' : url;
+    var target = url === '#' ? '' : ' target="_blank" rel="noopener"';
+    return '<div class="tp-item">' +
+      '<div class="tp-item-main">' +
+        '<div class="tp-item-title"><a href="' + esc(href) + '"' + target + '>' + esc(it.title) + '</a></div>' +
+        (it.summary ? '<div class="tp-item-summary">' + esc(it.summary) + '</div>' : '') +
+        '<div class="tp-item-meta">' +
+          '<span>' + esc(it.source_platform || '未知来源') + '</span>' +
+          (it.source_name ? '<span>' + esc(it.source_name) + '</span>' : '') +
+          '<span>' + fmtTime(it.collected_at) + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderDetail(t) {
+    var el = $('viewDetail');
+    $('viewList').style.display = 'none';
+    el.style.display = '';
+    el.innerHTML =
+      '<div style="margin-bottom:6px;"><button class="tp-btn small" id="btnBack" type="button">← 返回专题列表</button></div>' +
+      '<div class="tp-detail-head">' +
+        '<div style="flex:1 1 320px;min-width:0;">' +
+          '<div class="tp-detail-title">' + esc(t.name) + '</div>' +
+          '<div class="tp-detail-desc">' + esc(t.description || '') + '</div>' +
+          '<div>' + chipList(t.keywords) + '</div>' +
+          '<div class="tp-card-meta">' +
+            '<span>收录 ' + t.item_count + ' 条</span>' +
+            '<span>' + (t.platforms || []).join(' · ') + '</span>' +
+            '<span>最近收集：' + fmtTime(t.last_collected_at) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button class="tp-btn primary" id="btnCollect" type="button">立即收集一次</button>' +
+      '</div>' +
+      '<div class="tp-msg" id="collectMsg"></div>' +
+      '<div class="tp-items" id="topicItems">' +
+        (t.items && t.items.length
+          ? t.items.map(itemHtml).join('')
+          : '<div class="tp-empty">暂无条目——点「立即收集一次」从各平台搜索关键词。</div>') +
+      '</div>';
+
+    $('btnBack').addEventListener('click', backToList);
+    $('btnCollect').addEventListener('click', function () { collectNow(t.slug); });
+  }
+
+  function openDetail(slug) {
+    state.view = 'detail'; state.slug = slug;
+    $('viewList').innerHTML = '<div class="tp-loading">加载专题…</div>';
+    fetch('/api/topics/' + encodeURIComponent(slug))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (t) { renderDetail(t); })
+      .catch(function (e) {
+        $('viewList').style.display = '';
+        $('viewList').innerHTML = '<div class="tp-msg err">加载失败：' + esc(e.message) + '</div>';
+        state.view = 'list';
+      });
+  }
+
+  function backToList() {
+    state.view = 'list'; state.slug = null;
+    $('viewDetail').style.display = 'none';
+    $('viewList').style.display = '';
+    loadTopics();
+  }
+
+  function collectNow(slug) {
+    var btn = $('btnCollect');
+    var msg = $('collectMsg');
+    if (btn) { btn.disabled = true; btn.textContent = '收集中…'; }
+    if (msg) { msg.textContent = ''; msg.className = 'tp-msg'; }
+    fetch('/api/topics/' + encodeURIComponent(slug) + '/collect', { method: 'POST' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.d.detail || 'HTTP ' + res.status);
+        if (msg) {
+          msg.className = 'tp-msg ok';
+          msg.textContent = '完成：新增 ' + res.d.new + ' 条，重复 ' + res.d.dup +
+            '，失败 ' + res.d.failed + '，当前共 ' + res.d.item_count + ' 条。';
+        }
+        return loadTopics().then(function () { openDetail(slug); });
+      })
+      .catch(function (e) {
+        if (msg) { msg.className = 'tp-msg err'; msg.textContent = '收集失败：' + esc(e.message); }
+      })
+      .finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '立即收集一次'; }
+      });
+  }
+
+  function loadTopics() {
+    return fetch('/api/topics')
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (list) {
+        state.topics = list || [];
+        if (state.view === 'list') renderList();
+        else openDetail(state.slug);
+      })
+      .catch(function (e) {
+        $('viewList').innerHTML = '<div class="tp-msg err">加载专题失败：' + esc(e.message) + '</div>';
+      });
+  }
+
+  function showNewPanel() {
+    $('panelNew').style.display = '';
+    $('newMsg').textContent = ''; $('newMsg').className = 'tp-msg';
+    $('fName').focus();
+  }
+  function hideNewPanel() {
+    $('panelNew').style.display = 'none';
+  }
+  function createTopic() {
+    var msg = $('newMsg');
+    var name = $('fName').value.trim();
+    var slug = $('fSlug').value.trim().toLowerCase();
+    if (!name || !slug) {
+      msg.className = 'tp-msg err'; msg.textContent = '名称和 slug 必填。';
+      return;
+    }
+    var keywords = $('fKeywords').value.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var platforms = Array.prototype.filter.call($('fPlatforms').options, function (o) { return o.selected; })
+      .map(function (o) { return o.value; });
+    var body = {
+      name: name, slug: slug,
+      description: $('fDesc').value.trim(),
+      keywords: keywords,
+      platforms: platforms.length ? platforms : ['bilibili']
+    };
+    var btn = $('btnCreate'); btn.disabled = true;
+    fetch('/api/topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.d.detail || 'HTTP ' + res.status);
+        msg.className = 'tp-msg ok'; msg.textContent = '专题「' + res.d.name + '」已创建。';
+        $('fName').value = ''; $('fSlug').value = ''; $('fKeywords').value = ''; $('fDesc').value = '';
+        hideNewPanel();
+        loadTopics();
+      })
+      .catch(function (e) {
+        msg.className = 'tp-msg err'; msg.textContent = '创建失败：' + esc(e.message);
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function collectAll() {
+    var btn = $('btnCollectAll');
+    btn.disabled = true; btn.textContent = '收集中…';
+    var slugs = state.topics.map(function (t) { return t.slug; });
+    var chain = Promise.resolve();
+    var done = 0;
+    slugs.forEach(function (slug) {
+      chain = chain.then(function () {
+        return fetch('/api/topics/' + encodeURIComponent(slug) + '/collect', { method: 'POST' })
+          .catch(function () { /* per-topic tolerance */ });
+      }).then(function () {
+        done += 1;
+        btn.textContent = '收集中…(' + done + '/' + slugs.length + ')';
+      });
+    });
+    chain.then(function () { btn.textContent = '全部收集一次'; btn.disabled = false; return loadTopics(); })
+      .catch(function () { btn.textContent = '全部收集一次'; btn.disabled = false; });
+  }
+
+  $('btnNew').addEventListener('click', showNewPanel);
+  $('btnCancel').addEventListener('click', hideNewPanel);
+  $('btnCreate').addEventListener('click', createTopic);
+  $('btnCollectAll').addEventListener('click', collectAll);
+  loadTopics();
+})();
+</script>
+</body>
+</html>

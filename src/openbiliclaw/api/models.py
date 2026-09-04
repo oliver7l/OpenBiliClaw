@@ -931,6 +931,16 @@ class RecommendationClickResponse(BaseModel):
     layers_updated: list[str]
 
 
+class TopicCreateIn(BaseModel):
+    """Payload for creating a topic (专题)."""
+
+    name: str
+    slug: str
+    description: str = ""
+    keywords: list[str] = []
+    platforms: list[str] = []
+
+
 class ChatIn(BaseModel):
     """Popup chat request."""
 

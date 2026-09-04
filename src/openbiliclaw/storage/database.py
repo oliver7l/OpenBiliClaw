@@ -528,6 +528,7 @@ class Database:
         self._ensure_init_runs_table()
         self._ensure_user_feedback_table()
         self._ensure_view_history_table()
+        self._ensure_topic_tables()
         self.reset_stale_discovery_candidate_evaluations()
         self.suppress_low_score_pool_items()
         self.suppress_low_confidence_recommendations()
@@ -8199,6 +8200,163 @@ class Database:
         if "dwell_seconds" not in existing_cols:
             self.conn.execute("ALTER TABLE view_history ADD COLUMN dwell_seconds REAL DEFAULT 0")
             self.conn.commit()
+
+    def _ensure_topic_tables(self) -> None:
+        """Create the topic (专题) tables.
+
+        A topic is a user-curated collection: a name + keyword set + source
+        platforms whose matching content is continuously collected into
+        ``topic_items``. Multiple topics can coexist (e.g. 广告, 去有风的地方).
+        """
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS topics (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                slug        TEXT NOT NULL UNIQUE,
+                description TEXT DEFAULT '',
+                keywords    TEXT DEFAULT '[]',
+                platforms   TEXT DEFAULT '["bilibili"]',
+                status      TEXT NOT NULL DEFAULT 'active',
+                item_count  INTEGER NOT NULL DEFAULT 0,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_collected_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS topic_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic_id    INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+                content_key TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                url         TEXT DEFAULT '',
+                source_platform TEXT DEFAULT '',
+                source_name  TEXT DEFAULT '',
+                cover_url   TEXT DEFAULT '',
+                summary     TEXT DEFAULT '',
+                topic_label TEXT DEFAULT '',
+                collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(topic_id, content_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_topic_items_topic
+                ON topic_items(topic_id, collected_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_topic_items_key
+                ON topic_items(content_key);
+        """)
+
+    # ------------------------------------------------------------------ #
+    # Topics CRUD
+    # ------------------------------------------------------------------ #
+    def create_topic(
+        self,
+        *,
+        name: str,
+        slug: str,
+        description: str = "",
+        keywords: list[str] | None = None,
+        platforms: list[str] | None = None,
+    ) -> int:
+        """Create a topic; returns its id (raises on duplicate name/slug)."""
+        import json as _json
+
+        cursor = self.conn.execute(
+            """INSERT INTO topics (name, slug, description, keywords, platforms, status)
+               VALUES (?, ?, ?, ?, ?, 'active')""",
+            (
+                name,
+                slug,
+                description,
+                _json.dumps(keywords or [], ensure_ascii=False),
+                _json.dumps(platforms or ["bilibili"], ensure_ascii=False),
+            ),
+        )
+        self.conn.commit()
+        return int(cursor.lastrowid)
+
+    def list_topics(self, *, include_paused: bool = True) -> list[dict[str, Any]]:
+        """Return topics newest-first with item counts."""
+        where = "" if include_paused else "WHERE status = 'active'"
+        rows = self.conn.execute(
+            f"""SELECT t.*,
+                       (SELECT COUNT(*) FROM topic_items i WHERE i.topic_id = t.id) AS item_count
+                FROM topics t {where}
+                ORDER BY t.created_at DESC, t.id DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_topic_by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM topics WHERE slug = ?", (slug,)).fetchone()
+        return dict(row) if row else None
+
+    def get_topic_by_id(self, topic_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM topics WHERE id = ?", (topic_id,)).fetchone()
+        return dict(row) if row else None
+
+    def add_topic_item(self, topic_id: int, item: dict[str, Any]) -> bool:
+        """Insert one collected item (idempotent by topic_id+content_key).
+
+        Returns True if inserted, False if the item already exists.
+        """
+        content_key = str(item.get("content_key") or "").strip()
+        title = str(item.get("title") or "").strip()
+        if not content_key or not title:
+            return False
+        existing = self.conn.execute(
+            "SELECT id FROM topic_items WHERE topic_id = ? AND content_key = ?",
+            (topic_id, content_key),
+        ).fetchone()
+        if existing:
+            return False
+        self.conn.execute(
+            """INSERT INTO topic_items
+               (topic_id, content_key, title, url, source_platform, source_name,
+                cover_url, summary, topic_label)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                topic_id,
+                content_key,
+                title,
+                str(item.get("url") or ""),
+                str(item.get("source_platform") or ""),
+                str(item.get("source_name") or ""),
+                str(item.get("cover_url") or ""),
+                str(item.get("summary") or ""),
+                str(item.get("topic_label") or ""),
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def get_topic_items(
+        self,
+        topic_id: int,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Return a topic's collected items, newest first."""
+        rows = self.conn.execute(
+            """SELECT * FROM topic_items
+               WHERE topic_id = ?
+               ORDER BY collected_at DESC, id DESC
+               LIMIT ? OFFSET ?""",
+            (topic_id, limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_topic_items(self, topic_id: int) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM topic_items WHERE topic_id = ?", (topic_id,)
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+    def mark_topic_collected(self, topic_id: int) -> None:
+        """Stamp last_collected_at and refresh the stored item_count."""
+        count = self.count_topic_items(topic_id)
+        self.conn.execute(
+            "UPDATE topics SET last_collected_at = CURRENT_TIMESTAMP, "
+            "item_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (count, topic_id),
+        )
+        self.conn.commit()
 
     def insert_view_history(self, item: dict[str, Any]) -> None:
         """Record a content view / click."""

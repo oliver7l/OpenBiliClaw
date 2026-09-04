@@ -4,6 +4,12 @@
 
 ---
 
+## v0.3.154: 专题系统（2026-09-04）
+
+- **专题（Topics）系统**：持续搜集用户感兴趣方向的内容，多专题并存、前端可查看。新增 `topics` / `topic_items` 两张表（`Database.create_topic` / `list_topics` / `get_topic_by_slug` / `add_topic_item` / `count_topic_items` / `mark_topic_collected`，幂等去重 `(topic_id, content_key)`），API 暴露 `GET/POST /api/topics`、`GET /api/topics/{slug}`、`POST /api/topics/{slug}/collect`，并挂载独立 `/topics` 前端页（`web/topics/index.html`）。
+- **纯 CLI 搜集通道，零浏览器**：`scripts/collect_topic.py` 支持 `bilibili`（项目自带 WBI 搜索 API）/ `rss`（feedparser）/ `pool`（匹配项目内容池与阅读库，零网络请求）/ `csdn` / `hot` / `zhihu-cli` / `xhs-cli` / `bili-cli` / `rdt-cli` 多通道；4 个用户 CLI 通道按自然日冷却，小红书额外 12h 关键词间隔与验证码熔断；搜集关键词以 `pending` 状态写回 `discovery_keywords`，挂在项目既有 discovery 管线上形成「发现→入库→匹配→回填」闭环。
+- 新增 `tests/test_topics.py`（专题 CRUD / 幂等 / 列表统计）。
+
 ## v0.3.153: 候选池目标上限放宽（2026-09-04）
 
 - **`[scheduler].pool_target_count` 允许范围从 `1..600` 放宽到 `1..6000`**：历史上限只适合 300 规模的默认候选池，专题系统 / 阅读库回填等需要更大候选池的场景会被配置校验硬拦截。`_MAX_POOL_TARGET_COUNT` 常量提升到 6000（5000 等用户可见大池仍留余量），`config.example.toml` 注释与 `docs/modules/config.md` 同步更新。新增回归测试 `test_validate_runtime_config_accepts_large_pool_target_count`（5000 放行）并更新越界用例（6001 拒绝）。
