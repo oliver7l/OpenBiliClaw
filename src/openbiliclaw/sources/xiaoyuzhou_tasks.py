@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from openbiliclaw.sources.registry import AdapterRegistry
-    from openbiliclaw.sources.protocol import SourceRecipe
     from openbiliclaw.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -33,9 +32,9 @@ async def run_xiaoyuzhou_polling(
     Returns:
         Total number of episodes fetched.
     """
-    from openbiliclaw.sources.protocol import SourceRecipe
-
     import uuid
+
+    from openbiliclaw.sources.protocol import SourceRecipe
 
     total = 0
     for sub in subscriptions:
@@ -53,9 +52,7 @@ async def run_xiaoyuzhou_polling(
         )
         adapter = adapter_registry.resolve(recipe)
         if adapter is None:
-            logger.warning(
-                "Xiaoyuzhou adapter not registered, skipping %s", feed_url
-            )
+            logger.warning("Xiaoyuzhou adapter not registered, skipping %s", feed_url)
             continue
 
         try:

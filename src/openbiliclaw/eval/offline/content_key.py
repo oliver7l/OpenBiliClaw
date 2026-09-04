@@ -9,6 +9,7 @@ Unifies content keys across the three places a piece of content appears:
 The canonical key used throughout the offline eval is ``platform:content_id``
 (e.g. ``bilibili:BV1xxx``) — lowercase platform, exact content id.
 """
+
 from __future__ import annotations
 
 import re

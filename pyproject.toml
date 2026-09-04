@@ -116,6 +116,11 @@ select = [
 "src/openbiliclaw/llm/prompts.py" = ["E501"]  # Prompt templates contain long JSON examples
 "src/openbiliclaw/llm/prompts_pipeline.py" = ["E501"]
 "scripts/*.py" = ["E501"]  # Scripts contain long prompt strings
+# Large files pending refactor/split — E501 will be addressed during restructuring
+"src/openbiliclaw/api/app.py" = ["E501"]
+"src/openbiliclaw/storage/database.py" = ["E501"]
+"src/openbiliclaw/runtime/refresh.py" = ["E501"]
+"src/openbiliclaw/cli.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -126,10 +131,11 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = [
     "aiohttp",
-    "claude_agent_sdk",
-    "claude_agent_sdk.*",
+    "aiohttp.*",
+    "feedparser",
     "playwright.*",
-    "twitter_cli",
+    "rich.*",
+    "scrapetube",
     "twitter_cli.*",
 ]
 ignore_missing_imports = true

@@ -1,4 +1,5 @@
 """Integration tests for the offline evaluation pipeline (runner + scenario)."""
+
 from __future__ import annotations
 
 from openbiliclaw.eval.offline.ground_truth import CandidateItem

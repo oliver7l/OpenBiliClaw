@@ -11,6 +11,7 @@ Two sides:
 Time slicing: when ``eval_after`` is set, only behavior strictly after that
 timestamp counts as positive evidence; this is the M2 leakage guard.
 """
+
 from __future__ import annotations
 
 import sqlite3

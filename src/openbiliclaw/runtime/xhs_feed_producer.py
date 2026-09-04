@@ -14,8 +14,8 @@ import re
 import sqlite3
 import subprocess
 import time
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _last_fetch_time(conn: sqlite3.Connection) -> datetime | None:
     return None
 
 
-def _fetch_feed() -> list[dict]:
+def _fetch_feed() -> list[dict[str, Any]]:
     """Call ``xhs feed --json`` and return the parsed items."""
     result = subprocess.run(
         FEED_CMD,
@@ -108,10 +108,10 @@ def _parse_likes(raw: str) -> int:
     return 0
 
 
-def _parse_items(items: list[dict]) -> list[dict]:
+def _parse_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Extract fields from feed items into content_cache-compatible rows."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in items:
         note_id = str(item.get("id", "")).strip()
@@ -138,23 +138,25 @@ def _parse_items(items: list[dict]) -> list[dict]:
             f"?xsec_token={xsec_token}&xsec_source=pc_feed"
         )
 
-        rows.append({
-            "bvid": note_id,
-            "title": title,
-            "up_name": author,
-            "author_name": author,
-            "content_url": content_url,
-            "source_platform": "xiaohongshu",
-            "source": "xhs-feed",
-            "content_type": "note",
-            "pool_status": "fresh",
-            "like_count": likes,
-            "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        rows.append(
+            {
+                "bvid": note_id,
+                "title": title,
+                "up_name": author,
+                "author_name": author,
+                "content_url": content_url,
+                "source_platform": "xiaohongshu",
+                "source": "xhs-feed",
+                "content_type": "note",
+                "pool_status": "fresh",
+                "like_count": likes,
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
     inserted = 0
     for row in rows:
@@ -166,9 +168,16 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
                     like_count, discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["content_url"], row["source_platform"], row["source"],
-                    row["content_type"], row["pool_status"], row["like_count"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["content_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["like_count"],
                     row["discovered_at"],
                 ),
             )
@@ -179,7 +188,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return inserted
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     items = _fetch_feed()
     if not items:

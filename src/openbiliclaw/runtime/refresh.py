@@ -387,9 +387,7 @@ class ContinuousRefreshController:
     # by ``get_loop_health`` (the /api/observability 运行时健康 tab). Keys are
     # stable loop names; values carry the task handle, display label, expected
     # interval and the last "still alive" probe timestamp.
-    _loop_meta: dict[str, dict[str, object]] = field(
-        default_factory=dict, init=False, repr=False
-    )
+    _loop_meta: dict[str, dict[str, object]] = field(default_factory=dict, init=False, repr=False)
 
     _signal_event_types = [
         "view",
@@ -1058,23 +1056,86 @@ class ContinuousRefreshController:
                 with suppress(Exception):
                     bind_soul(self.soul_engine)
         tasks = [
-            self._spawn_loop("refresh", "发现刷新", self.check_interval_seconds, self._loop_refresh()),
-            self._spawn_loop("pool_precompute", "池子预计算", self.check_interval_seconds, self._loop_pool_precompute()),
-            self._spawn_loop("candidate_eval", "候选评估", self.check_interval_seconds, self._loop_candidate_eval()),
-            self._spawn_loop("soul_pipeline", "灵魂管道", self.check_interval_seconds, self._loop_soul_pipeline()),
-            self._spawn_loop("bilibili_producer", "B站内容生产", self.check_interval_seconds, self._loop_bilibili_producer()),
-            self._spawn_loop("xhs_producer", "小红书内容生产", self.check_interval_seconds, self._loop_xhs_producer()),
-            self._spawn_loop("douyin_producer", "抖音内容生产", self.check_interval_seconds, self._loop_douyin_producer()),
-            self._spawn_loop("youtube_producer", "YouTube内容生产", self.check_interval_seconds, self._loop_youtube_producer()),
-            self._spawn_loop("x_producer", "X内容生产", self.check_interval_seconds, self._loop_x_producer()),
-            self._spawn_loop("zhihu_producer", "知乎内容生产", self.check_interval_seconds, self._loop_zhihu_producer()),
+            self._spawn_loop(
+                "refresh", "发现刷新", self.check_interval_seconds, self._loop_refresh()
+            ),
+            self._spawn_loop(
+                "pool_precompute",
+                "池子预计算",
+                self.check_interval_seconds,
+                self._loop_pool_precompute(),
+            ),
+            self._spawn_loop(
+                "candidate_eval",
+                "候选评估",
+                self.check_interval_seconds,
+                self._loop_candidate_eval(),
+            ),
+            self._spawn_loop(
+                "soul_pipeline", "灵魂管道", self.check_interval_seconds, self._loop_soul_pipeline()
+            ),
+            self._spawn_loop(
+                "bilibili_producer",
+                "B站内容生产",
+                self.check_interval_seconds,
+                self._loop_bilibili_producer(),
+            ),
+            self._spawn_loop(
+                "xhs_producer",
+                "小红书内容生产",
+                self.check_interval_seconds,
+                self._loop_xhs_producer(),
+            ),
+            self._spawn_loop(
+                "douyin_producer",
+                "抖音内容生产",
+                self.check_interval_seconds,
+                self._loop_douyin_producer(),
+            ),
+            self._spawn_loop(
+                "youtube_producer",
+                "YouTube内容生产",
+                self.check_interval_seconds,
+                self._loop_youtube_producer(),
+            ),
+            self._spawn_loop(
+                "x_producer", "X内容生产", self.check_interval_seconds, self._loop_x_producer()
+            ),
+            self._spawn_loop(
+                "zhihu_producer",
+                "知乎内容生产",
+                self.check_interval_seconds,
+                self._loop_zhihu_producer(),
+            ),
             self._spawn_loop("rss_polling", "RSS轮询", 3600, self._loop_rss_polling()),
-            self._spawn_loop("xiaoyuzhou_polling", "小宇宙轮询", 7200, self._loop_xiaoyuzhou_polling()),
+            self._spawn_loop(
+                "xiaoyuzhou_polling", "小宇宙轮询", 7200, self._loop_xiaoyuzhou_polling()
+            ),
             self._spawn_loop("wechat_polling", "公众号轮询", 7200, self._loop_wechat_polling()),
-            self._spawn_loop("proactive_push", "主动推送", self.proactive_push_interval_seconds, self._loop_proactive_push()),
-            self._spawn_loop("keyword_planner", "关键词规划", int(getattr(self.keyword_planner, "poll_seconds", 120) or 120), self._loop_keyword_planner()),
-            self._spawn_loop("image_cache_cleanup", "图片缓存清理", _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS, self._loop_image_cache_cleanup()),
-            self._spawn_loop("cover_prefetch", "封面预取", _COVER_PREFETCH_INTERVAL_SECONDS, self._loop_cover_prefetch()),
+            self._spawn_loop(
+                "proactive_push",
+                "主动推送",
+                self.proactive_push_interval_seconds,
+                self._loop_proactive_push(),
+            ),
+            self._spawn_loop(
+                "keyword_planner",
+                "关键词规划",
+                int(getattr(self.keyword_planner, "poll_seconds", 120) or 120),
+                self._loop_keyword_planner(),
+            ),
+            self._spawn_loop(
+                "image_cache_cleanup",
+                "图片缓存清理",
+                _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS,
+                self._loop_image_cache_cleanup(),
+            ),
+            self._spawn_loop(
+                "cover_prefetch",
+                "封面预取",
+                _COVER_PREFETCH_INTERVAL_SECONDS,
+                self._loop_cover_prefetch(),
+            ),
         ]
         try:
             await asyncio.gather(*tasks)
@@ -1090,9 +1151,7 @@ class ContinuousRefreshController:
         interval_seconds: int,
         loop_coro: Any,
     ) -> asyncio.Task[None]:
-        return asyncio.ensure_future(
-            self._supervise_loop(name, label, interval_seconds, loop_coro)
-        )
+        return asyncio.ensure_future(self._supervise_loop(name, label, interval_seconds, loop_coro))
 
     async def _supervise_loop(
         self,
@@ -1110,10 +1169,8 @@ class ContinuousRefreshController:
         300s so even 2-6h loops report recent liveness.
         """
         task = asyncio.ensure_future(loop_coro)
-        try:
+        with suppress(AttributeError, RuntimeError):
             task.set_name(f"loop:{name}")
-        except (AttributeError, RuntimeError):
-            pass
         interval = max(1, int(interval_seconds))
         self._loop_meta[name] = {
             "label": label,
@@ -1124,9 +1181,7 @@ class ContinuousRefreshController:
         probe = min(interval, 300)
         try:
             while not task.done():
-                self._loop_meta[name]["last_tick_at"] = (
-                    datetime.now().isoformat(timespec="seconds")
-                )
+                self._loop_meta[name]["last_tick_at"] = datetime.now().isoformat(timespec="seconds")
                 await asyncio.wait({task}, timeout=probe)
         except asyncio.CancelledError:
             task.cancel()
@@ -1444,9 +1499,7 @@ class ContinuousRefreshController:
         Runs on a fixed 2-hour interval.
         """
         while True:
-            subscriptions = getattr(
-                self.scheduler_config, "xiaoyuzhou_subscriptions", []
-            )
+            subscriptions = getattr(self.scheduler_config, "xiaoyuzhou_subscriptions", [])
             if subscriptions and self.rss_adapter_registry is not None:
                 from openbiliclaw.sources.xiaoyuzhou_tasks import (
                     run_xiaoyuzhou_polling,
@@ -1467,9 +1520,7 @@ class ContinuousRefreshController:
         Runs on a fixed 2-hour interval.
         """
         while True:
-            subscriptions = getattr(
-                self.scheduler_config, "wechat_subscriptions", []
-            )
+            subscriptions = getattr(self.scheduler_config, "wechat_subscriptions", [])
             if subscriptions and self.rss_adapter_registry is not None:
                 from openbiliclaw.sources.wechat_tasks import (
                     run_wechat_polling,
@@ -2208,9 +2259,7 @@ class ContinuousRefreshController:
             # the persistent soul/preference layers by the cognition watermark,
             # so pruning them by age loses no profiling signal. Runs on this
             # background loop, never the request loop.
-            _events_retention = int(
-                getattr(self.scheduler_config, "events_retention_days", 0) or 0
-            )
+            _events_retention = int(getattr(self.scheduler_config, "events_retention_days", 0) or 0)
             if _events_retention > 0:
                 try:
                     self.database.prune_events_by_retention(retention_days=_events_retention)

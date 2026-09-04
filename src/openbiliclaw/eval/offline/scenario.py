@@ -5,6 +5,7 @@ mixed list of liked + not-liked items drawn from the real candidate pool and
 ``labels`` marks which are genuinely liked. The engine ranks ``candidates``
 and we compare against ``labels``.
 """
+
 from __future__ import annotations
 
 import random

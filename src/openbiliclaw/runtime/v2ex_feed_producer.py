@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sqlite3
 import time
 import urllib.request
 from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,16 @@ INTERVAL_HOURS = 24
 # 与 youtube 不同：v2ex 失败时会抛 urlopen error 而不是静默返回 0，
 # 已经写进 error log，不会像 youtube 那样伪装成功。
 _DEFAULT_OPENER = urllib.request.build_opener()
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 API_LATEST = "https://www.v2ex.com/api/topics/latest.json"
 API_HOT = "https://www.v2ex.com/api/topics/hot.json"
 
 
-def _fetch_json(url: str) -> list[dict]:
+def _fetch_json(url: str) -> list[dict[str, Any]]:
     """Fetch a V2EX API endpoint and return the parsed JSON array."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
@@ -42,10 +45,10 @@ def _fetch_json(url: str) -> list[dict]:
         return []
 
 
-def _parse_topics(topics: list[dict], source: str) -> list[dict]:
+def _parse_topics(topics: list[dict[str, Any]], source: str) -> list[dict[str, Any]]:
     """Extract fields from V2EX topic list into content_cache-compatible rows."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for topic in topics:
         tid = str(topic.get("id", "")).strip()
@@ -62,37 +65,38 @@ def _parse_topics(topics: list[dict], source: str) -> list[dict]:
         member = topic.get("member", {}) or {}
         node = topic.get("node", {}) or {}
         node_name = str(node.get("name", "") or "").strip()
-        node_title = str(node.get("title", "") or "").strip()
 
         content_url = f"https://www.v2ex.com/t/{tid}"
         replies = int(topic.get("replies", 0) or 0)
-        created = int(topic.get("created", 0) or 0)
         body_plain = str(topic.get("content_rendered", "") or "").strip()
         # Remove HTML tags for plain text
         body_text = ""
         if body_plain:
             import re
+
             body_text = re.sub(r"<[^>]+>", "", body_plain)[:500]
 
-        rows.append({
-            "bvid": tid,
-            "title": title,
-            "up_name": str(member.get("username", "") or "").strip(),
-            "author_name": str(member.get("username", "") or "").strip(),
-            "content_url": content_url,
-            "source_platform": "v2ex",
-            "source": source,
-            "content_type": "article",
-            "pool_status": "fresh",
-            "like_count": replies,
-            "topic_group": node_name,
-            "body_text": body_text,
-            "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        rows.append(
+            {
+                "bvid": tid,
+                "title": title,
+                "up_name": str(member.get("username", "") or "").strip(),
+                "author_name": str(member.get("username", "") or "").strip(),
+                "content_url": content_url,
+                "source_platform": "v2ex",
+                "source": source,
+                "content_type": "article",
+                "pool_status": "fresh",
+                "like_count": replies,
+                "topic_group": node_name,
+                "body_text": body_text,
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
     inserted = 0
     for row in rows:
@@ -104,10 +108,19 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
                     like_count, topic_group, body_text, discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["content_url"], row["source_platform"], row["source"],
-                    row["content_type"], row["pool_status"], row["like_count"],
-                    row["topic_group"], row["body_text"], row["discovered_at"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["content_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["like_count"],
+                    row["topic_group"],
+                    row["body_text"],
+                    row["discovered_at"],
                 ),
             )
             if cursor.rowcount > 0:
@@ -117,7 +130,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return inserted
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     # Fetch latest topics
     latest_topics = _fetch_json(API_LATEST)
@@ -132,8 +145,8 @@ def _run_once() -> dict:
         return {"ok": False, "reason": "no_data", "items_fetched": 0, "inserted": 0}
 
     # Deduplicate by bvid
-    seen: set = set()
-    deduped: list[dict] = []
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
     for row in all_rows:
         if row["bvid"] not in seen:
             seen.add(row["bvid"])

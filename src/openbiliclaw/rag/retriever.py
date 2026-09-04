@@ -93,7 +93,10 @@ def _load_embed_config() -> dict[str, Any]:
 class ArticleRagRetriever:
     """Lazy, in-memory retriever over ``article_rag.db``."""
 
-    def __init__(self, rag_db_path: Path | None = None, embed_cfg: dict | None = None) -> None:
+    def __init__(
+        self, rag_db_path: Path | None = None,
+        embed_cfg: dict[str, Any] | None = None,
+    ) -> None:
         self._rag_db = Path(rag_db_path or _RAG_DB_PATH)
         self._embed = embed_cfg or _load_embed_config()
         self._dim = int(self._embed.get("output_dimensionality") or 1024)

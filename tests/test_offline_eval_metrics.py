@@ -1,4 +1,5 @@
 """Tests for offline evaluation metrics and pipeline primitives."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,6 +12,7 @@ from openbiliclaw.eval.offline.content_key import (
 from openbiliclaw.eval.offline.metrics import auc, hr_at_k, mrr, ndcg_at_k, topic_ils
 
 # ── content_key ─────────────────────────────────────────────────────────
+
 
 def test_normalize_bvid_forms():
     assert normalize_bvid("BV1HK3w6TEBm") == "BV1HK3w6TEBm"
@@ -26,7 +28,9 @@ def test_content_key_from_url():
         == "bilibili:BV1HK3w6TEBm"
     )
     assert (
-        content_key_from_url("https://www.xiaohongshu.com/explore/6a71d55d000000002201257f?xsec_token=abc")
+        content_key_from_url(
+            "https://www.xiaohongshu.com/explore/6a71d55d000000002201257f?xsec_token=abc"
+        )
         == "xiaohongshu:6a71d55d000000002201257f"
     )
 
@@ -38,6 +42,7 @@ def test_to_content_key():
 
 
 # ── ranking metrics ─────────────────────────────────────────────────────
+
 
 def test_hr_at_k():
     assert hr_at_k([1, 0, 0], k=1) == 1.0
@@ -79,6 +84,7 @@ def test_auc():
 
 
 # ── diversity ───────────────────────────────────────────────────────────
+
 
 def test_topic_ils():
     assert topic_ils(["a", "a", "b"]) == pytest.approx(1 / 3)

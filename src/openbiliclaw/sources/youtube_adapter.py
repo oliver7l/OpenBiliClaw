@@ -17,7 +17,7 @@ import asyncio
 import logging
 import re
 import subprocess
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from openbiliclaw.discovery.engine import DiscoveredContent
@@ -65,11 +65,15 @@ async def _run_ytdlp(url: str, *, timeout: int = 60) -> list[str]:
     """Run yt-dlp and return output lines (async)."""
     cmd = [
         _YT_DLP_CMD,
-        "--cookies-from-browser", "chrome",
-        "--print", "%(title)s|%(uploader)s|%(view_count)s|%(webpage_url)s",
+        "--cookies-from-browser",
+        "chrome",
+        "--print",
+        "%(title)s|%(uploader)s|%(view_count)s|%(webpage_url)s",
         "--flat-playlist",
-        "--min-sleep-interval", "1",
-        "--max-sleep-interval", "3",
+        "--min-sleep-interval",
+        "1",
+        "--max-sleep-interval",
+        "3",
         url,
     ]
     try:
@@ -85,7 +89,7 @@ async def _run_ytdlp(url: str, *, timeout: int = 60) -> list[str]:
             return []
         text = stdout.decode("utf-8", errors="replace")
         return [line for line in text.split("\n") if line.strip()]
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("yt-dlp timed out after %ds for %s", timeout, url)
         return []
     except FileNotFoundError:
@@ -157,6 +161,8 @@ class YtDlpAdapter:
 
         logger.info(
             "YtDlpAdapter: fetched %d/%d items from youtube/%s",
-            len(items), len(lines), strategy,
+            len(items),
+            len(lines),
+            strategy,
         )
         return items

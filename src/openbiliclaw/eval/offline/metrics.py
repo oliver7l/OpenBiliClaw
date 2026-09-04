@@ -4,6 +4,7 @@ All functions are pure and unit-testable. Input convention:
 ``ranked_labels`` is a list of 0/1 in the order the engine ranked them
 (a 1 means "user genuinely liked / consumed this item").
 """
+
 from __future__ import annotations
 
 import math
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # ── Ranking (relevance) metrics ────────────────────────────────────────
+
 
 def hr_at_k(ranked_labels: Sequence[int], k: int) -> float:
     """HitRate@K: did the engine surface at least one liked item in top-K."""
@@ -25,7 +27,7 @@ def _dcg(rels: Sequence[float], k: int | None = None) -> float:
     k = min(k or len(rels), len(rels))
     s = 0.0
     for i, r in enumerate(rels[:k], start=1):
-        s += (2.0 ** r - 1.0) / math.log2(i + 1)
+        s += (2.0**r - 1.0) / math.log2(i + 1)
     return s
 
 
@@ -81,6 +83,7 @@ def auc(labels: Sequence[int], scores: Sequence[float]) -> float:
 
 
 # ── Diversity / coverage metrics (deterministic, embedding-free) ───────
+
 
 def topic_coverage(topics: Sequence[str]) -> int:
     """Number of distinct topic groups covered by a ranked list."""

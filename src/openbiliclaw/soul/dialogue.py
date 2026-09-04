@@ -67,9 +67,7 @@ class SocraticDialogue:
         self._tool_dispatcher = tool_dispatcher
         self._module_overrides = dict(module_overrides) if module_overrides is not None else None
 
-    async def respond(
-        self, user_message: str, *, retrieval_context: str | None = None
-    ) -> str:
+    async def respond(self, user_message: str, *, retrieval_context: str | None = None) -> str:
         """Generate a Socratic response to a user message.
 
         The response should:

@@ -4,6 +4,7 @@ Produces a machine-readable JSON blob and a human-readable Markdown report
 with mean ± std for every method, plus an explicit disclosure of the
 evaluation assumptions.
 """
+
 from __future__ import annotations
 
 import json
@@ -53,24 +54,19 @@ def render_markdown(
     lines.append(sep)
     for key in all_keys:
         row = f"| {key} | "
-        row += " | ".join(
-            _fmt_pair(methods[method]["metrics"], key) for method in methods
-        )
+        row += " | ".join(_fmt_pair(methods[method]["metrics"], key) for method in methods)
         row += " |"
         lines.append(row)
     lines.append("")
     lines.append("## 口径说明")
     lines.append("")
-    lines.append(
-        "- **范式**：隐式反馈偏好预测评估（无曝光-点击数据，故不使用 CTR）。"
-    )
+    lines.append("- **范式**：隐式反馈偏好预测评估（无曝光-点击数据，故不使用 CTR）。")
     lines.append(
         "- **正样本**：events 中 favorite/like/article_finished/view 行为对应的候选池内容"
         "（强信号优先）。"
     )
     lines.append(
-        "- **负样本**：候选池中用户未消费的内容"
-        "（`未消费 ≠ 不喜欢` 的选择偏差已在设计中披露）。"
+        "- **负样本**：候选池中用户未消费的内容（`未消费 ≠ 不喜欢` 的选择偏差已在设计中披露）。"
     )
     lines.append(
         "- **评估单元**：每个单元 = 用户画像快照 + 采样候选集（正+负），"

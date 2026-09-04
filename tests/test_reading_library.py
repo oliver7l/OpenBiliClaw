@@ -19,8 +19,12 @@ def _make_db() -> tuple[Database, Path]:
     db = Database(tmp)
     db.initialize()
     db.upsert_article(
-        "rss", "观察站", "测试文章标题", "https://example.com/1",
-        author="作者A", summary="摘要",
+        "rss",
+        "观察站",
+        "测试文章标题",
+        "https://example.com/1",
+        author="作者A",
+        summary="摘要",
         content_text="正文内容。" * 40,
         tags=["科技", "AI"],
     )
@@ -146,8 +150,7 @@ def test_hidden_article_is_excluded_from_default_views() -> None:
     assert db.count_articles() == 0
     assert db.search_articles(q="测试文章标题") == []
     facets = db.conn.execute(
-        "SELECT COUNT(*) AS n FROM articles "
-        "WHERE COALESCE(status, 'unread') != 'hidden'"
+        "SELECT COUNT(*) AS n FROM articles WHERE COALESCE(status, 'unread') != 'hidden'"
     ).fetchone()
     assert int(facets["n"]) == 0
 
@@ -164,8 +167,13 @@ def test_hidden_survives_resync_of_same_url() -> None:
     db.update_article_status(aid, "hidden")
 
     db.upsert_article(
-        "rss", "观察站", "测试文章标题（更新）", "https://example.com/1",
-        author="作者A", summary="新摘要", content_text="新正文。" * 40,
+        "rss",
+        "观察站",
+        "测试文章标题（更新）",
+        "https://example.com/1",
+        author="作者A",
+        summary="新摘要",
+        content_text="新正文。" * 40,
         tags=["科技"],
     )
     assert db.get_article(aid)["status"] == "hidden"
@@ -189,17 +197,22 @@ def test_blocking_article_suppresses_matching_pool_rows() -> None:
     """屏蔽文章时同步清洗候选池：同一 content_url 的 fresh 行被抑制，
     其它 URL 与已展示的历史行不受影响。"""
     db, _ = _make_db()
-    aid = _first_article_id(db)  # url = https://example.com/1
     db.cache_content(
-        "BV1P", title="池内同文", source="rss_polling",
+        "BV1P",
+        title="池内同文",
+        source="rss_polling",
         content_url="https://example.com/1",
     )
     db.cache_content(
-        "BV2P", title="池内无关", source="rss_polling",
+        "BV2P",
+        title="池内无关",
+        source="rss_polling",
         content_url="https://example.com/other",
     )
     db.cache_content(
-        "BV3P", title="池内同文已展示", source="search",
+        "BV3P",
+        title="池内同文已展示",
+        source="search",
         content_url="https://example.com/1",
     )
     db.conn.execute(
@@ -227,7 +240,9 @@ def test_unblocking_article_revives_suppressed_pool_rows() -> None:
     db, _ = _make_db()
     aid = _first_article_id(db)
     db.cache_content(
-        "BV1P", title="池内同文", source="rss_polling",
+        "BV1P",
+        title="池内同文",
+        source="rss_polling",
         content_url="https://example.com/1",
     )
     assert db.suppress_pool_rows_by_url("https://example.com/1") == 1
@@ -235,9 +250,7 @@ def test_unblocking_article_revives_suppressed_pool_rows() -> None:
     assert db.update_article_status(aid, "unread") is True  # 管理视图「恢复」
 
     assert db.revive_suppressed_pool_rows_by_url("https://example.com/1") == 1
-    row = db.conn.execute(
-        "SELECT pool_status FROM content_cache WHERE bvid = 'BV1P'"
-    ).fetchone()
+    row = db.conn.execute("SELECT pool_status FROM content_cache WHERE bvid = 'BV1P'").fetchone()
     assert row["pool_status"] == "fresh"
 
 
@@ -263,19 +276,19 @@ def test_daily_reading_summary_excludes_other_days_and_statuses() -> None:
 
     db, _ = _make_db()
     db.upsert_article(
-        "zhihu", "知乎", "昨天的文章", "https://example.com/2",
-        author="作者B", tags=["历史"],
+        "zhihu",
+        "知乎",
+        "昨天的文章",
+        "https://example.com/2",
+        author="作者B",
+        tags=["历史"],
     )
-    row2 = db.conn.execute(
-        "SELECT id FROM articles WHERE url = 'https://example.com/2'"
-    ).fetchone()
+    row2 = db.conn.execute("SELECT id FROM articles WHERE url = 'https://example.com/2'").fetchone()
     aid2 = int(row2["id"])
 
     assert db.update_article_status(aid2, "finished") is True
     # 第二篇拨回昨天：只统计今天
-    yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime(
-        "%Y-%m-%d 00:00:00"
-    )
+    yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
     db.conn.execute("UPDATE articles SET updated_at = ? WHERE id = ?", (yesterday, aid2))
     db.conn.commit()
     # 第一篇保持 unread：不计数
@@ -302,15 +315,23 @@ def test_daily_brief_endpoint_roundtrip(tmp_path) -> None:
     db = Database(tmp_path / "api.db")
     db.initialize()
     db.upsert_article(
-        "zhihu", "知乎", "今天的文章", "https://example.com/brief",
-        author="作者C", tags=["科技", "历史"],
+        "zhihu",
+        "知乎",
+        "今天的文章",
+        "https://example.com/brief",
+        author="作者C",
+        tags=["科技", "历史"],
         content_text="正文。" * 20,
     )
     aid = int(db.conn.execute("SELECT id FROM articles").fetchone()["id"])
     assert db.update_article_status(aid, "finished") is True
     db.upsert_article(
-        "rss", "观察站", "未读好文", "https://example.com/unread",
-        tags=["科技"], content_text="另一篇正文，提到科技。" * 20,
+        "rss",
+        "观察站",
+        "未读好文",
+        "https://example.com/unread",
+        tags=["科技"],
+        content_text="另一篇正文，提到科技。" * 20,
     )
 
     import datetime

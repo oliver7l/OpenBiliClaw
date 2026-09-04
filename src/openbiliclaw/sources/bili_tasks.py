@@ -306,9 +306,9 @@ class BiliTaskQueue:
         Called automatically on every ``enqueue_with_id``; recovers orphans
         whenever the queue is next used. Returns the number of tasks expired.
         """
-        stale_before = (
-            datetime.now(UTC) - timedelta(minutes=float(stale_after_minutes))
-        ).strftime("%Y-%m-%d %H:%M:%S")
+        stale_before = (datetime.now(UTC) - timedelta(minutes=float(stale_after_minutes))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         cursor = self._db.conn.execute(
             """
             UPDATE bili_tasks

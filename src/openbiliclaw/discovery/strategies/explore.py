@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -127,9 +126,10 @@ class ExploreStrategy(DiscoveryStrategy):
             )
             return []
 
-        if self._cached_domains and (
-            time.monotonic() - self._cached_domains_at
-        ) < _EXPLORE_DOMAINS_REFRESH_HOURS * 3600:
+        if (
+            self._cached_domains
+            and (time.monotonic() - self._cached_domains_at) < _EXPLORE_DOMAINS_REFRESH_HOURS * 3600
+        ):
             domains = list(self._cached_domains)
         else:
             domains = await self._generate_domains(profile)
@@ -382,9 +382,7 @@ class ExploreStrategy(DiscoveryStrategy):
                 reasoning_effort="",
                 caller="discovery.explore.queries",
             )
-            parsed = extract_llm_json_object(
-                str(getattr(response, "content", "")).strip()
-            )
+            parsed = extract_llm_json_object(str(getattr(response, "content", "")).strip())
         except Exception:
             logger.exception("Explore domain generation failed.")
             return []

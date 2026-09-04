@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -20,19 +20,28 @@ logger = logging.getLogger(__name__)
 # IntentAgent — parse natural-language query into structured filters
 # ---------------------------------------------------------------------------
 
+
 class IntentAgent:
     """Understand user intent: extract keywords, exclude filters, platform/type constraints."""
 
     NOT_PLATFORM_MAP: dict[str, str] = {
-        "不要b站": "bilibili", "不要bilibili": "bilibili", "不要哔哩哔哩": "bilibili",
-        "不要知乎": "zhihu", "不要zhihu": "zhihu",
-        "不要小红书": "xiaohongshu", "不要xhs": "xiaohongshu",
-        "不要youtube": "youtube", "不要油管": "youtube",
+        "不要b站": "bilibili",
+        "不要bilibili": "bilibili",
+        "不要哔哩哔哩": "bilibili",
+        "不要知乎": "zhihu",
+        "不要zhihu": "zhihu",
+        "不要小红书": "xiaohongshu",
+        "不要xhs": "xiaohongshu",
+        "不要youtube": "youtube",
+        "不要油管": "youtube",
         "不要v2ex": "v2ex",
-        "不要小宇宙": "xiaoyuzhou", "不要播客": "xiaoyuzhou",
+        "不要小宇宙": "xiaoyuzhou",
+        "不要播客": "xiaoyuzhou",
     }
     NOT_TYPE_MAP: dict[str, str] = {
-        "不要视频": "video", "不要播客": "podcast", "不要音频": "podcast",
+        "不要视频": "video",
+        "不要播客": "podcast",
+        "不要音频": "podcast",
         "不要文章": "article",
     }
 
@@ -75,7 +84,9 @@ class IntentAgent:
         cleaned = re.sub(r"不要[的]?[\u4e00-\u9fff\w]{2,10}", "", cleaned).strip()
 
         # Keyword extraction from cleaned query
-        keywords = [kw for kw in re.split(r"[,\s，、]+", cleaned) if kw.strip()] if cleaned.strip() else []
+        keywords = (
+            [kw for kw in re.split(r"[,\s，、]+", cleaned) if kw.strip()] if cleaned.strip() else []
+        )
 
         return {
             "keywords": keywords,
@@ -110,6 +121,7 @@ class IntentAgent:
 # ---------------------------------------------------------------------------
 # RankAgent — scoring, hybrid weights, diversity mix
 # ---------------------------------------------------------------------------
+
 
 class RankAgent:
     """Score candidates and apply diversity mix with alpha decay."""
@@ -198,9 +210,7 @@ class RankAgent:
         if not callable(lookup):
             return {}
         try:
-            rows = db.get_interest_centroid_sources(
-                days=days, min_dwell=min_dwell
-            )
+            rows = db.get_interest_centroid_sources(days=days, min_dwell=min_dwell)
         except Exception:
             return {}
         import math
@@ -213,9 +223,7 @@ class RankAgent:
             topic = str(row.get("topic_group") or "")
             if not topic or counts.get(topic, 0) >= per_topic:
                 continue
-            text = mmr_cache_text(
-                str(row.get("title") or ""), str(row.get("description") or "")
-            )
+            text = mmr_cache_text(str(row.get("title") or ""), str(row.get("description") or ""))
             if not text:
                 continue
             vec = lookup(text)
@@ -299,13 +307,15 @@ class RankAgent:
         # --- score each item ---
         scored_items: list[dict[str, Any]] = []
         for r in rows:
-            text = " ".join([
-                str(r["title"] or ""),
-                str(r["body_text"] or "")[:200],
-                str(r["topic_group"] or ""),
-                str(r["up_name"] or ""),
-                str(r["source_platform"] or ""),
-            ])
+            text = " ".join(
+                [
+                    str(r["title"] or ""),
+                    str(r["body_text"] or "")[:200],
+                    str(r["topic_group"] or ""),
+                    str(r["up_name"] or ""),
+                    str(r["source_platform"] or ""),
+                ]
+            )
             fit = RankAgent._profile_fit_score(text, profile_keywords) if profile_keywords else 0.0
             interest_sim = 0.0
             if interest_centroids and content_embeds:
@@ -320,15 +330,17 @@ class RankAgent:
             qs = float(r["quality_score"] or 0.0)
             combined = fit * 0.6 + qs * 0.4
             domain_match = any(tag.lower() in text.lower() for tag in profile_domains)
-            scored_items.append({
-                "row": r,
-                "fit_score": fit,
-                "interest_sim": interest_sim,
-                "quality_score": qs,
-                "combined": combined,
-                "domain_match": domain_match,
-                "semantic_score": 0.0,
-            })
+            scored_items.append(
+                {
+                    "row": r,
+                    "fit_score": fit,
+                    "interest_sim": interest_sim,
+                    "quality_score": qs,
+                    "combined": combined,
+                    "domain_match": domain_match,
+                    "semantic_score": 0.0,
+                }
+            )
 
         # --- semantic re-ranking (embeddings pre-computed by the caller) ---
         if q_embed and any(q_embed) and content_embeds:
@@ -352,17 +364,11 @@ class RankAgent:
             learned = learned_scores.get(topic, 0.5)
             dwell = dwell_scores.get(topic, 0.5) if dwell_scores else 0.5
 
-            if sem > 0:  # semantic available
-                rule_combined = f * 0.5 + sem * 0.3 + qs * 0.2
-            else:
-                rule_combined = f * 0.6 + qs * 0.4
+            # semantic available when sem > 0
+            rule_combined = f * 0.5 + sem * 0.3 + qs * 0.2 if sem > 0 else f * 0.6 + qs * 0.4
 
             rule_weight = max(0.0, 1.0 - alpha - beta)
-            s["combined"] = (
-                rule_combined * rule_weight
-                + learned * alpha
-                + dwell * beta
-            )
+            s["combined"] = rule_combined * rule_weight + learned * alpha + dwell * beta
 
         # --- sort ---
         scored_items.sort(key=lambda x: x["combined"], reverse=True)
@@ -400,6 +406,7 @@ class RankAgent:
 # ---------------------------------------------------------------------------
 # InterestSyncer — dynamic interest profile updates from feedback
 # ---------------------------------------------------------------------------
+
 
 class InterestSyncer:
     """Sync user_feedback into soul_profile interest weights."""
@@ -448,19 +455,26 @@ class InterestSyncer:
                     if topic in feedback_weights:
                         # Blend: 70% existing + 30% feedback
                         existing_weight = float(entry.get("weight", 0.5))
-                        entry["weight"] = round(existing_weight * 0.7 + feedback_weights[topic] * 0.3, 2)
+                        blended = existing_weight * 0.7 + feedback_weights[topic] * 0.3
+                        entry["weight"] = round(blended, 2)
 
                 # Add new topics from feedback if not already in profile
                 existing_domains = {e.get("domain", "") for e in existing}
                 for topic, weight in feedback_weights.items():
                     if topic not in existing_domains and weight >= 0.5:
-                        existing.append({
-                            "domain": topic,
-                            "weight": round(weight, 2),
-                            "specifics": [],
-                        })
+                        existing.append(
+                            {
+                                "domain": topic,
+                                "weight": round(weight, 2),
+                                "specifics": [],
+                            }
+                        )
 
-                profile_file.write_text(json.dumps(profile, ensure_ascii=False, indent=2), "utf-8")
-                logger.info("Interest synced from feedback: %d topics updated", len(feedback_weights))
+                profile_json = json.dumps(profile, ensure_ascii=False, indent=2)
+                profile_file.write_text(profile_json, "utf-8")
+                logger.info(
+                    "Interest synced from feedback: %d topics updated",
+                    len(feedback_weights),
+                )
         except Exception as exc:
             logger.warning("Interest sync failed: %s", exc)

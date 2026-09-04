@@ -57,15 +57,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import re
 import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +121,10 @@ def _looks_like_challenge(payload: bytes | str) -> bool:
     head = payload[:2000].lower()
     return any(m in head for m in _CF_MARKERS)
 
+
 # Toggled by --dry-run; when True we fetch/parse but skip all DB writes.
 _DRY_RUN = False
+
 
 # --------------------------------------------------------------------------- #
 # Discovery (shell out to the user's v2ex CLI)
@@ -154,9 +154,11 @@ def _run_cli_topics(command: str, limit: int) -> tuple[str | None, bool]:
         # The CLI prints its error on stdout ("Error fetching topics: ...")
         # as well as stderr, so inspect both when classifying the failure.
         blob = f"{proc.stdout or ''}\n{proc.stderr or ''}"
-        lines = [l for l in blob.strip().splitlines()
-                 if "UserWarning" not in l and "parser =" not in l
-                 and "self.parse_args" not in l]
+        lines = [
+            ln
+            for ln in blob.strip().splitlines()
+            if "UserWarning" not in ln and "parser =" not in ln and "self.parse_args" not in ln
+        ]
         detail = " | ".join(lines[-3:]) or "no output"
         lowered = blob.lower()
         if any(m in lowered for m in _CLI_FORBIDDEN_MARKERS):
@@ -164,15 +166,16 @@ def _run_cli_topics(command: str, limit: int) -> tuple[str | None, bool]:
             logger.warning(
                 "v2ex topics %s: platform risk-control detected "
                 "(Cloudflare challenge) - backing off, NOT retrying: %s",
-                command, detail)
+                command,
+                detail,
+            )
             return None, True
-        logger.error("v2ex topics %s failed (rc=%d): %s",
-                     command, proc.returncode, detail)
+        logger.error("v2ex topics %s failed (rc=%d): %s", command, proc.returncode, detail)
         return None, False
     return proc.stdout or "", False
 
 
-def _parse_topics_table(text: str) -> list[dict]:
+def _parse_topics_table(text: str) -> list[dict[str, Any]]:
     """Parse a rich table from ``v2ex topics latest/hot`` into row dicts.
 
     Robust to the real-world output, which differs from the source's
@@ -185,8 +188,8 @@ def _parse_topics_table(text: str) -> list[dict]:
         ``/nodes/{node}/topics`` omits the member field), so we must accept
         a blank author and rely on legacy-API enrichment later.
     """
-    rows: list[dict] = []
-    current: dict | None = None
+    rows: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
     for raw in text.splitlines():
         line = raw.rstrip("\n")
         # Data rows start with the single vertical box char; header uses
@@ -198,9 +201,7 @@ def _parse_topics_table(text: str) -> list[dict]:
         # cells[-1] is empty (after last │). Need at least 6 parts.
         if len(cells) < 6:
             continue
-        cid, title, author, replies, ttime = (
-            cells[1], cells[2], cells[3], cells[4], cells[5]
-        )
+        cid, title, author, replies, ttime = (cells[1], cells[2], cells[3], cells[4], cells[5])
         if cid and cid.isdigit():
             if current:
                 rows.append(current)
@@ -219,7 +220,7 @@ def _parse_topics_table(text: str) -> list[dict]:
     if current:
         rows.append(current)
 
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for r in rows:
         if not r["id"].isdigit():  # skip any non-data row
             continue
@@ -227,21 +228,23 @@ def _parse_topics_table(text: str) -> list[dict]:
             replies = int(r["replies"]) if str(r["replies"]).isdigit() else 0
         except (ValueError, TypeError):
             replies = 0
-        out.append({
-            "id": r["id"],
-            "title": r["title"].replace("\n", " ").strip(),
-            "author": (r["author"] or "").strip(),
-            "replies": replies,
-        })
+        out.append(
+            {
+                "id": r["id"],
+                "title": r["title"].replace("\n", " ").strip(),
+                "author": (r["author"] or "").strip(),
+                "replies": replies,
+            }
+        )
     return out
 
 
-def _discover(limit: int) -> tuple[list[dict], str, bool]:
+def _discover(limit: int) -> tuple[list[dict[str, Any]], str, bool]:
     """Discover new V2EX topics via the CLI.
 
     Returns ``(rows, status, risk_control)``.
     """
-    all_rows: list[dict] = []
+    all_rows: list[dict[str, Any]] = []
     ok_any = False
     risk_control = False
     for command, source in (("latest", "v2ex-cli-latest"), ("hot", "v2ex-cli-hot")):
@@ -260,24 +263,21 @@ def _discover(limit: int) -> tuple[list[dict], str, bool]:
 
     # Dedupe by topic id, keeping the first occurrence.
     seen: set[str] = set()
-    deduped: list[dict] = []
+    deduped: list[dict[str, Any]] = []
     for r in all_rows:
         if r["id"] in seen:
             continue
         seen.add(r["id"])
         deduped.append(r)
 
-    if risk_control:
-        status = "risk_control"
-    else:
-        status = "ok" if ok_any else "cli_failed"
+    status = "risk_control" if risk_control else "ok" if ok_any else "cli_failed"
     return deduped, status, risk_control
 
 
 # --------------------------------------------------------------------------- #
 # Enrichment (legacy public API -> full body)
 # --------------------------------------------------------------------------- #
-def _fetch_topic_body(topic_id: str) -> tuple[dict | None, bool]:
+def _fetch_topic_body(topic_id: str) -> tuple[dict[str, Any] | None, bool]:
     """Fetch full topic via legacy API.
 
     Returns ``(normalized_dict_or_None, risk_control)``. A Cloudflare
@@ -293,27 +293,33 @@ def _fetch_topic_body(topic_id: str) -> tuple[dict | None, bool]:
         # V2EX returns 403 for the Cloudflare challenge; any other HTTP error
         # is a normal per-topic failure (deleted topic, etc).
         if exc.code == 403:
-            logger.warning("v2ex legacy t/%s: 403 (Cloudflare challenge) - "
-                           "risk control, aborting enrichment", topic_id)
+            logger.warning(
+                "v2ex legacy t/%s: 403 (Cloudflare challenge) - risk control, aborting enrichment",
+                topic_id,
+            )
             return None, True
         try:
             if _looks_like_challenge(exc.read(2000)):
-                logger.warning("v2ex legacy t/%s: challenge page on HTTP %s - "
-                               "risk control, aborting enrichment",
-                               topic_id, exc.code)
+                logger.warning(
+                    "v2ex legacy t/%s: challenge page on HTTP %s - "
+                    "risk control, aborting enrichment",
+                    topic_id,
+                    exc.code,
+                )
                 return None, True
         except Exception:
             pass
-        logger.warning("v2ex legacy fetch failed for t/%s: HTTP %s",
-                       topic_id, exc.code)
+        logger.warning("v2ex legacy fetch failed for t/%s: HTTP %s", topic_id, exc.code)
         return None, False
     except Exception as exc:  # network errors -> degrade gracefully
         logger.warning("v2ex legacy fetch failed for t/%s: %s", topic_id, exc)
         return None, False
 
     if _looks_like_challenge(raw):
-        logger.warning("v2ex legacy t/%s: challenge page instead of JSON - "
-                       "risk control, aborting enrichment", topic_id)
+        logger.warning(
+            "v2ex legacy t/%s: challenge page instead of JSON - risk control, aborting enrichment",
+            topic_id,
+        )
         return None, True
 
     try:
@@ -332,8 +338,7 @@ def _fetch_topic_body(topic_id: str) -> tuple[dict | None, bool]:
     node = data.get("node") or {}
     created = data.get("created") or data.get("last_modified") or 0
     try:
-        published_at = datetime.fromtimestamp(int(created), tz=timezone.utc) \
-            .strftime("%Y-%m-%d %H:%M:%S")
+        published_at = datetime.fromtimestamp(int(created), tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError, OSError):
         published_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -350,7 +355,7 @@ def _fetch_topic_body(topic_id: str) -> tuple[dict | None, bool]:
 # --------------------------------------------------------------------------- #
 # Persistence
 # --------------------------------------------------------------------------- #
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int, int]:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> tuple[int, int, int]:
     """Insert rows into content_cache (pool) + articles (library).
 
     Returns (cache_inserted, cache_skipped, articles_inserted).
@@ -377,9 +382,17 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int, 
                     discovered_at, body_text
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    tid, title, author, author, url,
-                    "v2ex", row.get("source", "v2ex-cli"), "thread", "fresh",
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), body,
+                    tid,
+                    title,
+                    author,
+                    author,
+                    url,
+                    "v2ex",
+                    row.get("source", "v2ex-cli"),
+                    "thread",
+                    "fresh",
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    body,
                 ),
             )
             if cur.rowcount > 0:
@@ -398,8 +411,14 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int, 
                         content_text, published_at, tags
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        "v2ex", "V2EX", title, url, author,
-                        body, published_at, json.dumps([node] if node else []),
+                        "v2ex",
+                        "V2EX",
+                        title,
+                        url,
+                        author,
+                        body,
+                        published_at,
+                        json.dumps([node] if node else []),
                     ),
                 )
                 if cur.rowcount > 0:
@@ -413,11 +432,17 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int, 
 # --------------------------------------------------------------------------- #
 # Cycle
 # --------------------------------------------------------------------------- #
-def _run_once(limit: int, discover_only: bool) -> dict:
+def _run_once(limit: int, discover_only: bool) -> dict[str, Any]:
     rows, status, risk_control = _discover(limit)
     if not rows:
-        return {"ok": False, "reason": status, "risk_control": risk_control,
-                "discovered": 0, "inserted": 0, "articles": 0}
+        return {
+            "ok": False,
+            "reason": status,
+            "risk_control": risk_control,
+            "discovered": 0,
+            "inserted": 0,
+            "articles": 0,
+        }
 
     # Enrich (best-effort) unless disabled. Abort the whole loop on the first
     # sign of platform risk-control so we never fan out a burst of requests
@@ -429,9 +454,12 @@ def _run_once(limit: int, discover_only: bool) -> dict:
         body_data, risky = _fetch_topic_body(r["id"])
         if risky:
             risk_control = True
-            logger.warning("risk-control hit on t/%s; aborting enrichment "
-                           "for the remaining %d topics this cycle",
-                           r["id"], len(rows) - enriched - 1)
+            logger.warning(
+                "risk-control hit on t/%s; aborting enrichment "
+                "for the remaining %d topics this cycle",
+                r["id"],
+                len(rows) - enriched - 1,
+            )
             break
         if body_data:
             r["body"] = body_data["content"]
@@ -469,14 +497,20 @@ def _run_once(limit: int, discover_only: bool) -> dict:
 
 def _main() -> None:
     parser = argparse.ArgumentParser(description="V2EX CLI-based feed producer")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Discover + parse but skip DB writes.")
-    parser.add_argument("--discover-only", action="store_true",
-                        help="Skip legacy body enrichment (title-only rows).")
-    parser.add_argument("--limit", type=int, default=DISCOVER_LIMIT,
-                        help="Topics per CLI command (latest/hot).")
-    parser.add_argument("--interval", type=int, default=INTERVAL_HOURS,
-                        help="Hours between cycles when looping.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Discover + parse but skip DB writes."
+    )
+    parser.add_argument(
+        "--discover-only",
+        action="store_true",
+        help="Skip legacy body enrichment (title-only rows).",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=DISCOVER_LIMIT, help="Topics per CLI command (latest/hot)."
+    )
+    parser.add_argument(
+        "--interval", type=int, default=INTERVAL_HOURS, help="Hours between cycles when looping."
+    )
     args = parser.parse_args()
 
     global _DRY_RUN
@@ -486,15 +520,23 @@ def _main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-    logger.info("v2ex cli producer started (cli=%s, interval=%dh, limit=%d, "
-                "dry_run=%s, discover_only=%s)",
-                _V2EX_BIN, args.interval, args.limit, _DRY_RUN, args.discover_only)
+    logger.info(
+        "v2ex cli producer started (cli=%s, interval=%dh, limit=%d, dry_run=%s, discover_only=%s)",
+        _V2EX_BIN,
+        args.interval,
+        args.limit,
+        _DRY_RUN,
+        args.discover_only,
+    )
 
     if _DRY_RUN:
         result = _run_once(args.limit, args.discover_only)
         if result["ok"]:
-            logger.info("dry-run ok: %d discovered, %d would have body",
-                        result["discovered"], result.get("would_have_body", 0))
+            logger.info(
+                "dry-run ok: %d discovered, %d would have body",
+                result["discovered"],
+                result.get("would_have_body", 0),
+            )
         else:
             logger.warning("dry-run skipped: %s", result.get("reason", "unknown"))
         return
@@ -503,10 +545,11 @@ def _main() -> None:
         result = _run_once(args.limit, args.discover_only)
         if result["ok"]:
             logger.info(
-                "feed ok: %d discovered, %d with body, %d pool new, "
-                "%d pool dup, %d articles new",
-                result["discovered"], result.get("with_body", 0),
-                result.get("cache_inserted", 0), result.get("cache_skipped", 0),
+                "feed ok: %d discovered, %d with body, %d pool new, %d pool dup, %d articles new",
+                result["discovered"],
+                result.get("with_body", 0),
+                result.get("cache_inserted", 0),
+                result.get("cache_skipped", 0),
                 result.get("articles_inserted", 0),
             )
         else:
@@ -519,7 +562,10 @@ def _main() -> None:
                 "platform risk-control detected - backing off %.0fh "
                 "(%dh x%d). Do NOT tighten this without checking the "
                 "platform rate-limit policy.",
-                sleep_hours, args.interval, RISK_BACKOFF_MULTIPLIER)
+                sleep_hours,
+                args.interval,
+                RISK_BACKOFF_MULTIPLIER,
+            )
         else:
             sleep_hours = args.interval
         time.sleep(sleep_hours * 3600)

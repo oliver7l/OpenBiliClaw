@@ -51,9 +51,9 @@ class XiaoyuzhouAdapter:
             )
             return []
 
-        from openbiliclaw.discovery.engine import DiscoveredContent
-
         import re
+
+        from openbiliclaw.discovery.engine import DiscoveredContent
 
         # Get podcast-level metadata from the feed
         podcast_cover = ""
@@ -118,9 +118,7 @@ class XiaoyuzhouAdapter:
             # Parse episode cover
             if hasattr(entry, "itunes_image") and entry.itunes_image:
                 episode_cover = (
-                    getattr(entry.itunes_image, "href", "")
-                    or entry.itunes_image
-                    or podcast_cover
+                    getattr(entry.itunes_image, "href", "") or entry.itunes_image or podcast_cover
                 )
 
             content_id = f"xyz-{hash(link) & 0xFFFFFFFF:08x}"
@@ -142,9 +140,7 @@ class XiaoyuzhouAdapter:
                 )
             )
 
-        logger.info(
-            "XiaoyuzhouAdapter: fetched %d episodes from %s", len(items), feed_name
-        )
+        logger.info("XiaoyuzhouAdapter: fetched %d episodes from %s", len(items), feed_name)
         return items
 
 

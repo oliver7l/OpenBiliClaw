@@ -235,12 +235,8 @@ class SchedulerConfig:
     rss_subscriptions: list[dict[str, str]] = field(
         default_factory=lambda: list(_DEFAULT_RSS_SUBSCRIPTIONS)
     )
-    xiaoyuzhou_subscriptions: list[dict[str, str]] = field(
-        default_factory=list
-    )
-    wechat_subscriptions: list[dict[str, str]] = field(
-        default_factory=list
-    )
+    xiaoyuzhou_subscriptions: list[dict[str, str]] = field(default_factory=list)
+    wechat_subscriptions: list[dict[str, str]] = field(default_factory=list)
     account_sync_interval_hours: int = 6
     refresh_check_interval_seconds: int = _DEFAULT_REFRESH_CHECK_INTERVAL_SECONDS
     signal_event_threshold: int = _DEFAULT_SIGNAL_EVENT_THRESHOLD
@@ -490,6 +486,7 @@ class ZhihuSourceConfig:
 @dataclass
 class V2EXSourceConfig:
     """V2EX public discovery configuration with an optional PAT."""
+
     enabled: bool = False
     username: str = ""
     access_token: str = ""
@@ -521,6 +518,7 @@ class V2EXSourceConfig:
 @dataclass
 class RedditSourceConfig:
     """Reddit discovery configuration."""
+
     enabled: bool = False
     backend: str = "rdt"
     source_modes: tuple[str, ...] = ("search", "hot", "subreddit", "related")
@@ -674,6 +672,7 @@ class ApiConfig:
 @dataclass
 class TlsProxyConfig:
     """Optional TLS reverse proxy for LAN / self-managed access."""
+
     enabled: bool = False
     port: int = 8443
     cert_dir: str = ""
@@ -988,9 +987,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
             or ("search",),
             tab_modes=tuple(
                 mode
-                for mode in _coerce_str_list(
-                    v2ex_raw.get("tab_modes", ["tech", "creative", "qna"])
-                )
+                for mode in _coerce_str_list(v2ex_raw.get("tab_modes", ["tech", "creative", "qna"]))
             )
             or ("tech",),
             node_allowlist=tuple(_coerce_str_list(v2ex_raw.get("node_allowlist", []))),
@@ -2334,15 +2331,16 @@ def _render_config_toml(
             "auto_update_allowed_remotes = "
             f"{_toml_str_list(config.scheduler.auto_update_allowed_remotes)}",
             "",
-    ])
+        ]
+    )
     # 订阅源 key 必须保持在 [scheduler] 作用域内：TOML 子表头之后的
     # 裸 key 会归属子表，因此这里要先把订阅源渲染完，再写
     # [scheduler.pool_source_shares]。
     lines.append("# RSS 订阅源列表（支持 RSSHub 等任意 RSS/Atom feed）")
     lines.append("# 示例：")
-    lines.append("#   {name = \"少数派\", url = \"https://rsshub.app/sspai/series\"}")
-    lines.append("#   {name = \"知乎日报\", url = \"https://rsshub.app/zhihu/daily\"}")
-    lines.append("#   {name = \"微信公众号\", url = \"https://rsshub.app/wechat/mp/公众号ID\"}")
+    lines.append('#   {name = "少数派", url = "https://rsshub.app/sspai/series"}')
+    lines.append('#   {name = "知乎日报", url = "https://rsshub.app/zhihu/daily"}')
+    lines.append('#   {name = "微信公众号", url = "https://rsshub.app/wechat/mp/公众号ID"}')
     if config.scheduler.rss_subscriptions:
         lines.append("rss_subscriptions = [")
         for rss in config.scheduler.rss_subscriptions:
@@ -2352,7 +2350,9 @@ def _render_config_toml(
         lines.append("rss_subscriptions = []")
     lines.append("")
     lines.append("# 小宇宙播客订阅源列表（通过 RSSHub 获取）")
-    lines.append("# 格式：{{name = \"播客名称\", url = \"https://rsshub.bestblogs.dev/xiaoyuzhou/podcast/ID\"}}")
+    lines.append(
+        '# 格式：{{name = "播客名称", url = "https://rsshub.bestblogs.dev/xiaoyuzhou/podcast/ID"}}'
+    )
     if config.scheduler.xiaoyuzhou_subscriptions:
         lines.append("xiaoyuzhou_subscriptions = [")
         for xyz in config.scheduler.xiaoyuzhou_subscriptions:
@@ -2362,7 +2362,9 @@ def _render_config_toml(
         lines.append("xiaoyuzhou_subscriptions = []")
     lines.append("")
     lines.append("# 微信公众号订阅源列表（通过 wechat2rss 等 RSS 服务获取）")
-    lines.append("# 格式：{{name = \"公众号名称\", url = \"https://wechat2rss.bestblogs.dev/feed/feed_id.xml\"}}")
+    lines.append(
+        '# 格式：{{name = "公众号名称", url = "https://wechat2rss.bestblogs.dev/feed/feed_id.xml"}}'
+    )
     if config.scheduler.wechat_subscriptions:
         lines.append("wechat_subscriptions = [")
         for wx in config.scheduler.wechat_subscriptions:
@@ -2382,70 +2384,72 @@ def _render_config_toml(
     lines.append(f"reddit = {int(config.scheduler.pool_source_shares.get('reddit', 1))}")
     lines.append(f"rss = {int(config.scheduler.pool_source_shares.get('rss', 2))}")
     lines.append(f"wechat = {int(config.scheduler.pool_source_shares.get('wechat', 1))}")
-    lines.extend([
-        "",
-        "[discovery]",
-        "unified_keyword_planner_enabled = "
-        f"{_toml_bool(config.discovery.unified_keyword_planner_enabled)}",
-        f"kw_cache_high = {config.discovery.kw_cache_high}",
-        f"kw_cache_low = {config.discovery.kw_cache_low}",
-        f"gen_batch = {config.discovery.gen_batch}",
-        f"fetch_batch = {config.discovery.fetch_batch}",
-        f"history_window_size = {config.discovery.history_window_size}",
-        f"history_window_hours = {config.discovery.history_window_hours}",
-        f"claim_lease_minutes = {config.discovery.claim_lease_minutes}",
-        f"planner_poll_seconds = {config.discovery.planner_poll_seconds}",
-        f"plan_ttl_hours = {config.discovery.plan_ttl_hours}",
-        f"admission_min_score = {config.discovery.admission_min_score:g}",
-        "multimodal_evaluation_enabled = "
-        f"{_toml_bool(config.discovery.multimodal_evaluation_enabled)}",
-        f"multimodal_batch_size = {config.discovery.multimodal_batch_size}",
-        f"multimodal_image_max_px = {config.discovery.multimodal_image_max_px}",
-        f"multimodal_image_quality = {config.discovery.multimodal_image_quality}",
-        "multimodal_image_timeout_seconds = "
-        f"{config.discovery.multimodal_image_timeout_seconds}",
-        "",
-        "[recommendation]",
-        "# 推荐池排序旋钮（与 [llm.recommendation] 只选模型不同）。",
-        "# Thompson 采样按 (发现策略 × 话题大类) 分桶，在最近 ts_window_days 的",
-        "# 曝光/奖励后验上采样，给「几乎没被展示过」的兴趣一个均值中性的探索机会。",
-        "# 默认关闭：排序保持确定性的五维评分。",
-        "thompson_sampling_enabled = "
-        f"{_toml_bool(config.recommendation.thompson_sampling_enabled)}",
-        f"ts_window_days = {config.recommendation.ts_window_days}",
-        f"ts_exploration_weight = {config.recommendation.ts_exploration_weight:g}",
-        f"ts_exploitation_weight = {config.recommendation.ts_exploitation_weight:g}",
-        f"ts_deep_dwell_seconds = {config.recommendation.ts_deep_dwell_seconds:g}",
-        "",
-        *_autostart_lines(
-            config,
-            on_disk_autostart,
-            autostart_authoritative=autostart_authoritative,
-        ),
-        "",
-        "[storage]",
-        f"db_path = {_toml_string(config.storage.db_path)}",
-        "",
-        "[logging]",
-        f"level = {_toml_string(config.logging.level)}",
-        f"file_level = {_toml_string(config.logging.file_level)}",
-        f"directory = {_toml_string(config.logging.directory)}",
-        f"filename = {_toml_string(config.logging.filename)}",
-        f"max_file_size_mb = {config.logging.max_file_size_mb}",
-        f"backup_count = {config.logging.backup_count}",
-        f"aggregate_budget_mb = {config.logging.aggregate_budget_mb}",
-        f"unmanaged_truncate_mb = {config.logging.unmanaged_truncate_mb}",
-        f"unmanaged_max_age_days = {config.logging.unmanaged_max_age_days}",
-        "",
-        "[soul.preference]",
-        "# v0.3.x event-satisfaction signal. When true, preference",
-        "# analysis ignores passive negative events such as quick_exit.",
-        "# Explicit dislike feedback is retained as disliked_topics",
-        "# evidence instead of being learned as a positive interest.",
-        "satisfaction_filter_enabled = "
-        f"{_toml_bool(config.soul.preference.satisfaction_filter_enabled)}",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "[discovery]",
+            "unified_keyword_planner_enabled = "
+            f"{_toml_bool(config.discovery.unified_keyword_planner_enabled)}",
+            f"kw_cache_high = {config.discovery.kw_cache_high}",
+            f"kw_cache_low = {config.discovery.kw_cache_low}",
+            f"gen_batch = {config.discovery.gen_batch}",
+            f"fetch_batch = {config.discovery.fetch_batch}",
+            f"history_window_size = {config.discovery.history_window_size}",
+            f"history_window_hours = {config.discovery.history_window_hours}",
+            f"claim_lease_minutes = {config.discovery.claim_lease_minutes}",
+            f"planner_poll_seconds = {config.discovery.planner_poll_seconds}",
+            f"plan_ttl_hours = {config.discovery.plan_ttl_hours}",
+            f"admission_min_score = {config.discovery.admission_min_score:g}",
+            "multimodal_evaluation_enabled = "
+            f"{_toml_bool(config.discovery.multimodal_evaluation_enabled)}",
+            f"multimodal_batch_size = {config.discovery.multimodal_batch_size}",
+            f"multimodal_image_max_px = {config.discovery.multimodal_image_max_px}",
+            f"multimodal_image_quality = {config.discovery.multimodal_image_quality}",
+            "multimodal_image_timeout_seconds = "
+            f"{config.discovery.multimodal_image_timeout_seconds}",
+            "",
+            "[recommendation]",
+            "# 推荐池排序旋钮（与 [llm.recommendation] 只选模型不同）。",
+            "# Thompson 采样按 (发现策略 × 话题大类) 分桶，在最近 ts_window_days 的",
+            "# 曝光/奖励后验上采样，给「几乎没被展示过」的兴趣一个均值中性的探索机会。",
+            "# 默认关闭：排序保持确定性的五维评分。",
+            "thompson_sampling_enabled = "
+            f"{_toml_bool(config.recommendation.thompson_sampling_enabled)}",
+            f"ts_window_days = {config.recommendation.ts_window_days}",
+            f"ts_exploration_weight = {config.recommendation.ts_exploration_weight:g}",
+            f"ts_exploitation_weight = {config.recommendation.ts_exploitation_weight:g}",
+            f"ts_deep_dwell_seconds = {config.recommendation.ts_deep_dwell_seconds:g}",
+            "",
+            *_autostart_lines(
+                config,
+                on_disk_autostart,
+                autostart_authoritative=autostart_authoritative,
+            ),
+            "",
+            "[storage]",
+            f"db_path = {_toml_string(config.storage.db_path)}",
+            "",
+            "[logging]",
+            f"level = {_toml_string(config.logging.level)}",
+            f"file_level = {_toml_string(config.logging.file_level)}",
+            f"directory = {_toml_string(config.logging.directory)}",
+            f"filename = {_toml_string(config.logging.filename)}",
+            f"max_file_size_mb = {config.logging.max_file_size_mb}",
+            f"backup_count = {config.logging.backup_count}",
+            f"aggregate_budget_mb = {config.logging.aggregate_budget_mb}",
+            f"unmanaged_truncate_mb = {config.logging.unmanaged_truncate_mb}",
+            f"unmanaged_max_age_days = {config.logging.unmanaged_max_age_days}",
+            "",
+            "[soul.preference]",
+            "# v0.3.x event-satisfaction signal. When true, preference",
+            "# analysis ignores passive negative events such as quick_exit.",
+            "# Explicit dislike feedback is retained as disliked_topics",
+            "# evidence instead of being learned as a positive interest.",
+            "satisfaction_filter_enabled = "
+            f"{_toml_bool(config.soul.preference.satisfaction_filter_enabled)}",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

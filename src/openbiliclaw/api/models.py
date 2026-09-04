@@ -1414,6 +1414,7 @@ class SourceShareSuggestionResponse(BaseModel):
 
 class PlatformPoolStats(BaseModel):
     """Per-platform pool breakdown."""
+
     platform: str
     total: int
     fresh: int = 0
@@ -1426,18 +1427,21 @@ class PlatformPoolStats(BaseModel):
 
 class ScoreDistribution(BaseModel):
     """Quality score histogram bucket."""
+
     bucket: str
     count: int
 
 
 class TopicGroupStats(BaseModel):
     """Topic group distribution."""
+
     topic: str
     count: int
 
 
 class LLMUsageSummary(BaseModel):
     """LLM usage aggregate."""
+
     today_calls: int = 0
     today_cost_cny: float = 0.0
     total_calls_7d: int = 0
@@ -1447,12 +1451,14 @@ class LLMUsageSummary(BaseModel):
 
 class DiscoveryCandidateStats(BaseModel):
     """Discovery candidates by status."""
+
     status: str
     count: int
 
 
 class PoolPipelineStats(BaseModel):
     """Overall pool pipeline numbers."""
+
     total_items: int
     fresh: int
     shown: int
@@ -1469,6 +1475,7 @@ class PoolPipelineStats(BaseModel):
 
 class ObservabilityResponse(BaseModel):
     """Full observability dashboard data."""
+
     pipeline: PoolPipelineStats
     platforms: list[PlatformPoolStats]
     score_distribution: list[ScoreDistribution]

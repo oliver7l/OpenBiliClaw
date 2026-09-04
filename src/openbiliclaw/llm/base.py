@@ -350,9 +350,7 @@ class LLMRegistry:
                 # single call, each time paying the full connect timeout —
                 # with the LLM backend down that added 0.3–1.2s to serve().
                 if self._is_connectivity_error(exc):
-                    self._mark_cooldown(
-                        provider_name, self._CONNECTIVITY_COOLDOWN_SECONDS
-                    )
+                    self._mark_cooldown(provider_name, self._CONNECTIVITY_COOLDOWN_SECONDS)
                     logger.warning(
                         "Provider %s unreachable — cooling down for %.0fs.",
                         provider_name,

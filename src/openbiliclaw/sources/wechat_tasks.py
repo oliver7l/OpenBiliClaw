@@ -32,9 +32,9 @@ async def run_wechat_polling(
     Returns:
         Total number of articles fetched.
     """
-    from openbiliclaw.sources.protocol import SourceRecipe
-
     import uuid
+
+    from openbiliclaw.sources.protocol import SourceRecipe
 
     total = 0
     for sub in subscriptions:

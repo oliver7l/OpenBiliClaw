@@ -35,7 +35,13 @@ _HAS_BVID = lambda d: "bvid" in d  # noqa: E731
 @pytest.mark.asyncio
 async def test_happy_path_returns_parsed_list() -> None:
     llm = _FakeLLM([LLMResponse(content='[{"bvid": "x", "score": 1}]')])
-    out = await generate_json_list(llm, system_instruction="s", user_input="u", caller="t", item_predicate=_HAS_BVID)
+    out = await generate_json_list(
+        llm,
+        system_instruction="s",
+        user_input="u",
+        caller="t",
+        item_predicate=_HAS_BVID,
+    )
     assert out == [{"bvid": "x", "score": 1}]
     assert len(llm.calls) == 1
     # default disables thinking for structured tasks
@@ -48,8 +54,13 @@ async def test_empty_content_escalates_and_recovers() -> None:
         [LLMResponseContentError("empty"), LLMResponse(content='{"items": [{"bvid": "y"}]}')]
     )
     out = await generate_json_list(
-        llm, system_instruction="s", user_input="u", caller="t",
-        max_tokens=512, wrapper_keys=("items",), item_predicate=_HAS_BVID,
+        llm,
+        system_instruction="s",
+        user_input="u",
+        caller="t",
+        max_tokens=512,
+        wrapper_keys=("items",),
+        item_predicate=_HAS_BVID,
     )
     assert out == [{"bvid": "y"}]
     # second attempt bumped the token budget
@@ -65,8 +76,12 @@ async def test_truncated_output_recovers_on_retry() -> None:
         ]
     )
     out = await generate_json_list(
-        llm, system_instruction="s", user_input="u", caller="t",
-        max_tokens=512, item_predicate=_HAS_BVID,
+        llm,
+        system_instruction="s",
+        user_input="u",
+        caller="t",
+        max_tokens=512,
+        item_predicate=_HAS_BVID,
     )
     assert out == [{"bvid": "a"}]
     assert llm.calls[1]["max_tokens"] > 512  # escalated

@@ -11,8 +11,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from openai import AsyncOpenAI
 import httpx
+from openai import AsyncOpenAI
 
 from .base import (
     LLMProvider,

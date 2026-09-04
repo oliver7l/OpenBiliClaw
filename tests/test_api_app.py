@@ -239,7 +239,8 @@ class TestBackendAPI:
         assert '<meta name="mobile-web-app-capable" content="yes">' in response.text
         assert '<meta name="apple-mobile-web-app-capable" content="yes">' in response.text
         assert '<meta name="apple-mobile-web-app-title" content="古灵阁">' in response.text
-        assert '<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png' in response.text
+        icon_link = '<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png'
+        assert icon_link in response.text
 
     def test_mobile_web_manifest_is_installable_and_assets_resolve(self) -> None:
         from fastapi.testclient import TestClient

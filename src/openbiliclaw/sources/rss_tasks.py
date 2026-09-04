@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from openbiliclaw.sources.registry import AdapterRegistry
-    from openbiliclaw.sources.protocol import SourceRecipe
     from openbiliclaw.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -32,9 +31,9 @@ async def run_rss_polling(
     Returns:
         Total number of articles fetched.
     """
-    from openbiliclaw.sources.protocol import SourceRecipe
-
     import uuid
+
+    from openbiliclaw.sources.protocol import SourceRecipe
 
     total = 0
     for sub in subscriptions:

@@ -7,9 +7,12 @@ so cross-circle content stays servable by the delight (surprise) channel.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openbiliclaw.storage.database import Database
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _db(tmp_path: Path) -> Database:

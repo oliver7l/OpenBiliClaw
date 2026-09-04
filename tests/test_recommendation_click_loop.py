@@ -28,9 +28,7 @@ def _insert(db: Database, bvid: str, *, confidence: float = 0.9) -> int:
         (bvid, confidence),
     )
     db.conn.commit()
-    row = db.conn.execute(
-        "SELECT id FROM recommendations WHERE bvid = ?", (bvid,)
-    ).fetchone()
+    row = db.conn.execute("SELECT id FROM recommendations WHERE bvid = ?", (bvid,)).fetchone()
     assert row is not None
     return int(row["id"])
 

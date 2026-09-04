@@ -43,14 +43,12 @@ class RssAdapter:
         feed = await asyncio.to_thread(feedparser.parse, feed_url)
 
         if feed.bozo and not feed.entries:
-            logger.warning(
-                "RssAdapter: failed to parse %s: %s", feed_url, feed.bozo_exception
-            )
+            logger.warning("RssAdapter: failed to parse %s: %s", feed_url, feed.bozo_exception)
             return []
 
-        from openbiliclaw.discovery.engine import DiscoveredContent
-
         import re
+
+        from openbiliclaw.discovery.engine import DiscoveredContent
 
         items: list[DiscoveredContent] = []
         for entry in feed.entries[:limit]:
@@ -119,7 +117,5 @@ class RssAdapter:
                 )
             )
 
-        logger.info(
-            "RssAdapter: fetched %d items from %s", len(items), feed_url
-        )
+        logger.info("RssAdapter: fetched %d items from %s", len(items), feed_url)
         return items

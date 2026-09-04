@@ -8,7 +8,6 @@ recommendation pool.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -16,7 +15,7 @@ import sqlite3
 import subprocess
 import time
 from datetime import datetime
-from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +40,11 @@ for _proxy_key in (
 
 YT_DLP_CMD = [
     "yt-dlp",
-    "--cookies-from-browser", "chrome",
+    "--cookies-from-browser",
+    "chrome",
     "--flat-playlist",
-    "--print", "%(title)s|%(uploader)s|%(view_count)s|%(webpage_url)s",
+    "--print",
+    "%(title)s|%(uploader)s|%(view_count)s|%(webpage_url)s",
     "https://www.youtube.com/feed/recommended",
 ]
 
@@ -51,7 +52,7 @@ YT_DLP_CMD = [
 _VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
 
 
-def _fetch_feed() -> list[dict]:
+def _fetch_feed() -> list[dict[str, Any]]:
     """Call yt-dlp and return parsed items."""
     result = subprocess.run(
         YT_DLP_CMD,
@@ -64,12 +65,12 @@ def _fetch_feed() -> list[dict]:
         logger.error("yt-dlp failed (rc=%d): %s", result.returncode, result.stderr[:500])
         return []
 
-    lines = [l.strip() for l in result.stdout.split("\n") if l.strip()]
+    lines = [ln.strip() for ln in result.stdout.split("\n") if ln.strip()]
     if not lines:
         logger.info("yt-dlp returned 0 items")
         return []
 
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for line in lines:
         parts = line.split("|", 3)
         if len(parts) < 4:
@@ -89,13 +90,15 @@ def _fetch_feed() -> list[dict]:
         except ValueError:
             view_count = 0
 
-        items.append({
-            "title": title.strip(),
-            "uploader": uploader.strip() if uploader != "NA" else "",
-            "view_count": view_count,
-            "url": url,
-            "video_id": vid,
-        })
+        items.append(
+            {
+                "title": title.strip(),
+                "uploader": uploader.strip() if uploader != "NA" else "",
+                "view_count": view_count,
+                "url": url,
+                "video_id": vid,
+            }
+        )
     return items
 
 
@@ -107,10 +110,10 @@ def _extract_video_id(url: str) -> str | None:
     return None
 
 
-def _parse_items(items: list[dict]) -> list[dict]:
+def _parse_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Extract fields into content_cache-compatible rows."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in items:
         vid = item["video_id"]
@@ -122,23 +125,25 @@ def _parse_items(items: list[dict]) -> list[dict]:
         if not title:
             continue
 
-        rows.append({
-            "bvid": vid,
-            "title": title,
-            "up_name": item["uploader"],
-            "author_name": item["uploader"],
-            "content_url": item["url"],
-            "source_platform": "youtube",
-            "source": "youtube-feed",
-            "content_type": "video",
-            "pool_status": "fresh",
-            "view_count": item["view_count"],
-            "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        rows.append(
+            {
+                "bvid": vid,
+                "title": title,
+                "up_name": item["uploader"],
+                "author_name": item["uploader"],
+                "content_url": item["url"],
+                "source_platform": "youtube",
+                "source": "youtube-feed",
+                "content_type": "video",
+                "pool_status": "fresh",
+                "view_count": item["view_count"],
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
     inserted = 0
     for row in rows:
@@ -150,9 +155,16 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
                     view_count, discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["content_url"], row["source_platform"], row["source"],
-                    row["content_type"], row["pool_status"], row["view_count"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["content_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["view_count"],
                     row["discovered_at"],
                 ),
             )
@@ -163,7 +175,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return inserted
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     items = _fetch_feed()
     if not items:

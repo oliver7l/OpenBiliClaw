@@ -150,9 +150,7 @@ def test_updater_tag_check_never_uses_environment_proxy(
     monkeypatch.setattr(httpx.AsyncClient, "get", _boom)
 
     async def _run() -> None:
-        selection = await updater._fetch_latest_candidate_once(
-            channel="stable", verify_tls=True
-        )
+        selection = await updater._fetch_latest_candidate_once(channel="stable", verify_tls=True)
         # The method swallows the transport failure into an error selection,
         # but the httpx.AsyncClient was already constructed inside the async
         # with — which is exactly what we captured above.

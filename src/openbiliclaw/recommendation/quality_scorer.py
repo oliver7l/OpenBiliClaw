@@ -16,10 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Protocol
-
-if TYPE_CHECKING:
-    from openbiliclaw.llm.service import LLMService
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +25,11 @@ _QUALITY_LLM_BATCH_SIZE: int = 10
 
 # Quality score threshold -- items below this won't get a quality boost
 _QUALITY_SCORE_THRESHOLD: float = 0.3
+
+
+def _clamp_score(item: dict[str, Any], key: str) -> float:
+    """Clamp a quality score field from an LLM response to [0.0, 1.0]."""
+    return max(0.0, min(1.0, float(item.get(key, 0.0))))
 
 
 class SupportsQualityCandidate(Protocol):
@@ -65,7 +67,7 @@ _QUALITY_BATCH_SCORE_SYSTEM_PROMPT: str = (
     "interest_match, information_density, content_quality, "
     "reason(10-30字中文推荐理由,解释为什么推荐这篇)。\n"
     "3. 推荐理由要具体,引用内容细节,不要写空话套话。\n"
-    '4. 如果内容明显不符合用户兴趣,quality_score 给 0.0-0.3,reason 写不推荐原因。\n'
+    "4. 如果内容明显不符合用户兴趣,quality_score 给 0.0-0.3,reason 写不推荐原因。\n"
     "5. 如果用户画像信息不足,基于内容本身质量评分,quality_score 不超过 0.7。\n"
     "</rules>\n\n"
     "<output_schema>\n"
@@ -93,9 +95,7 @@ def _profile_summary_for_quality(profile: Any) -> dict[str, object]:
                     for d in interest.likes[:5]
                 ]
             if hasattr(interest, "dislikes") and interest.dislikes:
-                summary["dislikes"] = [
-                    d.domain for d in interest.dislikes[:3]
-                ]
+                summary["dislikes"] = [d.domain for d in interest.dislikes[:3]]
         if hasattr(profile, "personality_portrait") and profile.personality_portrait:
             summary["portrait"] = profile.personality_portrait[:200]
     except Exception:
@@ -216,10 +216,10 @@ class QualityScorer:
                     bvid = item.get("bvid", "")
                     if bvid:
                         all_results[bvid] = {
-                            "quality_score": max(0.0, min(1.0, float(item.get("quality_score", 0.0)))),
-                            "interest_match": max(0.0, min(1.0, float(item.get("interest_match", 0.0)))),
-                            "information_density": max(0.0, min(1.0, float(item.get("information_density", 0.0)))),
-                            "content_quality": max(0.0, min(1.0, float(item.get("content_quality", 0.0)))),
+                            "quality_score": _clamp_score(item, "quality_score"),
+                            "interest_match": _clamp_score(item, "interest_match"),
+                            "information_density": _clamp_score(item, "information_density"),
+                            "content_quality": _clamp_score(item, "content_quality"),
                             "reason": str(item.get("reason", "")),
                         }
             except Exception as exc:

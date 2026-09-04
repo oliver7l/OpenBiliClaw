@@ -29,11 +29,11 @@ import argparse
 import logging
 import re
 import sqlite3
-import sys
 import time
 import urllib.request
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from typing import Any
 
 import feedparser
 
@@ -58,7 +58,7 @@ _USER_AGENT = (
 )
 
 
-def _fetch_feed(url: str, timeout: int = 30) -> list[dict]:
+def _fetch_feed(url: str, timeout: int = 30) -> list[dict[str, Any]]:
     """Fetch an RSSHub endpoint and return list of feed entry dicts.
 
     Returns an empty list on any failure (HTTP error, parse error,
@@ -84,7 +84,7 @@ def _fetch_feed(url: str, timeout: int = 30) -> list[dict]:
     return list(feed.entries)
 
 
-def _parse_published(entry: dict) -> str:
+def _parse_published(entry: dict[str, Any]) -> str:
     """Best-effort parse of an entry's published time to 'YYYY-MM-DD HH:MM:SS'.
 
     Falls back to the current time if the field is missing or unparseable.
@@ -102,10 +102,10 @@ def _parse_published(entry: dict) -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _parse_entries(entries: list[dict], source_tag: str) -> list[dict]:
+def _parse_entries(entries: list[dict[str, Any]], source_tag: str) -> list[dict[str, Any]]:
     """Convert feedparser entries into content_cache-compatible rows."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in entries:
         link = (getattr(entry, "link", "") or "").strip()
@@ -131,22 +131,24 @@ def _parse_entries(entries: list[dict], source_tag: str) -> list[dict]:
         # strip email-like "user (https://...)" forms that some mirrors emit
         author = author.split("(")[0].strip() if "(" in author else author
 
-        rows.append({
-            "bvid": tid,
-            "title": title,
-            "up_name": author,
-            "author_name": author,
-            "content_url": f"https://www.v2ex.com/t/{tid}",
-            "source_platform": "v2ex",
-            "source": source_tag,
-            "content_type": "thread",
-            "pool_status": "fresh",
-            "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        rows.append(
+            {
+                "bvid": tid,
+                "title": title,
+                "up_name": author,
+                "author_name": author,
+                "content_url": f"https://www.v2ex.com/t/{tid}",
+                "source_platform": "v2ex",
+                "source": source_tag,
+                "content_type": "thread",
+                "pool_status": "fresh",
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int]:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> tuple[int, int]:
     """Insert new rows; skip duplicates by bvid.
 
     Returns (inserted, skipped_duplicates).
@@ -162,9 +164,16 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int]:
                     discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["content_url"], row["source_platform"], row["source"],
-                    row["content_type"], row["pool_status"], row["discovered_at"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["content_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["discovered_at"],
                 ),
             )
             if cursor.rowcount > 0:
@@ -176,7 +185,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int]:
     return inserted, skipped
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle across both RSSHub endpoints."""
     total_fetched = 0
     total_inserted = 0

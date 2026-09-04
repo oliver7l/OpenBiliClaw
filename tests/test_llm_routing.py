@@ -17,8 +17,6 @@ Pins the properties we depend on after the 2026-09-01 fallback rework:
 
 from __future__ import annotations
 
-import pytest
-
 from openbiliclaw.config import load_config
 from openbiliclaw.llm.base import LLMRegistry
 from openbiliclaw.llm.openai_provider import OpenAIProvider

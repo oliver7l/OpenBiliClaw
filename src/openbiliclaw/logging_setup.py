@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import queue
 import time
@@ -304,10 +305,8 @@ def configure_logging(
     # stops any prior listener first.
     global _LOG_LISTENER
     if _LOG_LISTENER is not None:
-        try:
+        with contextlib.suppress(Exception):
             _LOG_LISTENER.stop()
-        except Exception:
-            pass
         _LOG_LISTENER = None
 
     _LOG_LISTENER = QueueListener(

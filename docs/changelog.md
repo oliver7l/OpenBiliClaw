@@ -14,6 +14,12 @@
 
 ---
 
+## v0.3.166: 代码质量全面修复——ruff 清零 + mypy 大幅收敛（2026-09-04）
+
+- **ruff 全部清零**：从 195 个错误降至 0。包括 66 个自动修复（未使用导入/变量）、25 个非 E501 手动修复（SIM105 contextlib.suppress、SIM108 三元运算符、E702 分号多语句、F841 未使用变量、E741 歧义变量名、F601 字典重复 key、N806 函数内常量命名、TC003 类型检查导入、B023 闭包变量绑定）、16 个小文件 E501 行太长手动修复。大文件（app.py/database.py/refresh.py/cli.py）的 E501 在 `pyproject.toml` per-file-ignores 中标记，待后续重构拆分时统一处理。
+- **mypy 大幅收敛**：从 227 个错误降至 161（减少 66 个）。新增 `feedparser`/`rich`/`scrapetube`/`aiohttp` 的 ignore_missing_imports 配置；批量修复 65 个 `dict`/`set` 缺少类型参数错误（统一为 `dict[str, Any]` / `set[str]`），涉及 9 个 runtime producer 文件和 rag/retriever。剩余 161 个错误多为历史累积的复杂类型问题（BilibiliAPIError.code 属性、Returning Any、可选参数类型不匹配、JSONValue 联合类型迭代等），需后续逐模块深入修复。
+- **测试验证**：相关模块 290 个测试全部通过，无回归。
+
 ## v0.3.165: 虎扑搜索 API 集成——按关键词发现内容补充推荐池（2026-09-04）
 
 - **新数据源接入**：`runtime/hupu_feed_producer` 新增 `--search` 模式，通过虎扑站内搜索（`bbs.hupu.com/search?q={keyword}`）按关键词发现内容，补充到推荐池。无需登录或 API Key，纯标准库 `urllib` 实现。

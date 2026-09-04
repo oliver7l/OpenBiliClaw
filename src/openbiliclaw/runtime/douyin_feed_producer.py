@@ -480,18 +480,19 @@ def _fetch_jingxuan(
                         if not card.get("author"):
                             continue
                         aweme_id = aweme_ids[idx] if idx < len(aweme_ids) else ""
-                        vid = aweme_id or hashlib.md5(
-                            (card["author"] + "|" + card["title"]).encode("utf-8")
-                        ).hexdigest()[:16]
+                        vid = (
+                            aweme_id
+                            or hashlib.md5(
+                                (card["author"] + "|" + card["title"]).encode("utf-8")
+                            ).hexdigest()[:16]
+                        )
                         if vid in seen_ids:
                             continue
                         seen_ids.add(vid)
                         card["aweme_id"] = aweme_id
                         card["bvid"] = vid
                         card["content_url"] = (
-                            f"https://www.douyin.com/video/{aweme_id}"
-                            if aweme_id
-                            else JINGXUAN_URL
+                            f"https://www.douyin.com/video/{aweme_id}" if aweme_id else JINGXUAN_URL
                         )
                         videos.append(card)
                         if len(videos) >= limit:
@@ -894,9 +895,12 @@ def _fetch_feed(
                     parsed = _parse_video_text(text)
 
                     if parsed and parsed.get("author"):
-                        vid = aweme_id or hashlib.md5(
-                            (parsed["author"] + "|" + parsed["title"]).encode("utf-8")
-                        ).hexdigest()[:16]
+                        vid = (
+                            aweme_id
+                            or hashlib.md5(
+                                (parsed["author"] + "|" + parsed["title"]).encode("utf-8")
+                            ).hexdigest()[:16]
+                        )
                         if vid not in seen_ids:
                             seen_ids.add(vid)
                             parsed["aweme_id"] = aweme_id
@@ -1128,15 +1132,11 @@ def run_forever(
 
 
 def _main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Douyin personalized recommendation feed producer"
-    )
+    parser = argparse.ArgumentParser(description="Douyin personalized recommendation feed producer")
     parser.add_argument(
         "--once", action="store_true", help="Run a single cycle and exit (no loop)."
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Fetch + parse but skip DB writes."
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes.")
     parser.add_argument(
         "--login",
         action="store_true",

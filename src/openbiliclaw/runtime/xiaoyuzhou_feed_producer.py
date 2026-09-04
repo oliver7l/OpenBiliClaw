@@ -14,6 +14,7 @@ import sqlite3
 import subprocess
 import time
 from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +22,25 @@ DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbi
 INTERVAL_HOURS = 24
 # 白名单而非 os.environ.copy()：这里刻意不继承 HTTP(S)_PROXY 等代理变量——
 # 本机代理（Clash 类）挂掉时子进程走代理会静默失败。请勿改成 os.environ.copy()。
-CLEAN_ENV = {k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "USER", "SHELL", "TMPDIR")}
+_ALLOWED_ENV_KEYS = ("HOME", "PATH", "USER", "SHELL", "TMPDIR")
+CLEAN_ENV = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
 
 XYZ_CMD = ["xyz", "subs", "--jsonl"]
-EP_CMD_TEMPLATE = ["xyz", "episodes", "{}", "--limit", "3", "--jsonl", "--fields", "eid,pid,podcast_title,title,duration_seconds,pub_date,audio_url,image_url"]
+EP_CMD_TEMPLATE = [
+    "xyz",
+    "episodes",
+    "{}",
+    "--limit",
+    "3",
+    "--jsonl",
+    "--fields",
+    "eid,pid,podcast_title,title,duration_seconds,pub_date,audio_url,image_url",
+]
 
 
-def _run_cmd(cmd: list[str]) -> list[dict]:
+def _run_cmd(cmd: list[str]) -> list[dict[str, Any]]:
     """Run a CLI command and return parsed JSON objects."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, env=CLEAN_ENV, timeout=60)
@@ -42,7 +53,7 @@ def _run_cmd(cmd: list[str]) -> list[dict]:
     if result.returncode != 0:
         logger.error("command failed (rc=%d): %s", result.returncode, result.stderr[:500])
         return []
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for line in result.stdout.strip().splitlines():
         line = line.strip()
         if not line:
@@ -54,12 +65,12 @@ def _run_cmd(cmd: list[str]) -> list[dict]:
     return items
 
 
-def _fetch_subscriptions() -> list[dict]:
+def _fetch_subscriptions() -> list[dict[str, Any]]:
     """Get all subscribed podcasts."""
     return _run_cmd(XYZ_CMD)
 
 
-def _fetch_episodes(pid: str) -> list[dict]:
+def _fetch_episodes(pid: str) -> list[dict[str, Any]]:
     """Get latest episodes for a podcast."""
     cmd = [a.format(pid) if "{}" in a else a for a in EP_CMD_TEMPLATE]
     return _run_cmd(cmd)
@@ -70,10 +81,13 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def _parse_items(subscriptions: list[dict], episodes_by_pid: dict[str, list[dict]]) -> list[dict]:
+def _parse_items(
+    subscriptions: list[dict[str, Any]],
+    episodes_by_pid: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
     """Build content_cache-compatible rows from subscriptions + episodes."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     # Build a podcast title map for fallback
@@ -97,28 +111,28 @@ def _parse_items(subscriptions: list[dict], episodes_by_pid: dict[str, list[dict
             podcast_title = ep.get("podcast_title", "") or podcast_titles.get(pid, "")
             content_url = f"https://www.xiaoyuzhoufm.com/episode/{eid}"
             duration = int(ep.get("duration_seconds", 0) or 0)
-            image_url = ep.get("image_url", "") or ""
-            audio_url = ep.get("audio_url", "") or ""
 
-            rows.append({
-                "bvid": eid,
-                "title": title,
-                "up_name": podcast_title,
-                "author_name": podcast_title,
-                "content_url": content_url,
-                "source_platform": "xiaoyuzhou",
-                "source": "xiaoyuzhou-feed",
-                "content_type": "podcast",
-                "pool_status": "fresh",
-                "like_count": duration,
-                "body_text": "",
-                "topic_group": "",
-                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-            })
+            rows.append(
+                {
+                    "bvid": eid,
+                    "title": title,
+                    "up_name": podcast_title,
+                    "author_name": podcast_title,
+                    "content_url": content_url,
+                    "source_platform": "xiaoyuzhou",
+                    "source": "xiaoyuzhou-feed",
+                    "content_type": "podcast",
+                    "pool_status": "fresh",
+                    "like_count": duration,
+                    "body_text": "",
+                    "topic_group": "",
+                    "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
     inserted = 0
     for row in rows:
@@ -130,10 +144,19 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
                     like_count, body_text, topic_group, discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["content_url"], row["source_platform"], row["source"],
-                    row["content_type"], row["pool_status"], row["like_count"],
-                    row["body_text"], row["topic_group"], row["discovered_at"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["content_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["like_count"],
+                    row["body_text"],
+                    row["topic_group"],
+                    row["discovered_at"],
                 ),
             )
             if cursor.rowcount > 0:
@@ -143,14 +166,14 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return inserted
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     subscriptions = _fetch_subscriptions()
     if not subscriptions:
         return {"ok": False, "reason": "no_subscriptions", "items_fetched": 0, "inserted": 0}
 
     # Fetch episodes for each subscription
-    episodes_by_pid: dict[str, list[dict]] = {}
+    episodes_by_pid: dict[str, list[dict[str, Any]]] = {}
     for sub in subscriptions:
         pid = sub.get("pid", "")
         if not pid:
@@ -162,11 +185,21 @@ def _run_once() -> dict:
 
     all_episode_count = sum(len(eps) for eps in episodes_by_pid.values())
     if all_episode_count == 0:
-        return {"ok": False, "reason": "no_episodes", "items_fetched": 0, "inserted": 0}
+        return {
+            "ok": False,
+            "reason": "no_episodes",
+            "items_fetched": 0,
+            "inserted": 0,
+        }
 
     rows = _parse_items(subscriptions, episodes_by_pid)
     if not rows:
-        return {"ok": False, "reason": "no_valid_items", "items_fetched": all_episode_count, "inserted": 0}
+        return {
+            "ok": False,
+            "reason": "no_valid_items",
+            "items_fetched": all_episode_count,
+            "inserted": 0,
+        }
 
     conn = sqlite3.connect(DB_PATH)
     try:

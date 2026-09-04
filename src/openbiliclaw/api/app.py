@@ -22,7 +22,7 @@ from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, Body
+from fastapi import Body, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
@@ -30,6 +30,8 @@ from pydantic import BaseModel, Field
 from openbiliclaw.api.models import (
     ActivityFeedItemOut,
     ActivityFeedResponse,
+    ArticleNoteIn,
+    ArticleUpdateIn,
     AutostartApplyIn,
     AutostartConfigOut,
     AutostartStatusOut,
@@ -54,6 +56,7 @@ from openbiliclaw.api.models import (
     ConfigUpdateResponse,
     DelightAckIn,
     DelightAckResponse,
+    DiscoveryCandidateStats,
     DiscoveryConfigOut,
     DouyinCookieIn,
     DouyinCookieResponse,
@@ -85,37 +88,34 @@ from openbiliclaw.api.models import (
     InsightFeedbackResponse,
     LLMConfigOut,
     LLMProviderConfigOut,
+    LLMUsageSummary,
     LoggingConfigOut,
     ModuleLLMConfigOut,
     NotificationAckIn,
     NotificationAckResponse,
+    ObservabilityResponse,
     PendingCognitionUpdateOut,
     PendingCognitionUpdateResponse,
     PendingDelightOut,
     PendingDelightResponse,
     PendingNotificationOut,
     PendingNotificationResponse,
+    PlatformPoolStats,
+    PoolAllResponse,
+    PoolItemOut,
+    PoolPipelineStats,
     ProfileEditIn,
     ProfileSummaryResponse,
     RecommendationAppendIn,
     RecommendationClickIn,
     RecommendationClickResponse,
-    TopicCreateIn,
     RecommendationListResponse,
-    ArticleUpdateIn,
-    ArticleNoteIn,
     RecommendationOut,
     RecommendationRefreshResponse,
     RecommendationReshuffleResponse,
-    PoolAllResponse,
-    PoolItemOut,
     RuntimeStatusResponse,
     SchedulerConfigOut,
-    SubscriptionAddIn,
-    SubscriptionDeleteIn,
-    SubscriptionItemOut,
-    SubscriptionListOut,
-    SubscriptionStatsOut,
+    ScoreDistribution,
     SourceCredentialItem,
     SourcesBrowserConfigOut,
     SourcesConfigOut,
@@ -125,6 +125,13 @@ from openbiliclaw.api.models import (
     SourcesStatusResponse,
     SourceStatusItem,
     StorageConfigOut,
+    SubscriptionAddIn,
+    SubscriptionDeleteIn,
+    SubscriptionItemOut,
+    SubscriptionListOut,
+    SubscriptionStatsOut,
+    TopicCreateIn,
+    TopicGroupStats,
     TwitterSourceConfigOut,
     UpdateApplyIn,
     UpdateCheckIn,
@@ -142,13 +149,6 @@ from openbiliclaw.api.models import (
     XStatusResponse,
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
-    ObservabilityResponse,
-    PlatformPoolStats,
-    ScoreDistribution,
-    TopicGroupStats,
-    LLMUsageSummary,
-    DiscoveryCandidateStats,
-    PoolPipelineStats,
 )
 from openbiliclaw.recommendation.agents import IntentAgent, InterestSyncer, RankAgent
 from openbiliclaw.recommendation.quality_scorer import QualityScorer
@@ -252,7 +252,7 @@ def _load_interest_keywords() -> list[tuple[str, float]]:
     keywords: list[tuple[str, float]] = []
     for path in _soul_profile_candidates():
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
             likes = (data.get("interest") or {}).get("likes") or []
             for item in likes:
@@ -310,27 +310,52 @@ def _article_fit_score(text: str) -> float:
 # 以及两种路径共用的排除过滤。词表与 /api/articles/facets 的真实
 # source_type 分布对齐。
 _READING_SOURCE_SYNONYMS: dict[str, str] = {
-    "b站": "bilibili", "哔哩哔哩": "bilibili", "bilibili": "bilibili",
-    "知乎": "zhihu", "zhihu": "zhihu",
-    "小红书": "xiaohongshu", "红书": "xiaohongshu", "xhs": "xiaohongshu",
+    "b站": "bilibili",
+    "哔哩哔哩": "bilibili",
+    "bilibili": "bilibili",
+    "知乎": "zhihu",
+    "zhihu": "zhihu",
+    "小红书": "xiaohongshu",
+    "红书": "xiaohongshu",
+    "xhs": "xiaohongshu",
     "xiaohongshu": "xiaohongshu",
-    "youtube": "youtube", "油管": "youtube",
+    "youtube": "youtube",
+    "油管": "youtube",
     "v2ex": "v2ex",
-    "小宇宙": "xiaoyuzhou", "播客": "xiaoyuzhou", "podcast": "xiaoyuzhou",
+    "小宇宙": "xiaoyuzhou",
+    "播客": "xiaoyuzhou",
+    "podcast": "xiaoyuzhou",
     "xiaoyuzhou": "xiaoyuzhou",
-    "抖音": "douyin", "douyin": "douyin",
-    "微信": "wechat", "公众号": "wechat", "wechat": "wechat",
-    "rss": "rss", "订阅": "rss",
-    "getnote": "getnote", "便签": "getnote",
-    "reddit": "reddit", "豆瓣": "douban", "douban": "douban",
+    "抖音": "douyin",
+    "douyin": "douyin",
+    "微信": "wechat",
+    "公众号": "wechat",
+    "wechat": "wechat",
+    "rss": "rss",
+    "订阅": "rss",
+    "getnote": "getnote",
+    "便签": "getnote",
+    "reddit": "reddit",
+    "豆瓣": "douban",
+    "douban": "douban",
     "已读库": "read-archive",
 }
 _READING_STATUS_SYNONYMS: dict[str, str] = {
-    "未读": "unread", "没读": "unread", "没看过": "unread", "unread": "unread",
-    "在读": "reading", "正在读": "reading", "看了一半": "reading", "reading": "reading",
-    "读完": "finished", "已读": "finished", "看过": "finished", "读过": "finished",
+    "未读": "unread",
+    "没读": "unread",
+    "没看过": "unread",
+    "unread": "unread",
+    "在读": "reading",
+    "正在读": "reading",
+    "看了一半": "reading",
+    "reading": "reading",
+    "读完": "finished",
+    "已读": "finished",
+    "看过": "finished",
+    "读过": "finished",
     "finished": "finished",
-    "归档": "archived", "archived": "archived",
+    "归档": "archived",
+    "archived": "archived",
 }
 _READING_VALID_STATUSES = frozenset({"unread", "reading", "finished", "archived"})
 # 与 /api/articles/facets 的真实来源分布对齐；LLM 只允许取这些值。
@@ -414,6 +439,7 @@ def _apply_reading_exclusions(
             continue
         kept.append(item)
     return kept
+
 
 # Canonical home is openbiliclaw.sources.x_auth (mirrors douyin_auth);
 # re-exported here because callers historically imported from api.app.
@@ -1895,9 +1921,7 @@ def create_app(
             error=str(row.get("error", "") or ""),
             created_at=str(row.get("created_at", "") or ""),
             updated_at=str(row.get("updated_at", "") or ""),
-            references=list(
-                chat_turn_references.get(str(row.get("turn_id", "")), [])
-            ),
+            references=list(chat_turn_references.get(str(row.get("turn_id", "")), [])),
         )
 
     def _chat_db_method(name: str) -> Any | None:
@@ -2103,9 +2127,7 @@ def create_app(
         """
         nonlocal _embedding_ready_value, _embedding_ready_checked_at
         ttl = (
-            _EMBEDDING_READY_TTL_SECONDS
-            if _embedding_ready_value
-            else _EMBEDDING_FAIL_TTL_SECONDS
+            _EMBEDDING_READY_TTL_SECONDS if _embedding_ready_value else _EMBEDDING_FAIL_TTL_SECONDS
         )
         return _embedding_ready_value, (time.monotonic() - _embedding_ready_checked_at >= ttl)
 
@@ -3566,6 +3588,7 @@ def create_app(
     @dataclass
     class _QualityScorerCandidate:
         """Minimal candidate shape for QualityScorer.score_batch."""
+
         bvid: str
         title: str
         description: str
@@ -3578,7 +3601,12 @@ def create_app(
 
     async def _bg_quality_score_recommendations(rows: list[dict[str, Any]]) -> None:
         """Score recommendation items that lack quality scores, in background."""
-        logger.info("_bg_quality_score_recommendations called with %d rows, llm=%s, soul=%s", len(rows), ctx.llm_service is not None, ctx.soul_engine is not None)
+        logger.info(
+            "_bg_quality_score_recommendations called with %d rows, llm=%s, soul=%s",
+            len(rows),
+            ctx.llm_service is not None,
+            ctx.soul_engine is not None,
+        )
         if not rows or ctx.llm_service is None or ctx.soul_engine is None:
             return
         to_score = [r for r in rows if not float(r.get("quality_score", 0.0) or 0.0)]
@@ -3609,7 +3637,8 @@ def create_app(
                 ctx.database.batch_update_content_quality_scores(db_scores)
                 logger.info(
                     "Quality scored %d/%d recommendation items",
-                    len(db_scores), len(to_score),
+                    len(db_scores),
+                    len(to_score),
                 )
         except Exception:
             logger.exception("Background quality scoring failed")
@@ -3714,28 +3743,28 @@ def create_app(
             if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
                 note_id = str(row.get("bvid", "") or row.get("content_id", "") or "")
                 if note_id:
-                    try:
+                    with suppress(Exception):
                         item_url = _pick_best_xhs_url(ctx.database, note_id, item_url)
-                    except Exception:
-                        pass
-            reshuffle_items.append(RecommendationOut(
-                id=int(row["id"]),
-                bvid=str(row.get("bvid", "")),
-                title=str(row.get("title", "")),
-                up_name=str(row.get("up_name", "")),
-                cover_url=str(row.get("cover_url", "")),
-                expression=str(row.get("expression", "")),
-                topic_label=str(row.get("topic", "")),
-                presented=bool(row.get("presented", 0)),
-                feedback_type=str(row.get("feedback_type", "") or ""),
-                content_id=str(row.get("content_id", "") or row.get("bvid", "")),
-                content_url=item_url,
-                source_platform=item_platform,
-                content_type=str(row.get("content_type", "") or "video"),
-                body_text=str(row.get("body_text", "") or ""),
-                quality_score=float(row.get("quality_score", 0.0) or 0.0),
-                quality_reason=str(row.get("quality_reason", "") or ""),
-            ))
+            reshuffle_items.append(
+                RecommendationOut(
+                    id=int(row["id"]),
+                    bvid=str(row.get("bvid", "")),
+                    title=str(row.get("title", "")),
+                    up_name=str(row.get("up_name", "")),
+                    cover_url=str(row.get("cover_url", "")),
+                    expression=str(row.get("expression", "")),
+                    topic_label=str(row.get("topic", "")),
+                    presented=bool(row.get("presented", 0)),
+                    feedback_type=str(row.get("feedback_type", "") or ""),
+                    content_id=str(row.get("content_id", "") or row.get("bvid", "")),
+                    content_url=item_url,
+                    source_platform=item_platform,
+                    content_type=str(row.get("content_type", "") or "video"),
+                    body_text=str(row.get("body_text", "") or ""),
+                    quality_score=float(row.get("quality_score", 0.0) or 0.0),
+                    quality_reason=str(row.get("quality_reason", "") or ""),
+                )
+            )
 
         return RecommendationListResponse(items=reshuffle_items)
 
@@ -4023,9 +4052,7 @@ def create_app(
             # The payload builder runs several pool-count SQL queries; keep
             # them off the request event loop (they take 100ms-1s on a large
             # pool and otherwise stall every in-flight request).
-            **await asyncio.get_running_loop().run_in_executor(
-                None, _runtime_pool_status_payload
-            ),
+            **await asyncio.get_running_loop().run_in_executor(None, _runtime_pool_status_payload),
         }
         with suppress(Exception):
             result = publish(event)
@@ -4110,8 +4137,13 @@ def create_app(
 
     @app.post("/api/recommendations/reshuffle", response_model=RecommendationReshuffleResponse)
     async def reshuffle_recommendations(
-        platform: str | None = Query(default=None, description="Restrict the fresh batch to this source_platform (e.g. bilibili, xiaohongshu)."),
-        limit: int = Query(default=10, ge=1, le=5000, description="Number of recommendations to return per batch."),
+        platform: str | None = Query(
+            default=None,
+            description="Restrict the fresh batch to this source_platform (e.g. bilibili, xiaohongshu).",
+        ),
+        limit: int = Query(
+            default=10, ge=1, le=5000, description="Number of recommendations to return per batch."
+        ),
     ) -> RecommendationReshuffleResponse:
         if ctx.recommendation_engine is None or ctx.soul_engine is None:
             return RecommendationReshuffleResponse(items=[])
@@ -4119,20 +4151,22 @@ def create_app(
         # profile/reshuffle 路径——与 append 端点保持一致，避免无谓的 soul
         # 调用和空转。_pool_available_count() 同步执行 count SQL，放到
         # executor 里避免阻塞事件循环。
-        if await asyncio.get_running_loop().run_in_executor(
-            None, _pool_available_count
-        ) == 0:
+        if await asyncio.get_running_loop().run_in_executor(None, _pool_available_count) == 0:
             await _trigger_replenishment_if_needed(force=True)
             return RecommendationReshuffleResponse(items=[])
         try:
             profile = await ctx.soul_engine.get_profile()
         except Exception:
             return RecommendationReshuffleResponse(items=[])
-        items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=limit, platform=platform)
+        items = await ctx.recommendation_engine.reshuffle_recommendations(
+            profile=profile, limit=limit, platform=platform
+        )
         _serialized = _serialize_recommendation_items(items)
         _enrich_xhs_urls(_serialized, ctx.database)
         # M4: record exposure for freshly shown batch.
-        _mark_presented_ids = [r.recommendation_id for r in items if getattr(r, "recommendation_id", None)]
+        _mark_presented_ids = [
+            r.recommendation_id for r in items if getattr(r, "recommendation_id", None)
+        ]
         if _mark_presented_ids:
             try:
                 ctx.database.mark_recommendations_presented(_mark_presented_ids)
@@ -4158,9 +4192,7 @@ def create_app(
             return RecommendationReshuffleResponse(items=[])
         # _pool_available_count() runs count SQL synchronously; keep it off
         # the event loop.
-        if await asyncio.get_running_loop().run_in_executor(
-            None, _pool_available_count
-        ) == 0:
+        if await asyncio.get_running_loop().run_in_executor(None, _pool_available_count) == 0:
             await _trigger_replenishment_if_needed(force=True)
             return RecommendationReshuffleResponse(items=[])
         try:
@@ -4177,7 +4209,9 @@ def create_app(
         _serialized = _serialize_recommendation_items(items)
         _enrich_xhs_urls(_serialized, ctx.database)
         # M4: record exposure for freshly shown batch.
-        _mark_presented_ids = [r.recommendation_id for r in items if getattr(r, "recommendation_id", None)]
+        _mark_presented_ids = [
+            r.recommendation_id for r in items if getattr(r, "recommendation_id", None)
+        ]
         if _mark_presented_ids:
             try:
                 ctx.database.mark_recommendations_presented(_mark_presented_ids)
@@ -4206,18 +4240,35 @@ def create_app(
     async def pool_all(
         platform: str | None = Query(default=None, description="Filter by source_platform."),
         source: str | None = Query(default=None, description="Filter by source (e.g. xhs-feed)."),
-        status: str | None = Query(default=None, description="Filter by pool_status (fresh, shown, stale, suppressed, pending)."),
+        status: str | None = Query(
+            default=None,
+            description="Filter by pool_status (fresh, shown, stale, suppressed, pending).",
+        ),
         shuffle: bool = Query(default=False, description="Randomize the result order."),
         limit: int = Query(default=10000, ge=1, le=10000, description="Max items to return."),
-        min_score: float | None = Query(default=None, ge=0.0, le=1.0, description="Minimum quality_score filter."),
-        max_score: float | None = Query(default=None, ge=0.0, le=1.0, description="Maximum quality_score filter."),
+        min_score: float | None = Query(
+            default=None, ge=0.0, le=1.0, description="Minimum quality_score filter."
+        ),
+        max_score: float | None = Query(
+            default=None, ge=0.0, le=1.0, description="Maximum quality_score filter."
+        ),
         scored_only: bool = Query(default=False, description="Only items with quality_score > 0."),
-        unscored_only: bool = Query(default=False, description="Only items with quality_score = 0."),
+        unscored_only: bool = Query(
+            default=False, description="Only items with quality_score = 0."
+        ),
         topic_group: str | None = Query(default=None, description="Filter by topic_group."),
-        has_url: bool | None = Query(default=None, description="Filter by content_url presence (true=has url, false=no url)."),
-        has_expression: bool | None = Query(default=None, description="Filter by pool_expression presence."),
-        date_from: str | None = Query(default=None, description="Filter by discovered_at >= YYYY-MM-DD."),
-        date_to: str | None = Query(default=None, description="Filter by discovered_at <= YYYY-MM-DD."),
+        has_url: bool | None = Query(
+            default=None, description="Filter by content_url presence (true=has url, false=no url)."
+        ),
+        has_expression: bool | None = Query(
+            default=None, description="Filter by pool_expression presence."
+        ),
+        date_from: str | None = Query(
+            default=None, description="Filter by discovered_at >= YYYY-MM-DD."
+        ),
+        date_to: str | None = Query(
+            default=None, description="Filter by discovered_at <= YYYY-MM-DD."
+        ),
     ) -> PoolAllResponse:
         db = getattr(ctx, "database", None)
         if db is None:
@@ -4229,7 +4280,11 @@ def create_app(
             raw = int(pool_counts.get("raw", 0))
             pending = int(pool_counts.get("pending", 0))
 
-            where_clauses = ["pool_status IS NOT NULL", "COALESCE(pool_status, '') != ''", "COALESCE(pool_status, '') != 'purged_by_dislike'"]
+            where_clauses = [
+                "pool_status IS NOT NULL",
+                "COALESCE(pool_status, '') != ''",
+                "COALESCE(pool_status, '') != 'purged_by_dislike'",
+            ]
             params = []
             if platform:
                 where_clauses.append("source_platform = ?")
@@ -4269,12 +4324,19 @@ def create_app(
                 params.append(date_to)
 
             # 先查总数
-            count_sql = f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
-            total_row = await loop.run_in_executor(None, lambda: db.conn.execute(count_sql, params).fetchall())
+            count_sql = (
+                f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
+            )
+            total_row = await loop.run_in_executor(
+                None, lambda: db.conn.execute(count_sql, params).fetchall()
+            )
             total = int(total_row[0]["cnt"]) if total_row else 0
 
             # 排序：随机或按状态+质量分
-            order_clause = "ORDER BY RANDOM()" if shuffle else """
+            order_clause = (
+                "ORDER BY RANDOM()"
+                if shuffle
+                else """
                 ORDER BY
                   CASE pool_status
                     WHEN 'fresh' THEN 1
@@ -4287,12 +4349,13 @@ def create_app(
                   quality_score DESC,
                   bvid DESC
             """
+            )
             sql = f"""
                 SELECT bvid, title, up_name, source_platform, content_type,
                        cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
                        topic_group, pool_expression
                 FROM content_cache
-                WHERE {' AND '.join(where_clauses)}
+                WHERE {" AND ".join(where_clauses)}
                 {order_clause}
                 LIMIT ?
             """
@@ -4306,26 +4369,28 @@ def create_app(
                 if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
                     note_id = str(r["bvid"] or "")
                     if note_id:
-                        try:
+                        with suppress(Exception):
                             item_url = _pick_best_xhs_url(db, note_id, item_url)
-                        except Exception:
-                            pass
-                items.append(PoolItemOut(
-                    bvid=str(r["bvid"]),
-                    title=str(r["title"] or ""),
-                    up_name=str(r["up_name"] or ""),
-                    source_platform=item_platform,
-                    content_type=str(r["content_type"] or "video"),
-                    cover_url=str(r["cover_url"] or ""),
-                    content_url=item_url,
-                    body_text=str(r["body_text"] or ""),
-                    pool_status=str(r["pool_status"] or ""),
-                    quality_score=float(r["quality_score"] or 0.0),
-                    quality_reason=str(r["quality_reason"] or ""),
-                    topic_group=str(r["topic_group"] or ""),
-                    pool_expression=str(r["pool_expression"] or ""),
-                ))
-            return PoolAllResponse(items=items, total=total, available=available, raw=raw, pending=pending)
+                items.append(
+                    PoolItemOut(
+                        bvid=str(r["bvid"]),
+                        title=str(r["title"] or ""),
+                        up_name=str(r["up_name"] or ""),
+                        source_platform=item_platform,
+                        content_type=str(r["content_type"] or "video"),
+                        cover_url=str(r["cover_url"] or ""),
+                        content_url=item_url,
+                        body_text=str(r["body_text"] or ""),
+                        pool_status=str(r["pool_status"] or ""),
+                        quality_score=float(r["quality_score"] or 0.0),
+                        quality_reason=str(r["quality_reason"] or ""),
+                        topic_group=str(r["topic_group"] or ""),
+                        pool_expression=str(r["pool_expression"] or ""),
+                    )
+                )
+            return PoolAllResponse(
+                items=items, total=total, available=available, raw=raw, pending=pending
+            )
         except Exception:
             logger.exception("pool_all failed")
             return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
@@ -4360,14 +4425,15 @@ def create_app(
         title: str = Body("", embed=True),
         topic_group: str = Body("", embed=True),
         body_text: str = Body("", embed=True),
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Record a like or dislike for a content item."""
         db = getattr(ctx, "database", None)
         if db is None:
             return {"ok": False, "action": action, "bvid": bvid}
         try:
             ok = db.insert_user_feedback(
-                bvid, action,
+                bvid,
+                action,
                 source_platform=source_platform,
                 title=title,
                 topic_group=topic_group,
@@ -4390,7 +4456,7 @@ def create_app(
     async def delete_user_feedback(
         bvid: str = Query(min_length=1),
         action: str = Query(pattern=r"^(like|dislike)$"),
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Remove a feedback action for a content item."""
         db = getattr(ctx, "database", None)
         if db is None:
@@ -4402,7 +4468,9 @@ def create_app(
             return {"ok": False, "action": action, "bvid": bvid}
 
     @app.get("/api/user-feedback/batch")
-    async def get_user_feedback_batch(bvids: str = Query(description="Comma-separated bvid list")) -> dict:
+    async def get_user_feedback_batch(
+        bvids: str = Query(description="Comma-separated bvid list"),
+    ) -> dict[str, Any]:
         """Get feedback status for a batch of bvids."""
         db = getattr(ctx, "database", None)
         if db is None:
@@ -4445,7 +4513,7 @@ def create_app(
             return []
 
     @app.post("/api/view-record")
-    async def record_view(payload: ViewRecordIn) -> dict:
+    async def record_view(payload: ViewRecordIn) -> dict[str, Any]:
         """Record a content view (implicit feedback)."""
         db = getattr(ctx, "database", None)
         if db is None:
@@ -4458,7 +4526,7 @@ def create_app(
             return {"ok": False}
 
     @app.post("/api/view-dwell")
-    async def report_view_dwell(payload: ViewDwellIn) -> dict:
+    async def report_view_dwell(payload: ViewDwellIn) -> dict[str, Any]:
         """Attach dwell seconds to the latest view of a bvid (implicit feedback)."""
         db = getattr(ctx, "database", None)
         if db is None:
@@ -4478,7 +4546,9 @@ def create_app(
         q: str = Query(default="", description="Natural language query, e.g. 'AI 创业 播客'."),
         limit: int = Query(default=20, ge=1, le=100, description="Max items to return."),
         shuffle: bool = Query(default=True, description="Randomize the result order."),
-        session_id: str | None = Query(default=None, description="Session ID for multi-turn context continuation."),
+        session_id: str | None = Query(
+            default=None, description="Session ID for multi-turn context continuation."
+        ),
     ) -> PoolAllResponse:
         """对话式推荐入口。
 
@@ -4498,13 +4568,18 @@ def create_app(
 
             # --- 1. keyword extraction (LLM-enhanced) ---
             import re
+
             keywords = []
             platform_filter = None
             content_type_filter = None
 
             # Try LLM-based intent extraction if available
             soul_engine = getattr(ctx, "soul_engine", None)
-            llm_available = soul_engine is not None and hasattr(soul_engine, "llm_ask") and callable(soul_engine.llm_ask)
+            llm_available = (
+                soul_engine is not None
+                and hasattr(soul_engine, "llm_ask")
+                and callable(soul_engine.llm_ask)
+            )
             llm_used = False
 
             if llm_available and len(q) >= 3:
@@ -4524,7 +4599,12 @@ Keep keywords focused and specific. Remove stop words."""
                             keywords = [str(k).strip() for k in kw if str(k).strip()]
                             platform_name = parsed.get("platform")
                             if platform_name and platform_name.lower() in {
-                                "bilibili", "zhihu", "xiaohongshu", "youtube", "v2ex", "xiaoyuzhou",
+                                "bilibili",
+                                "zhihu",
+                                "xiaohongshu",
+                                "youtube",
+                                "v2ex",
+                                "xiaoyuzhou",
                             }:
                                 platform_filter = platform_name.lower()
                             ct_name = parsed.get("content_type")
@@ -4540,17 +4620,29 @@ Keep keywords focused and specific. Remove stop words."""
                 keywords = [t.strip() for t in raw_tokens if len(t.strip()) >= 1]
 
                 platform_map = {
-                    "b站": "bilibili", "bilibili": "bilibili", "哔哩哔哩": "bilibili",
-                    "知乎": "zhihu", "zhihu": "zhihu",
-                    "小红书": "xiaohongshu", "xhs": "xiaohongshu", "xiaohongshu": "xiaohongshu",
-                    "youtube": "youtube", "youtube": "youtube", "油管": "youtube",
+                    "b站": "bilibili",
+                    "bilibili": "bilibili",
+                    "哔哩哔哩": "bilibili",
+                    "知乎": "zhihu",
+                    "zhihu": "zhihu",
+                    "小红书": "xiaohongshu",
+                    "xhs": "xiaohongshu",
+                    "xiaohongshu": "xiaohongshu",
+                    "youtube": "youtube",
+                    "油管": "youtube",
                     "v2ex": "v2ex",
-                    "小宇宙": "xiaoyuzhou", "播客": "xiaoyuzhou", "podcast": "xiaoyuzhou",
+                    "小宇宙": "xiaoyuzhou",
+                    "播客": "xiaoyuzhou",
+                    "podcast": "xiaoyuzhou",
                 }
                 content_type_map = {
-                    "视频": "video", "video": "video",
-                    "播客": "podcast", "podcast": "podcast", "音频": "podcast",
-                    "文章": "article", "article": "article",
+                    "视频": "video",
+                    "video": "video",
+                    "播客": "podcast",
+                    "podcast": "podcast",
+                    "音频": "podcast",
+                    "文章": "article",
+                    "article": "article",
                 }
 
                 remaining_keywords = []
@@ -4606,11 +4698,11 @@ Keep keywords focused and specific. Remove stop words."""
                 kw_escaped = kw.replace("!", "!!").replace("%", "!%").replace("_", "!_")
                 like_pattern = f"%{kw_escaped}%"
                 like_parts.append(
-                    f"(title LIKE ? ESCAPE '!' "
-                    f"OR body_text LIKE ? ESCAPE '!' "
-                    f"OR topic_group LIKE ? ESCAPE '!' "
-                    f"OR up_name LIKE ? ESCAPE '!' "
-                    f"OR source_platform LIKE ? ESCAPE '!')"
+                    "(title LIKE ? ESCAPE '!' "
+                    "OR body_text LIKE ? ESCAPE '!' "
+                    "OR topic_group LIKE ? ESCAPE '!' "
+                    "OR up_name LIKE ? ESCAPE '!' "
+                    "OR source_platform LIKE ? ESCAPE '!')"
                 )
                 for _ in range(5):
                     params.append(like_pattern)
@@ -4619,8 +4711,12 @@ Keep keywords focused and specific. Remove stop words."""
                 where_clauses.append(f"({' OR '.join(like_parts)})")
 
             # --- 5. count & fetch ---
-            count_sql = f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
-            total_row = await loop.run_in_executor(None, lambda: db.conn.execute(count_sql, params).fetchall())
+            count_sql = (
+                f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {' AND '.join(where_clauses)}"
+            )
+            total_row = await loop.run_in_executor(
+                None, lambda: db.conn.execute(count_sql, params).fetchall()
+            )
             total = int(total_row[0]["cnt"]) if total_row else 0
 
             fetch_limit = min(limit * 3, 200)  # fetch more for sorting + diversity
@@ -4629,7 +4725,7 @@ Keep keywords focused and specific. Remove stop words."""
                        cover_url, content_url, body_text, description, pool_status, quality_score, quality_reason,
                        topic_group, pool_expression
                 FROM content_cache
-                WHERE {' AND '.join(where_clauses)}
+                WHERE {" AND ".join(where_clauses)}
                 ORDER BY quality_score DESC
                 LIMIT ?
             """
@@ -4723,34 +4819,38 @@ Keep keywords focused and specific. Remove stop words."""
                 item_url = str(r["content_url"] or "")
                 item_platform = str(r["source_platform"] or "")
                 is_xhs_url = "xiaohongshu.com/explore/" in item_url
-                if item_url and "xsec_token=" not in item_url and (
-                    item_platform == "xiaohongshu" or is_xhs_url
+                if (
+                    item_url
+                    and "xsec_token=" not in item_url
+                    and (item_platform == "xiaohongshu" or is_xhs_url)
                 ):
                     note_id = str(r["bvid"] or "")
                     if note_id:
-                        try:
+                        with suppress(Exception):
                             item_url = _pick_best_xhs_url(db, note_id, item_url)
-                        except Exception:
-                            pass
-                final_items.append(PoolItemOut(
-                    bvid=str(r["bvid"]),
-                    title=str(r["title"] or ""),
-                    up_name=str(r["up_name"] or ""),
-                    source_platform=item_platform,
-                    content_type=str(r["content_type"] or "video"),
-                    cover_url=str(r["cover_url"] or ""),
-                    content_url=item_url,
-                    body_text=str(r["body_text"] or ""),
-                    pool_status=str(r["pool_status"] or ""),
-                    quality_score=float(r["quality_score"] or 0.0),
-                    fit_score=float(s["fit_score"] or 0.0),
-                    quality_reason=str(r["quality_reason"] or ""),
-                    topic_group=str(r["topic_group"] or ""),
-                    pool_expression=str(r["pool_expression"] or ""),
-                ))
+                final_items.append(
+                    PoolItemOut(
+                        bvid=str(r["bvid"]),
+                        title=str(r["title"] or ""),
+                        up_name=str(r["up_name"] or ""),
+                        source_platform=item_platform,
+                        content_type=str(r["content_type"] or "video"),
+                        cover_url=str(r["cover_url"] or ""),
+                        content_url=item_url,
+                        body_text=str(r["body_text"] or ""),
+                        pool_status=str(r["pool_status"] or ""),
+                        quality_score=float(r["quality_score"] or 0.0),
+                        fit_score=float(s["fit_score"] or 0.0),
+                        quality_reason=str(r["quality_reason"] or ""),
+                        topic_group=str(r["topic_group"] or ""),
+                        pool_expression=str(r["pool_expression"] or ""),
+                    )
+                )
             # Build session context with RankAgent
             intent["keywords"] = keywords
-            session_context = RankAgent.build_context_text(intent, alpha, rank_result.get("beta", 0.0))
+            session_context = RankAgent.build_context_text(
+                intent, alpha, rank_result.get("beta", 0.0)
+            )
             if session_id:
                 _agent_session_cache[session_id] = {
                     "exclude_platforms": list(exclude_platforms),
@@ -4761,7 +4861,14 @@ Keep keywords focused and specific. Remove stop words."""
                     "content_type_filter": content_type_filter,
                     "session_context": session_context,
                 }
-            return PoolAllResponse(items=final_items, total=total, available=total, raw=0, pending=0, session_context=session_context)
+            return PoolAllResponse(
+                items=final_items,
+                total=total,
+                available=total,
+                raw=0,
+                pending=0,
+                session_context=session_context,
+            )
         except Exception:
             logger.exception("agent-recommend failed (q=%r)", q)
             return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
@@ -4778,9 +4885,7 @@ Keep keywords focused and specific. Remove stop words."""
             )
         # get_runtime_status() runs several count SQL queries synchronously;
         # keep them off the event loop (frontend polls this endpoint).
-        payload = dict(
-            await asyncio.get_running_loop().run_in_executor(None, get_runtime_status)
-        )
+        payload = dict(await asyncio.get_running_loop().run_in_executor(None, get_runtime_status))
         get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
         if callable(get_account_sync_status):
             payload.update(get_account_sync_status())
@@ -4795,8 +4900,24 @@ Keep keywords focused and specific. Remove stop words."""
         db = getattr(ctx, "database", None)
         if db is None:
             return ObservabilityResponse(
-                pipeline=PoolPipelineStats(total_items=0, fresh=0, shown=0, stale=0, suppressed=0, feedbacked=0, pending=0, discovery_candidates_pending=0, discovery_candidates_evaluated=0, items_with_quality_score=0, items_without_quality_score=0),
-                platforms=[], score_distribution=[], topic_groups=[], llm_usage=LLMUsageSummary(), discovery_candidates=[],
+                pipeline=PoolPipelineStats(
+                    total_items=0,
+                    fresh=0,
+                    shown=0,
+                    stale=0,
+                    suppressed=0,
+                    feedbacked=0,
+                    pending=0,
+                    discovery_candidates_pending=0,
+                    discovery_candidates_evaluated=0,
+                    items_with_quality_score=0,
+                    items_without_quality_score=0,
+                ),
+                platforms=[],
+                score_distribution=[],
+                topic_groups=[],
+                llm_usage=LLMUsageSummary(),
+                discovery_candidates=[],
             )
 
         def _query() -> ObservabilityResponse:
@@ -4827,7 +4948,9 @@ Keep keywords focused and specific. Remove stop words."""
                 FROM content_cache
             """).fetchone()
             m_total = int(master["total"]) if master else 0
-            m_avg = float(master["avg_score"]) if master and master["avg_score"] is not None else 0.0
+            m_avg = (
+                float(master["avg_score"]) if master and master["avg_score"] is not None else 0.0
+            )
             m_scored = int(master["scored_count"]) if master else 0
 
             pipeline = PoolPipelineStats(
@@ -4861,18 +4984,29 @@ Keep keywords focused and specific. Remove stop words."""
                 PlatformPoolStats(
                     platform=plat,
                     total=sum(s.values()),
-                    fresh=s.get("fresh", 0), shown=s.get("shown", 0), stale=s.get("stale", 0),
-                    suppressed=s.get("suppressed", 0), feedbacked=s.get("feedbacked", 0), pending=s.get("pending", 0),
+                    fresh=s.get("fresh", 0),
+                    shown=s.get("shown", 0),
+                    stale=s.get("stale", 0),
+                    suppressed=s.get("suppressed", 0),
+                    feedbacked=s.get("feedbacked", 0),
+                    pending=s.get("pending", 0),
                 )
                 for plat, s in sorted(plat_map.items())
             ]
 
             # ── 3. Score distribution (from master) ──
             score_buckets = [
-                ("0 (未评分)", "bucket_0"), ("0~0.2", "bucket_02"), ("0.2~0.4", "bucket_04"),
-                ("0.4~0.6", "bucket_06"), ("0.6~0.8", "bucket_08"), ("0.8~1.0", "bucket_10"),
+                ("0 (未评分)", "bucket_0"),
+                ("0~0.2", "bucket_02"),
+                ("0.2~0.4", "bucket_04"),
+                ("0.4~0.6", "bucket_06"),
+                ("0.6~0.8", "bucket_08"),
+                ("0.8~1.0", "bucket_10"),
             ]
-            score_dist = [ScoreDistribution(bucket=b, count=int(master[col]) if master else 0) for b, col in score_buckets]
+            score_dist = [
+                ScoreDistribution(bucket=b, count=int(master[col]) if master else 0)
+                for b, col in score_buckets
+            ]
 
             # ── 4. Topic groups ──
             topic_rows = db.conn.execute("""
@@ -4881,14 +5015,19 @@ Keep keywords focused and specific. Remove stop words."""
                 WHERE topic_group != '' AND topic_group IS NOT NULL
                 GROUP BY topic_group ORDER BY c DESC LIMIT 30
             """).fetchall()
-            topic_groups = [TopicGroupStats(topic=str(r["topic_group"]), count=int(r["c"])) for r in topic_rows]
+            topic_groups = [
+                TopicGroupStats(topic=str(r["topic_group"]), count=int(r["c"])) for r in topic_rows
+            ]
 
             # ── 5. Discovery candidates ──
             disc_rows = db.conn.execute("""
                 SELECT status, COUNT(*) AS c
                 FROM discovery_candidates GROUP BY status ORDER BY c DESC
             """).fetchall()
-            disc_stats = [DiscoveryCandidateStats(status=str(r["status"]), count=int(r["c"])) for r in disc_rows]
+            disc_stats = [
+                DiscoveryCandidateStats(status=str(r["status"]), count=int(r["c"]))
+                for r in disc_rows
+            ]
 
             # Discovery candidates pipeline counts (from disc_rows)
             disc_pending = 0
@@ -4920,18 +5059,28 @@ Keep keywords focused and specific. Remove stop words."""
             total_today_calls = 0
             total_today_cost = 0.0
             for r in caller_rows:
-                calls = int(r["calls"]); cost = float(r["cost_cny"])
-                t_calls = int(r["today_calls"]); t_cost = float(r["today_cost"])
-                total_7d_calls += calls; total_7d_cost += cost
-                total_today_calls += t_calls; total_today_cost += t_cost
-                by_caller.append({
-                    "caller": str(r["caller"] or "unknown"), "calls": calls,
-                    "cost_cny": round(cost, 4), "prompt_tokens": int(r["prompt_tokens"]),
-                    "completion_tokens": int(r["completion_tokens"]),
-                })
+                calls = int(r["calls"])
+                cost = float(r["cost_cny"])
+                t_calls = int(r["today_calls"])
+                t_cost = float(r["today_cost"])
+                total_7d_calls += calls
+                total_7d_cost += cost
+                total_today_calls += t_calls
+                total_today_cost += t_cost
+                by_caller.append(
+                    {
+                        "caller": str(r["caller"] or "unknown"),
+                        "calls": calls,
+                        "cost_cny": round(cost, 4),
+                        "prompt_tokens": int(r["prompt_tokens"]),
+                        "completion_tokens": int(r["completion_tokens"]),
+                    }
+                )
             llm_usage = LLMUsageSummary(
-                today_calls=total_today_calls, today_cost_cny=round(total_today_cost, 4),
-                total_calls_7d=total_7d_calls, total_cost_7d=round(total_7d_cost, 4),
+                today_calls=total_today_calls,
+                today_cost_cny=round(total_today_cost, 4),
+                total_calls_7d=total_7d_calls,
+                total_cost_7d=round(total_7d_cost, 4),
                 by_caller=by_caller,
             )
 
@@ -4942,10 +5091,20 @@ Keep keywords focused and specific. Remove stop words."""
                 with suppress(Exception):
                     st = get_runtime_status()
                     if isinstance(st, dict):
-                        for k in ("last_refresh_at", "last_discovered_count", "last_replenished_count",
-                                  "pool_available_count", "pool_raw_count", "pool_target_count",
-                                  "recommendation_count", "recent_pool_topics", "pending_delight_count",
-                                  "last_delight_notification_at", "manual_refresh_state", "pending_signal_events"):
+                        for k in (
+                            "last_refresh_at",
+                            "last_discovered_count",
+                            "last_replenished_count",
+                            "pool_available_count",
+                            "pool_raw_count",
+                            "pool_target_count",
+                            "recommendation_count",
+                            "recent_pool_topics",
+                            "pending_delight_count",
+                            "last_delight_notification_at",
+                            "manual_refresh_state",
+                            "pending_signal_events",
+                        ):
                             if k in st:
                                 runtime[k] = st[k]
 
@@ -4954,7 +5113,14 @@ Keep keywords focused and specific. Remove stop words."""
                 SELECT platform, status, COUNT(*) AS c
                 FROM discovery_keywords GROUP BY platform, status ORDER BY platform, status
             """).fetchall()
-            keywords = [{"platform": str(r["platform"] or "unknown"), "status": str(r["status"] or "unknown"), "count": int(r["c"])} for r in kw_rows]
+            keywords = [
+                {
+                    "platform": str(r["platform"] or "unknown"),
+                    "status": str(r["status"] or "unknown"),
+                    "count": int(r["c"]),
+                }
+                for r in kw_rows
+            ]
 
             # ── 9. Eval stats (combined single query) ──
             eval_row = db.conn.execute("""
@@ -4966,7 +5132,11 @@ Keep keywords focused and specific. Remove stop words."""
                 "total_candidates": eval_total_c,
                 "total_eval_attempts": int(eval_row["attempts"]) if eval_row else 0,
                 "candidates_accepted": int(master["candidates_accepted"]) if master else 0,
-                "acceptance_rate": round(int(master["candidates_accepted"]) / max(eval_total_c, 1) * 100, 1) if eval_total_c else 0,
+                "acceptance_rate": round(
+                    int(master["candidates_accepted"]) / max(eval_total_c, 1) * 100, 1
+                )
+                if eval_total_c
+                else 0,
             }
 
             # ── 10. Event stats (combined single query) ──
@@ -4989,8 +5159,15 @@ Keep keywords focused and specific. Remove stop words."""
                 if sat:
                     sat_map[sat] += c
             event_total = sum(event_types.values())
-            event_stats = {"total_events": event_total, "by_type": dict(event_types), "by_platform": dict(event_platforms)}
-            satisfaction_distribution = [{"satisfaction": k, "count": v} for k, v in sorted(sat_map.items(), key=lambda x: -x[1])]
+            event_stats = {
+                "total_events": event_total,
+                "by_type": dict(event_types),
+                "by_platform": dict(event_platforms),
+            }
+            satisfaction_distribution = [
+                {"satisfaction": k, "count": v}
+                for k, v in sorted(sat_map.items(), key=lambda x: -x[1])
+            ]
 
             # ── 11. Feedback stats ──
             fb_rows = db.conn.execute("""
@@ -5033,11 +5210,16 @@ Keep keywords focused and specific. Remove stop words."""
                 ss_resp = sources_status()
                 if isinstance(ss_resp, SourcesStatusResponse):
                     for s in ss_resp.sources:
-                        auth_sources.append({
-                            "platform": s.platform, "label": s.label, "status": s.status,
-                            "last_ok_at": s.last_ok_at or "", "error": s.error or "",
-                            "cookie_age_hours": s.cookie_age_hours,
-                        })
+                        auth_sources.append(
+                            {
+                                "platform": s.platform,
+                                "label": s.label,
+                                "status": s.status,
+                                "last_ok_at": s.last_ok_at or "",
+                                "error": s.error or "",
+                                "cookie_age_hours": s.cookie_age_hours,
+                            }
+                        )
             except Exception:
                 pass
 
@@ -5047,7 +5229,9 @@ Keep keywords focused and specific. Remove stop words."""
                 WHERE style_key != '' AND style_key IS NOT NULL
                 GROUP BY style_key ORDER BY c DESC LIMIT 20
             """).fetchall()
-            style_distribution = [{"style": str(r["style_key"]), "count": int(r["c"])} for r in style_rows]
+            style_distribution = [
+                {"style": str(r["style_key"]), "count": int(r["c"])} for r in style_rows
+            ]
 
             # ── 17. Suppressed (quota-managed) qualification breakdown ──
             # One GROUP BY over source_platform × qualification bucket so the
@@ -5088,13 +5272,23 @@ Keep keywords focused and specific. Remove stop words."""
             ]
 
             return ObservabilityResponse(
-                pipeline=pipeline, platforms=platforms, score_distribution=score_dist,
-                topic_groups=topic_groups, llm_usage=llm_usage, discovery_candidates=disc_stats,
-                runtime=runtime, keywords=keywords, eval_stats=eval_stats,
-                event_stats=event_stats, feedback_stats=feedback_stats,
-                expression_coverage=expression_coverage, delight_stats=delight_stats,
-                soul_profile=soul_profile, scheduler_loops=scheduler_loops,
-                auth_sources=auth_sources, style_distribution=style_distribution,
+                pipeline=pipeline,
+                platforms=platforms,
+                score_distribution=score_dist,
+                topic_groups=topic_groups,
+                llm_usage=llm_usage,
+                discovery_candidates=disc_stats,
+                runtime=runtime,
+                keywords=keywords,
+                eval_stats=eval_stats,
+                event_stats=event_stats,
+                feedback_stats=feedback_stats,
+                expression_coverage=expression_coverage,
+                delight_stats=delight_stats,
+                soul_profile=soul_profile,
+                scheduler_loops=scheduler_loops,
+                auth_sources=auth_sources,
+                style_distribution=style_distribution,
                 satisfaction_distribution=satisfaction_distribution,
                 suppressed_breakdown=suppressed_breakdown,
             )
@@ -5106,7 +5300,11 @@ Keep keywords focused and specific. Remove stop words."""
             if soul_engine is not None and hasattr(soul_engine, "get_profile"):
                 profile = await soul_engine.get_profile()
                 if profile is not None:
-                    interest_tags = len(getattr(profile.interest, "likes", [])) if hasattr(profile, "interest") else 0
+                    interest_tags = (
+                        len(getattr(profile.interest, "likes", []))
+                        if hasattr(profile, "interest")
+                        else 0
+                    )
                     awareness_count = len(getattr(profile, "recent_awareness", []))
                     insights_count = len(getattr(profile, "active_insights", []))
                     portrait = getattr(profile, "personality_portrait", "")[:100]
@@ -5588,9 +5786,7 @@ Keep keywords focused and specific. Remove stop words."""
             retr = get_retriever()
             loop = asyncio.get_running_loop()
             hits = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, lambda: retr.retrieve_chunks(message, top_k=top_k)
-                ),
+                loop.run_in_executor(None, lambda: retr.retrieve_chunks(message, top_k=top_k)),
                 timeout=15,
             )
         except Exception:
@@ -7096,9 +7292,7 @@ Keep keywords focused and specific. Remove stop words."""
         if not name or not slug:
             raise HTTPException(status_code=422, detail="name and slug are required.")
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
-            raise HTTPException(
-                status_code=422, detail="slug 只能包含小写字母、数字和连字符。"
-            )
+            raise HTTPException(status_code=422, detail="slug 只能包含小写字母、数字和连字符。")
         if ctx.database.get_topic_by_slug(slug) is not None:
             raise HTTPException(status_code=409, detail=f"slug 已存在: {slug}")
         keywords = list(payload.keywords or [])
@@ -10624,14 +10818,10 @@ Keep keywords focused and specific. Remove stop words."""
         """Fetch a single article with its full body text for reading."""
         database = getattr(ctx, "database", None)
         if database is None:
-            return JSONResponse(
-                {"ok": False, "error": "database unavailable"}, status_code=503
-            )
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         row = database.get_article(article_id)
         if row is None:
-            return JSONResponse(
-                {"ok": False, "error": "article not found"}, status_code=404
-            )
+            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
         return JSONResponse({"ok": True, "article": row})
 
     @app.get("/api/read-archive/articles/{article_id}")
@@ -10639,9 +10829,7 @@ Keep keywords focused and specific. Remove stop words."""
         """Fetch a single read-archive article with its full body text."""
         database = getattr(ctx, "database", None)
         if database is None:
-            return JSONResponse(
-                {"ok": False, "error": "database unavailable"}, status_code=503
-            )
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         row = database.get_readarchive_article(article_id)
         if row is None:
             return JSONResponse(
@@ -10650,9 +10838,7 @@ Keep keywords focused and specific. Remove stop words."""
         return JSONResponse({"ok": True, "article": row})
 
     @app.patch("/api/articles/{article_id}")
-    async def update_article(
-        article_id: int, payload: ArticleUpdateIn
-    ) -> JSONResponse:
+    async def update_article(article_id: int, payload: ArticleUpdateIn) -> JSONResponse:
         """Update an article's reading status and/or tags."""
         # Mirrors Database.ARTICLE_STATUSES — keep the two in sync.
         valid = {"unread", "reading", "finished", "archived", "hidden"}
@@ -10666,18 +10852,14 @@ Keep keywords focused and specific. Remove stop words."""
             )
         database = getattr(ctx, "database", None)
         if database is None:
-            return JSONResponse(
-                {"ok": False, "error": "database unavailable"}, status_code=503
-            )
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         ok = True
         pool_purged = 0
         pool_revived = 0
         previous_status: str | None = None
         if payload.status is not None:
             previous_row = database.get_article(article_id)
-            previous_status = (
-                str(previous_row.get("status") or "") if previous_row else None
-            )
+            previous_status = str(previous_row.get("status") or "") if previous_row else None
             ok = bool(database.update_article_status(article_id, payload.status))
             # 读完回流画像：finished 是强正向信号，插入事件由 soul 管道
             # 自然消费（classify_event_satisfaction 已将其归为 positive）。
@@ -10848,7 +11030,9 @@ Keep keywords focused and specific. Remove stop words."""
             return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
         if row.get("ai_summary"):
             try:
-                return JSONResponse({"ok": True, "summary": json.loads(row["ai_summary"]), "cached": True})
+                return JSONResponse(
+                    {"ok": True, "summary": json.loads(row["ai_summary"]), "cached": True}
+                )
             except Exception:
                 pass  # 损坏则重新生成
         content = str(row.get("content_text") or "").strip()
@@ -11057,10 +11241,10 @@ Keep keywords focused and specific. Remove stop words."""
             with suppress(Exception):
                 sys_prompt = (
                     "你是阅读库搜索的意图解析器。把用户的自然语言查询拆成结构化检索意图，"
-                    "只输出 JSON：{\"keywords\":[检索关键词],"
-                    "\"exclude\":[要排除的词，如『不要营销号』里的『营销号』],"
-                    "\"source_type\":来源或null,"
-                    "\"status\":unread|reading|finished|archived 之一或null}。"
+                    '只输出 JSON：{"keywords":[检索关键词],'
+                    '"exclude":[要排除的词，如『不要营销号』里的『营销号』],'
+                    '"source_type":来源或null,'
+                    '"status":unread|reading|finished|archived 之一或null}。'
                     f"source_type 只能取这些值之一：{sorted(_READING_VALID_SOURCE_TYPES)}；"
                     "不符合的填 null。keywords 用具体、聚焦的词，去掉停用词。"
                 )
@@ -11069,14 +11253,10 @@ Keep keywords focused and specific. Remove stop words."""
                     parsed = json.loads(raw)
                     if isinstance(parsed, dict):
                         kws = [
-                            str(k).strip()
-                            for k in (parsed.get("keywords") or [])
-                            if str(k).strip()
+                            str(k).strip() for k in (parsed.get("keywords") or []) if str(k).strip()
                         ]
                         exc = [
-                            str(e).strip()
-                            for e in (parsed.get("exclude") or [])
-                            if str(e).strip()
+                            str(e).strip() for e in (parsed.get("exclude") or []) if str(e).strip()
                         ]
                         src = str(parsed.get("source_type") or "").strip().lower()
                         stt = str(parsed.get("status") or "").strip().lower()
@@ -11105,8 +11285,11 @@ Keep keywords focused and specific. Remove stop words."""
         per_term_limit = max(limit, 30)
         for term in terms:
             rows = database.search_articles(
-                q=term, limit=per_term_limit, offset=0,
-                source_type=src, status=st,
+                q=term,
+                limit=per_term_limit,
+                offset=0,
+                source_type=src,
+                status=st,
             )
             for row in rows:
                 try:
@@ -11170,9 +11353,9 @@ Keep keywords focused and specific. Remove stop words."""
             for name, weight in keywords:
                 if name and name.lower() in text:
                     hit_counter[name] = hit_counter.get(name, 0.0) + weight
-        interest_shift["matched"] = sorted(
-            hit_counter.items(), key=lambda kv: kv[1], reverse=True
-        )[:10]
+        interest_shift["matched"] = sorted(hit_counter.items(), key=lambda kv: kv[1], reverse=True)[
+            :10
+        ]
         return JSONResponse({"ok": True, "stats": stats, "interest_shift": interest_shift})
 
     @app.post("/api/reading/auto-tag")
@@ -11198,8 +11381,14 @@ Keep keywords focused and specific. Remove stop words."""
         keywords = _load_interest_keywords()
         if not keywords:
             return JSONResponse(
-                {"ok": True, "scanned": 0, "updated": 0, "added": 0,
-                 "note": "no interest profile yet; skipped"}, status_code=200,
+                {
+                    "ok": True,
+                    "scanned": 0,
+                    "updated": 0,
+                    "added": 0,
+                    "note": "no interest profile yet; skipped",
+                },
+                status_code=200,
             )
         rows = database.iter_articles_for_tagging(
             limit=limit, status=status, only_sparse=only_sparse
@@ -11257,16 +11446,21 @@ Keep keywords focused and specific. Remove stop words."""
             if str(c.get("status") or "") == "hidden":
                 continue
             s = similarity(
-                t_title, t_tags,
-                str(c.get("title") or ""), c.get("tags"),
+                t_title,
+                t_tags,
+                str(c.get("title") or ""),
+                c.get("tags"),
             )
             if s > 0:
                 scored.append((s, c))
         scored.sort(key=lambda kv: kv[0], reverse=True)
         items = [
             {
-                "id": c.get("id"), "title": c.get("title"), "url": c.get("url"),
-                "source_type": c.get("source_type"), "tags": c.get("tags"),
+                "id": c.get("id"),
+                "title": c.get("title"),
+                "url": c.get("url"),
+                "source_type": c.get("source_type"),
+                "tags": c.get("tags"),
                 "similarity": round(s, 3),
             }
             for s, c in scored[:k]
@@ -11316,12 +11510,14 @@ Keep keywords focused and specific. Remove stop words."""
             for sub in subs:
                 key = f"{platform}:{sub['url']}"
                 count, last = stats_map.get(key, (0, ""))
-                out.append(SubscriptionItemOut(
-                    name=sub["name"],
-                    url=sub["url"],
-                    item_count=count,
-                    last_fetched_at=last or "",
-                ))
+                out.append(
+                    SubscriptionItemOut(
+                        name=sub["name"],
+                        url=sub["url"],
+                        item_count=count,
+                        last_fetched_at=last or "",
+                    )
+                )
             return out
 
         result.rss = map_subs(list(_cfg.scheduler.rss_subscriptions), "rss")
@@ -11459,10 +11655,29 @@ Keep keywords focused and specific. Remove stop words."""
         def _desktop_index_slash() -> Response:
             return _desktop_index_response()
 
-        _DESKTOP_PAGE_NAMES = {
-            "home", "delight", "saved", "profile", "chat", "library", "read-archive", "settings",
-            "watchLater", "watchlater",
-            "custom-filter", "pool-all", "pool-filter", "observability", "pool-explore", "xhs-feed", "zhihu-feed", "bili-feed", "youtube-feed", "v2ex-feed", "xiaoyuzhou-feed", "agent-recommend",
+        _desktop_page_names = {
+            "home",
+            "delight",
+            "saved",
+            "profile",
+            "chat",
+            "library",
+            "read-archive",
+            "settings",
+            "watchLater",
+            "watchlater",
+            "custom-filter",
+            "pool-all",
+            "pool-filter",
+            "observability",
+            "pool-explore",
+            "xhs-feed",
+            "zhihu-feed",
+            "bili-feed",
+            "youtube-feed",
+            "v2ex-feed",
+            "xiaoyuzhou-feed",
+            "agent-recommend",
         }
 
         @app.get("/web/{page}", include_in_schema=False)
@@ -11472,7 +11687,7 @@ Keep keywords focused and specific. Remove stop words."""
             Returns the SPA shell; the client reads location.pathname and opens
             the matching view. `page` is a single path segment, so /web/assets/*
             static requests are never intercepted. Unknown pages 404."""
-            if page not in _DESKTOP_PAGE_NAMES:
+            if page not in _desktop_page_names:
                 raise HTTPException(status_code=404, detail="unknown desktop page")
             return _desktop_index_response()
 
@@ -11500,8 +11715,10 @@ Keep keywords focused and specific. Remove stop words."""
     def reading_library_platform(source: str):
         """Bookmarkable per-platform reading page. Reuses the same SPA,
         injecting the active source so the client filters and labels by it."""
-        from fastapi.responses import Response
         import re
+
+        from fastapi.responses import Response
+
         html_path = _reading_dir / "index.html"
         try:
             html = html_path.read_text(encoding="utf-8")
@@ -11513,7 +11730,9 @@ Keep keywords focused and specific. Remove stop words."""
         return Response(html, media_type="text/html")
 
     if _reading_dir.is_dir():
-        app.mount("/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library")
+        app.mount(
+            "/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library"
+        )
 
     # ── Standalone Topics (专题) page ────────────────────────────
     # Bookmarkable /topics page listing user-curated topic collections with

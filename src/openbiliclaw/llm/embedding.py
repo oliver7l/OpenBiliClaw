@@ -267,9 +267,7 @@ class EmbeddingService:
         # L1 / L2 cache lookup (also covers warming-side hits). The L2 read
         # is a pickled SQLite read — run it off the event loop so it cannot
         # stall in-flight requests.
-        cached = await asyncio.get_running_loop().run_in_executor(
-            None, self.lookup_cached, text
-        )
+        cached = await asyncio.get_running_loop().run_in_executor(None, self.lookup_cached, text)
         if cached:
             return cached
 

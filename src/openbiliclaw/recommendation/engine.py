@@ -7,6 +7,7 @@ to the user in a warm, friend-like manner with deep personal insights.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
@@ -62,6 +63,7 @@ class _PerLoopLock:
 
     async def __aexit__(self, *exc: object) -> bool | None:
         return await self._lock_for_loop().__aexit__(*exc)
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -341,7 +343,11 @@ class RecommendationEngine:
             return None
         try:
             rows = database.batch_get_quality_scores(bvids)
-            scores = {row["bvid"]: float(row["quality_score"] or 0.0) for row in rows if row["quality_score"]}
+            scores = {
+                row["bvid"]: float(row["quality_score"] or 0.0)
+                for row in rows
+                if row["quality_score"]
+            }
             return scores if scores else None
         except Exception:
             logger.exception("Failed to fetch quality scores for re-ranking")
@@ -389,7 +395,10 @@ class RecommendationEngine:
             self._last_served_bvids = frozenset()
             return []
 
-        candidates = self._load_pool_candidates(limit=max(limit * multiplier, 40), platform=platform)
+        candidates = self._load_pool_candidates(
+            limit=max(limit * multiplier, 40),
+            platform=platform,
+        )
         loaded_count = len(candidates)
         if excluded_bvids:
             candidates = [c for c in candidates if c.bvid not in excluded_bvids]
@@ -453,7 +462,9 @@ class RecommendationEngine:
             # Fetch quality scores from DB for re-ranking blend
             quality_scores = self._fetch_quality_scores(self._database, candidates)
             score_override = self._curator.score_candidates(
-                candidates, context, quality_scores=quality_scores,
+                candidates,
+                context,
+                quality_scores=quality_scores,
             )
             amplification_guard = context.over_budget_amplification_keys
 
@@ -1777,9 +1788,7 @@ class RecommendationEngine:
         loop = asyncio.get_running_loop()
         batch = await loop.run_in_executor(None, self._run_serve_sync, profile, platform, limit)
         if not batch:
-            self._batch_empty_until[key] = (
-                time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
-            )
+            self._batch_empty_until[key] = time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
         # Refill buffer with standard-size batches regardless of this
         # request's limit — the next standard click should stay instant.
         self._schedule_refill(profile=profile, key=key, platform=platform, limit=10)
@@ -1847,13 +1856,11 @@ class RecommendationEngine:
             self._refill_batch_buffer(profile=profile, key=key, platform=platform, limit=limit)
         )
         if self.task_registry is not None:
-            try:
-                # NB: ``register`` takes (name, task) — passing only the task
-                # silently registered it as the *name* and raised a TypeError
-                # that this except swallowed, so refills were never tracked.
+            # NB: ``register`` takes (name, task) — passing only the task
+            # silently registered it as the *name* and raised a TypeError
+            # that this except swallowed, so refills were never tracked.
+            with contextlib.suppress(Exception):
                 self.task_registry.register(f"batch_buffer_refill.{key}", task)
-            except Exception:
-                pass
 
     async def _refill_batch_buffer(
         self,
@@ -1870,7 +1877,13 @@ class RecommendationEngine:
             while len(buf) < self._BATCH_BUFFER_TARGET:
                 try:
                     loop = asyncio.get_running_loop()
-                    batch = await loop.run_in_executor(None, self._run_serve_sync, profile, platform, limit)
+                    batch = await loop.run_in_executor(
+                        None,
+                        self._run_serve_sync,
+                        profile,
+                        platform,
+                        limit,
+                    )
                 except Exception:
                     logger.exception("Batch buffer refill failed for key=%s", key)
                     break
@@ -1884,9 +1897,7 @@ class RecommendationEngine:
                     # Record it so the click path can answer instantly
                     # instead of re-running the (expensive, ~4.5s) cold
                     # serve() for an empty pool on every single click.
-                    self._batch_empty_until[key] = (
-                        time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
-                    )
+                    self._batch_empty_until[key] = time.monotonic() + self._BATCH_EMPTY_TTL_SECONDS
                     break
                 # Got content → any prior "empty" verdict for this key is stale.
                 self._batch_empty_until.pop(key, None)
@@ -2832,7 +2843,12 @@ class RecommendationEngine:
             for row in rows
         ]
 
-    def _load_pool_candidates(self, *, limit: int, platform: str | None = None) -> list[DiscoveredContent]:
+    def _load_pool_candidates(
+        self,
+        *,
+        limit: int,
+        platform: str | None = None,
+    ) -> list[DiscoveredContent]:
         rows = self._database.get_pool_candidates(
             limit=limit, xhs_self_nickname=self._xhs_self_nickname(), platform=platform
         )

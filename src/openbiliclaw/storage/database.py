@@ -14,8 +14,8 @@ import sqlite3
 import threading
 import time
 from collections import defaultdict
-from contextlib import suppress
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
@@ -603,7 +603,7 @@ class Database:
                 resolved_action TEXT NOT NULL,
                 resolved_target TEXT NOT NULL,
                 status TEXT NOT NULL
-                    CHECK (status IN ({', '.join(f"'{s}'" for s in NATIVE_SAVE_STATUSES)})),
+                    CHECK (status IN ({", ".join(f"'{s}'" for s in NATIVE_SAVE_STATUSES)})),
                 task_id TEXT NOT NULL,
                 execution_id TEXT NOT NULL,
                 last_error_code TEXT NOT NULL,
@@ -627,7 +627,7 @@ class Database:
             );
             CREATE INDEX IF NOT EXISTS idx_native_save_task_items_order
                 ON native_save_task_items(updated_at DESC);
-        """);
+        """)
 
     @staticmethod
     def _saved_list_kind(value: str) -> str:
@@ -1040,12 +1040,16 @@ class Database:
         self._ensure_fresh_read()
 
     def release_stale_pending_native_sync_tasks(
-        self, list_kind: str, item_keys: Sequence[str] | None,
+        self,
+        list_kind: str,
+        item_keys: Sequence[str] | None,
     ) -> None:
         pass
 
     def reconcile_stale_native_save_claims_for_list(
-        self, list_kind: str, item_keys: Sequence[str] | None,
+        self,
+        list_kind: str,
+        item_keys: Sequence[str] | None,
     ) -> None:
         conn = self.open_connection()
         try:
@@ -1128,9 +1132,7 @@ class Database:
         # thread reuses the primary connection bound in initialize().
         local_conn = getattr(self._thread_local, "conn", None)
         if local_conn is None:
-            local_conn = sqlite3.connect(
-                str(self._db_path), timeout=30.0, check_same_thread=False
-            )
+            local_conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
             local_conn.row_factory = sqlite3.Row
             local_conn.execute("PRAGMA journal_mode=WAL")
             local_conn.execute("PRAGMA busy_timeout = 30000")
@@ -4805,8 +4807,7 @@ class Database:
         self._ensure_fresh_read()
         min_score = self._pool_admission_min_score()
         processed_clause = (
-            "AND (r.feedback_type IS NULL OR r.feedback_type = '') "
-            "AND r.clicked_at IS NULL"
+            "AND (r.feedback_type IS NULL OR r.feedback_type = '') AND r.clicked_at IS NULL"
             if exclude_processed
             else ""
         )
@@ -5054,9 +5055,7 @@ class Database:
             (quality_score, quality_reason, bvid),
         )
 
-    def batch_update_content_quality_scores(
-        self, scores: list[tuple[str, float, str]]
-    ) -> None:
+    def batch_update_content_quality_scores(self, scores: list[tuple[str, float, str]]) -> None:
         """Batch update quality scores for multiple content items."""
         cursor = self.conn.cursor()
         try:
@@ -5075,9 +5074,7 @@ class Database:
             logger.exception("Failed to batch update quality scores")
             self.conn.rollback()
 
-    def batch_get_quality_scores(
-        self, bvids: list[str]
-    ) -> list[dict[str, object]]:
+    def batch_get_quality_scores(self, bvids: list[str]) -> list[dict[str, object]]:
         """Fetch quality scores for a batch of bvids.
 
         Returns list of dicts with bvid and quality_score.
@@ -5173,8 +5170,7 @@ class Database:
             return
         self.conn.execute("ALTER TABLE recommendations ADD COLUMN clicked_at TIMESTAMP")
         self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_recommendations_clicked "
-            "ON recommendations(clicked_at)"
+            "CREATE INDEX IF NOT EXISTS idx_recommendations_clicked ON recommendations(clicked_at)"
         )
 
     def _ensure_content_cache_runtime_columns(self) -> None:
@@ -6379,10 +6375,8 @@ class Database:
             ("favorited", "INTEGER", "0"),
             ("ai_summary", "TEXT", "''"),
         ]:
-            try:
+            with suppress(Exception):
                 self.conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typ} DEFAULT {default}")
-            except Exception:
-                pass  # Column already exists
 
         # 阅读笔记/摘录/高亮：绑定 articles.id，无外键约束（与 favorites 同风格）
         self.conn.executescript("""
@@ -6785,8 +6779,17 @@ class Database:
                       WHEN articles.tags IS NULL OR articles.tags IN ('', '[]')
                         THEN excluded.tags ELSE articles.tags END,
                     updated_at=CURRENT_TIMESTAMP""",
-                (source_type, source_name, title, url, author, summary,
-                 content_text, published_at, tag_value),
+                (
+                    source_type,
+                    source_name,
+                    title,
+                    url,
+                    author,
+                    summary,
+                    content_text,
+                    published_at,
+                    tag_value,
+                ),
             )
             self.conn.commit()
             return cursor.lastrowid
@@ -6893,9 +6896,7 @@ class Database:
                 ids = [row["id"] for row in id_rows]
                 if not ids:
                     return []
-                sample = (
-                    random.sample(ids, limit) if len(ids) > limit else ids
-                )
+                sample = random.sample(ids, limit) if len(ids) > limit else ids
                 placeholders = ",".join("?" * len(sample))
                 cursor = self.conn.execute(
                     f"""SELECT id, source_type, source_name, title, url, author,
@@ -6992,6 +6993,7 @@ class Database:
         read_archive doesn't track reading progress/status, only finished reads.
         """
         import random
+
         try:
             conditions: list[str] = []
             params: list[Any] = []
@@ -7203,6 +7205,7 @@ class Database:
     def update_article_tags(self, article_id: int, tags: list[str]) -> bool:
         """Update tags for an article. Returns True on success."""
         import json
+
         try:
             self.conn.execute(
                 "UPDATE articles SET tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -7362,8 +7365,13 @@ class Database:
         import json as _json
 
         stats: dict[str, Any] = {
-            "by_status": {}, "by_source": {}, "notes": 0,
-            "by_month": {}, "top_tags": [], "by_week": {}, "timeline": [],
+            "by_status": {},
+            "by_source": {},
+            "notes": 0,
+            "by_month": {},
+            "top_tags": [],
+            "by_week": {},
+            "timeline": [],
         }
         try:
             row = self.conn.execute(
@@ -7521,9 +7529,7 @@ class Database:
                         tag_counter[text] = tag_counter.get(text, 0) + 1
         summary["finished_today"] = len(rows)
         summary["top_topics"] = [
-            tag for tag, _ in sorted(
-                tag_counter.items(), key=lambda kv: kv[1], reverse=True
-            )[:6]
+            tag for tag, _ in sorted(tag_counter.items(), key=lambda kv: kv[1], reverse=True)[:6]
         ]
         return summary
 
@@ -8082,7 +8088,10 @@ class Database:
         """)
 
     def insert_user_feedback(
-        self, bvid: str, action: str, *,
+        self,
+        bvid: str,
+        action: str,
+        *,
         source_platform: str = "",
         title: str = "",
         topic_group: str = "",
@@ -8174,14 +8183,17 @@ class Database:
         sorted by descending weight.
         """
         # Get topic_group from liked items
-        rows = self.conn.execute("""
+        rows = self.conn.execute(
+            """
             SELECT topic_group, source_platform, COUNT(*) as cnt
             FROM user_feedback
             WHERE action = 'like' AND topic_group != '' AND topic_group IS NOT NULL
             GROUP BY topic_group, source_platform
             ORDER BY cnt DESC
             LIMIT ?
-        """, (limit * 3,)).fetchall()
+        """,
+            (limit * 3,),
+        ).fetchall()
 
         # Aggregate by topic_group across platforms
         tags: dict[str, dict[str, Any]] = {}
@@ -8206,12 +8218,52 @@ class Database:
         """).fetchall()
 
         import re
+
         # Common Chinese stop words and generic terms
-        stop_words = {"的", "了", "是", "在", "有", "和", "就", "不", "人", "都", "一",
-                      "一个", "这个", "那个", "什么", "怎么", "如何", "为什么", "可以",
-                      "没有", "不是", "就是", "还是", "我们", "他们", "你们", "自己",
-                      "知道", "觉得", "看到", "看到", "可能", "已经", "这样", "通过",
-                      "之后", "因为", "所以", "但是", "而且", "如果", "虽然", "然后"}
+        stop_words = {
+            "的",
+            "了",
+            "是",
+            "在",
+            "有",
+            "和",
+            "就",
+            "不",
+            "人",
+            "都",
+            "一",
+            "一个",
+            "这个",
+            "那个",
+            "什么",
+            "怎么",
+            "如何",
+            "为什么",
+            "可以",
+            "没有",
+            "不是",
+            "就是",
+            "还是",
+            "我们",
+            "他们",
+            "你们",
+            "自己",
+            "知道",
+            "觉得",
+            "看到",
+            "可能",
+            "已经",
+            "这样",
+            "通过",
+            "之后",
+            "因为",
+            "所以",
+            "但是",
+            "而且",
+            "如果",
+            "虽然",
+            "然后",
+        }
 
         word_counts: dict[str, int] = {}
         for r in title_rows:
@@ -8465,6 +8517,7 @@ class Database:
         total capped dwell.
         """
         import datetime
+
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
         try:
             rows = self.conn.execute(
@@ -8495,6 +8548,7 @@ class Database:
     def get_total_view_count(self, days: int = 30) -> int:
         """Count views recorded in the last N days (implicit feedback volume)."""
         import datetime
+
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
         try:
             row = self.conn.execute(
@@ -8575,6 +8629,7 @@ class Database:
     def get_viewed_bvids(self, days: int = 30) -> set[str]:
         """Get bvids viewed in the last N days."""
         import datetime
+
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
         rows = self.conn.execute(
             "SELECT DISTINCT bvid FROM view_history WHERE viewed_at >= ?",

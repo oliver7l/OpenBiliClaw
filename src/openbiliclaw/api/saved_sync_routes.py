@@ -13,13 +13,12 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from openbiliclaw.api.runtime_context import RuntimeContext
 from openbiliclaw.saved_sync.models import (
     NATIVE_SAVE_STATUSES,
     SavedListKind,
     SavedSyncBatchResult,
 )
-
-from openbiliclaw.api.runtime_context import RuntimeContext
 
 _RECOMMENDATION_SNAPSHOT_TTL_SECONDS = 30.0
 _saved_state_snapshot_cache: dict[tuple[str, str], tuple[float, Any]] = {}
@@ -177,13 +176,19 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
 
     # ── List saved items ────────────────────────────────────────────────
     @app.get("/api/saved/{list_kind}")
-    async def saved_list(list_kind: SavedListKind, limit: int = 20, offset: int = 0) -> JSONResponse:
+    async def saved_list(
+        list_kind: SavedListKind,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> JSONResponse:
         rows = list(ctx.database.list_saved_memberships(list_kind, limit=limit, offset=offset))
         count = ctx.database.count_saved_memberships(list_kind)
-        return JSONResponse({
-            "items": [_saved_list_item(row) for row in rows],
-            "total": count,
-        })
+        return JSONResponse(
+            {
+                "items": [_saved_list_item(row) for row in rows],
+                "total": count,
+            }
+        )
 
     # ── Check item saved status ─────────────────────────────────────────
     @app.get("/api/saved/{list_kind}/status")
@@ -227,7 +232,8 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
     ) -> JSONResponse:
         db = ctx.database
         items = db.get_recent_articles(
-            limit=limit, offset=offset,
+            limit=limit,
+            offset=offset,
             source_type=source_type,
             status=status,
             tag=tag,
@@ -243,19 +249,16 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
         tag: str | None = None,
     ) -> JSONResponse:
         db = ctx.database
-        return JSONResponse({
-            "total": db.count_articles(
-                source_type=source_type, status=status, tag=tag
-            )
-        })
+        return JSONResponse(
+            {"total": db.count_articles(source_type=source_type, status=status, tag=tag)}
+        )
 
     # ── Reading library source-type distribution (for dynamic filters) ──
     @app.get("/api/reading/sources")
     async def get_reading_sources(request: Request) -> JSONResponse:
         db = ctx.database
         rows = db.conn.execute(
-            "SELECT source_type, COUNT(*) c FROM articles "
-            "GROUP BY source_type ORDER BY c DESC"
+            "SELECT source_type, COUNT(*) c FROM articles GROUP BY source_type ORDER BY c DESC"
         ).fetchall()
         sources = [{"source_type": r[0], "count": r[1]} for r in rows]
         return JSONResponse({"sources": sources})
@@ -294,8 +297,12 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
         if offset < 0:
             offset = 0
         items = ctx.database.search_articles(
-            q=q, limit=limit, offset=offset,
-            source_type=source_type, status=status, tag=tag,
+            q=q,
+            limit=limit,
+            offset=offset,
+            source_type=source_type,
+            status=status,
+            tag=tag,
         )
         return JSONResponse(items)
 
@@ -310,7 +317,8 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
     ) -> JSONResponse:
         db = ctx.database
         items = db.get_recent_readarchive(
-            limit=limit, offset=offset,
+            limit=limit,
+            offset=offset,
             source_type=source_type,
             tag=tag,
         )
@@ -323,12 +331,14 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
         tag: str | None = None,
     ) -> JSONResponse:
         db = ctx.database
-        return JSONResponse({
-            "total": db.count_readarchive(
-                source_type=source_type,
-                tag=tag,
-            )
-        })
+        return JSONResponse(
+            {
+                "total": db.count_readarchive(
+                    source_type=source_type,
+                    tag=tag,
+                )
+            }
+        )
 
     @app.get("/api/read-archive/search")
     async def search_read_archive_items(
@@ -344,7 +354,10 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
         if offset < 0:
             offset = 0
         items = ctx.database.search_readarchive(
-            q=q, limit=limit, offset=offset,
-            source_type=source_type, tag=tag,
+            q=q,
+            limit=limit,
+            offset=offset,
+            source_type=source_type,
+            tag=tag,
         )
         return JSONResponse(items)

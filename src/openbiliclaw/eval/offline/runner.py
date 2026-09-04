@@ -11,6 +11,7 @@ diversified_batch`` is exactly the sorting core ``serve()`` uses, exposed as a
 classmethod — reusing it lets us evaluate the true ranking/diversity logic
 without touching production state.
 """
+
 from __future__ import annotations
 
 import logging
@@ -102,9 +103,7 @@ def _rank_random(candidates: list[CandidateItem], rng: random.Random) -> list[Ca
 
 
 def _to_result(unit: EvalUnit, ranked: list[CandidateItem], method: str) -> UnitResult:
-    label_by_key = {
-        c.content_key: lab for c, lab in zip(unit.candidates, unit.labels, strict=True)
-    }
+    label_by_key = {c.content_key: lab for c, lab in zip(unit.candidates, unit.labels, strict=True)}
     ranked_keys: list[str] = []
     ranked_labels: list[int] = []
     ranked_topics: list[str] = []

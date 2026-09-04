@@ -328,10 +328,20 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> tuple[
                     discovered_at, body_text, like_count, view_count, topic_group
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    tid, title, author, author, url,
-                    "v2ex", source, "thread", "fresh",
+                    tid,
+                    title,
+                    author,
+                    author,
+                    url,
+                    "v2ex",
+                    source,
+                    "thread",
+                    "fresh",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    body, replies, view_count, node,
+                    body,
+                    replies,
+                    view_count,
+                    node,
                 ),
             )
             if cur.rowcount > 0:
@@ -350,8 +360,14 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> tuple[
                         content_text, published_at, tags
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        "v2ex", "V2EX", title, url, author,
-                        body, published_at, json.dumps([node] if node else []),
+                        "v2ex",
+                        "V2EX",
+                        title,
+                        url,
+                        author,
+                        body,
+                        published_at,
+                        json.dumps([node] if node else []),
                     ),
                 )
                 if cur.rowcount > 0:
@@ -396,19 +412,23 @@ def _run_once(limit: int, enrich: bool, proxy: str | None) -> dict[str, Any]:
 def run_forever(interval_hours: int, limit: int, enrich: bool, proxy: str | None) -> None:
     """Main loop: fetch every ``interval_hours`` hours."""
     logger.info(
-        "v2ex browser producer started (proxy=%s, interval=%dh, limit=%d, "
-        "enrich=%s, dry_run=%s)",
-        proxy or "none", interval_hours, limit, enrich, _DRY_RUN,
+        "v2ex browser producer started (proxy=%s, interval=%dh, limit=%d, enrich=%s, dry_run=%s)",
+        proxy or "none",
+        interval_hours,
+        limit,
+        enrich,
+        _DRY_RUN,
     )
     while True:
         logger.info("fetching v2ex topics via browser...")
         result = _run_once(limit=limit, enrich=enrich, proxy=proxy)
         if result["ok"]:
             logger.info(
-                "feed ok: %d discovered, %d with body, %d pool new, "
-                "%d pool dup, %d articles new",
-                result["discovered"], result.get("with_body", 0),
-                result.get("cache_inserted", 0), result.get("cache_skipped", 0),
+                "feed ok: %d discovered, %d with body, %d pool new, %d pool dup, %d articles new",
+                result["discovered"],
+                result.get("with_body", 0),
+                result.get("cache_inserted", 0),
+                result.get("cache_skipped", 0),
                 result.get("articles_inserted", 0),
             )
         else:
@@ -422,16 +442,31 @@ def _main() -> None:
     )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes.")
-    parser.add_argument("--no-enrich", action="store_true",
-                        help="Skip detail-page body enrichment (title-only rows).")
-    parser.add_argument("--limit", type=int, default=0,
-                        help="Max topics to process (0 = all discovered, typically ~60).")
-    parser.add_argument("--interval", type=int, default=INTERVAL_HOURS,
-                        help="Hours between cycles when looping.")
-    parser.add_argument("--proxy", type=str, default=DEFAULT_PROXY,
-                        help=f"HTTP proxy server (default: {DEFAULT_PROXY}).")
-    parser.add_argument("--no-proxy", action="store_true",
-                        help="Disable proxy (direct connection - likely blocked by Cloudflare).")
+    parser.add_argument(
+        "--no-enrich",
+        action="store_true",
+        help="Skip detail-page body enrichment (title-only rows).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Max topics to process (0 = all discovered, typically ~60).",
+    )
+    parser.add_argument(
+        "--interval", type=int, default=INTERVAL_HOURS, help="Hours between cycles when looping."
+    )
+    parser.add_argument(
+        "--proxy",
+        type=str,
+        default=DEFAULT_PROXY,
+        help=f"HTTP proxy server (default: {DEFAULT_PROXY}).",
+    )
+    parser.add_argument(
+        "--no-proxy",
+        action="store_true",
+        help="Disable proxy (direct connection - likely blocked by Cloudflare).",
+    )
     args = parser.parse_args()
 
     global _DRY_RUN
@@ -450,8 +485,10 @@ def _main() -> None:
             logger.info(
                 "v2ex feed ok: %d discovered, %d with body, %d pool new, "
                 "%d pool dup, %d articles new",
-                result["discovered"], result.get("with_body", 0),
-                result.get("cache_inserted", 0), result.get("cache_skipped", 0),
+                result["discovered"],
+                result.get("with_body", 0),
+                result.get("cache_inserted", 0),
+                result.get("cache_skipped", 0),
                 result.get("articles_inserted", 0),
             )
         else:

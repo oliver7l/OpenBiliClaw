@@ -236,11 +236,7 @@ class CognitionCycle:
         if len(high) > _AWARENESS_BACKLOG_CAP:
             high = high[:_AWARENESS_BACKLOG_CAP]
             low_budget = 0
-        low = [
-            r
-            for r in rows
-            if r.get("event_type") in _AWARENESS_LOW_SIGNAL_TYPES
-        ][:low_budget]
+        low = [r for r in rows if r.get("event_type") in _AWARENESS_LOW_SIGNAL_TYPES][:low_budget]
         selected = high + low
         selected.sort(key=lambda r: _coerce_int(r.get("id", 0)), reverse=True)
         return selected[:_AWARENESS_BACKLOG_CAP]

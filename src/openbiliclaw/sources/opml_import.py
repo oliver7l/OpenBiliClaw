@@ -33,9 +33,7 @@ def parse_opml(file_path: str) -> list[dict[str, str]]:
     subscriptions: list[dict[str, str]] = []
     _walk_outlines(body, subscriptions)
 
-    logger.info(
-        "OPML import: %d feeds from %s", len(subscriptions), file_path
-    )
+    logger.info("OPML import: %d feeds from %s", len(subscriptions), file_path)
     return subscriptions
 
 
@@ -93,7 +91,9 @@ def subscriptions_to_toml(subscriptions: list[dict[str, str]]) -> str:
 
 
 # Convenience path for the bundled BestBlogs OPML
-_BESTBLOGS_OPML_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/rss/BestBlogs_RSS_ALL.opml"
+_BESTBLOGS_OPML_PATH = (
+    "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/rss/BestBlogs_RSS_ALL.opml"
+)
 
 
 def load_bestblogs_subscriptions(

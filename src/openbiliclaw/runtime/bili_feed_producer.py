@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sqlite3
 import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,10 @@ CREDENTIAL_PATH = Path.home() / ".bilibili-cli" / "credential.json"
 RECOMMEND_URL = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=5&fresh_type=4&fresh_idx=1&fresh_idx_1h=1"
 
 REQUEST_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
     "Referer": "https://www.bilibili.com/",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -48,7 +51,7 @@ def _load_sessdata() -> str | None:
     return None
 
 
-def _fetch_feed() -> list[dict]:
+def _fetch_feed() -> list[dict[str, Any]]:
     """Call the Bilibili recommend API and return parsed items."""
     sessdata = _load_sessdata()
     if not sessdata:
@@ -87,10 +90,10 @@ def _format_duration(seconds: int) -> str:
     return f"{m}:{s:02d}"
 
 
-def _parse_items(items: list[dict]) -> list[dict]:
+def _parse_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Extract fields from recommend items into content_cache-compatible rows."""
     now = datetime.now()
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in items:
         bvid = str(item.get("bvid", "")).strip()
@@ -110,29 +113,31 @@ def _parse_items(items: list[dict]) -> list[dict]:
         content_url = f"https://www.bilibili.com/video/{bvid}"
         pic = str(item.get("pic", "") or "").strip()
 
-        rows.append({
-            "bvid": bvid,
-            "title": title,
-            "up_name": str(owner.get("name", "") or "").strip(),
-            "author_name": str(owner.get("name", "") or "").strip(),
-            "up_mid": int(owner.get("mid", 0) or 0),
-            "content_url": content_url,
-            "cover_url": pic,
-            "source_platform": "bilibili",
-            "source": "bili-feed",
-            "content_type": "video",
-            "pool_status": "fresh",
-            "duration": int(item.get("duration", 0) or 0),
-            "view_count": int(stat.get("view", 0) or 0),
-            "like_count": int(stat.get("like", 0) or 0),
-            "danmaku_count": int(stat.get("danmaku", 0) or 0),
-            "description": str(item.get("desc", "") or "").strip(),
-            "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        rows.append(
+            {
+                "bvid": bvid,
+                "title": title,
+                "up_name": str(owner.get("name", "") or "").strip(),
+                "author_name": str(owner.get("name", "") or "").strip(),
+                "up_mid": int(owner.get("mid", 0) or 0),
+                "content_url": content_url,
+                "cover_url": pic,
+                "source_platform": "bilibili",
+                "source": "bili-feed",
+                "content_type": "video",
+                "pool_status": "fresh",
+                "duration": int(item.get("duration", 0) or 0),
+                "view_count": int(stat.get("view", 0) or 0),
+                "like_count": int(stat.get("like", 0) or 0),
+                "danmaku_count": int(stat.get("danmaku", 0) or 0),
+                "description": str(item.get("desc", "") or "").strip(),
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
+def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
     inserted = 0
     for row in rows:
@@ -145,11 +150,22 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
                     discovered_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    row["bvid"], row["title"], row["up_name"], row["author_name"],
-                    row["up_mid"], row["content_url"], row["cover_url"],
-                    row["source_platform"], row["source"], row["content_type"],
-                    row["pool_status"], row["duration"], row["view_count"],
-                    row["like_count"], row["danmaku_count"], row["description"],
+                    row["bvid"],
+                    row["title"],
+                    row["up_name"],
+                    row["author_name"],
+                    row["up_mid"],
+                    row["content_url"],
+                    row["cover_url"],
+                    row["source_platform"],
+                    row["source"],
+                    row["content_type"],
+                    row["pool_status"],
+                    row["duration"],
+                    row["view_count"],
+                    row["like_count"],
+                    row["danmaku_count"],
+                    row["description"],
                     row["discovered_at"],
                 ),
             )
@@ -160,7 +176,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return inserted
 
 
-def _run_once() -> dict:
+def _run_once() -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     items = _fetch_feed()
     if not items:
