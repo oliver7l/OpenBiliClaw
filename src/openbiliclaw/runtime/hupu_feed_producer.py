@@ -1,11 +1,14 @@
-"""Hupu (虎扑) hot-posts and 步行街 (Buxingjie) feed producer.
+"""Hupu (虎扑) hot-posts, 步行街 (Buxingjie), and search feed producer.
 
-Two modes:
+Three modes:
   * Default (CLI): calls ``hupu hot --output json`` (Go binary, tamnd/hupu-cli)
     and inserts trending BBS homepage posts into ``content_cache``.
   * ``--bxj``: direct HTTP scrape of the 步行街 forum (bbs.hupu.com/bxj),
     parsing post title / reply count / view count / author / time from HTML.
     No login or API key required; supports pagination (50 posts per page).
+  * ``--search``: direct HTTP search (bbs.hupu.com/search?q=...), supports
+    keyword(s), sort order (general/createtime/light/reply), and returns
+    post title / forum / date / reply / recommend / light counts.
 
 Why a CLI producer
 ------------------
@@ -21,16 +24,23 @@ The ``--bxj`` mode complements the CLI: the CLI only covers the homepage
 hot list, while 步行街 is the highest-traffic general discussion forum
 and has a stable HTML structure suitable for direct scraping.
 
+The ``--search`` mode complements both: it discovers content by interest
+keywords (e.g. python, AI, 理财, 职场) rather than browsing hot lists,
+filling gaps in the recommendation pool.
+
 Outputs
 -------
   * ``content_cache`` (recommendation pool) — one row per post,
-    title + link (+ author / reply / view counts in bxj mode).
+    title + link (+ author / reply / view counts in bxj mode,
+    + forum / reply / recommend / light in search mode).
 
 Usage
 -----
   python3 -m openbiliclaw.runtime.hupu_feed_producer            # loop forever (24h, hot)
   python3 -m openbiliclaw.runtime.hupu_feed_producer --once     # one cycle (hot)
   python3 -m openbiliclaw.runtime.hupu_feed_producer --bxj --once   # one cycle (步行街)
+  python3 -m openbiliclaw.runtime.hupu_feed_producer --search --keyword python --once  # search
+  python3 -m openbiliclaw.runtime.hupu_feed_producer --search --keywords python,AI  # multi-kw
   python3 -m openbiliclaw.runtime.hupu_feed_producer --dry-run  # one cycle, no DB writes
 """
 
@@ -76,6 +86,25 @@ _BXJ_DATUM_RE = re.compile(r'class="post-datum"[^>]*>(.*?)</div>', re.DOTALL)
 _BXJ_AUTHOR_RE = re.compile(r'href="https://my\.hupu\.com/(\d+)"[^>]*>(.*?)</a>', re.DOTALL)
 _BXJ_TIME_RE = re.compile(r'class="post-time"[^>]*>(.*?)</div>', re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
+
+# Search (虎扑搜索) direct HTTP scrape constants
+SEARCH_BASE_URL = "https://bbs.hupu.com/search"
+SEARCH_HTTP_TIMEOUT = 15
+SEARCH_SORT_OPTIONS = ("general", "createtime", "light", "reply")
+SEARCH_DEFAULT_KEYWORDS = ("python", "AI", "理财", "职场")
+
+# Regex patterns for search HTML parsing
+_SEARCH_WRAP_RE = re.compile(r'<div class="content-wrap">(.*?)</div>', re.DOTALL)
+_SEARCH_LINK_RE = re.compile(
+    r'<a class="content-wrap-span" href="(https://bbs\.hupu\.com/(\d+)\.html)"[^>]*>(.*?)</a>',
+    re.DOTALL,
+)
+_SEARCH_FORUM_RE = re.compile(
+    r'<a class="content-wrap-span" href="https://bbs\.hupu\.com/\d+"[^>]*>(.*?)</a>', re.DOTALL
+)
+_SEARCH_DATE_RE = re.compile(r"<span>(\d{4}-\d{2}-\d{2})</span>")
+_SEARCH_STAT_RE = re.compile(r'<span class="content-wrap-span1">(\d+)</span>')
+_FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>", re.IGNORECASE)
 
 # Strip proxy env vars: the local proxy (Clash-like) often dies/restarts and a
 # dead proxy breaks the CLI child process. Same rationale as xhs_feed_producer /
@@ -306,6 +335,182 @@ def _to_bxj_rows(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Search (虎扑搜索) direct HTTP scrape
+# ---------------------------------------------------------------------------
+
+
+def _fetch_search_page(keyword: str, sortby: str = "general", page: int = 1) -> str:
+    """Fetch a single search results page and return its HTML.
+
+    Args:
+        keyword: Search query string.
+        sortby: One of 'general' (综合), 'createtime' (最新), 'light' (亮回复), 'reply' (回复数).
+        page: 1-based page number.
+
+    Returns the HTML string, or ``""`` on failure.
+    """
+    from urllib.parse import quote
+
+    params = f"q={quote(keyword)}&sortby={sortby}"
+    if page > 1:
+        params += f"&page={page}"
+    url = f"{SEARCH_BASE_URL}?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": BXJ_USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=SEARCH_HTTP_TIMEOUT) as resp:
+            raw: bytes = resp.read()
+        return raw.decode("utf-8", errors="replace")
+    except Exception as exc:
+        logger.error("hupu search page %d fetch failed (q=%s): %s", page, keyword, exc)
+        return ""
+
+
+def _parse_search_html(html: str) -> list[dict[str, Any]]:
+    """Parse search results HTML into normalized post dicts.
+
+    Each result block (div.content-wrap) contains:
+      - First link (content-wrap-span): post title + full URL (may have <font> highlights)
+      - Second link (content-wrap-span): forum name
+      - First <span>: post date (YYYY-MM-DD)
+      - Three <span class="content-wrap-span1">: reply, recommend, light counts
+
+    Returns list of dicts with: id, title, forum, post_time, reply_count,
+    recommend_count, light_count, url.
+    """
+    if not html:
+        return []
+
+    posts: list[dict[str, Any]] = []
+    for match in _SEARCH_WRAP_RE.finditer(html):
+        block = match.group(1)
+
+        # Post ID + URL + title (first content-wrap-span link)
+        link_m = _SEARCH_LINK_RE.search(block)
+        if not link_m:
+            continue
+        url = link_m.group(1)
+        pid = link_m.group(2)
+        # Title may contain <font color='...'>keyword</font> highlights
+        title_raw = link_m.group(3)
+        title = _FONT_TAG_RE.sub("", title_raw)
+        title = _TAG_RE.sub("", title).strip()
+        if not title:
+            continue
+
+        # Forum name (second content-wrap-span link)
+        forum = ""
+        forum_m = _SEARCH_FORUM_RE.search(block)
+        if forum_m:
+            forum = _TAG_RE.sub("", forum_m.group(1)).strip()
+
+        # Post date
+        post_time = ""
+        date_m = _SEARCH_DATE_RE.search(block)
+        if date_m:
+            post_time = date_m.group(1)
+
+        # Stats: reply_count, recommend_count, light_count
+        stats = _SEARCH_STAT_RE.findall(block)
+        reply_count = int(stats[0]) if len(stats) >= 1 else 0
+        recommend_count = int(stats[1]) if len(stats) >= 2 else 0
+        light_count = int(stats[2]) if len(stats) >= 3 else 0
+
+        posts.append(
+            {
+                "id": pid,
+                "title": title,
+                "forum": forum,
+                "post_time": post_time,
+                "reply_count": reply_count,
+                "recommend_count": recommend_count,
+                "light_count": light_count,
+                "url": url,
+            }
+        )
+    return posts
+
+
+def _fetch_search(
+    keywords: list[str], sortby: str = "general", limit: int = 50
+) -> list[dict[str, Any]]:
+    """Search Hupu for one or more keywords and return deduplicated posts.
+
+    Args:
+        keywords: List of search queries. Each keyword fetches one page.
+        sortby: Sort order, one of SEARCH_SORT_OPTIONS.
+        limit: Maximum total posts to return across all keywords.
+
+    Returns a list of normalized post dicts, deduplicated by post id.
+    """
+    all_posts: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for keyword in keywords:
+        html = _fetch_search_page(keyword, sortby=sortby, page=1)
+        if not html:
+            continue
+        posts = _parse_search_html(html)
+        logger.info("hupu search q='%s': parsed %d posts", keyword, len(posts))
+        for post in posts:
+            pid = post["id"]
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            post["keyword"] = keyword
+            post["sortby"] = sortby
+            all_posts.append(post)
+            if len(all_posts) >= limit:
+                break
+        if len(all_posts) >= limit:
+            break
+        # Polite delay between keyword searches
+        time.sleep(0.5)
+
+    return all_posts
+
+
+def _to_search_rows(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize search results into content_cache-compatible rows."""
+    now = datetime.now()
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for post in posts:
+        pid = str(post.get("id", "") or "").strip()
+        title = str(post.get("title", "") or "").strip()
+        url = str(post.get("url", "") or "").strip()
+        if not pid or not pid.isdigit() or not title or not url:
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        forum = post.get("forum", "")
+        keyword = post.get("keyword", "")
+        # source includes keyword for traceability, e.g. "hupu-search-python"
+        source = f"hupu-search-{keyword}" if keyword else "hupu-search"
+        rows.append(
+            {
+                "bvid": pid,
+                "title": title,
+                "up_name": "",
+                "author_name": "",
+                "content_url": url,
+                "source_platform": "hupu",
+                "source": source,
+                "content_type": "thread",
+                "pool_status": "fresh",
+                "discovered_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "reply_count": post.get("reply_count", 0),
+                "view_count": 0,
+                "post_time": post.get("post_time", ""),
+                "forum": forum,
+                "recommend_count": post.get("recommend_count", 0),
+                "light_count": post.get("light_count", 0),
+            }
+        )
+    return rows
+
+
 def _to_rows(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Normalize hupu posts into content_cache-compatible rows."""
     now = datetime.now()
@@ -349,14 +554,28 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     for row in rows:
         # Build column list dynamically based on available fields
         columns = [
-            "bvid", "title", "up_name", "author_name", "content_url",
-            "source_platform", "source", "content_type", "pool_status",
+            "bvid",
+            "title",
+            "up_name",
+            "author_name",
+            "content_url",
+            "source_platform",
+            "source",
+            "content_type",
+            "pool_status",
             "discovered_at",
         ]
         values: list[Any] = [
-            row["bvid"], row["title"], row["up_name"], row["author_name"],
-            row["content_url"], row["source_platform"], row["source"],
-            row["content_type"], row["pool_status"], row["discovered_at"],
+            row["bvid"],
+            row["title"],
+            row["up_name"],
+            row["author_name"],
+            row["content_url"],
+            row["source_platform"],
+            row["source"],
+            row["content_type"],
+            row["pool_status"],
+            row["discovered_at"],
         ]
         # Optional: map reply_count → comment_count, view_count → view_count
         if row.get("reply_count") is not None:
@@ -379,14 +598,28 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
             # Fallback: if optional columns don't exist in this DB version,
             # insert with the base columns only
             base_cols = [
-                "bvid", "title", "up_name", "author_name", "content_url",
-                "source_platform", "source", "content_type", "pool_status",
+                "bvid",
+                "title",
+                "up_name",
+                "author_name",
+                "content_url",
+                "source_platform",
+                "source",
+                "content_type",
+                "pool_status",
                 "discovered_at",
             ]
             base_vals = [
-                row["bvid"], row["title"], row["up_name"], row["author_name"],
-                row["content_url"], row["source_platform"], row["source"],
-                row["content_type"], row["pool_status"], row["discovered_at"],
+                row["bvid"],
+                row["title"],
+                row["up_name"],
+                row["author_name"],
+                row["content_url"],
+                row["source_platform"],
+                row["source"],
+                row["content_type"],
+                row["pool_status"],
+                row["discovered_at"],
             ]
             ph = ", ".join("?" for _ in base_cols)
             cl = ", ".join(base_cols)
@@ -404,13 +637,27 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     return inserted
 
 
-def _run_once(limit: int, bxj_mode: bool = False) -> dict[str, Any]:
+def _run_once(
+    limit: int,
+    bxj_mode: bool = False,
+    search_mode: bool = False,
+    keywords: list[str] | None = None,
+    sortby: str = "general",
+) -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict.
 
     Args:
         bxj_mode: If True, scrape 步行街 instead of the CLI hot list.
+        search_mode: If True, search Hupu by keyword(s) instead of hot list.
+        keywords: Search keywords (only used when search_mode=True).
+        sortby: Search sort order (only used when search_mode=True).
     """
-    if bxj_mode:
+    if search_mode:
+        kw_list = keywords or list(SEARCH_DEFAULT_KEYWORDS)
+        posts = _fetch_search(kw_list, sortby=sortby, limit=limit)
+        rows = _to_search_rows(posts)
+        feed_label = "search"
+    elif bxj_mode:
         posts = _fetch_bxj(limit)
         rows = _to_bxj_rows(posts)
         feed_label = "bxj"
@@ -444,9 +691,21 @@ def _run_once(limit: int, bxj_mode: bool = False) -> dict[str, Any]:
         conn.close()
 
 
-def run_forever(interval_hours: int, limit: int, bxj_mode: bool = False) -> None:
+def run_forever(
+    interval_hours: int,
+    limit: int,
+    bxj_mode: bool = False,
+    search_mode: bool = False,
+    keywords: list[str] | None = None,
+    sortby: str = "general",
+) -> None:
     """Main loop: fetch every ``interval_hours`` hours."""
-    feed_label = "bxj" if bxj_mode else "hot"
+    if search_mode:
+        feed_label = "search"
+    elif bxj_mode:
+        feed_label = "bxj"
+    else:
+        feed_label = "hot"
     logger.info(
         "hupu %s feed producer started (cli=%s, interval=%dh, limit=%d, dry_run=%s)",
         feed_label,
@@ -457,7 +716,13 @@ def run_forever(interval_hours: int, limit: int, bxj_mode: bool = False) -> None
     )
     while True:
         logger.info("fetching hupu %s...", feed_label)
-        result = _run_once(limit, bxj_mode=bxj_mode)
+        result = _run_once(
+            limit,
+            bxj_mode=bxj_mode,
+            search_mode=search_mode,
+            keywords=keywords,
+            sortby=sortby,
+        )
         if result["ok"]:
             logger.info(
                 "feed ok: %d fetched, %d new, %d duplicate",
@@ -485,6 +750,30 @@ def _main() -> None:
         action="store_true",
         help="Scrape 步行街 (Buxingjie) forum via direct HTTP instead of CLI hot list.",
     )
+    parser.add_argument(
+        "--search",
+        action="store_true",
+        help="Search Hupu by keyword(s) via direct HTTP instead of hot list.",
+    )
+    parser.add_argument(
+        "--keyword",
+        type=str,
+        default="",
+        help="Single search keyword (use with --search). Default: built-in keyword list.",
+    )
+    parser.add_argument(
+        "--keywords",
+        type=str,
+        default="",
+        help="Comma-separated search keywords (use with --search). Overrides --keyword.",
+    )
+    parser.add_argument(
+        "--sortby",
+        type=str,
+        default="general",
+        choices=SEARCH_SORT_OPTIONS,
+        help="Search sort order: general(综合)/createtime(最新)/light(亮回复)/reply(回复数).",
+    )
     args = parser.parse_args()
 
     global _DRY_RUN
@@ -495,8 +784,24 @@ def _main() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
+    # Resolve search keywords
+    search_keywords: list[str] | None = None
+    if args.search:
+        if args.keywords:
+            search_keywords = [k.strip() for k in args.keywords.split(",") if k.strip()]
+        elif args.keyword:
+            search_keywords = [args.keyword.strip()]
+        else:
+            search_keywords = list(SEARCH_DEFAULT_KEYWORDS)
+
     if args.once or args.dry_run:
-        result = _run_once(args.limit, bxj_mode=args.bxj)
+        result = _run_once(
+            args.limit,
+            bxj_mode=args.bxj,
+            search_mode=args.search,
+            keywords=search_keywords,
+            sortby=args.sortby,
+        )
         if result["ok"]:
             logger.info(
                 "hupu feed ok: %d fetched, %d new, %d duplicate",
@@ -508,7 +813,14 @@ def _main() -> None:
             logger.warning("hupu feed skipped: %s", result.get("reason", "unknown"))
         return
 
-    run_forever(args.interval, args.limit, bxj_mode=args.bxj)
+    run_forever(
+        args.interval,
+        args.limit,
+        bxj_mode=args.bxj,
+        search_mode=args.search,
+        keywords=search_keywords,
+        sortby=args.sortby,
+    )
 
 
 if __name__ == "__main__":

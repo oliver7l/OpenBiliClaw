@@ -14,6 +14,16 @@
 
 ---
 
+## v0.3.165: 虎扑搜索 API 集成——按关键词发现内容补充推荐池（2026-09-04）
+
+- **新数据源接入**：`runtime/hupu_feed_producer` 新增 `--search` 模式，通过虎扑站内搜索（`bbs.hupu.com/search?q={keyword}`）按关键词发现内容，补充到推荐池。无需登录或 API Key，纯标准库 `urllib` 实现。
+- **多关键词 + 排序**：支持 `--keyword`（单关键词）和 `--keywords`（逗号分隔多关键词），默认关键词为 python/AI/理财/职场。支持 `--sortby` 四种排序：general（综合）/createtime（最新）/light（亮回复数）/reply（回复数）。
+- **丰富字段**：每条搜索结果含标题（自动去除 `<font>` 关键词高亮标签）、帖子 ID、完整 URL、专区名称、发布日期、回复数、推荐数、亮评数。source 为 `hupu-search-{keyword}`，便于按关键词追溯。
+- **HTML 解析**：`_parse_search_html` 基于 `div.content-wrap` 卡片结构，用预编译正则提取标题链接/专区链接/日期/三个统计数字。`_fetch_search` 支持多关键词去重合并，关键词间 0.5s 礼貌延迟。
+- **三模式统一**：producer 现支持 hot（CLI 热榜）/bxj（步行街 HTTP）/search（搜索 HTTP）三种模式，`_run_once` / `run_forever` / `_main` 均已扩展。
+- **新增测试**：`tests/test_hupu_feed_producer.py` 新增 5 例（搜索 HTML 全字段解析、`<font>` 高亮标签去除、空输入降级、搜索结果转行规范化、排序选项常量），总计 18 例全过。ruff/mypy 干净。
+- **实测**：`--search --keywords "python,AI,理财,职场" --limit 50 --once` 成功抓取并入库 50 条（python 20/AI 20/理财 10，职场与前面重复被去重）。
+
 ## v0.3.164: mindback_data 补充导入——日记AI分析 + Flomo每月总结（2026-09-04）
 
 - **全面扫描遗漏数据源**：对 `mindback_data/` 全目录扫描，发现 `diary/analysis/`（105篇日记AI分析）、`processed-data/flomo-notes.json`（261条flomo笔记）等此前遗漏的数据源。经用户确认，只导入日记AI分析和flomo中"每月总结-AI"标签的笔记。

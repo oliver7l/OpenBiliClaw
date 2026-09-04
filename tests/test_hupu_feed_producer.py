@@ -208,3 +208,116 @@ def test_bxj_page_url_construction() -> None:
     # but we can verify the URL pattern by checking the constant
     assert hfp.BXJ_BASE_URL == "https://bbs.hupu.com/bxj"
     assert hfp.BXJ_POSTS_PER_PAGE == 50
+
+
+# ---------------------------------------------------------------------------
+# Search (虎扑搜索) tests
+# ---------------------------------------------------------------------------
+
+_SEARCH_HTML_SAMPLE = (
+    '<div class="content-outline">'
+    '<div class="content-wrap">'
+    '<a class="content-wrap-span" href="https://bbs.hupu.com/641673232.html">'
+    "这配置跑<font color='#c01e2f'>python</font>处理数据</a>"
+    '<a class="content-wrap-span" href="https://bbs.hupu.com/74">PC区</a>'
+    "<span>2026-08-07</span>"
+    '<span class="content-wrap-span1">8</span>'
+    '<span class="content-wrap-span1">1</span>'
+    '<span class="content-wrap-span1">0</span>'
+    "</div>"
+    '<div class="content-wrap">'
+    '<a class="content-wrap-span" href="https://bbs.hupu.com/639691499.html">'
+    "Python异步编程入门指南</a>"
+    '<a class="content-wrap-span" href="https://bbs.hupu.com/37">步行街</a>'
+    "<span>2026-07-15</span>"
+    '<span class="content-wrap-span1">42</span>'
+    '<span class="content-wrap-span1">15</span>'
+    '<span class="content-wrap-span1">3</span>'
+    "</div>"
+    '<div class="content-wrap">'
+    '<a class="content-wrap-span" href="https://bbs.hupu.com/invalid">无数字ID</a>'
+    "<span>2026-01-01</span>"
+    "</div>"
+    "</div>"
+)
+
+
+def test_parse_search_html_extracts_all_fields() -> None:
+    posts = hfp._parse_search_html(_SEARCH_HTML_SAMPLE)
+    assert len(posts) == 2  # third block has no valid numeric ID
+
+    p1 = posts[0]
+    assert p1["id"] == "641673232"
+    assert p1["title"] == "这配置跑python处理数据"
+    assert p1["forum"] == "PC区"
+    assert p1["post_time"] == "2026-08-07"
+    assert p1["reply_count"] == 8
+    assert p1["recommend_count"] == 1
+    assert p1["light_count"] == 0
+    assert p1["url"] == "https://bbs.hupu.com/641673232.html"
+
+    p2 = posts[1]
+    assert p2["id"] == "639691499"
+    assert p2["title"] == "Python异步编程入门指南"
+    assert p2["forum"] == "步行街"
+    assert p2["reply_count"] == 42
+    assert p2["recommend_count"] == 15
+    assert p2["light_count"] == 3
+
+
+def test_parse_search_html_strips_font_highlight_tags() -> None:
+    """Keyword highlights (<font color='...'>keyword</font>) must be stripped."""
+    html = (
+        '<div class="content-wrap">'
+        '<a class="content-wrap-span" href="https://bbs.hupu.com/123.html">'
+        "学习<font color='#c01e2f'>AI</font>和<font color='#c01e2f'>Python</font>技术</a>"
+        '<a class="content-wrap-span" href="https://bbs.hupu.com/1">技术区</a>'
+        "<span>2026-01-01</span>"
+        '<span class="content-wrap-span1">5</span>'
+        '<span class="content-wrap-span1">2</span>'
+        '<span class="content-wrap-span1">1</span>'
+        "</div>"
+    )
+    posts = hfp._parse_search_html(html)
+    assert len(posts) == 1
+    assert posts[0]["title"] == "学习AI和Python技术"
+    assert "<font" not in posts[0]["title"]
+
+
+def test_parse_search_html_empty_returns_empty() -> None:
+    assert hfp._parse_search_html("") == []
+    assert hfp._parse_search_html("<html><body>no results</body></html>") == []
+
+
+def test_to_search_rows_normalization() -> None:
+    posts = [
+        {
+            "id": "641673232",
+            "title": "测试帖子",
+            "forum": "PC区",
+            "post_time": "2026-08-07",
+            "reply_count": 8,
+            "recommend_count": 1,
+            "light_count": 0,
+            "url": "https://bbs.hupu.com/641673232.html",
+            "keyword": "python",
+        },
+        {"id": "641673232", "title": "重复帖子", "url": "https://bbs.hupu.com/641673232.html"},
+        {"id": "", "title": "无ID", "url": "https://bbs.hupu.com/x.html"},
+    ]
+    rows = hfp._to_search_rows(posts)
+    assert len(rows) == 1
+    assert rows[0]["bvid"] == "641673232"
+    assert rows[0]["source"] == "hupu-search-python"
+    assert rows[0]["source_platform"] == "hupu"
+    assert rows[0]["content_type"] == "thread"
+    assert rows[0]["reply_count"] == 8
+    assert rows[0]["forum"] == "PC区"
+
+
+def test_search_sort_options_valid() -> None:
+    assert "general" in hfp.SEARCH_SORT_OPTIONS
+    assert "createtime" in hfp.SEARCH_SORT_OPTIONS
+    assert "light" in hfp.SEARCH_SORT_OPTIONS
+    assert "reply" in hfp.SEARCH_SORT_OPTIONS
+    assert hfp.SEARCH_BASE_URL == "https://bbs.hupu.com/search"
