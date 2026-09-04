@@ -8,6 +8,15 @@
 
 ---
 
+---
+
+## v0.3.159: 新增虎扑 / 头条 CLI 热榜 feed producer（2026-09-04）
+
+- **新数据源接入**：`runtime/hupu_feed_producer`（虎扑热帖）与 `runtime/toutiao_feed_producer`（头条热闻）两个独立脚本，周期调用 Go 单二进制 CLI（`hupu hot` / `toutiao hot --output json`，Apache-2.0、免登录）抓公开热榜，写入 `content_cache` 推荐池；toutiao 额外把摘要写进 `articles` 阅读库（可搜索可读）。按 bvid 去重幂等，支持 `--once` / `--dry-run` / `--limit` / `--interval`，失败安静降级不中断循环。
+- **二进制安装**：`~/.local/bin/hupu`（v0.1.0，release 下载）与 `~/.local/bin/toutiao`（go 编译）。均已实测抓取真实数据（虎扑 20 条 / 头条 13 条入库）。
+- **新增测试**：`tests/test_hupu_feed_producer.py` + `tests/test_toutiao_feed_producer.py`（16 例：解析、过滤、幂等去重、CLI 失败/缺二进制/坏 JSON 降级、bvid 提取）。
+- **说明**：两者当前只覆盖**公开热榜**；头条/虎扑的登录态"个人 feed"（关注流/个性化推荐）不可由此获取（待专项评估）。
+
 ## v0.3.158: RAG 向量改二进制存储 + 原地迁移（2026-09-04）
 
 - **向量存储从 JSON 文本改为 float32 BLOB**：`chunks.vector` 由 `TEXT`（每维一个浮点数字符，489MB）改为 `BLOB`（每维 4 字节，~130MB，省 ~67% 磁盘）。`_load_locked` 用 `np.frombuffer` 读，冷启动索引加载从 ~5.5s 降到 **~0.5s（~10x）**；旧 JSON 库仍可正常读取（retriever 双格式兼容）。
