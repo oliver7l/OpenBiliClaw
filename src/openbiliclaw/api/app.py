@@ -299,6 +299,114 @@ def _article_fit_score(text: str) -> float:
         return 0.0
     return round(min(1.0, total / 1.5), 3)
 
+
+# ── 阅读库意图搜索（自然语言 → 结构化检索）────────────────────────
+# 主路径是 LLM 分词 / 推断；下面是 LLM 不可用或失败时的纯规则回退，
+# 以及两种路径共用的排除过滤。词表与 /api/articles/facets 的真实
+# source_type 分布对齐。
+_READING_SOURCE_SYNONYMS: dict[str, str] = {
+    "b站": "bilibili", "哔哩哔哩": "bilibili", "bilibili": "bilibili",
+    "知乎": "zhihu", "zhihu": "zhihu",
+    "小红书": "xiaohongshu", "红书": "xiaohongshu", "xhs": "xiaohongshu",
+    "xiaohongshu": "xiaohongshu",
+    "youtube": "youtube", "油管": "youtube",
+    "v2ex": "v2ex",
+    "小宇宙": "xiaoyuzhou", "播客": "xiaoyuzhou", "podcast": "xiaoyuzhou",
+    "xiaoyuzhou": "xiaoyuzhou",
+    "抖音": "douyin", "douyin": "douyin",
+    "微信": "wechat", "公众号": "wechat", "wechat": "wechat",
+    "rss": "rss", "订阅": "rss",
+    "getnote": "getnote", "便签": "getnote",
+    "reddit": "reddit", "豆瓣": "douban", "douban": "douban",
+    "已读库": "read-archive",
+}
+_READING_STATUS_SYNONYMS: dict[str, str] = {
+    "未读": "unread", "没读": "unread", "没看过": "unread", "unread": "unread",
+    "在读": "reading", "正在读": "reading", "看了一半": "reading", "reading": "reading",
+    "读完": "finished", "已读": "finished", "看过": "finished", "读过": "finished",
+    "finished": "finished",
+    "归档": "archived", "archived": "archived",
+}
+_READING_VALID_STATUSES = frozenset({"unread", "reading", "finished", "archived"})
+# 口语填充词：规则回退里从关键词中剔除（LLM 路径自带去停用词能力）。
+_READING_STOPWORDS = frozenset(
+    "的 了 呢 吗 啊 我 你 帮 找 想 要 看 读 些 点 最近 有没有 推荐 一些".split()
+)
+
+
+def _rule_parse_reading_intent(q: str) -> dict[str, Any]:
+    """纯规则解析阅读库查询（LLM 回退路径）。
+
+    从自然语言里剥离来源 / 阅读状态 / 「不要 X」排除，剩余碎片作为
+    关键词。中文无空格分词，长串整体保留交给 FTS trigram 兜底子串匹配。
+    """
+    import re as _re
+
+    text = (q or "").strip()
+    source_type = ""
+    status = ""
+    exclude: list[str] = []
+
+    lower = text.lower()
+    for word, canon in _READING_SOURCE_SYNONYMS.items():
+        if word in lower:
+            source_type = canon
+            break
+    for word, canon in _READING_STATUS_SYNONYMS.items():
+        if word in lower:
+            status = canon
+            break
+
+    # 「不要X」「不带X」「排除X」抽排除词（2-10 字）。
+    for m in _re.finditer(r"(?:不要|别|不带|排除|去掉)[的]?([\u4e00-\u9fff\w]{2,10})", text):
+        token = m.group(1).strip()
+        if token and token not in exclude:
+            exclude.append(token)
+
+    cleaned = text
+    for word in list(_READING_SOURCE_SYNONYMS) + list(_READING_STATUS_SYNONYMS):
+        cleaned = _re.sub(_re.escape(word), " ", cleaned, flags=_re.IGNORECASE)
+    cleaned = _re.sub(r"(?:不要|别|不带|排除|去掉)[的]?[\u4e00-\u9fff\w]{2,10}", " ", cleaned)
+
+    keywords: list[str] = []
+    for raw in _re.split(r"[,，、;；\s]+", cleaned):
+        token = raw.strip()
+        if not token or token in _READING_STOPWORDS:
+            continue
+        if token not in keywords:
+            keywords.append(token)
+
+    return {
+        "keywords": keywords,
+        "exclude": exclude,
+        "source_type": source_type,
+        "status": status,
+        "llm_used": False,
+    }
+
+
+def _apply_reading_exclusions(
+    items: list[dict[str, Any]], exclude: list[str]
+) -> list[dict[str, Any]]:
+    """按排除词过滤文章（大小写不敏感地扫标题/摘要/标签/作者）。"""
+    terms = [t.lower() for t in exclude if t.strip()]
+    if not terms:
+        return items
+    kept: list[dict[str, Any]] = []
+    for item in items:
+        haystack = " ".join(
+            [
+                str(item.get("title") or ""),
+                str(item.get("summary") or ""),
+                str(item.get("tags") or ""),
+                str(item.get("author") or ""),
+            ]
+        ).lower()
+        if any(term in haystack for term in terms):
+            continue
+        kept.append(item)
+    return kept
+
 # Canonical home is openbiliclaw.sources.x_auth (mirrors douyin_auth);
 # re-exported here because callers historically imported from api.app.
 from openbiliclaw.sources.x_auth import (  # noqa: E402
@@ -3547,6 +3655,17 @@ def create_app(
 
         rows = _cap_by_franchise(rows, max_per_franchise=2)[:20]
 
+        # M4: record exposure. Serving a recommendation to the UI is an
+        # impression — persist presented=1 / presented_at so the offline
+        # eval loop (and any future online CTR metric) has real
+        # exposure→feedback data instead of a table stuck at presented=0.
+        _mark_presented_ids = [int(r["id"]) for r in rows if r.get("id") is not None]
+        if _mark_presented_ids:
+            try:
+                ctx.database.mark_recommendations_presented(_mark_presented_ids)
+            except Exception:
+                logger.exception("mark_recommendations_presented (recommendations) failed")
+
         # Fire background quality scoring for items that lack scores
         task = asyncio.create_task(_bg_quality_score_recommendations(rows))
         _fire_and_forget_tasks.add(task)
@@ -3977,6 +4096,13 @@ def create_app(
         items = await ctx.recommendation_engine.reshuffle_recommendations(profile=profile, limit=limit, platform=platform)
         _serialized = _serialize_recommendation_items(items)
         _enrich_xhs_urls(_serialized, ctx.database)
+        # M4: record exposure for freshly shown batch.
+        _mark_presented_ids = [r.recommendation_id for r in items if getattr(r, "recommendation_id", None)]
+        if _mark_presented_ids:
+            try:
+                ctx.database.mark_recommendations_presented(_mark_presented_ids)
+            except Exception:
+                logger.exception("mark_recommendations_presented (reshuffle) failed")
         # Best-effort post-processing — explicitly kept OFF the user's
         # latency path. serve() already consumed pool inventory and the
         # batch buffer refills asynchronously, so we must not block the
@@ -4015,6 +4141,13 @@ def create_app(
         await _trigger_replenishment_if_needed()
         _serialized = _serialize_recommendation_items(items)
         _enrich_xhs_urls(_serialized, ctx.database)
+        # M4: record exposure for freshly shown batch.
+        _mark_presented_ids = [r.recommendation_id for r in items if getattr(r, "recommendation_id", None)]
+        if _mark_presented_ids:
+            try:
+                ctx.database.mark_recommendations_presented(_mark_presented_ids)
+            except Exception:
+                logger.exception("mark_recommendations_presented (append) failed")
         return RecommendationReshuffleResponse(items=_serialized)
 
     @app.post("/api/recommendations/refresh", response_model=RecommendationRefreshResponse)
