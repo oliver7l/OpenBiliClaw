@@ -4,17 +4,24 @@
 
 ---
 
-## v0.3.155: 实时反馈闭环 E1+E2（2026-09-04）
+## v0.3.156: 实时反馈闭环 E1+E2（2026-09-04）
 
 - **E1 推荐点击回写消费状态**：`recommendations` 表新增 `clicked_at` 列（幂等迁移）；`/api/recommendations/click` 收到 `recommendation_id` 时回写 presented+clicked，`get_recommendations(exclude_processed=True)` 排除已点击项、保留仅展示项；`engine.serve()` 的 `_exclude_recently_viewed` 合并已点击 bvid——点过的视频即使重新进入候选池也不再重复推荐。`presented_at` / `clicked_at` 组合可算真实 CTR。新增 `tests/test_recommendation_click_loop.py`。
 - **E2 已读回流画像**：`_article_tags_for_context` 把文章标签折叠进 `article_finished` / `article_dismissed` 事件的 context（此前 tags 仅存 metadata、LLM 偏好分析永远看不到）；`scripts/backfill_reading_to_profile.py` 把 `read_archive` + `articles(finished/favorited)` 的 tags 批量送入 `PreferenceAnalyzer.analyze_events`，按 `layer_updaters._update_interest` 同款流程写回 flat preference + onion profile，推荐引擎下次 `serve()` 即生效。已用真实数据验证（智能体强化学习、影视评论、广告投放等兴趣成功入画像）。
 - 设计文档 `docs/plans/2026-09-03-offline-eval-loop-design.md` 追加 E 里程碑章节。
 
-## v0.3.154: 专题系统（2026-09-04）
+## v0.3.155: 专题系统（2026-09-04）
 
 - **专题（Topics）系统**：持续搜集用户感兴趣方向的内容，多专题并存、前端可查看。新增 `topics` / `topic_items` 两张表（`Database.create_topic` / `list_topics` / `get_topic_by_slug` / `add_topic_item` / `count_topic_items` / `mark_topic_collected`，幂等去重 `(topic_id, content_key)`），API 暴露 `GET/POST /api/topics`、`GET /api/topics/{slug}`、`POST /api/topics/{slug}/collect`，并挂载独立 `/topics` 前端页（`web/topics/index.html`）。
 - **纯 CLI 搜集通道，零浏览器**：`scripts/collect_topic.py` 支持 `bilibili`（项目自带 WBI 搜索 API）/ `rss`（feedparser）/ `pool`（匹配项目内容池与阅读库，零网络请求）/ `csdn` / `hot` / `zhihu-cli` / `xhs-cli` / `bili-cli` / `rdt-cli` 多通道；4 个用户 CLI 通道按自然日冷却，小红书额外 12h 关键词间隔与验证码熔断；搜集关键词以 `pending` 状态写回 `discovery_keywords`，挂在项目既有 discovery 管线上形成「发现→入库→匹配→回填」闭环。
 - 新增 `tests/test_topics.py`（专题 CRUD / 幂等 / 列表统计）。
+
+## v0.3.154: V2EX CLI producer 风控加固（2026-09-04）
+
+- **根因定位**：v2ex.com 的 403 是 Cloudflare 挑战页（body 为 `Just a moment...`），不是 IP 封禁也不是 token 失效；连续请求约 8-10 个后必触发。
+- **降频 + 风控退避**：`INTERVAL_HOURS` 6 → 24；新增 `RISK_BACKOFF_MULTIPLIER=3`，命中风控按 72h 退避而非常频重试。新增 `_looks_like_challenge` 识别 Cloudflare 挑战页。
+- **发现阶段短路**：`_run_cli_topics` 返回 `(stdout, risk_control)`，命中 403 即 break 不再发第二个 latest/hot 调用；`_discover` 返回三态 `status`（含 `risk_control`），`_fetch_topic_body` 返回 `(dict, risk_control)` 传递风控标志。
+- **进程编排同步**：`ecosystem.config.json` 显式传 `--interval 24 --limit 20`。
 
 ## v0.3.153: 候选池目标上限放宽（2026-09-04）
 
