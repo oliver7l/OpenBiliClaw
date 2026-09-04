@@ -20,11 +20,24 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
+DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 24
 CLEAN_ENV = os.environ.copy()
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
+# 清掉代理环境变量：本机代理（Clash 类）经常重启/挂掉，挂掉时 yt-dlp 走代理会拿到
+# "Unable to connect to proxy ... 502 Bad Gateway"，表现为 "yt-dlp returned 0 items"
+# （退出码仍是 0，所以不会报错、只会被当成空 feed 跳过，很难发现）。
+# 实测清掉代理后直连可正常抓取推荐页（与 cli.py 的 _strip_proxy_env 同一思路）。
+for _proxy_key in (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+):
+    CLEAN_ENV.pop(_proxy_key, None)
 
 YT_DLP_CMD = [
     "yt-dlp",
