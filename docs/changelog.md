@@ -14,6 +14,15 @@
 
 ---
 
+## v0.3.163: mindback_data 扩展导入——小宇宙播客/YouTube订阅流/小红书热门榜/聊天记录AI分析（2026-09-04）
+
+- **新增导入脚本**：`scripts/import_mindback_extra.py`，支持 `--xiaoyuzhou` / `--youtube` / `--xhs-hot` / `--chat-analysis` / `--all`，含 `--dry-run` 和 `--limit`。与 `import_mindback_data.py`（B站/小红书/V2EX/知乎）互补，覆盖 `001-scheduler-data/` 和 `deepseek-analysis/` 两个目录。
+- **小宇宙播客**：629 期播客节目（`xiaoyuzhou-articles.json`），含标题/链接/HTML 节目简介/嘉宾/发布日期/时长。`html_to_text` 清洗 HTML 后入 articles（source_type="xiaoyuzhou"），新增 178 条（其余已存在）。
+- **YouTube 订阅流**：236 次 feed 抓取 + 689 个视频详情（details 为 `[{field,value}]` 键值对格式，`_parse_youtube_details` 重组为字典）。去重后 125 个视频，入 content_cache（source="youtube-feed"）112 条 + articles（含描述正文）65 条。字段含频道/分类/播放量/点赞/时长/发布日期/缩略图。
+- **小红书热门榜**：100 次抓取覆盖 10 个分类（career/travel/movie/home/food/gaming/fashion/love/fitness/cosmetics），去重后 3,886 条笔记入 content_cache（source="xhs-hot-{category}"）。从文件名提取分类标签，字段含标题/作者/点赞数/封面。
+- **聊天记录 AI 分析**：`deepseek-analysis/` 下 15 个聊天对象（狄胖胖/童小家/V2EX深圳/科学空间交流群8/ChatLab交流群等），420 个结构化分析文件（DeepSeek 生成，含洞察/指导/行动计划），全部入 articles（source_type="chat-analysis"）。标题格式 `【对象名】第X-Y行聊天记录分析`，最长分析 7,762 字（科学空间交流群8）。
+- **通用工具函数**：`html_to_text`（HTML标签清洗+空白归一化）、`insert_article`（articles 表去重插入）、`insert_content_cache`（content_cache 表动态列插入+旧版回退），均在脚本内复用。
+
 ## v0.3.162: 虎扑步行街 (Buxingjie) 直接 HTTP 抓取 producer（2026-09-04）
 
 - **新数据源接入**：`runtime/hupu_feed_producer` 新增 `--bxj` 模式，通过直接 HTTP 抓取虎扑步行街主干道（`bbs.hupu.com/bxj`），无需登录或 API Key。每页 50 条，支持分页（`/bxj-2`、`/bxj-3`...），默认按最新回复排序。
