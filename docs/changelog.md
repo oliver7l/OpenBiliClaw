@@ -6,6 +6,14 @@
 
 ---
 
+---
+
+## v0.3.158: RAG 向量改二进制存储 + 原地迁移（2026-09-04）
+
+- **向量存储从 JSON 文本改为 float32 BLOB**：`chunks.vector` 由 `TEXT`（每维一个浮点数字符，489MB）改为 `BLOB`（每维 4 字节，~130MB，省 ~67% 磁盘）。`_load_locked` 用 `np.frombuffer` 读，冷启动索引加载从 ~5.5s 降到 **~0.5s（~10x）**；旧 JSON 库仍可正常读取（retriever 双格式兼容）。
+- **原地迁移，零重新 embedding**：`scripts/build_article_rag.py --migrate-vectors` 把现有 JSON 向量就地转成 BLOB（读→转→重建表→VACUUM），31639 块仅 **~7s**，检索结果与迁移前逐位一致（已用真实库验证）。build 脚本 schema 改为 BLOB，增量建索引时自动检测旧 TEXT 列并迁移（幂等）。
+- 新增 `tests/test_rag_retriever.py` 的 BLOB/JSON 双格式等价测试；build 脚本清理未用的 `math`/`os` 导入并补 `zip(strict=True)`。
+
 ## v0.3.157: RAG 检索提速（numpy 向量化扫描 + query 缓存）（2026-09-04）
 
 - **根因**：`ArticleRagRetriever.retrieve_chunks` 的余弦扫描是纯 Python 双层循环，对 31639 chunks × 1024 维 ≈ 3200 万次浮点运算要 ~2.2s；加上每次聊天都重新调 Ollama 算 query embedding（warm 后 ~0.15s、冷启动 ~3s）与进程级冷启动的 489MB 索引加载，聊天时 `_rag_retrieve` 常触及其 15s 超时 → 用户每次发消息卡 ~15s 且 RAG 引用几乎永远为空。

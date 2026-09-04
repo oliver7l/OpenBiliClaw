@@ -176,14 +176,31 @@ class ArticleRagRetriever:
                 url,
                 source_name,
                 author,
-                vec_json,
+                vec_raw,
                 source_table,
             ) in conn.execute(query):
-                try:
-                    vec = json.loads(vec_json)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                if not isinstance(vec, list) or len(vec) != self._dim:
+                # ``vector`` is a packed float32 BLOB on current indexes; legacy
+                # indexes stored JSON text. Accept both so a pre-migration DB
+                # still loads (the build script converts in place).
+                if isinstance(vec_raw, (bytes, bytearray)):
+                    try:
+                        if _HAVE_NUMPY:
+                            vec: Any = np.frombuffer(bytes(vec_raw), dtype=np.float32)
+                        else:  # pragma: no cover - numpy is a declared dep
+                            arr = array.array("f")
+                            arr.frombytes(bytes(vec_raw))
+                            vec = arr
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    try:
+                        parsed = json.loads(vec_raw)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    if not isinstance(parsed, list):
+                        continue
+                    vec = np.asarray(parsed, dtype=np.float32) if _HAVE_NUMPY else parsed
+                if len(vec) != self._dim:
                     continue
                 ids.append(cid)
                 citations.append(

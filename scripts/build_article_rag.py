@@ -13,14 +13,17 @@ Design notes
 * Local embedding only (no cloud quota / cost). ``bge-m3`` on CPU is ~3s/call,
   so we fan out with a small thread pool (default 3) and retry on transient
   connection errors with backoff.
-* Vector storage is JSON text in the chunks table — simple and compatible with
-  the retriever's pure-Python cosine scan.
+* Vector storage is a float32 binary BLOB in the chunks table (~25% the size
+  of the legacy JSON text, and ~100x faster to load at request time). Older
+  indexes with a ``TEXT vector`` column are auto-migrated on open; use
+  ``--migrate-vectors`` to convert in place without re-embedding anything.
 
 Usage
 -----
     .venv/bin/python scripts/build_article_rag.py            # full build
     .venv/bin/python scripts/build_article_rag.py --limit 50 # dry cap
     .venv/bin/python scripts/build_article_rag.py --concurrency 4
+    .venv/bin/python scripts/build_article_rag.py --migrate-vectors  # JSON→BLOB only
 """
 
 from __future__ import annotations
@@ -28,8 +31,6 @@ from __future__ import annotations
 import argparse
 import array
 import json
-import math
-import os
 import re
 import sqlite3
 import sys
@@ -194,25 +195,111 @@ def _init_rag_db() -> sqlite3.Connection:
             url TEXT DEFAULT '',
             source_name TEXT DEFAULT '',
             author TEXT DEFAULT '',
-            vector TEXT NOT NULL
+            vector BLOB NOT NULL
         )"""
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_article ON chunks(article_id)")
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-    )
+    conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
     # Migration: older indexes were built before read_archive support. This
     # must run BEFORE the index below, which references the new column.
     cols = {r[1] for r in conn.execute("PRAGMA table_info(chunks)").fetchall()}
     if "source_table" not in cols:
-        conn.execute(
-            "ALTER TABLE chunks ADD COLUMN source_table TEXT NOT NULL DEFAULT 'articles'"
-        )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_table, article_id)"
-    )
+        conn.execute("ALTER TABLE chunks ADD COLUMN source_table TEXT NOT NULL DEFAULT 'articles'")
+    # Migration: legacy indexes stored vectors as JSON text (5-6x the binary
+    # size, ~100x slower to load). Convert in place to a float32 BLOB column.
+    _migrate_vector_column_if_text(conn)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_table, article_id)")
     conn.commit()
     return conn
+
+
+def _migrate_vector_column_if_text(conn: sqlite3.Connection) -> None:
+    """Rebuild ``chunks`` with a BLOB ``vector`` column if it is still TEXT.
+
+    Converts every stored vector from its JSON string to a packed float32
+    BLOB without re-embedding anything (the embeddings are already correct;
+    only the on-disk encoding changes). Idempotent: no-op when the column is
+    already BLOB (including fresh DBs created by the schema above).
+    """
+    vec_type = ""
+    for row in conn.execute("PRAGMA table_info(chunks)").fetchall():
+        if row[1] == "vector":
+            vec_type = (row[2] or "").upper()
+    if vec_type == "BLOB":
+        return
+    total = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    if total == 0:
+        # Empty legacy table — just recreate the schema, nothing to convert.
+        conn.execute("DROP TABLE chunks")
+        conn.execute(
+            """CREATE TABLE chunks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_table TEXT NOT NULL DEFAULT 'articles',
+                article_id INTEGER NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                title TEXT DEFAULT '',
+                url TEXT DEFAULT '',
+                source_name TEXT DEFAULT '',
+                author TEXT DEFAULT '',
+                vector BLOB NOT NULL
+            )"""
+        )
+        conn.commit()
+        print("[migrate] rebuilt empty chunks table (vector TEXT → BLOB)")
+        return
+    print(
+        f"[migrate] converting {total} chunk vectors from JSON text → float32 BLOB…",
+        file=sys.stderr,
+    )
+    t0 = time.time()
+    conn.execute("ALTER TABLE chunks RENAME TO chunks_legacy")
+    conn.execute(
+        """CREATE TABLE chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_table TEXT NOT NULL DEFAULT 'articles',
+            article_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            title TEXT DEFAULT '',
+            url TEXT DEFAULT '',
+            source_name TEXT DEFAULT '',
+            author TEXT DEFAULT '',
+            vector BLOB NOT NULL
+        )"""
+    )
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks_legacy)").fetchall()]
+    base_cols = [c for c in cols if c != "vector"]
+    src_cols = ", ".join(base_cols)
+    dst_cols = ", ".join([f'"{c}"' for c in base_cols])
+    insert_sql = (
+        f"INSERT INTO chunks ({dst_cols}, vector) VALUES ({', '.join('?' * len(base_cols))}, ?)"
+    )
+    cursor = conn.execute(f"SELECT {src_cols}, vector FROM chunks_legacy ORDER BY id")
+    batch: list[tuple] = []
+    while True:
+        rows = cursor.fetchmany(2000)
+        if not rows:
+            break
+        for row in rows:
+            raw = row[-1]
+            if isinstance(raw, (bytes, bytearray)):
+                vec_blob = bytes(raw)
+            else:
+                vec_blob = array.array("f", json.loads(raw)).tobytes()
+            batch.append((*row[:-1], vec_blob))
+        conn.executemany(insert_sql, batch)
+        batch.clear()
+        conn.commit()
+    conn.execute("DROP TABLE chunks_legacy")
+    conn.commit()
+    # Reclaim the pages freed by dropping the legacy table; without this the
+    # DB file temporarily grows (free pages) instead of shrinking to the
+    # smaller BLOB footprint.
+    print("[migrate] vacuuming to reclaim freed pages…", file=sys.stderr)
+    conn.execute("VACUUM")
+    conn.commit()
+    print(f"[migrate] done — {total} vectors converted in {time.time() - t0:.1f}s", file=sys.stderr)
 
 
 def _indexed_ids(conn: sqlite3.Connection, source_table: str) -> set[int]:
@@ -249,6 +336,12 @@ def main() -> int:
         help="Restrict to one source table (default: all sources)",
     )
     ap.add_argument("--dry-run", action="store_true", help="List candidates only")
+    ap.add_argument(
+        "--migrate-vectors",
+        action="store_true",
+        help="Convert an existing JSON-text vector column to float32 BLOB in "
+        "place, then exit (no re-embedding, no new indexing)",
+    )
     args = ap.parse_args()
 
     if not MAIN_DB.exists():
@@ -257,6 +350,13 @@ def main() -> int:
     cfg = _load_embed_config()
     dim = int(cfg.get("output_dimensionality") or 1024)
     print(f"[config] embedding {cfg.get('model')} @ {cfg.get('base_url')} dim={dim}")
+
+    if args.migrate_vectors:
+        rag = _init_rag_db()
+        total = rag.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        print(f"[migrate] chunks table ready ({total} chunks, vector BLOB)")
+        rag.close()
+        return 0
 
     src = sqlite3.connect(str(MAIN_DB), timeout=15.0)
     src.row_factory = sqlite3.Row
@@ -281,8 +381,10 @@ def main() -> int:
             ).fetchall()
             done_ids = _indexed_ids(rag, source_table)
             candidates = [r for r in rows if int(r["id"]) not in done_ids]
-            print(f"[scan] {label}({source_table}): {len(rows)} with content; "
-                  f"{len(done_ids)} already indexed; {len(candidates)} to process")
+            print(
+                f"[scan] {label}({source_table}): {len(rows)} with content; "
+                f"{len(done_ids)} already indexed; {len(candidates)} to process"
+            )
 
             if args.dry_run:
                 for r in candidates[:5]:
@@ -321,7 +423,7 @@ def main() -> int:
                         "DELETE FROM chunks WHERE source_table=? AND article_id=?",
                         (source_table, article_id),
                     )
-                    for i, (ch, vec) in enumerate(zip(chunks, vecs)):
+                    for i, (ch, vec) in enumerate(zip(chunks, vecs, strict=True)):
                         if not vec or len(vec) != dim:
                             failed += 1
                             continue
@@ -338,7 +440,7 @@ def main() -> int:
                                 r["url"] or "",
                                 r["source_name"] or "",
                                 r["author"] or "",
-                                json.dumps(vec),
+                                array.array("f", vec).tobytes(),
                             ),
                         )
                         chunks_written += 1
@@ -354,8 +456,7 @@ def main() -> int:
                 processed += 1
                 if processed % 25 == 0:
                     rate = processed / max(0.01, time.time() - t0)
-                    print(f"[progress] {processed} items, {chunks_written} chunks, "
-                          f"{rate:.2f}/s")
+                    print(f"[progress] {processed} items, {chunks_written} chunks, {rate:.2f}/s")
 
             if limit and processed >= limit:
                 break
@@ -368,9 +469,11 @@ def main() -> int:
     rag.commit()
     rag.close()
     src.close()
-    print(f"[done] indexed {processed} articles ({chunks_written} chunks), "
-          f"{failed} failed. total chunks in db: {total_chunks}. "
-          f"elapsed {elapsed/60:.1f}min")
+    print(
+        f"[done] indexed {processed} articles ({chunks_written} chunks), "
+        f"{failed} failed. total chunks in db: {total_chunks}. "
+        f"elapsed {elapsed / 60:.1f}min"
+    )
     return 0
 
 

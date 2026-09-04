@@ -8,6 +8,7 @@ touched and the index is a tiny in-memory-on-disk SQLite file.
 
 from __future__ import annotations
 
+import array
 import json
 import math
 import sqlite3
@@ -24,16 +25,26 @@ if TYPE_CHECKING:
 _DIM = 4
 
 
-def _build_index(db_path: Path, rows: list[tuple[int, str, list[float]]]) -> None:
+def _build_index(
+    db_path: Path,
+    rows: list[tuple[int, str, list[float]]],
+    *,
+    vector_column: str = "BLOB",
+) -> None:
     """Create a minimal ``chunks`` table (same schema as the real RAG index)."""
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
             "CREATE TABLE chunks ("
             "id INTEGER PRIMARY KEY, article_id INTEGER, text TEXT, title TEXT, "
-            "url TEXT, source_name TEXT, author TEXT, vector TEXT, source_table TEXT)"
+            f"url TEXT, source_name TEXT, author TEXT, vector {vector_column} NOT NULL, "
+            "source_table TEXT)"
         )
         for cid, title, vec in rows:
+            if vector_column == "BLOB":
+                payload: str | bytes = array.array("f", vec).tobytes()
+            else:  # legacy JSON-text encoding
+                payload = json.dumps(vec)
             conn.execute(
                 "INSERT INTO chunks (id, article_id, text, title, url, source_name, "
                 "author, vector, source_table) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -45,7 +56,7 @@ def _build_index(db_path: Path, rows: list[tuple[int, str, list[float]]]) -> Non
                     f"https://example.com/{cid}",
                     "test-src",
                     "tester",
-                    json.dumps(vec),
+                    payload,
                     "articles",
                 ),
             )
@@ -148,3 +159,22 @@ def test_retrieve_returns_empty_without_index_or_query(tmp_path: Path) -> None:
     assert retr.retrieve_chunks("   ") == []
     assert retr.retrieve_chunks("没有索引的查询") == []
     assert retr.ready is False
+
+
+def test_legacy_json_text_index_still_loads(tmp_path: Path) -> None:
+    """Pre-migration indexes stored vectors as JSON text; they must keep working.
+
+    The BLOB retriever path and the JSON fallback must return identical hits so
+    a not-yet-migrated DB is safe to serve.
+    """
+    blob_db = tmp_path / "blob.db"
+    json_db = tmp_path / "legacy.db"
+    _build_index(blob_db, _sample_rows())
+    _build_index(json_db, _sample_rows(), vector_column="TEXT")
+
+    blob_hits = retr_retrieve(blob_db)
+    legacy_hits = retr_retrieve(json_db)
+
+    assert [h["chunk_id"] for h in blob_hits] == [h["chunk_id"] for h in legacy_hits]
+    assert [h["score"] for h in blob_hits] == [h["score"] for h in legacy_hits]
+    assert legacy_hits[0]["title"] == "目标文章"
