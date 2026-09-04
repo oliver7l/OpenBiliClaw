@@ -5585,10 +5585,12 @@ class TestBackendAPI:
         assert memory._updates[0]["notified"] is True
 
     def test_chat_endpoint_returns_dialogue_reply(self) -> None:
+        from unittest import mock
+
         from fastapi.testclient import TestClient
 
         class FakeDialogue:
-            async def respond(self, user_message: str) -> str:
+            async def respond(self, user_message: str, retrieval_context: str | None = None) -> str:
                 assert user_message == "我最近总在看国际新闻"
                 return "你更在意的是它背后的逻辑，还是事件本身的冲突感？"
 
@@ -5600,10 +5602,18 @@ class TestBackendAPI:
         )
         client = TestClient(app)
 
-        response = client.post("/api/chat", json={"message": "我最近总在看国际新闻"})
+        # 隔离 RAG：retrieval 走真实 embedding 模型很慢（本机 ~20s，会触发
+        # _rag_retrieve 的 15s 超时），与本次测试的「对话回复」意图无关。
+        with mock.patch(
+            "openbiliclaw.rag.retriever.get_retriever",
+            side_effect=RuntimeError("RAG skipped in test"),
+        ):
+            response = client.post("/api/chat", json={"message": "我最近总在看国际新闻"})
 
         assert response.status_code == 200
-        assert response.json() == {"reply": "你更在意的是它背后的逻辑，还是事件本身的冲突感？"}
+        data = response.json()
+        assert data["reply"] == "你更在意的是它背后的逻辑，还是事件本身的冲突感？"
+        assert data["references"] == []
 
     def test_chat_endpoint_rejects_empty_message(self) -> None:
         from fastapi.testclient import TestClient
@@ -6457,6 +6467,7 @@ class TestBackendAPI:
     def test_chat_turn_endpoint_persists_pending_turn_until_reply(self, tmp_path: Path) -> None:
         import asyncio
         import time
+        from unittest import mock
 
         from fastapi.testclient import TestClient
 
@@ -6466,7 +6477,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self.messages: list[str] = []
 
-            async def respond(self, user_message: str) -> str:
+            async def respond(self, user_message: str, retrieval_context: str | None = None) -> str:
                 self.messages.append(user_message)
                 await asyncio.sleep(0.05)
                 return "你更在意的是它背后的逻辑。"
@@ -6481,7 +6492,15 @@ class TestBackendAPI:
             dialogue=dialogue,
         )
 
-        with TestClient(app) as client:
+        # 隔离 RAG：chat scope 的 durable turn 会触发真实 RAG 检索（本机
+        # ~20s 且超 15s 超时），与「turn 生命周期/持久化」的测试意图无关。
+        with (
+            mock.patch(
+                "openbiliclaw.rag.retriever.get_retriever",
+                side_effect=RuntimeError("RAG skipped in test"),
+            ),
+            TestClient(app) as client,
+        ):
             start = client.post(
                 "/api/chat/turns",
                 json={
@@ -6537,7 +6556,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self.messages: list[str] = []
 
-            async def respond(self, user_message: str) -> str:
+            async def respond(self, user_message: str, retrieval_context: str | None = None) -> str:
                 self.messages.append(user_message)
                 await asyncio.sleep(0.01)
                 return "这条像是从另一个角度补上你的问题。"
@@ -6597,7 +6616,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self.messages: list[str] = []
 
-            async def respond(self, user_message: str) -> str:
+            async def respond(self, user_message: str, retrieval_context: str | None = None) -> str:
                 self.messages.append(user_message)
                 await asyncio.sleep(0.01)
                 return "懂，这类你更像是在避开低信息密度。"
