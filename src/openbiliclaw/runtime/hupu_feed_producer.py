@@ -107,7 +107,7 @@ _SEARCH_STAT_RE = re.compile(r'<span class="content-wrap-span1">(\d+)</span>')
 _FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>", re.IGNORECASE)
 
 # Strip proxy env vars: the local proxy (Clash-like) often dies/restarts and a
-# dead proxy breaks the CLI child process. Same rationale as xhs_feed_producer /
+# dead proxy breaks the CLI child process. Same rationale as xhs_producer /
 # cli.py — these producer scripts don't go through cli.py so they clean up
 # themselves.
 CLEAN_ENV = os.environ.copy()

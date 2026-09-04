@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
-from openbiliclaw.runtime import douyin_feed_producer as dfp
+from openbiliclaw.runtime import douyin_producer as dfp
 
 if TYPE_CHECKING:
     from pathlib import Path

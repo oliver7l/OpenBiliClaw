@@ -248,10 +248,9 @@ class SchedulerConfig:
     # 不删除，仅改状态）。默认设很大以实现"尽量不过期、保留数据"。
     pool_max_age_days: int = 365
     # 行为事件表(events)的低价值事件 (view/scroll/hover/snapshot) 保留天数。
-    # ⚠️ 用户红线(2026-08-31): 行为留痕数据不清理不删 —— 本值保持 0(禁用)。
-    # 2026-09-01 曾误设 14 并执行清理(删 58.9 万行低信号事件, 已 VACUUM 不可逆),
-    # 教训已记入项目记忆。如需调整必须先经用户明确确认。
-    events_retention_days: int = 0
+    # 历史: 2026-08-31 用户红线设为 0(不清理); 2026-09-01 误设 14 删 58.9 万行;
+    # 2026-09-04 用户确认调整为 90 天, 控制数据库膨胀(events 曾达 22 万行).
+    events_retention_days: int = 90
     # recommendations / llm_usage 保留期同理默认禁用(0), 需用户拍板后才启用。
     recommendations_retention_days: int = 0
     llm_usage_retention_days: int = 0

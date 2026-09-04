@@ -23,9 +23,9 @@
       * 已存在且 content_text 为空 -> 补填正文/摘要/标签 (CASE WHEN 保护已有值)
       * 已存在且 content_text 非空 -> 跳过 (绝不覆盖用户/已有数据)
   - 同时(默认 --pool)按 topic id 去重 upsert 进 content_cache (推荐池):
-      * 这是推荐池 V2EX 断流的真正补法——旧 v2ex_feed_producer 走 v2ex.com API,
+      * 这是推荐池 V2EX 断流的真正补法——v2ex_producer --mode api 走 v2ex.com API,
         现网络下 403 死掉; 归档走 GitHub 镜像, 带全文, 且能回填正文到已存在的
-        标题流空行 (RSSHub / 旧 feed 写入的 v2ex 行)。
+        标题流空行 (RSSHub / api 模式写入的 v2ex 行)。
       * 仅最近 --recent 天(默认 30)的归档进推荐池, 避免把多年历史一次性
         灌进实时推荐; 阅读库 articles 仍收全量。
       * 幂等: 重复运行安全; 已有行只补空字段, 绝不覆盖。

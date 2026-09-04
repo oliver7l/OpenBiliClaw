@@ -133,7 +133,6 @@ module = [
     "aiohttp",
     "aiohttp.*",
     "claude_agent_sdk",
-    "claude_agent_sdk.*",
     "feedparser",
     "google",
     "google.*",
@@ -141,7 +140,6 @@ module = [
     "rich.*",
     "scrapetube",
     "typer",
-    "typer.*",
     "twitter_cli.*",
 ]
 ignore_missing_imports = true

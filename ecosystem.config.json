@@ -20,7 +20,7 @@
     {
       "name": "openbiliclaw-xhs-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/xhs_feed_producer.py",
+      "script": "./src/openbiliclaw/runtime/xhs_producer.py",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {
@@ -42,7 +42,7 @@
     {
       "name": "openbiliclaw-zhihu-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/zhihu_feed_producer.py",
+      "script": "./src/openbiliclaw/runtime/zhihu_producer.py",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {
@@ -64,7 +64,7 @@
     {
       "name": "openbiliclaw-bili-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/bili_feed_producer.py",
+      "script": "./src/openbiliclaw/runtime/bilibili_producer.py",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {
@@ -86,7 +86,7 @@
     {
       "name": "openbiliclaw-youtube-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/youtube_feed_producer.py",
+      "script": "./src/openbiliclaw/runtime/youtube_producer.py",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {
@@ -108,7 +108,8 @@
     {
       "name": "openbiliclaw-v2ex-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/v2ex_feed_producer.py",
+      "script": "./src/openbiliclaw/runtime/v2ex_producer.py",
+      "args": "--mode api",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {
@@ -153,8 +154,8 @@
     {
       "name": "openbiliclaw-v2ex-cli",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/v2ex_cli_producer.py",
-      "args": "--interval 24 --limit 20",
+      "script": "./src/openbiliclaw/runtime/v2ex_producer.py",
+      "args": "--mode cli --interval 24 --limit 20",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {

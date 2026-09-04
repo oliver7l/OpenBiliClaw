@@ -53,7 +53,7 @@ CLI_TIMEOUT = 60  # seconds per ``toutiao hot`` subprocess call
 # dir (same convention as the v2ex / hupu CLI producers).
 _TOUTIAO_BIN = shutil.which("toutiao") or "/Users/imac/.local/bin/toutiao"
 
-# Strip proxy env vars (same rationale as hupu_feed_producer / xhs_feed_producer).
+# Strip proxy env vars (same rationale as hupu_feed_producer / xhs_producer).
 CLEAN_ENV = os.environ.copy()
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
