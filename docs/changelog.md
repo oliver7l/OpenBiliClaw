@@ -14,6 +14,14 @@
 
 ---
 
+## v0.3.164: mindback_data 补充导入——日记AI分析 + Flomo每月总结（2026-09-04）
+
+- **全面扫描遗漏数据源**：对 `mindback_data/` 全目录扫描，发现 `diary/analysis/`（105篇日记AI分析）、`processed-data/flomo-notes.json`（261条flomo笔记）等此前遗漏的数据源。经用户确认，只导入日记AI分析和flomo中"每月总结-AI"标签的笔记。
+- **日记AI分析**：105篇日记中93篇有效入库（12篇空内容跳过），覆盖 2016-2025 十年。每篇含原文 + AI分析（【点评】+【关键要点】格式，与日记陪伴模式一致），source_type="diary-analysis"。按年分布：2016(5)/2017(6)/2018(5)/2019(6)/2020(4)/2021(6)/2022(20)/2023(10)/2024(12)/2025(19)。
+- **Flomo每月总结**：从261条flomo笔记中筛选"每月总结-AI"标签的26条月度AI总结入库，source_type="flomo-monthly"。内容为2025年各月的AI生成月度复盘（心理健康/自我成长/职业发展等维度）。
+- **导入脚本扩展**：`import_mindback_extra.py` 新增 `--diary-analysis` 和 `--flomo-monthly` 两个参数，支持两种JSON格式（diary-analysis-*.json 的 aiResults 数组 / diary-ai-*.json 的 analysis 字段），自动合并原文+AI分析为完整 content_text。
+- **articles 总量**：86,405 → 86,524（新增119条）。
+
 ## v0.3.163: mindback_data 扩展导入——小宇宙播客/YouTube订阅流/小红书热门榜/聊天记录AI分析（2026-09-04）
 
 - **新增导入脚本**：`scripts/import_mindback_extra.py`，支持 `--xiaoyuzhou` / `--youtube` / `--xhs-hot` / `--chat-analysis` / `--all`，含 `--dry-run` 和 `--limit`。与 `import_mindback_data.py`（B站/小红书/V2EX/知乎）互补，覆盖 `001-scheduler-data/` 和 `deepseek-analysis/` 两个目录。

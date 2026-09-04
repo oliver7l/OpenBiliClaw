@@ -1,16 +1,19 @@
 """Import extra mindback_data sources into OpenBiliClaw.
 
-Handles four data sources not covered by import_mindback_data.py:
+Handles six data sources not covered by import_mindback_data.py:
   * xiaoyuzhou (小宇宙播客) — 629 episodes with HTML show notes → articles
   * youtube-feed (YouTube订阅流) — feed list + video details → content_cache + articles
   * xhs-hot (小红书热门榜) — career/travel categories → content_cache
   * chat-analysis (聊天记录AI分析) — DeepSeek structured analysis of 15 chats → articles
+  * diary-analysis (日记AI分析) — 105 diary entries with AI 点评/关键要点 (2016-2025) → articles
+  * flomo-monthly (Flomo每月总结-AI) — 26 monthly AI summaries → articles
 
 Usage:
   python3 scripts/import_mindback_extra.py --xiaoyuzhou --once
   python3 scripts/import_mindback_extra.py --youtube --dry-run
   python3 scripts/import_mindback_extra.py --xhs-hot --limit 100
   python3 scripts/import_mindback_extra.py --chat-analysis
+  python3 scripts/import_mindback_extra.py --diary-analysis --flomo-monthly
   python3 scripts/import_mindback_extra.py --all
 """
 
@@ -35,6 +38,8 @@ DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbi
 MINDBACK_BASE = "/Volumes/未命名/未命名文件夹/2026年04月27日-备份项目/2026年05月09日-SQLiteDB/mindback_data"
 SCHEDULER_DIR = os.path.join(MINDBACK_BASE, "001-scheduler-data")
 DEEPSEEK_DIR = os.path.join(MINDBACK_BASE, "deepseek-analysis")
+DIARY_ANALYSIS_DIR = os.path.join(MINDBACK_BASE, "diary", "analysis")
+PROCESSED_DIR = os.path.join(MINDBACK_BASE, "processed-data")
 
 _DRY_RUN = False
 
@@ -555,6 +560,198 @@ def import_chat_analysis(dry_run: bool = False, limit: int = 0) -> dict[str, Any
 
 
 # ---------------------------------------------------------------------------
+# Diary AI analysis (日记AI分析)
+# ---------------------------------------------------------------------------
+
+
+def import_diary_analysis(dry_run: bool = False, limit: int = 0) -> dict[str, Any]:
+    """Import diary AI analysis results into articles.
+
+    Source: mindback_data/diary/analysis/*.json
+    Two formats:
+      - diary-analysis-*.json: aiResults list [{model, response}]
+      - diary-ai-*.json: analysis string field
+    Each contains diaryDate, diaryTitle, diaryContent + AI analysis.
+    """
+    files = sorted(glob.glob(os.path.join(DIARY_ANALYSIS_DIR, "*.json")))
+    if limit > 0:
+        files = files[:limit]
+
+    total = len(files)
+    inserted = 0
+    skipped = 0
+    conn = None
+
+    try:
+        conn = get_conn()
+        for fpath in files:
+            try:
+                with open(fpath, encoding="utf-8") as f:
+                    d = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                skipped += 1
+                continue
+
+            diary_date = d.get("diaryDate", "")
+            diary_title = str(d.get("diaryTitle", "")).strip()
+            diary_content = str(d.get("diaryContent", "")).strip()
+
+            # Extract AI analysis text from either format
+            ai_text = ""
+            if "aiResults" in d and d["aiResults"]:
+                for r in d["aiResults"]:
+                    resp = str(r.get("response", "")).strip()
+                    if resp:
+                        ai_text = resp
+                        break
+            elif "analysis" in d:
+                ai_text = str(d["analysis"]).strip()
+
+            if not diary_date and not diary_title:
+                skipped += 1
+                continue
+
+            # Build title: 【日记】2024-06-27 标题前40字
+            title_prefix = f"【日记】{diary_date}" if diary_date else "【日记】"
+            short_title = diary_title[:40] + ("..." if len(diary_title) > 40 else "")
+            title = f"{title_prefix} {short_title}".strip()
+
+            url = f"diary-analysis://{diary_date or os.path.basename(fpath)}"
+
+            # Build content: original diary + AI analysis
+            content_parts = []
+            if diary_content:
+                content_parts.append(f"【原文】\n{diary_content}")
+            if ai_text:
+                content_parts.append(f"【AI分析】\n{ai_text}")
+            content_text = "\n\n".join(content_parts)
+
+            if not content_text:
+                skipped += 1
+                continue
+
+            summary = ai_text[:200] if ai_text else diary_content[:200]
+            tags = json.dumps(["日记", "AI分析"], ensure_ascii=False)
+
+            ok = insert_article(
+                conn,
+                source_type="diary-analysis",
+                source_name="日记AI分析",
+                title=title,
+                url=url,
+                content_text=content_text,
+                author="",
+                summary=summary,
+                published_at=diary_date,
+                tags=tags,
+            )
+            if ok:
+                inserted += 1
+            else:
+                skipped += 1
+
+        if not dry_run:
+            conn.commit()
+    finally:
+        if conn:
+            conn.close()
+
+    return {
+        "ok": True,
+        "total": total,
+        "inserted": inserted,
+        "skipped": skipped,
+        "date_range": f"{min((json.load(open(f)).get('diaryDate','?') for f in files[:1]), default='?')} ~ "
+        f"{max((json.load(open(f)).get('diaryDate','?') for f in files[-1:]), default='?')}",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Flomo monthly AI summary (Flomo每月总结-AI)
+# ---------------------------------------------------------------------------
+
+
+def import_flomo_monthly(dry_run: bool = False, limit: int = 0) -> dict[str, Any]:
+    """Import Flomo notes tagged '每月总结-AI' into articles.
+
+    Source: mindback_data/processed-data/flomo-notes.json
+    Only imports notes with tag '每月总结-AI'.
+    """
+    fpath = os.path.join(PROCESSED_DIR, "flomo-notes.json")
+    if not os.path.exists(fpath):
+        return {"ok": False, "error": f"File not found: {fpath}"}
+
+    with open(fpath, encoding="utf-8") as f:
+        d = json.load(f)
+
+    all_notes = d.get("notes", [])
+    monthly_notes = [
+        n for n in all_notes
+        if "每月总结-AI" in n.get("tags", [])
+    ]
+    if limit > 0:
+        monthly_notes = monthly_notes[:limit]
+
+    total = len(monthly_notes)
+    inserted = 0
+    skipped = 0
+    conn = None
+
+    try:
+        conn = get_conn()
+        for note in monthly_notes:
+            note_id = str(note.get("id", "")).strip()
+            content_text = str(note.get("contentText", "")).strip()
+            note_time = str(note.get("time", "")).strip()
+            tags_list = note.get("tags", [])
+
+            if not content_text:
+                skipped += 1
+                continue
+
+            # Title: 2026-01 月度总结 (extract year-month from time)
+            year_month = note_time[:7] if len(note_time) >= 7 else "未知"
+            # First line of content as subtitle
+            first_line = content_text.split("\n")[0][:30]
+            title = f"【月度总结】{year_month} {first_line}".strip()
+
+            url = f"flomo://{note_id}" if note_id else f"flomo-monthly://{year_month}"
+            summary = content_text[:200]
+            tags = json.dumps(tags_list if tags_list else ["每月总结-AI"], ensure_ascii=False)
+
+            ok = insert_article(
+                conn,
+                source_type="flomo-monthly",
+                source_name="Flomo每月总结",
+                title=title,
+                url=url,
+                content_text=content_text,
+                author="",
+                summary=summary,
+                published_at=note_time,
+                tags=tags,
+            )
+            if ok:
+                inserted += 1
+            else:
+                skipped += 1
+
+        if not dry_run:
+            conn.commit()
+    finally:
+        if conn:
+            conn.close()
+
+    return {
+        "ok": True,
+        "total": total,
+        "inserted": inserted,
+        "skipped": skipped,
+        "filtered_from": len(all_notes),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -565,6 +762,8 @@ def main() -> None:
     parser.add_argument("--youtube", action="store_true", help="导入YouTube订阅流（→content_cache+articles）")
     parser.add_argument("--xhs-hot", action="store_true", help="导入小红书热门榜（→content_cache）")
     parser.add_argument("--chat-analysis", action="store_true", help="导入聊天记录AI分析（→articles）")
+    parser.add_argument("--diary-analysis", action="store_true", help="导入日记AI分析（105篇→articles）")
+    parser.add_argument("--flomo-monthly", action="store_true", help="导入Flomo每月总结-AI（26条→articles）")
     parser.add_argument("--all", action="store_true", help="导入以上全部")
     parser.add_argument("--dry-run", action="store_true", help="只解析不写入数据库")
     parser.add_argument("--limit", type=int, default=0, help="每个数据源最大导入条数（0=全部）")
@@ -584,6 +783,10 @@ def main() -> None:
         sources.append(("小红书热门榜", import_xhs_hot))
     if args.all or args.chat_analysis:
         sources.append(("聊天记录AI分析", import_chat_analysis))
+    if args.all or args.diary_analysis:
+        sources.append(("日记AI分析", import_diary_analysis))
+    if args.all or args.flomo_monthly:
+        sources.append(("Flomo每月总结", import_flomo_monthly))
 
     if not sources:
         parser.print_help()
