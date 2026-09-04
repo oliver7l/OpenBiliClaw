@@ -40,7 +40,7 @@ Usage
   python3 -m openbiliclaw.runtime.v2ex_cli_producer            # loop forever
   python3 -m openbiliclaw.runtime.v2ex_cli_producer --dry-run  # one-shot, no DB writes
   python3 -m openbiliclaw.runtime.v2ex_cli_producer --discover-only  # skip body fetch
-  python3 -m openbiliclaw.runtime.v2ex_cli_producer --limit 30 --interval 6
+  python3 -m openbiliclaw.runtime.v2ex_cli_producer --limit 20 --interval 6
 """
 
 from __future__ import annotations
@@ -62,7 +62,14 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 6
-DISCOVER_LIMIT = 30
+# V2EX API 2.0 /nodes/{node}/topics returns a FIXED 20 topics per page and
+# has NO size param, so asking for more than 20 only ever yields 20. To get
+# more you must paginate via `--page` (one extra API call per page — weigh
+# against the platform rate-limit red line). Keep this <= 20.
+# NOTE: the v2ex CLI has a bug where BOTH `--limit` and `--node` claim the
+# short flag `-n` (Click warns "parameter -n used more than once" on every
+# call). Always pass `--limit` / `--node` LONG forms; never `-n`.
+DISCOVER_LIMIT = 20
 CLI_TIMEOUT = 40  # seconds per `v2ex topics` subprocess call
 
 # Locate the v2ex executable. Prefer PATH, fall back to the known pipx bin.
