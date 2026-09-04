@@ -140,19 +140,20 @@ class ExtensionNativeSaveBroker:
     def owns(self, task_id: str, platform_slug: str | None = None) -> bool:
         """Return global ownership, optionally restricted to one exact slug."""
         try:
-            return self._database.owns_extension_native_save_job(task_id, platform_slug)
+            result = self._database.owns_extension_native_save_job(task_id, platform_slug)
+            return cast("bool", result)
         except ValueError:
             return False
 
     def submit_result(self, platform_slug: str, result: ExtensionNativeSaveResultIn) -> bool:
-        return self._database.complete_extension_native_save_job(
+        return cast("bool", self._database.complete_extension_native_save_job(
             result.task_id,
             platform_slug,
             result.item_key,
             result.status,
             result.error_code,
             result.error_message,
-        )
+        ))
 
     async def _wake_before_deadline(self, platform_slug: str, deadline_at: float) -> None:
         try:
@@ -194,7 +195,7 @@ class ExtensionNativeSaveBroker:
                 raise RuntimeError("extension native-save job disappeared")
             status = str(row["status"])
             if status in _TERMINAL_JOB_STATUSES:
-                return row
+                return cast("dict[str, object]", row)
             if status == "pending":
                 try:
                     timed_out = time.monotonic() >= dispatch_deadline_at
@@ -218,7 +219,7 @@ class ExtensionNativeSaveBroker:
                 if marked:
                     if terminal is None:
                         raise RuntimeError("extension native-save job disappeared")
-                    return terminal
+                    return cast("dict[str, object]", terminal)
             elif status == "in_progress":
                 try:
                     await asyncio.to_thread(

@@ -151,7 +151,7 @@ from openbiliclaw.api.models import (
     ZhihuSourceConfigOut,
 )
 from openbiliclaw.recommendation.agents import IntentAgent, InterestSyncer, RankAgent
-from openbiliclaw.recommendation.quality_scorer import QualityScorer
+from openbiliclaw.recommendation.quality_scorer import QualityScorer, SupportsQualityCandidate
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
 from openbiliclaw.runtime.image_cache import (
     CoverFetchError,
@@ -248,7 +248,7 @@ def _load_interest_keywords() -> list[tuple[str, float]]:
     if _interest_keywords_cache["at"] and (
         now - _interest_keywords_cache["at"] < _INTEREST_KEYWORDS_TTL_SECONDS
     ):
-        return _interest_keywords_cache["keywords"]
+        return cast("list[tuple[str, float]]", _interest_keywords_cache["keywords"])
     keywords: list[tuple[str, float]] = []
     for path in _soul_profile_candidates():
         try:
@@ -3629,7 +3629,7 @@ def create_app(
                 )
                 for r in to_score
             ]
-            scored = await scorer.score_batch(candidates, profile)
+            scored = await scorer.score_batch(cast("list[SupportsQualityCandidate]", candidates), profile)
             db_scores: list[tuple[str, float, str]] = []
             for bvid, result in scored.items():
                 db_scores.append((bvid, result["quality_score"], result["reason"]))
@@ -4285,7 +4285,7 @@ def create_app(
                 "COALESCE(pool_status, '') != ''",
                 "COALESCE(pool_status, '') != 'purged_by_dislike'",
             ]
-            params = []
+            params: list[Any] = []
             if platform:
                 where_clauses.append("source_platform = ?")
                 params.append(platform)
@@ -4479,7 +4479,7 @@ def create_app(
         if not bvid_list:
             return {}
         try:
-            return db.get_user_feedback_batch(bvid_list)
+            return cast("dict[str, Any]", db.get_user_feedback_batch(bvid_list))
         except Exception:
             return {}
 
@@ -4591,7 +4591,7 @@ def create_app(
 
 Respond ONLY with valid JSON: {"keywords": [...], "platform": null, "content_type": null}
 Keep keywords focused and specific. Remove stop words."""
-                    llm_result = await soul_engine.llm_ask(sys_prompt, q)
+                    llm_result = await cast("Any", soul_engine).llm_ask(sys_prompt, q)
                     if llm_result:
                         parsed = json.loads(llm_result)
                         kw = parsed.get("keywords", [])
@@ -5128,7 +5128,7 @@ Keep keywords focused and specific. Remove stop words."""
                 FROM discovery_candidates
             """).fetchone()
             eval_total_c = int(eval_row["total"]) if eval_row else 0
-            eval_stats = {
+            eval_stats: dict[str, object] = {
                 "total_candidates": eval_total_c,
                 "total_eval_attempts": int(eval_row["attempts"]) if eval_row else 0,
                 "candidates_accepted": int(master["candidates_accepted"]) if master else 0,
@@ -5209,7 +5209,7 @@ Keep keywords focused and specific. Remove stop words."""
             try:
                 ss_resp = sources_status()
                 if isinstance(ss_resp, SourcesStatusResponse):
-                    for s in ss_resp.sources:
+                    for s in cast("Any", ss_resp).sources:
                         auth_sources.append(
                             {
                                 "platform": s.platform,
@@ -11276,7 +11276,7 @@ Keep keywords focused and specific. Remove stop words."""
         if status.strip():
             intent["status"] = status.strip().lower()
 
-        src = intent["source_type"] or None
+        source_type_filter: str | None = intent["source_type"] or None
         st = intent["status"] or None
         terms = intent["keywords"] or [q]
 
@@ -11288,7 +11288,7 @@ Keep keywords focused and specific. Remove stop words."""
                 q=term,
                 limit=per_term_limit,
                 offset=0,
-                source_type=src,
+                source_type=source_type_filter,
                 status=st,
             )
             for row in rows:
@@ -11473,7 +11473,7 @@ Keep keywords focused and specific. Remove stop words."""
         from openbiliclaw.config import load_config as _load_cfg
 
         _cfg = _load_cfg()
-        stats_map: dict[str, dict[str, tuple[int, str]]] = {}  # url -> (count, last_fetched)
+        stats_map: dict[str, tuple[int, str]] = {}  # url -> (count, last_fetched)
 
         # Query from content_cache
         database = getattr(ctx, "database", None)
@@ -11500,7 +11500,7 @@ Keep keywords focused and specific. Remove stop words."""
                     )
                     row = cursor.fetchone()
                     if row:
-                        stats_map[f"{platform}:{url}"] = (row[0] or 0, row[1] or "")
+                        stats_map[f"{platform}:{url}"] = (int(row[0] or 0), str(row[1] or ""))
 
         # Build response
         result = SubscriptionStatsOut()
@@ -11514,7 +11514,7 @@ Keep keywords focused and specific. Remove stop words."""
                     SubscriptionItemOut(
                         name=sub["name"],
                         url=sub["url"],
-                        item_count=count,
+                        item_count=int(count),
                         last_fetched_at=last or "",
                     )
                 )
@@ -11712,7 +11712,7 @@ Keep keywords focused and specific. Remove stop words."""
     _reading_dir = _web_dir / "reading-library"
 
     @app.get("/library/{source}", include_in_schema=False)
-    def reading_library_platform(source: str):
+    def reading_library_platform(source: str) -> Response:
         """Bookmarkable per-platform reading page. Reuses the same SPA,
         injecting the active source so the client filters and labels by it."""
         import re

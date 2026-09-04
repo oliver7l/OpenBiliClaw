@@ -140,7 +140,7 @@ class RankAgent:
         - 500+ feedback → alpha ≈ 0.3 (cap)
         """
         try:
-            total = db.get_total_feedback_count()
+            total = int(db.get_total_feedback_count())
             if total <= 0:
                 return 0.0
             return min(0.3, total / (total + 100) * 0.3)
@@ -258,7 +258,7 @@ class RankAgent:
         - 200+      → beta = 0.15 (cap)
         """
         try:
-            views = db.get_total_view_count(days=30)
+            views = int(db.get_total_view_count(days=30))
             if views <= 0:
                 return 0.0
             return min(0.15, views / (views + 30) * 0.15 * 1.15)
@@ -286,7 +286,7 @@ class RankAgent:
         q_embed: list[float] | None = None,
         content_embeds: dict[str, list[float]] | None = None,
         interest_centroids: dict[str, list[float]] | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Score candidates and return ranked list with diversity mix.
 
         ``content_embeds`` maps bvid → pre-computed embedding vector. It

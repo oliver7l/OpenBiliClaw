@@ -4721,7 +4721,7 @@ def _ask_network_binding() -> bool:
     console.print()
     console.print("[dim]后续可在 config.toml 的 [api].host 随时切换。[/dim]")
     console.print()
-    return typer.confirm("允许局域网设备访问（推荐）?", default=True)
+    return cast("bool", typer.confirm("允许局域网设备访问（推荐）?", default=True))
 
 
 def _persist_api_host_choice(*, allow_lan: bool) -> None:

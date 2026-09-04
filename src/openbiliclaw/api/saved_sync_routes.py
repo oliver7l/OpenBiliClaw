@@ -6,7 +6,7 @@ Registered from ``app.py`` during ``create_app()``.
 
 import time
 import unicodedata
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -57,7 +57,7 @@ def _saved_state_response(
     cached = _saved_state_snapshot_cache.get(cache_key)
     now = time.monotonic()
     if cached is not None and now - cached[0] < _RECOMMENDATION_SNAPSHOT_TTL_SECONDS:
-        return cached[1]
+        return cast("dict[str, Any]", cached[1])
 
     row = ctx.database.get_saved_membership(list_kind, item_key)
     if row is None:

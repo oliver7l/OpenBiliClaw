@@ -58,15 +58,22 @@ class _PerLoopLock:
         except RuntimeError:
             return False
 
-    async def __aenter__(self) -> asyncio.Lock:
-        return await self._lock_for_loop().__aenter__()
+    async def __aenter__(self) -> None:
+        await self._lock_for_loop().__aenter__()
+        return None
 
-    async def __aexit__(self, *exc: object) -> bool | None:
-        return await self._lock_for_loop().__aexit__(*exc)
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self._lock_for_loop().__aexit__(exc_type, exc, tb)
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
+    from types import TracebackType
 
     from openbiliclaw.discovery.engine import DiscoveredContent
     from openbiliclaw.llm.base import LLMResponse

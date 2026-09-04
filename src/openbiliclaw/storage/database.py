@@ -1064,7 +1064,7 @@ class Database:
         task_id: str,
         trigger: str,
     ) -> list[dict[str, Any]]:
-        pass
+        return []
 
     def has_sync_task(self, task_id: str) -> bool:
         row = self.conn.execute(
@@ -1110,18 +1110,6 @@ class Database:
 
     def count_watch_later_legacy(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM watch_later").fetchone()[0])
-
-    @staticmethod
-    def _content_row_view_keys(row: dict[str, Any], viewed_content_keys: set[str]) -> set[str]:
-        keys: set[str] = set()
-        raw_bvid = str(row.get("bvid", "") or "").strip()
-        content_id = str(row.get("content_id", "") or "").strip() or raw_bvid
-        for value in {raw_bvid, content_id}:
-            if not value:
-                continue
-            if value.startswith("BV"):
-                keys.add(value)
-        return keys
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -8385,7 +8373,7 @@ class Database:
             ),
         )
         self.conn.commit()
-        return int(cursor.lastrowid)
+        return int(cursor.lastrowid or 0)
 
     def list_topics(self, *, include_paused: bool = True) -> list[dict[str, Any]]:
         """Return topics newest-first with item counts."""

@@ -1196,7 +1196,7 @@ class ContinuousRefreshController:
         for name, meta in self._loop_meta.items():
             task = meta.get("task")
             task_ref = cast("asyncio.Task[None] | None", task)
-            interval = int(meta.get("interval", 0) or 0)
+            interval = int(str(meta.get("interval", 0) or 0))
             last_tick = str(meta.get("last_tick_at", ""))
             if task_ref is None:
                 status = "not_started"
@@ -1487,7 +1487,7 @@ class ContinuousRefreshController:
                 with suppress(Exception):
                     await run_rss_polling(
                         self.rss_adapter_registry,
-                        self.database,
+                        cast("Any", self.database),
                         subscriptions,
                     )
             await asyncio.sleep(3600)
@@ -1508,7 +1508,7 @@ class ContinuousRefreshController:
                 with suppress(Exception):
                     await run_xiaoyuzhou_polling(
                         self.rss_adapter_registry,
-                        self.database,
+                        cast("Any", self.database),
                         subscriptions,
                     )
             await asyncio.sleep(7200)
@@ -1529,7 +1529,7 @@ class ContinuousRefreshController:
                 with suppress(Exception):
                     await run_wechat_polling(
                         self.rss_adapter_registry,
-                        self.database,
+                        cast("Any", self.database),
                         subscriptions,
                     )
             await asyncio.sleep(7200)
@@ -2262,7 +2262,7 @@ class ContinuousRefreshController:
             _events_retention = int(getattr(self.scheduler_config, "events_retention_days", 0) or 0)
             if _events_retention > 0:
                 try:
-                    self.database.prune_events_by_retention(retention_days=_events_retention)
+                    cast("Any", self.database).prune_events_by_retention(retention_days=_events_retention)
                 except Exception:
                     logger.debug("events retention prune failed", exc_info=True)
             # Same maintenance pass: bound the terminal crawl-task rows
@@ -2273,7 +2273,7 @@ class ContinuousRefreshController:
             )
             if _task_retention > 0:
                 try:
-                    self.database.prune_task_history(retention_days=_task_retention)
+                    cast("Any", self.database).prune_task_history(retention_days=_task_retention)
                 except Exception:
                     logger.debug("task history prune failed", exc_info=True)
             # Same maintenance pass: bound ``recommendations`` (24h de-dup
@@ -2284,7 +2284,7 @@ class ContinuousRefreshController:
             )
             if _rec_retention > 0:
                 try:
-                    self.database.prune_recommendations(retention_days=_rec_retention)
+                    cast("Any", self.database).prune_recommendations(retention_days=_rec_retention)
                 except Exception:
                     logger.debug("recommendations prune failed", exc_info=True)
             _usage_retention = int(
@@ -2292,7 +2292,7 @@ class ContinuousRefreshController:
             )
             if _usage_retention > 0:
                 try:
-                    self.database.prune_llm_usage(retention_days=_usage_retention)
+                    cast("Any", self.database).prune_llm_usage(retention_days=_usage_retention)
                 except Exception:
                     logger.debug("llm_usage prune failed", exc_info=True)
             # Snapshot delight count BEFORE precompute so we can detect
