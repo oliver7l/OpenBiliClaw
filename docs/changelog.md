@@ -4,6 +4,10 @@
 
 ---
 
+## v0.3.153: 候选池目标上限放宽（2026-09-04）
+
+- **`[scheduler].pool_target_count` 允许范围从 `1..600` 放宽到 `1..6000`**：历史上限只适合 300 规模的默认候选池，专题系统 / 阅读库回填等需要更大候选池的场景会被配置校验硬拦截。`_MAX_POOL_TARGET_COUNT` 常量提升到 6000（5000 等用户可见大池仍留余量），`config.example.toml` 注释与 `docs/modules/config.md` 同步更新。新增回归测试 `test_validate_runtime_config_accepts_large_pool_target_count`（5000 放行）并更新越界用例（6001 拒绝）。
+
 ## v0.3.152: agent-recommend 隐式停留反馈与热路径修复（2026-09-02）
 
 后端源码走 `backend-v0.3.152`。

@@ -362,7 +362,7 @@ extension_disconnect_grace_seconds = 90
 # per-strategy refresh intervals below.
 discovery_cron = "0 */8 * * *"
 # Keep at least this many fresh candidates ready in the discovery pool
-# Allowed range: 1..600; each single refresh will backfill at most 60
+# Allowed range: 1..6000; each single refresh will backfill at most 60
 pool_target_count = 300
 # Low-frequency account sync interval for history / favorites / following
 account_sync_interval_hours = 6

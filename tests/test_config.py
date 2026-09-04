@@ -656,13 +656,36 @@ def test_validate_runtime_config_rejects_pool_target_count_above_cap() -> None:
         scheduler=SchedulerConfig(
             enabled=True,
             discovery_cron="0 */4 * * *",
-            pool_target_count=601,
+            pool_target_count=6001,
             account_sync_interval_hours=6,
         ),
     )
 
     with pytest.raises(ConfigError, match="scheduler.pool_target_count"):
         validate_runtime_config(config)
+
+
+def test_validate_runtime_config_accepts_large_pool_target_count() -> None:
+    """A user-facing large pool (e.g. 5000 for topic/pool backfill) is allowed.
+
+    Regression guard for the topics system, which wants a bigger candidate
+    pool than the historical 1..600 cap allowed.
+    """
+    config = Config(
+        llm=LLMConfig(
+            default_provider="ollama",
+            ollama=LLMProviderConfig(model="llama3", base_url="http://localhost:11434"),
+        ),
+        scheduler=SchedulerConfig(
+            enabled=True,
+            discovery_cron="0 */4 * * *",
+            pool_target_count=5000,
+            account_sync_interval_hours=6,
+        ),
+    )
+
+    # Should not raise.
+    validate_runtime_config(config)
 
 
 def test_build_config_supports_account_sync_interval() -> None:
