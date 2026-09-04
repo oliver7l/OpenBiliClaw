@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 24
+# 白名单而非 os.environ.copy()：这里刻意不继承 HTTP(S)_PROXY 等代理变量——
+# 本机代理（Clash 类）挂掉时子进程走代理会静默失败。请勿改成 os.environ.copy()。
 CLEAN_ENV = {k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "USER", "SHELL", "TMPDIR")}
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""

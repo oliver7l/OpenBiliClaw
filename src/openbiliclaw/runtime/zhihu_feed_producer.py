@@ -30,6 +30,17 @@ FEED_CMD = [
 CLEAN_ENV = os.environ.copy()
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
+# 清掉代理环境变量：本机代理（Clash 类）经常重启/挂掉，挂掉时子进程（zhihu CLI）走代理会失败。
+# 与 cli.py 的 _strip_proxy_env 同一思路——本脚本不经 cli.py 启动，需自行清理。
+for _proxy_key in (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+):
+    CLEAN_ENV.pop(_proxy_key, None)
 
 _ANSWER_ID_RE = re.compile(r"^\d+$")
 

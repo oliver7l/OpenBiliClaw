@@ -17,8 +17,14 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
+DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 24
+
+# V2EX API 走代理：实测直连（urllib 默认 + Chrome UA）会 25s 超时
+# HTTP 000，必须走本机 Clash 类代理（HTTP_PROXY）才能在 0.3s 内拿到 200。
+# 与 youtube 不同：v2ex 失败时会抛 urlopen error 而不是静默返回 0，
+# 已经写进 error log，不会像 youtube 那样伪装成功。
+_DEFAULT_OPENER = urllib.request.build_opener()
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 API_LATEST = "https://www.v2ex.com/api/topics/latest.json"
@@ -29,7 +35,7 @@ def _fetch_json(url: str) -> list[dict]:
     """Fetch a V2EX API endpoint and return the parsed JSON array."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _DEFAULT_OPENER.open(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         logger.error("V2EX API request failed for %s: %s", url, exc)

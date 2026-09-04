@@ -18,8 +18,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
+DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 24
+
+# 直连 opener：urllib 默认会读 env 里的 http(s)_proxy（本机 Clash 类代理），
+# 代理挂掉时请求失败、抓取静默返回空，很难排查。这里显式禁用代理，直连更稳。
+_NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 CREDENTIAL_PATH = Path.home() / ".bilibili-cli" / "credential.json"
 RECOMMEND_URL = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=5&fresh_type=4&fresh_idx=1&fresh_idx_1h=1"
 
@@ -55,7 +59,7 @@ def _fetch_feed() -> list[dict]:
     req = urllib.request.Request(RECOMMEND_URL, headers=headers)
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _NO_PROXY_OPENER.open(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         logger.error("bilibili recommend API request failed: %s", exc)
