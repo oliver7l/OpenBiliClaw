@@ -7,15 +7,28 @@
 (项目里只有 V2EXSourceConfig 配置桩, 无真实适配器实现)。
 
 用法:
-  python3 scripts/collect_v2ex_archive.py                 # 全量灌库(增量去重)
+  python3 scripts/collect_v2ex_archive.py                 # 全量灌库(增量去重) + 桥接推荐池
   python3 scripts/collect_v2ex_archive.py --limit-days 7  # 只收最近 7 天
   python3 scripts/collect_v2ex_archive.py --dry-run       # 只数数不写库
   python3 scripts/collect_v2ex_archive.py --repo /path    # 指定本地仓库
+  python3 scripts/collect_v2ex_archive.py --no-pool       # 只灌阅读库, 不碰推荐池
+  python3 scripts/collect_v2ex_archive.py --recent 14     # 只最近14天进推荐池(默认30)
+  python3 scripts/collect_v2ex_archive.py --loop --interval 24  # 常驻循环(pm2 用)
 
 行为:
   - git clone/pull 归档到 data/v2ex_hot_hub (首次 clone, 之后 pull 增量)
   - 遍历 raw/*.json, 解析每条 topic
-  - 按 url 去重 upsert 进 articles:
+  - 按 url 去重 upsert 进 articles (阅读库):
+      * 不存在 -> INSERT (published_at 用 topic.created epoch 转换, 让历史按时间排序)
+      * 已存在且 content_text 为空 -> 补填正文/摘要/标签 (CASE WHEN 保护已有值)
+      * 已存在且 content_text 非空 -> 跳过 (绝不覆盖用户/已有数据)
+  - 同时(默认 --pool)按 topic id 去重 upsert 进 content_cache (推荐池):
+      * 这是推荐池 V2EX 断流的真正补法——旧 v2ex_feed_producer 走 v2ex.com API,
+        现网络下 403 死掉; 归档走 GitHub 镜像, 带全文, 且能回填正文到已存在的
+        标题流空行 (RSSHub / 旧 feed 写入的 v2ex 行)。
+      * 仅最近 --recent 天(默认 30)的归档进推荐池, 避免把多年历史一次性
+        灌进实时推荐; 阅读库 articles 仍收全量。
+      * 幂等: 重复运行安全; 已有行只补空字段, 绝不覆盖。
       * 不存在 -> INSERT (published_at 用 topic.created epoch 转换, 让历史按时间排序)
       * 已存在且 content_text 为空 -> 补填正文/摘要/标签 (CASE WHEN 保护已有值)
       * 已存在且 content_text 非空 -> 跳过 (绝不覆盖用户/已有数据)
@@ -29,11 +42,13 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import logging
 import os
 import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
@@ -145,14 +160,64 @@ def _topic_to_article(topic: dict, date_str: str) -> dict | None:
         "published_at": published_iso,
         "tags": tags,
         "replies": replies,
+        "bvid": str(topic.get("id") or "").strip(),
     }
 
 
-def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool) -> dict:
+def _upsert_pool(cur: sqlite3.Cursor, art: dict, now_iso: str) -> str:
+    """Upsert one topic into content_cache (recommendation pool).
+
+    Dedup by topic id (bvid). On conflict (an existing v2ex row from the
+    old feed producer or RSSHub) only fill empty fields, never overwrite
+    real data — this enriches the title-only rows with 正文.
+    Returns 'inserted' | 'filled' | 'skipped'.
+    """
+    bvid = art["bvid"]
+    if not bvid:
+        return "skipped"
+    row = cur.execute(
+        "SELECT body_text FROM content_cache WHERE bvid=?", (bvid,)
+    ).fetchone()
+    if row is None:
+        cur.execute(
+            """INSERT INTO content_cache (
+                bvid, title, up_name, author_name, content_url,
+                source_platform, source, content_type, pool_status,
+                discovered_at, body_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                bvid, art["title"], art["author"], art["author"], art["url"],
+                "v2ex", "v2ex-archive", "thread", "fresh",
+                now_iso, art["content_text"],
+            ),
+        )
+        return "inserted"
+    existing_body = (row[0] or "") if row[0] is not None else ""
+    if not existing_body.strip() and art["content_text"]:
+        cur.execute(
+            """UPDATE content_cache
+               SET body_text = CASE WHEN body_text IS NULL OR TRIM(body_text)='' THEN ? ELSE body_text END,
+                   title = CASE WHEN title IS NULL OR TRIM(title)='' THEN ? ELSE title END,
+                   up_name = CASE WHEN up_name IS NULL OR TRIM(up_name)='' THEN ? ELSE up_name END,
+                   author_name = CASE WHEN author_name IS NULL OR TRIM(author_name)='' THEN ? ELSE author_name END,
+                   content_url = CASE WHEN content_url IS NULL OR TRIM(content_url)='' THEN ? ELSE content_url END,
+                   discovered_at = ?
+               WHERE bvid = ?""",
+            (art["content_text"], art["title"], art["author"], art["author"],
+             art["url"], now_iso, bvid),
+        )
+        return "filled"
+    return "skipped"
+
+
+def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool,
+            pool: bool, pool_window: int) -> dict:
     total = inserted = filled = skipped = ignored = 0
+    pool_inserted = pool_filled = pool_skipped = 0
     conn = None if dry_run else sqlite3.connect(DB_PATH)
     cur = None if dry_run else conn.cursor()
     now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    cutoff = (dt.date.today() - dt.timedelta(days=pool_window)).isoformat()
 
     for topic, date_str in _iter_topics(repo_dir, limit_days):
         art = _topic_to_article(topic, date_str)
@@ -163,6 +228,8 @@ def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool) -> dict:
 
         if dry_run:
             inserted += 1
+            if pool and date_str >= cutoff:
+                pool_inserted += 1
             continue
 
         row = cur.execute("SELECT id, content_text FROM articles WHERE url=?", (art["url"],)).fetchone()
@@ -194,6 +261,16 @@ def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool) -> dict:
             else:
                 skipped += 1
 
+        # 推荐池桥接: 仅最近 pool_window 天的归档进实时推荐
+        if pool and date_str >= cutoff:
+            res = _upsert_pool(cur, art, now_iso)
+            if res == "inserted":
+                pool_inserted += 1
+            elif res == "filled":
+                pool_filled += 1
+            else:
+                pool_skipped += 1
+
     if not dry_run:
         conn.commit()
         conn.close()
@@ -204,29 +281,80 @@ def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool) -> dict:
         "filled": filled,
         "skipped": skipped,
         "ignored": ignored,
+        "pool_inserted": pool_inserted,
+        "pool_filled": pool_filled,
+        "pool_skipped": pool_skipped,
+        "pool": pool,
+        "pool_window": pool_window,
         "dry_run": dry_run,
     }
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="把 V2EX 热榜归档收进阅读库")
+    ap = argparse.ArgumentParser(description="把 V2EX 热榜归档收进阅读库(并可选桥接推荐池)")
     ap.add_argument("--repo", default=DEFAULT_REPO_DIR, help="本地归档仓库路径")
     ap.add_argument("--limit-days", type=int, default=None, help="只收最近 N 天(默认全量)")
     ap.add_argument("--dry-run", action="store_true", help="只统计不写库")
+    ap.add_argument("--pool", dest="pool", action="store_true",
+                    help="同时把归档桥接进推荐池 content_cache(默认开)")
+    ap.add_argument("--no-pool", dest="pool", action="store_false",
+                    help="只灌阅读库, 不碰推荐池")
+    ap.set_defaults(pool=True)
+    ap.add_argument("--recent", type=int, default=30,
+                    help="仅最近 N 天的归档进推荐池(默认 30, 避免多年历史灌进实时推荐)")
+    ap.add_argument("--loop", action="store_true",
+                    help="持续循环(每隔 --interval 小时跑一轮), 用于 pm2 常驻")
+    ap.add_argument("--interval", type=int, default=24,
+                    help="--loop 模式下的间隔小时数(默认 24)")
     args = ap.parse_args()
 
     if not _ensure_repo(args.repo):
         print("无法获取 V2EX 归档, 中止。")
         return 1
 
+    if args.loop:
+        interval = max(1, args.interval)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+        )
+        logger = logging.getLogger("collect_v2ex_archive")
+        logger.info("loop 模式启动 (interval=%dh, pool=%s, recent=%d)",
+                    interval, args.pool, args.recent)
+        while True:
+            print(f"[解析] 遍历 {args.repo}/raw ...")
+            stats = collect(
+                args.repo, limit_days=args.limit_days, dry_run=False,
+                pool=args.pool, pool_window=args.recent,
+            )
+            logger.info(
+                "阅读库 新增 %d/补空 %d/跳过 %d | 推荐池 新增 %d/回填 %d/跳过 %d",
+                stats["inserted"], stats["filled"], stats["skipped"],
+                stats["pool_inserted"], stats["pool_filled"], stats["pool_skipped"],
+            )
+            time.sleep(interval * 3600)
+        return 0
+
     print(f"[解析] 遍历 {args.repo}/raw ...")
-    stats = collect(args.repo, limit_days=args.limit_days, dry_run=args.dry_run)
+    stats = collect(
+        args.repo, limit_days=args.limit_days, dry_run=args.dry_run,
+        pool=args.pool, pool_window=args.recent,
+    )
 
     mode = "DRY-RUN" if stats["dry_run"] else "写入"
     print(
-        f"[{mode}] 候选 {stats['total']} | 新增 {stats['inserted']} | "
-        f"补空正文 {stats['filled']} | 跳过(已有) {stats['skipped']} | 忽略(无url/title) {stats['ignored']}"
+        f"[{mode}] 候选 {stats['total']} | 阅读库新增 {stats['inserted']} | "
+        f"阅读库补空正文 {stats['filled']} | 阅读库跳过(已有) {stats['skipped']} | "
+        f"忽略(无url/title) {stats['ignored']}"
     )
+    if stats["pool"]:
+        print(
+            f"[{mode}] 推荐池 新增 {stats['pool_inserted']} | "
+            f"回填正文 {stats['pool_filled']} | 跳过(已有) {stats['pool_skipped']} "
+            f"(窗口={stats['pool_window']}天)"
+        )
+    else:
+        print("[info] 推荐池桥接已关闭(--no-pool)")
     if stats["dry_run"]:
         print("(dry-run 模式未写库)")
     return 0
