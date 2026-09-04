@@ -14,7 +14,7 @@
 | 统一候选待评估池调度 | ✅ | B 站、XHS、抖音、YouTube、X discovery raw candidates 先写入 `discovery_candidates`；runtime 既会在 refresh plan 发现新 raw 后即时调用共享 drain，也会由独立 `_loop_candidate_eval()` 周期性 drain 已有 pending raw 并在 admission 后触发 `precompute_pool_copy()`。API runtime 会先过滤历史候选 / 已缓存内容并补足待评估供给，再攒到 8 条 `pending_eval` 或等待 120 秒跑 evaluator；周期 drain 未显式传参时按文本 batch 45 执行，单次默认最多领取两个 batch（90 条，仍受 hard cap 约束），并由 evaluator 以 2 个 worker 并发跑 LLM batch。controller 层 `_discovery_drain_lock` 与 `DiscoveryCandidatePipeline` 内部 lock 串行化所有入口；正式可换池达到 `pool_target_count` 时不会继续 discovery / drain。 |
 | B 站扩展搜索兜底 producer | ✅ | `BilibiliExtensionSearchProducer` 在 B 站平台族低于 quota、`BilibiliAPIClient.search_cooldown_remaining()>0`、扩展 presence 在线且候选池未满时入队 `bili_tasks(type="search")`；扩展回传后仍进入 `DiscoveryCandidatePipeline` 统一评估。 |
 | 虎扑 / 头条 CLI 热榜 feed producer | ✅ | `hupu_feed_producer` / `toutiao_feed_producer` 独立脚本周期调用 `hupu hot --output json` / `toutiao hot --output json`（Go 单二进制、Apache-2.0、免登录），解析 JSON 写入 `content_cache`（toutiao 另把摘要写进 `articles` 阅读库），按 bvid 去重幂等；支持 `--once` / `--dry-run` / `--limit` / `--interval`，失败安静降级不中断循环。二进制默认装在 `~/.local/bin/{hupu,toutiao}`。 |
-| 抖音登录态推荐流 producer | ✅ | `douyin_feed_producer` 独立脚本通过 Playwright 驱动已登录 Chrome 抓取抖音个性化推荐流（`?recommend=1`），写入 `content_cache`（`source="douyin-recommend"`），含作者/标题/话题/点赞评论收藏转发数/视频 URL。三种模式：`--login` 有头扫码保存登录态、`--headless`（默认）无头复用、`--cdp-port` 连接真实 Chrome。按 aweme_id 去重幂等，支持 `--once` / `--dry-run` / `--limit` / `--interval`，未登录或抓取失败安静降级。需 `pip install playwright && playwright install chromium`。 |
+| 抖音推荐流 + 精选页 producer | ✅ | `douyin_feed_producer` 独立脚本通过 Playwright 驱动 Chrome 抓取抖音内容。默认抓个性化推荐流（需登录态，单列虚拟滚动，`source="douyin-recommend"`）；`--jingxuan` 抓精选页公开多列网格（免登录，单屏 ~50-60 卡片，页面滚动加载，`source="douyin-jingxuan"`，默认 limit 50）。三种模式：`--login` 有头扫码保存登录态、`--headless`（默认）无头后台运行、`--cdp-port` 连真实 Chrome。按 aweme_id 去重幂等，支持 `--once` / `--dry-run` / `--limit` / `--interval`，失败安静降级。需 `pip install playwright && playwright install chromium`。 |
 | 候选池文案预计算状态同步 | ✅ | 独立 `_loop_pool_precompute()` 将 fresh 候选补齐 `pool_expression` / `pool_topic_label` 后，会同步更新 `last_replenished_count` 并推送 `refresh.pool_updated`；推荐文案 batch 默认 30 条、2 个 worker 并发生成，但仍受 `_expression_lock` 串行化多入口，避免重复消费同一批候选。批量解析失败会先在当前 worker 内拆半重试，限流则留空等下一轮。`GET /api/recommendations` bootstrap、`reshuffle` 和 `append` 消费可换池后也会发布同一池子快照。前端消费该事件时只刷新池子状态和相关提示，不全量替换推荐列表，避免覆盖已 append 的历史内容。 |
 | 候选池真实可换计数 | ✅ | `pool_available_count` 现在只表示后端当前可立即 `serve()` 的候选，并按默认每 `topic_group` 最多 3 条的候选窗口计数；runtime status / runtime stream 另带 `pool_raw_count`、`pool_pending_count`、`pool_pending_eval_count`、`pool_evaluated_pending_count` 区分素材库存、待评估和已评估待入池内容。 |
 | embedding 后台预热 | ✅ | refresh 完成前只保证候选入池与文案可用；`prewarm_supergroup_embeddings()` / `prewarm_pool_mmr_embeddings()` 作为后台 task 运行，慢本地 embedding 后端不会占住 refresh lock 或让界面长时间停在“正在补货”。v0.3.124+（lever 4）：`prewarm_pool_mmr_embeddings()` 返回值区分良性冷启动与真故障——`-1`（无 embedding service / 空池，没东西可暖）让启动重试包装器 `_safe_prewarm_pool_mmr_embeddings` 平静跳过(不再每次装机刷 5 行 `warmed=0 — retry`)，`0`（有候选但全嵌入失败＝后端不可达）才重试到底并在放弃时打 WARNING 点名 embedding 后端不可达、MMR 降级。 |
@@ -60,7 +60,8 @@ python -m openbiliclaw.runtime.toutiao_feed_producer --dry-run --limit 20
 
 # 抖音推荐流（需先 --login 保存登录态）
 python -m openbiliclaw.runtime.douyin_feed_producer --login           # 首次扫码登录
-python -m openbiliclaw.runtime.douyin_feed_producer --once --limit 20  # 抓一轮
+python -m openbiliclaw.runtime.douyin_feed_producer --once --limit 20  # 抓一轮推荐流
+python -m openbiliclaw.runtime.douyin_feed_producer --jingxuan --once   # 抓精选页（免登录）
 python -m openbiliclaw.runtime.douyin_feed_producer --cdp-port 9222    # 连真实 Chrome
 ```
 

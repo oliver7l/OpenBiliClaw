@@ -10,13 +10,15 @@
 
 ---
 
-## v0.3.160: 抖音登录态推荐流 producer（Playwright 浏览器自动化）（2026-09-04）
+## v0.3.160: 抖音推荐流 + 精选页 producer（Playwright 无头/CDP 双模式）（2026-09-04）
 
-- **新数据源接入**：`runtime/douyin_feed_producer` 独立脚本，通过 Playwright 驱动已登录的 Chrome 会话抓取抖音个性化推荐流（`https://www.douyin.com/?recommend=1`），写入 `content_cache` 推荐池（`source="douyin-recommend"`、`source_platform="douyin"`、`content_type="video"`），含作者、标题、话题标签、点赞/评论/收藏/转发数、视频 URL。按 bvid（aweme_id，缺失时回退 hash）去重幂等，支持 `--once` / `--dry-run` / `--limit` / `--interval`，未登录或抓取失败安静降级不中断循环。
-- **三种运行模式**：① `--login` 有头模式，等待用户扫码登录并保存 user_data_dir（`data/douyin_profile/`）；② `--headless`（默认）无头模式复用已保存的登录态；③ `--cdp-port 9222` 连接到已运行的真实 Chrome（CDP 模式，无无头检测风险）。首次使用需先跑 `--login` 保存登录态。
-- **抓取策略**：导航到推荐页后检测登录态（`扫码登录`/`验证码登录`/独立`登录`按钮 → 未登录），循环按 `ArrowDown` 切换视频（单列虚拟滚动），每次从 `document.body.innerText` 解析作者/标题/互动数据，同时用 JS 从 DOM 提取 aweme_id 构造视频 URL。
-- **新增测试**：`tests/test_douyin_feed_producer.py`（19 例：数字解析含"万"单位、页面文本解析提取字段、登录态检测含异常降级、aweme_id 提取含异常降级、行规范化与过滤去重、DB 写入幂等与互动数字保留）。
-- **依赖**：`playwright>=1.40`（项目 `[project.optional-dependencies] browser` 已预留，mypy 已配 ignore_missing_imports）；需额外执行 `playwright install chromium`。
+- **新数据源接入**：`runtime/douyin_feed_producer` 独立脚本，通过 Playwright 驱动 Chrome 抓取抖音内容，写入 `content_cache`。支持两种 feed：① `--jingxuan` 精选页公开多列网格（免登录、单屏 ~50-60 卡片、页面滚动加载更多，`source="douyin-jingxuan"`，默认 limit 50）；② 默认个性化推荐流（需登录态，单列虚拟滚动按 ArrowDown 切换，`source="douyin-recommend"`）。每条含作者、标题、话题标签、点赞数、时长、视频 URL。
+- **三种运行模式**：`--login` 有头扫码保存登录态（`data/douyin_profile/`）、`--headless`（默认）无头复用登录态后台运行、`--cdp-port 9222` 连接已运行的真实 Chrome。无头反检测：`--disable-blink-features=AutomationControlled` + 真实 UA + `navigator.webdriver` 覆盖。
+- **关键修复**：导航到 `?recommend=1` 后必须 JS 点击「推荐」tab 才能进入单列推荐流（直接 navigate 会停在精选多列网格页，ArrowDown 不生效）。
+- **按 bvid 去重幂等**（aweme_id，缺失时回退 author+title hash），支持 `--once` / `--dry-run` / `--limit` / `--interval`，未登录或抓取失败安静降级不中断循环。
+- **新增测试**：`tests/test_douyin_feed_producer.py`（23 例：数字解析含万单位、推荐流文本解析、精选页多卡片解析含广告/直播过滤、登录态检测含异常降级、aweme_id 提取、行规范化去重、source 参数化、DB 写入幂等与互动数字保留）。
+- **实测**：无头模式精选页单屏解析 50-60 卡片、70 条成功入库（@小高姐的美食vlog 9.7万赞、@秋瓷炫 9.4万赞等）；推荐流无头模式成功抓取个性化视频。
+- **依赖**：`playwright>=1.40`（项目 `[project.optional-dependencies] browser` 已预留）；需 `playwright install chromium`。
 
 ## v0.3.159: 新增虎扑 / 头条 CLI 热榜 feed producer（2026-09-04）
 

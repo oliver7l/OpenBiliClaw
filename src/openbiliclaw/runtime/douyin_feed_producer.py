@@ -45,8 +45,10 @@ DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbi
 INTERVAL_HOURS = 6
 USER_DATA_DIR = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/douyin_profile"
 RECOMMEND_URL = "https://www.douyin.com/?recommend=1"
+JINGXUAN_URL = "https://www.douyin.com/jingxuan"
 PAGE_TIMEOUT_MS = 30000
 SCROLL_PAUSE = 2.0  # seconds between ArrowDown presses
+JINGXUAN_SCROLL_PAUSE = 2.5  # seconds between page scrolls
 LOGIN_WAIT_TIMEOUT = 300  # seconds to wait for user to scan QR in --login mode
 
 # Strip proxy env vars so the launched browser does not inherit a dead
@@ -273,6 +275,256 @@ def _click_recommend_tab(page: Any) -> None:
         logger.debug("recommend tab click failed: %s", exc)
 
 
+_DURATION_RE = re.compile(r"^\d{1,2}:\d{2}$")
+_DATE_RE = re.compile(r"·\s*(\d+\s*月\s*\d+\s*日|\d+\s*天前|\d+\s*小时前|\d+\s*分钟前|刚刚)")
+
+
+def _parse_jingxuan_cards(text: str) -> list[dict[str, Any]]:
+    """Parse video cards from the Douyin 精选 (jingxuan) multi-column grid.
+
+    Each card in the page innerText follows the pattern::
+
+        mm:ss            ← duration
+        1234 / 1.2万     ← like count
+        标题文字 #话题1 #话题2
+        @作者名
+         · 8月14日        ← publish date
+
+    Ads (``广告``) and live streams (``直播中``) are skipped. Returns a
+    list of dicts with ``author``, ``title``, ``hashtags``, ``likes``,
+    ``duration``, ``published_at``.
+    """
+    lines = [line.strip() for line in text.split("\n")]
+    cards: list[dict[str, Any]] = []
+
+    i = 0
+    while i < len(lines):
+        # Card starts with a duration line (mm:ss)
+        if not _DURATION_RE.match(lines[i]):
+            i += 1
+            continue
+
+        duration = lines[i]
+        i += 1
+
+        # Next line: like count (may be absent for ads/live)
+        likes = 0
+        if i < len(lines):
+            num = _parse_count(lines[i])
+            if num is not None:
+                likes = num
+                i += 1
+
+        # Title lines: collect until we hit @author or another duration
+        title_parts: list[str] = []
+        hashtags: list[str] = []
+        author = ""
+        published_at = ""
+        is_ad_or_live = False
+
+        while i < len(lines):
+            line = lines[i]
+            if not line:
+                i += 1
+                continue
+            # Stop at next card's duration
+            if _DURATION_RE.match(line) and title_parts:
+                break
+            # Stop at @author
+            if line.startswith("@") and len(line) > 1:
+                author = line[1:]
+                i += 1
+                # Next line is publish date
+                if i < len(lines):
+                    m = _DATE_RE.search(lines[i])
+                    if m:
+                        published_at = m.group(1)
+                        i += 1
+                break
+            # Skip ad / live markers
+            if line in ("广告", "直播中") or line.endswith("正在直播"):
+                is_ad_or_live = True
+                i += 1
+                continue
+            # Collect hashtags
+            tags = _HASHTAG_RE.findall(line)
+            if tags:
+                hashtags.extend(tags)
+            title_parts.append(line)
+            i += 1
+
+        if is_ad_or_live or not author or not title_parts:
+            continue
+
+        title = " ".join(title_parts).strip()
+        if len(title) > 300:
+            title = title[:300]
+
+        cards.append(
+            {
+                "author": author,
+                "title": title,
+                "hashtags": hashtags,
+                "likes": likes,
+                "duration": duration,
+                "published_at": published_at,
+                "comments": 0,
+                "favorites": 0,
+                "shares": 0,
+            }
+        )
+
+    return cards
+
+
+def _extract_all_aweme_ids(page: Any) -> list[str]:
+    """Extract all aweme_ids from /video/ links on the page (for jingxuan grid)."""
+    script = """\
+() => {
+  const ids = [];
+  const seen = new Set();
+  const links = document.querySelectorAll('a[href*="/video/"]');
+  for (const a of links) {
+    const m = (a.href || '').match(/video\\/(\\d+)/);
+    if (m && !seen.has(m[1])) {
+      seen.add(m[1]);
+      ids.push(m[1]);
+    }
+  }
+  return ids;
+}
+"""
+    try:
+        result = page.evaluate(script)
+    except Exception:
+        return []
+    if isinstance(result, list):
+        return [str(x) for x in result if x]
+    return []
+
+
+def _fetch_jingxuan(
+    limit: int,
+    headless: bool,
+    cdp_port: int | None,
+) -> list[dict[str, Any]]:
+    """Scrape the Douyin 精选 (jingxuan) multi-column grid feed.
+
+    The jingxuan page is a public multi-column grid (no login required,
+    though a logged-in profile may show personalized results). Cards are
+    loaded lazily as the page scrolls. Returns ``[]`` on failure.
+    """
+    sync_playwright = _require_playwright()
+    videos: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    max_scrolls = max(3, (limit // 12) + 2)  # ~12 cards per scroll
+
+    try:
+        with sync_playwright() as pw:
+            if cdp_port:
+                browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+                context = browser.contexts[0] if browser.contexts else browser.new_context()
+                page = context.new_page()
+                owns_browser = False
+            else:
+                os.makedirs(USER_DATA_DIR, exist_ok=True)
+                context = pw.chromium.launch_persistent_context(
+                    user_data_dir=USER_DATA_DIR,
+                    headless=headless,
+                    viewport={"width": 1280, "height": 900},
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                        "--disable-gpu",
+                    ],
+                    env=CLEAN_ENV,
+                )
+                context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                )
+                page = context.pages[0] if context.pages else context.new_page()
+                owns_browser = True
+
+            page.set_default_timeout(PAGE_TIMEOUT_MS)
+
+            try:
+                logger.info("navigating to %s", JINGXUAN_URL)
+                page.goto(JINGXUAN_URL, wait_until="domcontentloaded")
+                with contextlib.suppress(Exception):
+                    page.wait_for_load_state("networkidle", timeout=8000)
+                time.sleep(3)
+
+                for scroll_idx in range(max_scrolls):
+                    # Parse current page text
+                    try:
+                        text = page.evaluate("() => document.body.innerText")
+                        if not isinstance(text, str):
+                            text = ""
+                    except Exception:
+                        text = ""
+
+                    aweme_ids = _extract_all_aweme_ids(page)
+                    cards = _parse_jingxuan_cards(text)
+
+                    for idx, card in enumerate(cards):
+                        if not card.get("author"):
+                            continue
+                        aweme_id = aweme_ids[idx] if idx < len(aweme_ids) else ""
+                        vid = aweme_id or hashlib.md5(
+                            (card["author"] + "|" + card["title"]).encode("utf-8")
+                        ).hexdigest()[:16]
+                        if vid in seen_ids:
+                            continue
+                        seen_ids.add(vid)
+                        card["aweme_id"] = aweme_id
+                        card["bvid"] = vid
+                        card["content_url"] = (
+                            f"https://www.douyin.com/video/{aweme_id}"
+                            if aweme_id
+                            else JINGXUAN_URL
+                        )
+                        videos.append(card)
+                        if len(videos) >= limit:
+                            break
+
+                    logger.info(
+                        "  jingxuan scroll %d/%d: %d cards parsed, %d unique total",
+                        scroll_idx + 1,
+                        max_scrolls,
+                        len(cards),
+                        len(videos),
+                    )
+
+                    if len(videos) >= limit:
+                        break
+
+                    # Scroll down to load more cards
+                    with contextlib.suppress(Exception):
+                        page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
+                    time.sleep(JINGXUAN_SCROLL_PAUSE)
+
+            finally:
+                with contextlib.suppress(Exception):
+                    page.close()
+                if owns_browser:
+                    with contextlib.suppress(Exception):
+                        context.close()
+                else:
+                    with contextlib.suppress(Exception):
+                        browser.close()
+    except Exception as exc:
+        logger.error("douyin jingxuan scrape failed: %s", exc, exc_info=True)
+        return []
+
+    return videos
+
+
 def _require_playwright() -> Any:
     """Lazy-import ``playwright.sync_api`` with a helpful error message."""
     try:
@@ -445,7 +697,10 @@ def _fetch_feed(
 # ---------------------------------------------------------------------------
 
 
-def _to_rows(videos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _to_rows(
+    videos: list[dict[str, Any]],
+    source: str = "douyin-recommend",
+) -> list[dict[str, Any]]:
     """Normalize scraped videos into content_cache-compatible rows."""
     now = datetime.now()
     rows: list[dict[str, Any]] = []
@@ -471,9 +726,9 @@ def _to_rows(videos: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "title": title,
                 "up_name": author,
                 "author_name": author,
-                "content_url": str(v.get("content_url", RECOMMEND_URL)),
+                "content_url": str(v.get("content_url", JINGXUAN_URL)),
                 "source_platform": "douyin",
-                "source": "douyin-recommend",
+                "source": source,
                 "content_type": "video",
                 "pool_status": "fresh",
                 "body_text": body,
@@ -529,17 +784,23 @@ def _run_once(
     headless: bool,
     cdp_port: int | None,
     login_mode: bool,
+    jingxuan_mode: bool = False,
 ) -> dict[str, Any]:
     """One full fetch cycle. Returns a summary dict."""
     if login_mode:
         _fetch_feed(limit=1, headless=False, cdp_port=cdp_port, login_mode=True)
         return {"ok": True, "login_mode": True}
 
-    videos = _fetch_feed(limit=limit, headless=headless, cdp_port=cdp_port, login_mode=False)
+    source = "douyin-jingxuan" if jingxuan_mode else "douyin-recommend"
+    if jingxuan_mode:
+        videos = _fetch_jingxuan(limit=limit, headless=headless, cdp_port=cdp_port)
+    else:
+        videos = _fetch_feed(limit=limit, headless=headless, cdp_port=cdp_port, login_mode=False)
+
     if not videos:
         return {"ok": False, "reason": "empty_feed", "fetched": 0, "inserted": 0}
 
-    rows = _to_rows(videos)
+    rows = _to_rows(videos, source=source)
     if not rows:
         return {"ok": False, "reason": "no_valid_videos", "fetched": len(videos), "inserted": 0}
 
@@ -566,11 +827,14 @@ def run_forever(
     limit: int,
     headless: bool,
     cdp_port: int | None,
+    jingxuan_mode: bool = False,
 ) -> None:
     """Main loop: fetch every ``interval_hours`` hours."""
+    feed_label = "jingxuan" if jingxuan_mode else "recommend"
     logger.info(
-        "douyin recommend feed producer started "
+        "douyin %s feed producer started "
         "(headless=%s, cdp_port=%s, interval=%dh, limit=%d, dry_run=%s)",
+        feed_label,
         headless,
         cdp_port,
         interval_hours,
@@ -578,8 +842,14 @@ def run_forever(
         _DRY_RUN,
     )
     while True:
-        logger.info("fetching douyin recommend feed...")
-        result = _run_once(limit=limit, headless=headless, cdp_port=cdp_port, login_mode=False)
+        logger.info("fetching douyin %s feed...", feed_label)
+        result = _run_once(
+            limit=limit,
+            headless=headless,
+            cdp_port=cdp_port,
+            login_mode=False,
+            jingxuan_mode=jingxuan_mode,
+        )
         if result["ok"]:
             logger.info(
                 "feed ok: %d fetched, %d new, %d duplicate",
@@ -607,7 +877,7 @@ def _main() -> None:
         action="store_true",
         help="Headed mode: wait for QR scan and save the session.",
     )
-    parser.add_argument("--limit", type=int, default=20, help="Videos to scrape per cycle.")
+    parser.add_argument("--limit", type=int, default=50, help="Videos to scrape per cycle.")
     parser.add_argument(
         "--interval",
         type=int,
@@ -632,6 +902,11 @@ def _main() -> None:
         default=None,
         help="Connect to a running Chrome via CDP on this port (e.g. 9222).",
     )
+    parser.add_argument(
+        "--jingxuan",
+        action="store_true",
+        help="Scrape the 精选 (jingxuan) public grid feed instead of personalized recommend.",
+    )
     args = parser.parse_args()
 
     global _DRY_RUN
@@ -654,6 +929,7 @@ def _main() -> None:
             headless=args.headless,
             cdp_port=args.cdp_port,
             login_mode=False,
+            jingxuan_mode=args.jingxuan,
         )
         if result["ok"]:
             logger.info(
@@ -671,6 +947,7 @@ def _main() -> None:
         limit=args.limit,
         headless=args.headless,
         cdp_port=args.cdp_port,
+        jingxuan_mode=args.jingxuan,
     )
 
 

@@ -149,6 +149,100 @@ def test_parse_video_text_handles_missing_counts() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _parse_jingxuan_cards
+# ---------------------------------------------------------------------------
+
+_JINGXUAN_SAMPLE = """\
+精选
+推荐
+关注
+我的
+全部公开课游戏二次元音乐影视美食知识
+01:39
+2490
+潮汕人超爱的生腌梭子蟹，入口真的绝 #美食 #梭子蟹 #广东美食
+@美食原产地
+ · 8月14日
+45:57
+8592
+【韩路游记】穿越甘南秘境（上集） #甘南旅游 #洛克之路
+@韩路有点意思
+ · 7月25日
+29:36
+1.1万
+大明王朝81：全身而退 #大明王朝1566
+@Lucas真有大劲
+ · 8月12日
+"""
+
+
+def test_parse_jingxuan_cards_extracts_multiple() -> None:
+    cards = dfp._parse_jingxuan_cards(_JINGXUAN_SAMPLE)
+    assert len(cards) == 3
+    assert cards[0]["author"] == "美食原产地"
+    assert "生腌梭子蟹" in cards[0]["title"]
+    assert cards[0]["likes"] == 2490
+    assert cards[0]["duration"] == "01:39"
+    assert "美食" in cards[0]["hashtags"]
+    assert cards[1]["author"] == "韩路有点意思"
+    assert cards[1]["likes"] == 8592
+    assert cards[2]["likes"] == 11000  # 1.1万
+
+
+def test_parse_jingxuan_cards_skips_ads_and_live() -> None:
+    text = """\
+00:30
+100
+这是一个正常视频标题 #正常
+@正常作者
+ · 8月1日
+广告
+豆包工作任务全新改版
+立即领取
+05:00
+200
+另一个正常视频 #另一个
+@另一个作者
+ · 8月2日
+直播中
+203
+船长OVO正在直播
+@
+船长ovo
+"""
+    cards = dfp._parse_jingxuan_cards(text)
+    authors = [c["author"] for c in cards]
+    assert "正常作者" in authors
+    assert "另一个作者" in authors
+    assert "船长ovo" not in authors
+
+
+def test_parse_jingxuan_cards_empty_returns_empty() -> None:
+    assert dfp._parse_jingxuan_cards("") == []
+    assert dfp._parse_jingxuan_cards("no cards here just text") == []
+
+
+def test_to_rows_jingxuan_source() -> None:
+    videos = [
+        {
+            "bvid": "jx001",
+            "author": "测试作者",
+            "title": "精选视频标题",
+            "hashtags": [],
+            "likes": 100,
+            "comments": 0,
+            "favorites": 0,
+            "shares": 0,
+            "content_url": dfp.JINGXUAN_URL,
+        }
+    ]
+    rows = dfp._to_rows(videos, source="douyin-jingxuan")
+    assert len(rows) == 1
+    assert rows[0]["source"] == "douyin-jingxuan"
+    assert rows[0]["source_platform"] == "douyin"
+
+
+# ---------------------------------------------------------------------------
 # _is_logged_in
 # ---------------------------------------------------------------------------
 
