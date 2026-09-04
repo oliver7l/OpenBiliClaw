@@ -2848,7 +2848,11 @@ class RecommendationEngine:
         self,
         candidates: list[DiscoveredContent],
     ) -> list[DiscoveredContent]:
-        viewed_bvids = self._database.get_recent_viewed_bvids()
+        viewed_bvids = set(self._database.get_recent_viewed_bvids())
+        # E1: recommendation click-throughs are consumption too — a video
+        # the user already opened from a recommendation must not re-enter
+        # the pool-based serve path even after the pool refreshes.
+        viewed_bvids.update(self._database.get_clicked_bvids())
         if not viewed_bvids:
             return candidates
         return [item for item in candidates if item.bvid not in viewed_bvids]

@@ -4,6 +4,12 @@
 
 ---
 
+## v0.3.155: 实时反馈闭环 E1+E2（2026-09-04）
+
+- **E1 推荐点击回写消费状态**：`recommendations` 表新增 `clicked_at` 列（幂等迁移）；`/api/recommendations/click` 收到 `recommendation_id` 时回写 presented+clicked，`get_recommendations(exclude_processed=True)` 排除已点击项、保留仅展示项；`engine.serve()` 的 `_exclude_recently_viewed` 合并已点击 bvid——点过的视频即使重新进入候选池也不再重复推荐。`presented_at` / `clicked_at` 组合可算真实 CTR。新增 `tests/test_recommendation_click_loop.py`。
+- **E2 已读回流画像**：`_article_tags_for_context` 把文章标签折叠进 `article_finished` / `article_dismissed` 事件的 context（此前 tags 仅存 metadata、LLM 偏好分析永远看不到）；`scripts/backfill_reading_to_profile.py` 把 `read_archive` + `articles(finished/favorited)` 的 tags 批量送入 `PreferenceAnalyzer.analyze_events`，按 `layer_updaters._update_interest` 同款流程写回 flat preference + onion profile，推荐引擎下次 `serve()` 即生效。已用真实数据验证（智能体强化学习、影视评论、广告投放等兴趣成功入画像）。
+- 设计文档 `docs/plans/2026-09-03-offline-eval-loop-design.md` 追加 E 里程碑章节。
+
 ## v0.3.154: 专题系统（2026-09-04）
 
 - **专题（Topics）系统**：持续搜集用户感兴趣方向的内容，多专题并存、前端可查看。新增 `topics` / `topic_items` 两张表（`Database.create_topic` / `list_topics` / `get_topic_by_slug` / `add_topic_item` / `count_topic_items` / `mark_topic_collected`，幂等去重 `(topic_id, content_key)`），API 暴露 `GET/POST /api/topics`、`GET /api/topics/{slug}`、`POST /api/topics/{slug}/collect`，并挂载独立 `/topics` 前端页（`web/topics/index.html`）。

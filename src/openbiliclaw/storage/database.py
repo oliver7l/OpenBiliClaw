@@ -504,6 +504,7 @@ class Database:
         self._conn.executescript(_SCHEMA_SQL)
         self._ensure_event_satisfaction_columns()
         self._ensure_recommendation_feedback_columns()
+        self._ensure_recommendation_clicked_column()
         self._ensure_content_cache_runtime_columns()
         self._ensure_content_cache_relevance_columns()
         self._ensure_content_cache_topic_columns()
@@ -4794,7 +4795,7 @@ class Database:
         are filtered out — clicking them hits xhs's 300031 login wall.
 
         When *exclude_processed* is True, rows that have already been
-        acted upon (liked / disliked / dismissed / commented) are
+        acted upon (liked / disliked / dismissed / commented / clicked) are
         omitted so the API only returns actionable items.
 
         ``franchise_key`` (v0.3.18) is exposed so /api/recommendations
@@ -4804,7 +4805,10 @@ class Database:
         self._ensure_fresh_read()
         min_score = self._pool_admission_min_score()
         processed_clause = (
-            "AND (r.feedback_type IS NULL OR r.feedback_type = '')" if exclude_processed else ""
+            "AND (r.feedback_type IS NULL OR r.feedback_type = '') "
+            "AND r.clicked_at IS NULL"
+            if exclude_processed
+            else ""
         )
         cursor = self.conn.execute(
             f"""
@@ -4994,6 +4998,47 @@ class Database:
             recommendation_ids,
         )
 
+    def mark_recommendations_clicked(self, recommendation_ids: list[int]) -> None:
+        """Mark recommendations as clicked-through and record click timestamp.
+
+        E1 (real-time feedback loop): a click-through is the strongest
+        consumption signal. Marking it closes the exposure→click loop:
+        clicked items are excluded from future serves (see
+        ``get_recommendations(exclude_processed=True)``) so the user never
+        sees the same card again, while ``presented_at`` / ``clicked_at``
+        together yield real CTR data for online metrics.
+        """
+        if not recommendation_ids:
+            return
+        placeholders = ", ".join("?" for _ in recommendation_ids)
+        self._execute_write(
+            f"""
+            UPDATE recommendations
+            SET presented = 1,
+                presented_at = COALESCE(presented_at, CURRENT_TIMESTAMP),
+                clicked_at = CURRENT_TIMESTAMP
+            WHERE id IN ({placeholders})
+            """,
+            recommendation_ids,
+        )
+
+    def get_clicked_bvids(self, limit: int = 200) -> list[str]:
+        """Return bvids of recently clicked-through recommendations.
+
+        E1: the serve/reshuffle/append paths draw from the live candidate
+        pool and only learn about consumed items through ``excluded_bvids``.
+        This helper lets the API merge historically clicked items into that
+        exclusion set so a video the user already opened is never served
+        again, even after it re-enters the pool.
+        """
+        rows = self.conn.execute(
+            "SELECT bvid FROM recommendations "
+            "WHERE clicked_at IS NOT NULL AND bvid != '' "
+            "ORDER BY clicked_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [str(row["bvid"]) for row in rows]
+
     def update_content_quality_score(
         self, bvid: str, *, quality_score: float, quality_reason: str
     ) -> None:
@@ -5112,6 +5157,25 @@ class Database:
             if column_name in existing_columns:
                 continue
             self.conn.execute(f"ALTER TABLE recommendations ADD COLUMN {column_name} {column_type}")
+
+    def _ensure_recommendation_clicked_column(self) -> None:
+        """Backfill the recommendation click-through column for existing DBs.
+
+        E1 (real-time feedback loop): a click is the strongest consumption
+        signal — it closes the exposure→click loop so clicked items stop
+        being re-served and the history table carries true CTR data.
+        """
+        existing_columns = {
+            str(row["name"])
+            for row in self.conn.execute("PRAGMA table_info(recommendations)").fetchall()
+        }
+        if "clicked_at" in existing_columns:
+            return
+        self.conn.execute("ALTER TABLE recommendations ADD COLUMN clicked_at TIMESTAMP")
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_recommendations_clicked "
+            "ON recommendations(clicked_at)"
+        )
 
     def _ensure_content_cache_runtime_columns(self) -> None:
         """Backfill content-cache runtime columns for continuous refresh."""

@@ -259,3 +259,59 @@
 1. **严格时间切片的画像重建**：当前 `--eval-after` 只过滤正样本行为，未重建「历史时刻」的画像快照（relevance_score 仍用全量画像）。完整做法是保存历史画像快照、按 T0 重建——留作后续。
 2. **OptimizationLoop 自动接入**：现有 `OptimizationLoop` 面向画像 prompt 优化，未强行耦合。当前迭代方式为「调参 → 重跑 CLI → 对比 index 趋势」，已是标准闭环；如需全自动调参可基于 `eval/loop.py` 扩展。
 3. **embedding 级 ILS / 新颖性**：MVP 用确定性 topic 重合度近似；embedding_cache 为标题级 key，需先建「内容↔embedding」映射再升级。
+
+---
+
+## 12. E 里程碑：实时反馈闭环（2026-09-04）
+
+离线评估证明「画像 → 排序」有效后，E 把**真实使用行为**接回画像，让推荐吃到的信号持续更新。
+
+### 闭环图景（探查确认）
+
+| 信号 | 状态 |
+|---|---|
+| events（收藏/点赞/读完/观看/屏蔽）→ ProfileUpdatePipeline | ✅ 已有 |
+| 推荐点击 → 强信号立即更新画像 | ✅ 已有 |
+| 文章 finished/hidden → 事件回流 | ✅ 已有（仅标题级） |
+| **推荐点击 → recommendations 表消费状态** | ❌ **E1 修复** |
+| **已读全文 tags → 偏好分析** | ❌ **E2 修复** |
+| 兴趣时间衰减 | ✅ 已有（`decay_factor_per_week=0.9`） |
+
+### E1：点击回写消费状态（曝光→点击数据闭环）
+
+- `database.py`：新增 `clicked_at` 列迁移（幂等）+ `mark_recommendations_clicked()` + `get_clicked_bvids()`；`get_recommendations(exclude_processed=True)` 排除已点击项，**保留仅展示项**（曝光≠消费）。
+- `app.py`：`/api/recommendations/click` 收到 `recommendation_id` 时回写 presented+clicked。
+- `engine.py`：`serve()` 的 `_exclude_recently_viewed` 合并已点击 bvid——点过的视频即使重新进入候选池也不再被推荐。
+- 效果：推荐表具备完整 `presented_at` / `clicked_at`，可算真实 CTR；已消费内容不再重复推荐。
+
+### E2：已读回流（推荐吃到正在读的内容）
+
+- **E2a**（app.py）：`article_finished` / `article_dismissed` 事件 context 折叠文章 tags（此前 tags 仅存 metadata、LLM 偏好分析永远看不到）——读完/屏蔽信号升级为标签级证据。
+- **E2b**（`scripts/backfill_reading_to_profile.py`）：把 `read_archive` + `articles(finished/favorited)` 的 tags 批量送入 `PreferenceAnalyzer.analyze_events`，按 `layer_updaters._update_interest` 同款流程写回 flat preference + onion profile + profile 文件同步，推荐引擎下次 `serve()` 即生效。LLM 失败/结果异常时不写回。
+
+### 真实验证（2026-09-04）
+
+```text
+$ .venv/bin/python scripts/backfill_reading_to_profile.py --limit 5
+[reading→profile] 读取已读条目 5 条
+[reading→profile] 现有画像: 255 个兴趣
+[reading→profile] 画像变化 3 项：
+  + 新增兴趣: 智能体强化学习 (0.65)      ← 《OpenAI o1 RL训练配方》(微信)
+  + 兴趣权重变化: 影视评论 0.19 → 0.45    ← 《重器》影视评论 (知乎)
+  + 新增兴趣: 广告投放 (0.40)            ← 《腾讯运营教程 Vol.4 出价策略》(小红书)
+```
+
+画像落盘确认：`preference.json` / `soul.json` 均含 `source: 'read-archive'`、`last_seen: 2026-09-04` 的新兴趣条目。
+
+### 使用方式
+
+```bash
+# 已读回流（默认每源 50 条；--dry-run 只看不写）
+.venv/bin/python scripts/backfill_reading_to_profile.py [--limit 50] [--dry-run]
+```
+
+### E 已知限制
+
+1. `reshuffle`（换一批）走预计算缓冲，缓冲生命周期内新点击不会立即从当批排除——缓冲 TTL 短且下次填充即生效，可接受近似。
+2. 已读回流是**触发式**（脚本/手动），未接定时调度；如需每日自动回流可挂 cron。
+3. `_article_tags_for_context` 取前 8 个标签，超长标签列表截断（保护 LLM prompt 预算）。

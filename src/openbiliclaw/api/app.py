@@ -715,6 +715,33 @@ def _normalize_source_platform(source: object) -> str:
     return source_key
 
 
+def _article_tags_for_context(value: object, *, max_tags: int = 8) -> str:
+    """Render an article's tags JSON as a short comma-joined context suffix.
+
+    E2 (reading feedback loop): article tags were persisted in event
+    metadata but never reached the preference-analyzer LLM prompt (only
+    title/url/source are compacted). Folding the top-N tags into the
+    natural-language context gives the analyzer topic-level evidence for
+    both positive (finished) and negative (hidden) reading signals.
+    """
+    if isinstance(value, list):
+        tags = [str(t).strip() for t in value if str(t).strip()]
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                tags = [str(t).strip() for t in parsed if str(t).strip()]
+            else:
+                tags = []
+        except json.JSONDecodeError:
+            tags = [t.strip() for t in value.replace("，", ",").split(",") if t.strip()]
+    else:
+        tags = []
+    if not tags:
+        return ""
+    return "标签:" + ",".join(tags[:max_tags])
+
+
 def _infer_source_platform_from_url(url: object) -> str:
     text = str(url or "").strip().lower()
     if "youtube.com" in text or "youtu.be" in text:
@@ -7013,6 +7040,16 @@ Keep keywords focused and specific. Remove stop words."""
             else:
                 layers_updated = [r.layer.value for r in ingest_result.layers_updated]
 
+        # E1: close the exposure→click loop. A click-through is consumption —
+        # mark the stored card presented+clicked so it stops being re-served
+        # (get_recommendations(exclude_processed=True) drops clicked rows) and
+        # presented_at/clicked_at yield real CTR data for online metrics.
+        if payload.recommendation_id is not None:
+            try:
+                ctx.database.mark_recommendations_clicked([payload.recommendation_id])
+            except Exception:
+                logger.exception("mark_recommendations_clicked failed")
+
         return RecommendationClickResponse(
             ok=True,
             bvid=bvid,
@@ -10653,11 +10690,17 @@ Keep keywords focused and specific. Remove stop words."""
                             format_event_context,
                         )
 
+                        # E2: fold the article's tags into the context so the
+                        # preference analyzer sees topic-level evidence, not
+                        # just the title (tags were previously metadata-only
+                        # and never reached the LLM prompt).
+                        _tags = _article_tags_for_context(row.get("tags"))
                         context = format_event_context(
                             event_type="article_finished",
                             source_platform=str(row.get("source_type") or "阅读库"),
                             title=str(row.get("title") or ""),
                             author=str(row.get("author") or ""),
+                            extra=_tags,
                         )
                         database.insert_event(
                             "article_finished",
@@ -10686,11 +10729,15 @@ Keep keywords focused and specific. Remove stop words."""
                             format_event_context,
                         )
 
+                        # E2: same tag-folding as article_finished so the
+                        # negative signal carries topic-level evidence too.
+                        _tags = _article_tags_for_context(row.get("tags"))
                         context = format_event_context(
                             event_type="article_dismissed",
                             source_platform=str(row.get("source_type") or "阅读库"),
                             title=str(row.get("title") or ""),
                             author=str(row.get("author") or ""),
+                            extra=_tags,
                         )
                         database.insert_event(
                             "article_dismissed",
