@@ -152,10 +152,8 @@ class YtDlpAdapter:
                     author_name=str(parsed["uploader"]) if parsed["uploader"] else "",
                     up_name=str(parsed["uploader"]) if parsed["uploader"] else "",
                     content_type="video",
-                    extra={
-                        "view_count": parsed["view_count"],
-                        "strategy": strategy,
-                    },
+                    view_count=int(parsed.get("view_count", 0) or 0),
+                    topic_key=str(strategy),
                 )
             )
 

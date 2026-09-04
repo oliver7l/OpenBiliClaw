@@ -325,9 +325,10 @@ class EmbeddingService:
             try:
                 # L2 write is a pickled SQLite write — keep it off the event
                 # loop (it can take 10-100ms per vector on a large cache).
+                l2_cache = self._l2_cache
                 await asyncio.get_running_loop().run_in_executor(
                     None,
-                    lambda: self._l2_cache.put(key, vector, model=self._cache_model),
+                    lambda: l2_cache.put(key, vector, model=self._cache_model),
                 )
             except Exception:
                 logger.debug("L2 cache write failed", exc_info=True)

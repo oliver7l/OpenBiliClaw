@@ -225,15 +225,15 @@ def _parse_topics_table(text: str) -> list[dict[str, Any]]:
         if not r["id"].isdigit():  # skip any non-data row
             continue
         try:
-            replies = int(r["replies"]) if str(r["replies"]).isdigit() else 0
+            reply_count = int(r["replies"]) if str(r["replies"]).isdigit() else 0
         except (ValueError, TypeError):
-            replies = 0
+            reply_count = 0
         out.append(
             {
                 "id": r["id"],
                 "title": r["title"].replace("\n", " ").strip(),
                 "author": (r["author"] or "").strip(),
-                "replies": replies,
+                "replies": reply_count,
             }
         )
     return out

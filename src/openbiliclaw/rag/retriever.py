@@ -46,13 +46,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     tomllib = None  # type: ignore
 
+import logging
+
 import httpx
 
-logger = __name__ if isinstance(__name__, str) else "rag.retriever"
-if isinstance(logger, str):
-    import logging
-
-    logger = logging.getLogger("openbiliclaw.rag.retriever")
+logger = logging.getLogger("openbiliclaw.rag.retriever")
 
 # bge-m3 expects this prefix on the *query* side only (passages are indexed
 # bare). Without it retrieval recall drops noticeably.

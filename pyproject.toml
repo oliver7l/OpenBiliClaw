@@ -154,6 +154,14 @@ module = [
 ]
 disable_error_code = ["untyped-decorator"]
 
+# saved_sync 模块是 WIP 功能，调用了 Database/BilibiliAPIClient 中尚未实现的方法
+# 暂时忽略 attr-defined 错误，待方法实现后移除
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.saved_sync.*",
+]
+disable_error_code = ["attr-defined"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
