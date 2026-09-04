@@ -154,6 +154,7 @@
       "name": "openbiliclaw-v2ex-cli",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
       "script": "./src/openbiliclaw/runtime/v2ex_cli_producer.py",
+      "args": "--interval 24 --limit 20",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",
       "env": {

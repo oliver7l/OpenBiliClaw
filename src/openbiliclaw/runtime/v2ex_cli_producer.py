@@ -35,12 +35,21 @@ Robustness
     we still insert the title-only row so the pool is never empty.
   * Dedupe is by topic id (``bvid``) / url, so re-runs are safe.
 
+Platform risk-control (IMPORTANT)
+---------------------------------
+  V2EX sits behind Cloudflare. Bursty automated traffic gets a 403 whose body
+  is a "Just a moment..." interstitial. That is NOT an IP ban and NOT a bad
+  token, and retrying through it makes things worse. The cycle therefore runs
+  at a deliberately low frequency (24h) and, on any sign of a challenge,
+  aborts the remaining requests and backs off (interval x3 = 72h). Do not
+  tighten this without checking the platform's rate-limit policy.
+
 Usage
 -----
   python3 -m openbiliclaw.runtime.v2ex_cli_producer            # loop forever
   python3 -m openbiliclaw.runtime.v2ex_cli_producer --dry-run  # one-shot, no DB writes
   python3 -m openbiliclaw.runtime.v2ex_cli_producer --discover-only  # skip body fetch
-  python3 -m openbiliclaw.runtime.v2ex_cli_producer --limit 20 --interval 6
+  python3 -m openbiliclaw.runtime.v2ex_cli_producer --limit 20 --interval 24
 """
 
 from __future__ import annotations
@@ -61,7 +70,11 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 6
+INTERVAL_HOURS = 24
+# Backoff multiplier applied to the interval when a Cloudflare challenge is
+# detected (i.e. the platform is rate-limiting / bot-screening us). We must
+# NEVER retry through a challenge — back off hard instead.
+RISK_BACKOFF_MULTIPLIER = 3
 # V2EX API 2.0 /nodes/{node}/topics returns a FIXED 20 topics per page and
 # has NO size param, so asking for more than 20 only ever yields 20. To get
 # more you must paginate via `--page` (one extra API call per page — weigh
@@ -83,14 +96,46 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# --- Platform risk-control (Cloudflare) detection ---------------------------
+# V2EX sits behind Cloudflare. Sustained automated requests get a 403 whose
+# body is a "Just a moment..." interstitial — NOT an IP ban and NOT a token
+# problem. Retrying through it makes things worse, so we detect it and back
+# off hard instead (user red line: never trigger platform rate-limit/风控).
+_CF_MARKERS = (
+    "just a moment",
+    "cf-browser-verification",
+    "cf_chl_opt",
+    "challenge-platform",
+    "enable javascript and cookies to continue",
+)
+# The CLI maps ANY 403 to this message. With a valid token configured, a 403
+# from V2EX means the Cloudflare challenge, so treat it as risk control.
+_CLI_FORBIDDEN_MARKERS = ("access forbidden", "insufficient permissions")
+
+
+def _looks_like_challenge(payload: bytes | str) -> bool:
+    """True if the payload is a Cloudflare interstitial rather than JSON."""
+    if isinstance(payload, bytes):
+        try:
+            payload = payload.decode("utf-8", "replace")
+        except Exception:
+            return False
+    head = payload[:2000].lower()
+    return any(m in head for m in _CF_MARKERS)
+
 # Toggled by --dry-run; when True we fetch/parse but skip all DB writes.
 _DRY_RUN = False
 
 # --------------------------------------------------------------------------- #
 # Discovery (shell out to the user's v2ex CLI)
 # --------------------------------------------------------------------------- #
-def _run_cli_topics(command: str, limit: int) -> str | None:
-    """Run ``v2ex topics <command> --limit <limit>`` and return stdout, or None."""
+def _run_cli_topics(command: str, limit: int) -> tuple[str | None, bool]:
+    """Run ``v2ex topics <command> --limit <limit>``.
+
+    Returns ``(stdout_or_None, risk_control)``. ``risk_control`` is True when
+    the failure looks like a Cloudflare challenge (403) rather than a plain
+    outage — callers must back off instead of retrying.
+    """
     try:
         proc = subprocess.run(
             [_V2EX_BIN, "topics", command, "--limit", str(limit)],
@@ -100,19 +145,31 @@ def _run_cli_topics(command: str, limit: int) -> str | None:
         )
     except FileNotFoundError:
         logger.error("v2ex CLI not found at %s", _V2EX_BIN)
-        return None
+        return None, False
     except subprocess.TimeoutExpired:
         logger.error("v2ex topics %s timed out after %ds", command, CLI_TIMEOUT)
-        return None
+        return None, False
 
     if proc.returncode != 0:
-        # Surface the CLI's own error (e.g. "Resource not found") loudly.
-        err = (proc.stderr or proc.stdout or "").strip().splitlines()
-        err = [l for l in err if "UserWarning" not in l]
+        # The CLI prints its error on stdout ("Error fetching topics: ...")
+        # as well as stderr, so inspect both when classifying the failure.
+        blob = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+        lines = [l for l in blob.strip().splitlines()
+                 if "UserWarning" not in l and "parser =" not in l
+                 and "self.parse_args" not in l]
+        detail = " | ".join(lines[-3:]) or "no output"
+        lowered = blob.lower()
+        if any(m in lowered for m in _CLI_FORBIDDEN_MARKERS):
+            # V2EX behind Cloudflare: 403 == bot challenge, not a bad token.
+            logger.warning(
+                "v2ex topics %s: platform risk-control detected "
+                "(Cloudflare challenge) - backing off, NOT retrying: %s",
+                command, detail)
+            return None, True
         logger.error("v2ex topics %s failed (rc=%d): %s",
-                     command, proc.returncode, " | ".join(err[-3:]) or "no output")
-        return None
-    return proc.stdout or ""
+                     command, proc.returncode, detail)
+        return None, False
+    return proc.stdout or "", False
 
 
 def _parse_topics_table(text: str) -> list[dict]:
@@ -179,12 +236,19 @@ def _parse_topics_table(text: str) -> list[dict]:
     return out
 
 
-def _discover(limit: int) -> tuple[list[dict], str]:
-    """Discover new V2EX topics via the CLI. Returns (rows, status)."""
+def _discover(limit: int) -> tuple[list[dict], str, bool]:
+    """Discover new V2EX topics via the CLI.
+
+    Returns ``(rows, status, risk_control)``.
+    """
     all_rows: list[dict] = []
     ok_any = False
+    risk_control = False
     for command, source in (("latest", "v2ex-cli-latest"), ("hot", "v2ex-cli-hot")):
-        text = _run_cli_topics(command, limit)
+        text, risky = _run_cli_topics(command, limit)
+        if risky:
+            risk_control = True
+            break  # challenged — stop issuing further discovery calls
         if text is None:
             continue
         parsed = _parse_topics_table(text)
@@ -203,35 +267,66 @@ def _discover(limit: int) -> tuple[list[dict], str]:
         seen.add(r["id"])
         deduped.append(r)
 
-    status = "ok" if ok_any else "cli_failed"
-    return deduped, status
+    if risk_control:
+        status = "risk_control"
+    else:
+        status = "ok" if ok_any else "cli_failed"
+    return deduped, status, risk_control
 
 
 # --------------------------------------------------------------------------- #
 # Enrichment (legacy public API -> full body)
 # --------------------------------------------------------------------------- #
-def _fetch_topic_body(topic_id: str) -> dict | None:
-    """Fetch full topic via legacy API. Returns normalized dict or None."""
+def _fetch_topic_body(topic_id: str) -> tuple[dict | None, bool]:
+    """Fetch full topic via legacy API.
+
+    Returns ``(normalized_dict_or_None, risk_control)``. A Cloudflare
+    challenge (403 / interstitial HTML) sets ``risk_control`` so callers can
+    abort the remaining per-topic calls instead of hammering the platform.
+    """
     url = _LEGACY_SHOW_URL.format(tid=topic_id)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             raw = resp.read()
-    except Exception as exc:  # network/HTTP errors -> degrade gracefully
+    except urllib.error.HTTPError as exc:
+        # V2EX returns 403 for the Cloudflare challenge; any other HTTP error
+        # is a normal per-topic failure (deleted topic, etc).
+        if exc.code == 403:
+            logger.warning("v2ex legacy t/%s: 403 (Cloudflare challenge) - "
+                           "risk control, aborting enrichment", topic_id)
+            return None, True
+        try:
+            if _looks_like_challenge(exc.read(2000)):
+                logger.warning("v2ex legacy t/%s: challenge page on HTTP %s - "
+                               "risk control, aborting enrichment",
+                               topic_id, exc.code)
+                return None, True
+        except Exception:
+            pass
+        logger.warning("v2ex legacy fetch failed for t/%s: HTTP %s",
+                       topic_id, exc.code)
+        return None, False
+    except Exception as exc:  # network errors -> degrade gracefully
         logger.warning("v2ex legacy fetch failed for t/%s: %s", topic_id, exc)
-        return None
+        return None, False
+
+    if _looks_like_challenge(raw):
+        logger.warning("v2ex legacy t/%s: challenge page instead of JSON - "
+                       "risk control, aborting enrichment", topic_id)
+        return None, True
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         logger.warning("v2ex legacy JSON decode failed for t/%s: %s", topic_id, exc)
-        return None
+        return None, False
 
     # topics/show.json returns a list with one topic dict.
     if isinstance(data, list):
         data = data[0] if data else None
     if not isinstance(data, dict):
-        return None
+        return None, False
 
     member = data.get("member") or {}
     node = data.get("node") or {}
@@ -249,7 +344,7 @@ def _fetch_topic_body(topic_id: str) -> dict | None:
         "node": node.get("title") or node.get("name") or "",
         "published_at": published_at,
         "replies": data.get("replies") or 0,
-    }
+    }, False
 
 
 # --------------------------------------------------------------------------- #
@@ -319,17 +414,25 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int, 
 # Cycle
 # --------------------------------------------------------------------------- #
 def _run_once(limit: int, discover_only: bool) -> dict:
-    rows, status = _discover(limit)
+    rows, status, risk_control = _discover(limit)
     if not rows:
-        return {"ok": False, "reason": status, "discovered": 0,
-                "inserted": 0, "articles": 0}
+        return {"ok": False, "reason": status, "risk_control": risk_control,
+                "discovered": 0, "inserted": 0, "articles": 0}
 
-    # Enrich (best-effort) unless disabled.
+    # Enrich (best-effort) unless disabled. Abort the whole loop on the first
+    # sign of platform risk-control so we never fan out a burst of requests
+    # into a Cloudflare challenge.
     enriched = 0
     for r in rows:
         if discover_only:
             continue
-        body_data = _fetch_topic_body(r["id"])
+        body_data, risky = _fetch_topic_body(r["id"])
+        if risky:
+            risk_control = True
+            logger.warning("risk-control hit on t/%s; aborting enrichment "
+                           "for the remaining %d topics this cycle",
+                           r["id"], len(rows) - enriched - 1)
+            break
         if body_data:
             r["body"] = body_data["content"]
             r["author"] = body_data["author"] or r["author"]
@@ -341,6 +444,7 @@ def _run_once(limit: int, discover_only: bool) -> dict:
         return {
             "ok": True,
             "dry_run": True,
+            "risk_control": risk_control,
             "discovered": len(rows),
             "would_have_body": enriched,
         }
@@ -354,6 +458,7 @@ def _run_once(limit: int, discover_only: bool) -> dict:
 
     return {
         "ok": True,
+        "risk_control": risk_control,
         "discovered": len(rows),
         "with_body": enriched,
         "cache_inserted": cache_ins,
@@ -406,7 +511,18 @@ def _main() -> None:
             )
         else:
             logger.warning("feed skipped: %s", result.get("reason", "unknown"))
-        time.sleep(args.interval * 3600)
+
+        if result.get("risk_control"):
+            # Cloudflare challenged us: back off hard instead of retrying.
+            sleep_hours = args.interval * RISK_BACKOFF_MULTIPLIER
+            logger.warning(
+                "platform risk-control detected - backing off %.0fh "
+                "(%dh x%d). Do NOT tighten this without checking the "
+                "platform rate-limit policy.",
+                sleep_hours, args.interval, RISK_BACKOFF_MULTIPLIER)
+        else:
+            sleep_hours = args.interval
+        time.sleep(sleep_hours * 3600)
 
 
 if __name__ == "__main__":
