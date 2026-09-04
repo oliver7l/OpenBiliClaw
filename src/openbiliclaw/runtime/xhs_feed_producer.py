@@ -1,6 +1,6 @@
 """Xiaohongshu recommendation feed scheduler.
 
-Calls ``xhs feed --json`` every 12 hours and inserts new notes into
+Calls ``xhs feed --json`` every 24 hours and inserts new notes into
 ``content_cache`` with fresh ``xsec_token``, so they become available
 in the recommendation pool immediately.
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 12
+INTERVAL_HOURS = 24
 FEED_CMD = [
     "uvx",
     "--from",
@@ -194,7 +194,7 @@ def _run_once() -> dict:
 
 
 def run_forever() -> None:
-    """Main loop: fetch every 3 hours."""
+    """Main loop: fetch every 24 hours."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

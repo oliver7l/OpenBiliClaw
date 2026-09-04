@@ -1,7 +1,7 @@
 """Xiaoyuzhou FM (小宇宙) recommendation feed scheduler.
 
 Calls the ``xyz`` CLI to fetch subscribed podcasts and their latest episodes
-every 3 hours, and inserts them into ``content_cache``.
+every 24 hours, and inserts them into ``content_cache``.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 3
+INTERVAL_HOURS = 24
 CLEAN_ENV = {k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "USER", "SHELL", "TMPDIR")}
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
@@ -183,7 +183,7 @@ def _run_once() -> dict:
 
 
 def run_forever() -> None:
-    """Main loop: fetch every 3 hours."""
+    """Main loop: fetch every 24 hours."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

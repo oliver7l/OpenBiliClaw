@@ -1,7 +1,7 @@
 """V2EX recommendation feed scheduler.
 
 Calls the V2EX public API (no authentication required) to fetch latest and
-hot topics every 3 hours, and inserts them into ``content_cache`` so they
+hot topics every 24 hours, and inserts them into ``content_cache`` so they
 become available in the recommendation pool.
 """
 
@@ -18,7 +18,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 3
+INTERVAL_HOURS = 24
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 API_LATEST = "https://www.v2ex.com/api/topics/latest.json"
@@ -149,7 +149,7 @@ def _run_once() -> dict:
 
 
 def run_forever() -> None:
-    """Main loop: fetch every 3 hours."""
+    """Main loop: fetch every 24 hours."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

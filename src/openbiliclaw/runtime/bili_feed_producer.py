@@ -1,6 +1,6 @@
 """Bilibili recommendation feed scheduler.
 
-Calls the Bilibili recommend API (same as bilibili.com homepage) every 3 hours
+Calls the Bilibili recommend API (same as bilibili.com homepage) every 24 hours
 using the SESSDATA from the bili CLI credential store, and inserts new videos
 into ``content_cache`` so they become available in the recommendation pool.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 3
+INTERVAL_HOURS = 24
 CREDENTIAL_PATH = Path.home() / ".bilibili-cli" / "credential.json"
 RECOMMEND_URL = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=5&fresh_type=4&fresh_idx=1&fresh_idx_1h=1"
 
@@ -182,7 +182,7 @@ def _run_once() -> dict:
 
 
 def run_forever() -> None:
-    """Main loop: fetch every 3 hours."""
+    """Main loop: fetch every 24 hours."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

@@ -1,7 +1,7 @@
 """YouTube recommendation feed scheduler.
 
 Calls ``yt-dlp --cookies-from-browser chrome`` to fetch the YouTube
-recommended feed (same as youtube.com homepage) every 3 hours, and inserts
+recommended feed (same as youtube.com homepage) every 24 hours, and inserts
 new videos into ``content_cache`` so they become available in the
 recommendation pool.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 3
+INTERVAL_HOURS = 24
 CLEAN_ENV = os.environ.copy()
 CLEAN_ENV["PYTHONHOME"] = ""
 CLEAN_ENV["PYTHONPATH"] = ""
@@ -176,7 +176,7 @@ def _run_once() -> dict:
 
 
 def run_forever() -> None:
-    """Main loop: fetch every 3 hours."""
+    """Main loop: fetch every 24 hours."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
