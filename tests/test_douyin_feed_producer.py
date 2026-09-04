@@ -243,6 +243,63 @@ def test_to_rows_jingxuan_source() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _parse_user_list_card (likes / favorites)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_user_list_card_likes_format() -> None:
+    """Likes page: likes count first, then title."""
+    result = dfp._parse_user_list_card("3.8万\n\n小狗：这女人太现实了！ #狗狗的心思 #萌宠")
+    assert result is not None
+    assert result["likes"] == 38000
+    assert "小狗" in result["title"]
+    assert "狗狗的心思" in result["hashtags"]
+
+
+def test_parse_user_list_card_favorites_format() -> None:
+    """Favorites page: title first, then likes count."""
+    result = dfp._parse_user_list_card("深圳玻璃海推荐 去过好几次的玻璃海 #海边 #深圳\n\n3.6万")
+    assert result is not None
+    assert result["likes"] == 36000
+    assert "深圳玻璃海" in result["title"]
+
+
+def test_parse_user_list_card_only_hashtag() -> None:
+    result = dfp._parse_user_list_card("1.4万\n\n#熊猫幼崽")
+    assert result is not None
+    assert result["likes"] == 14000
+    assert result["title"] == "#熊猫幼崽"
+    assert "熊猫幼崽" in result["hashtags"]
+
+
+def test_parse_user_list_card_empty_returns_none() -> None:
+    assert dfp._parse_user_list_card("") is None
+    assert dfp._parse_user_list_card("1.4万") is None  # only count, no title
+
+
+def test_to_rows_likes_and_favorites_sources() -> None:
+    for source in ("douyin-likes", "douyin-favorites"):
+        videos = [
+            {
+                "bvid": "7677773987762247675",
+                "aweme_id": "7677773987762247675",
+                "author": dfp.DEFAULT_AUTHOR,
+                "title": "测试喜欢的视频 #测试",
+                "hashtags": ["测试"],
+                "likes": 14000,
+                "comments": 0,
+                "favorites": 0,
+                "shares": 0,
+                "content_url": "https://www.douyin.com/video/7677773987762247675",
+            }
+        ]
+        rows = dfp._to_rows(videos, source=source)
+        assert len(rows) == 1
+        assert rows[0]["source"] == source
+        assert rows[0]["up_name"] == dfp.DEFAULT_AUTHOR
+
+
+# ---------------------------------------------------------------------------
 # _is_logged_in
 # ---------------------------------------------------------------------------
 

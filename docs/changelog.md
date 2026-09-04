@@ -10,6 +10,16 @@
 
 ---
 
+---
+
+## v0.3.161: 抖音喜欢/收藏内容抓取 + 定时周期改为一天一抓（2026-09-04）
+
+- **新数据源接入**：`runtime/douyin_feed_producer` 新增 `--likes` 和 `--favorites` 两种模式，抓取用户登录态下的「喜欢」和「收藏」视频列表（各最近 50 条）。喜欢页直接导航 `?showTab=like`；收藏页需 JS 点击「收藏」tab 切换（URL 变为 `?showTab=favorite_collection`）。source 分别为 `douyin-likes` / `douyin-favorites`。
+- **通用用户列表抓取**：`_fetch_user_list(list_type, ...)` 复用同一套框架，JS 提取所有 `/video/<aweme_id>` 链接 + 卡片 innerText，`_parse_user_list_card` 按数字行识别点赞数、其余行合并为标题（不依赖 likes/favorites 两种页面的字段顺序差异）。列表页不显示作者名，author 回退为 `抖音用户`。
+- **定时周期调整**：`INTERVAL_HOURS` 从 6 改为 24（一天一抓），减少对抖音的请求频率和登录态消耗。
+- **新增测试**：`tests/test_douyin_feed_producer.py` 新增 6 例（喜欢页格式解析、收藏页格式解析、仅话题标签卡片、空输入返回 None、likes/favorites source 参数化），总计 29 例全过。
+- **实测**：无头模式喜欢页 50 条成功入库（最高 58.2 万赞西湖暴雨视频）；收藏页 44 条成功入库（用户收藏总共 44 条，最高 54.5 万赞回忆杀视频）。
+
 ## v0.3.160: 抖音推荐流 + 精选页 producer（Playwright 无头/CDP 双模式）（2026-09-04）
 
 - **新数据源接入**：`runtime/douyin_feed_producer` 独立脚本，通过 Playwright 驱动 Chrome 抓取抖音内容，写入 `content_cache`。支持两种 feed：① `--jingxuan` 精选页公开多列网格（免登录、单屏 ~50-60 卡片、页面滚动加载更多，`source="douyin-jingxuan"`，默认 limit 50）；② 默认个性化推荐流（需登录态，单列虚拟滚动按 ArrowDown 切换，`source="douyin-recommend"`）。每条含作者、标题、话题标签、点赞数、时长、视频 URL。

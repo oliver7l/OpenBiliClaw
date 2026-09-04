@@ -42,13 +42,17 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
-INTERVAL_HOURS = 6
+INTERVAL_HOURS = 24
 USER_DATA_DIR = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/douyin_profile"
 RECOMMEND_URL = "https://www.douyin.com/?recommend=1"
 JINGXUAN_URL = "https://www.douyin.com/jingxuan"
+USER_SELF_URL = "https://www.douyin.com/user/self"
+LIKES_URL = "https://www.douyin.com/user/self?showTab=like"
 PAGE_TIMEOUT_MS = 30000
 SCROLL_PAUSE = 2.0  # seconds between ArrowDown presses
 JINGXUAN_SCROLL_PAUSE = 2.5  # seconds between page scrolls
+USER_LIST_SCROLL_PAUSE = 2.5  # seconds between page scrolls for likes/favorites
+DEFAULT_AUTHOR = "抖音用户"  # fallback when list pages don't show author
 LOGIN_WAIT_TIMEOUT = 300  # seconds to wait for user to scan QR in --login mode
 
 # Strip proxy env vars so the launched browser does not inherit a dead
@@ -525,6 +529,247 @@ def _fetch_jingxuan(
     return videos
 
 
+# ---------------------------------------------------------------------------
+# User list (likes / favorites) scraping
+# ---------------------------------------------------------------------------
+
+
+def _parse_user_list_card(card_text: str) -> dict[str, Any] | None:
+    """Parse a single card from the likes/favorites grid.
+
+    Card text format (order may vary between likes and favorites)::
+
+        1.4万              ← like count
+        标题文字 #话题标签
+
+    Returns a dict with ``title``, ``hashtags``, ``likes``, or ``None``
+    when the text does not contain a valid card.
+    """
+    lines = [line.strip() for line in card_text.split("\n") if line.strip()]
+    if not lines:
+        return None
+
+    likes = 0
+    title_parts: list[str] = []
+    for line in lines:
+        num = _parse_count(line)
+        if num is not None and len(line) <= 10:
+            likes = num
+        else:
+            title_parts.append(line)
+
+    title = " ".join(title_parts).strip()
+    if not title:
+        return None
+    if len(title) > 300:
+        title = title[:300]
+
+    hashtags = _HASHTAG_RE.findall(title)
+    return {
+        "title": title,
+        "hashtags": hashtags,
+        "likes": likes,
+        "comments": 0,
+        "favorites": 0,
+        "shares": 0,
+        "duration": "",
+        "published_at": "",
+    }
+
+
+def _extract_user_list_cards(page: Any) -> list[dict[str, Any]]:
+    """Extract all video cards from the likes/favorites page via JS.
+
+    Returns a list of dicts with ``aweme_id`` and ``text`` (card innerText).
+    """
+    script = """\
+() => {
+  const cards = [];
+  const seen = new Set();
+  const links = document.querySelectorAll('a[href*="/video/"]');
+  for (const a of links) {
+    const m = (a.href || '').match(/video\\/(\\d+)/);
+    if (!m || seen.has(m[1])) continue;
+    seen.add(m[1]);
+    // Walk up to find the card container
+    let card = a.closest(
+      'div[class*="card"], div[class*="item"], li, ' +
+      'div[class*="video"], div[class*="work"]'
+    );
+    if (!card) {
+      let el = a.parentElement;
+      for (let i = 0; i < 5 && el; i++) {
+        if (el.innerText && el.innerText.length > 5) { card = el; break; }
+        el = el.parentElement;
+      }
+    }
+    const text = card ? card.innerText : a.textContent;
+    cards.push({aweme_id: m[1], text: text || ''});
+  }
+  return cards;
+}
+"""
+    try:
+        result = page.evaluate(script)
+    except Exception:
+        return []
+    if not isinstance(result, list):
+        return []
+    cards: list[dict[str, Any]] = []
+    for c in result:
+        if not isinstance(c, dict):
+            continue
+        cards.append(
+            {
+                "aweme_id": str(c.get("aweme_id", "")),
+                "text": str(c.get("text", "")),
+            }
+        )
+    return cards
+
+
+def _click_favorites_tab(page: Any) -> None:
+    """Click the 收藏 tab on the user profile page."""
+    script = """\
+() => {
+  const candidates = document.querySelectorAll('div, span, a, li');
+  for (const el of candidates) {
+    if (el.textContent.trim() === '收藏' && el.offsetParent !== null) {
+      el.click();
+      return true;
+    }
+  }
+  return false;
+}
+"""
+    with contextlib.suppress(Exception):
+        page.evaluate(script)
+
+
+def _fetch_user_list(
+    list_type: str,
+    limit: int,
+    headless: bool,
+    cdp_port: int | None,
+) -> list[dict[str, Any]]:
+    """Scrape the user's liked or favorited videos.
+
+    Args:
+        list_type: ``"like"`` or ``"favorite"``.
+        limit: Maximum number of videos to fetch.
+
+    Returns a list of normalized video dicts, or ``[]`` on failure.
+    """
+    sync_playwright = _require_playwright()
+    videos: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    max_scrolls = max(3, (limit // 15) + 2)
+
+    try:
+        with sync_playwright() as pw:
+            if cdp_port:
+                browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+                context = browser.contexts[0] if browser.contexts else browser.new_context()
+                page = context.new_page()
+                owns_browser = False
+            else:
+                os.makedirs(USER_DATA_DIR, exist_ok=True)
+                context = pw.chromium.launch_persistent_context(
+                    user_data_dir=USER_DATA_DIR,
+                    headless=headless,
+                    viewport={"width": 1280, "height": 900},
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                        "--disable-gpu",
+                    ],
+                    env=CLEAN_ENV,
+                )
+                context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                )
+                page = context.pages[0] if context.pages else context.new_page()
+                owns_browser = True
+
+            page.set_default_timeout(PAGE_TIMEOUT_MS)
+
+            try:
+                # Navigate and switch to the right tab
+                if list_type == "like":
+                    logger.info("navigating to likes page: %s", LIKES_URL)
+                    page.goto(LIKES_URL, wait_until="domcontentloaded")
+                else:
+                    logger.info("navigating to user profile for favorites")
+                    page.goto(USER_SELF_URL, wait_until="domcontentloaded")
+                    time.sleep(3)
+                    _click_favorites_tab(page)
+                time.sleep(4)
+
+                # Check login state
+                if not _is_logged_in(page):
+                    logger.error(
+                        "not logged in — run with --login first, "
+                        "or use --cdp-port to connect to a logged-in Chrome."
+                    )
+                    return []
+
+                for scroll_idx in range(max_scrolls):
+                    raw_cards = _extract_user_list_cards(page)
+                    for raw in raw_cards:
+                        aweme_id = raw.get("aweme_id", "")
+                        if not aweme_id or aweme_id in seen_ids:
+                            continue
+                        parsed = _parse_user_list_card(raw.get("text", ""))
+                        if not parsed or not parsed.get("title"):
+                            continue
+                        seen_ids.add(aweme_id)
+                        parsed["aweme_id"] = aweme_id
+                        parsed["bvid"] = aweme_id
+                        parsed["author"] = DEFAULT_AUTHOR
+                        parsed["content_url"] = f"https://www.douyin.com/video/{aweme_id}"
+                        videos.append(parsed)
+                        if len(videos) >= limit:
+                            break
+
+                    logger.info(
+                        "  %s scroll %d/%d: %d cards extracted, %d unique total",
+                        list_type,
+                        scroll_idx + 1,
+                        max_scrolls,
+                        len(raw_cards),
+                        len(videos),
+                    )
+
+                    if len(videos) >= limit:
+                        break
+
+                    # Scroll down to load more
+                    with contextlib.suppress(Exception):
+                        page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
+                    time.sleep(USER_LIST_SCROLL_PAUSE)
+
+            finally:
+                with contextlib.suppress(Exception):
+                    page.close()
+                if owns_browser:
+                    with contextlib.suppress(Exception):
+                        context.close()
+                else:
+                    with contextlib.suppress(Exception):
+                        browser.close()
+    except Exception as exc:
+        logger.error("douyin %s scrape failed: %s", list_type, exc, exc_info=True)
+        return []
+
+    return videos
+
+
 def _require_playwright() -> Any:
     """Lazy-import ``playwright.sync_api`` with a helpful error message."""
     try:
@@ -785,16 +1030,29 @@ def _run_once(
     cdp_port: int | None,
     login_mode: bool,
     jingxuan_mode: bool = False,
+    user_list_mode: str | None = None,
 ) -> dict[str, Any]:
-    """One full fetch cycle. Returns a summary dict."""
+    """One full fetch cycle. Returns a summary dict.
+
+    Args:
+        user_list_mode: ``"like"``, ``"favorite"``, or ``None`` (default
+            recommend feed).
+    """
     if login_mode:
         _fetch_feed(limit=1, headless=False, cdp_port=cdp_port, login_mode=True)
         return {"ok": True, "login_mode": True}
 
-    source = "douyin-jingxuan" if jingxuan_mode else "douyin-recommend"
-    if jingxuan_mode:
+    if user_list_mode == "like":
+        source = "douyin-likes"
+        videos = _fetch_user_list("like", limit=limit, headless=headless, cdp_port=cdp_port)
+    elif user_list_mode == "favorite":
+        source = "douyin-favorites"
+        videos = _fetch_user_list("favorite", limit=limit, headless=headless, cdp_port=cdp_port)
+    elif jingxuan_mode:
+        source = "douyin-jingxuan"
         videos = _fetch_jingxuan(limit=limit, headless=headless, cdp_port=cdp_port)
     else:
+        source = "douyin-recommend"
         videos = _fetch_feed(limit=limit, headless=headless, cdp_port=cdp_port, login_mode=False)
 
     if not videos:
@@ -828,9 +1086,15 @@ def run_forever(
     headless: bool,
     cdp_port: int | None,
     jingxuan_mode: bool = False,
+    user_list_mode: str | None = None,
 ) -> None:
     """Main loop: fetch every ``interval_hours`` hours."""
-    feed_label = "jingxuan" if jingxuan_mode else "recommend"
+    if user_list_mode:
+        feed_label = user_list_mode
+    elif jingxuan_mode:
+        feed_label = "jingxuan"
+    else:
+        feed_label = "recommend"
     logger.info(
         "douyin %s feed producer started "
         "(headless=%s, cdp_port=%s, interval=%dh, limit=%d, dry_run=%s)",
@@ -849,6 +1113,7 @@ def run_forever(
             cdp_port=cdp_port,
             login_mode=False,
             jingxuan_mode=jingxuan_mode,
+            user_list_mode=user_list_mode,
         )
         if result["ok"]:
             logger.info(
@@ -907,10 +1172,27 @@ def _main() -> None:
         action="store_true",
         help="Scrape the 精选 (jingxuan) public grid feed instead of personalized recommend.",
     )
+    parser.add_argument(
+        "--likes",
+        action="store_true",
+        help="Scrape the user's liked videos (requires login).",
+    )
+    parser.add_argument(
+        "--favorites",
+        action="store_true",
+        help="Scrape the user's favorited/collected videos (requires login).",
+    )
     args = parser.parse_args()
 
     global _DRY_RUN
     _DRY_RUN = args.dry_run
+
+    # Determine user list mode
+    user_list_mode: str | None = None
+    if args.likes:
+        user_list_mode = "like"
+    elif args.favorites:
+        user_list_mode = "favorite"
 
     logging.basicConfig(
         level=logging.INFO,
@@ -930,6 +1212,7 @@ def _main() -> None:
             cdp_port=args.cdp_port,
             login_mode=False,
             jingxuan_mode=args.jingxuan,
+            user_list_mode=user_list_mode,
         )
         if result["ok"]:
             logger.info(
@@ -948,6 +1231,7 @@ def _main() -> None:
         headless=args.headless,
         cdp_port=args.cdp_port,
         jingxuan_mode=args.jingxuan,
+        user_list_mode=user_list_mode,
     )
 
 
