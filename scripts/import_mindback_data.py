@@ -6,7 +6,8 @@
   --xhs        xhs_data/             (小红书推荐流, ~43000条)
   --v2ex-hot   v2ex-hot-hub/data/   (V2EX每日热门, ~5555条, 含正文→同时进articles)
   --zhihu      zhihu/recommend-cache/ (知乎推荐缓存, ~1329文件)
-  --all        导入以上全部
+  --zhihu-static  知乎静态网站JSON目录 (~9762篇文章, 含完整正文→同时进articles)
+  --all        导入以上全部(不含zhihu-static)
 
 用法:
   python scripts/import_mindback_data.py --bilibili --dry-run
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 # ── 路径配置 ──────────────────────────────────────────────
 MINDBACK_BASE = "/Volumes/未命名/未命名文件夹/2026年04月27日-备份项目/2026年05月09日-SQLiteDB/mindback_data"
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
+ZHIHU_STATIC_DIR = "/Volumes/固态硬盘1T/002-探索项目/031-静态网站/zhihu"
 
 BATCH_SIZE = 500  # 批量插入大小
 
@@ -406,6 +408,108 @@ def import_zhihu(dry_run: bool = False, limit: int = 0) -> dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════
+#  zhihu-static (知乎静态网站JSON, 含完整正文)
+# ══════════════════════════════════════════════════════════
+
+def import_zhihu_static(dry_run: bool = False, limit: int = 0) -> dict[str, Any]:
+    """导入知乎静态网站JSON目录下的文章（含完整正文→同时进articles）。"""
+    pattern = os.path.join(ZHIHU_STATIC_DIR, "*.json")
+    files = sorted(glob.glob(pattern))
+    if not files:
+        return {"ok": False, "reason": "no_files", "source": "zhihu-static"}
+
+    logger.info("zhihu-static: 发现 %d 个 JSON 文件", len(files))
+
+    seen_ids: set[str] = set()
+    cache_rows: list[dict[str, Any]] = []
+    article_rows: list[dict[str, Any]] = []
+
+    for fpath in files:
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            logger.warning("zhihu-static: 跳过损坏文件 %s: %s", os.path.basename(fpath), exc)
+            continue
+
+        if not isinstance(data, list):
+            continue
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            cid = item.get("content_id")
+            if not cid or cid in seen_ids:
+                continue
+            seen_ids.add(str(cid))
+
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            content = (item.get("content_text") or "").strip()
+            desc = (item.get("desc") or "").strip()
+            author = (item.get("user_nickname") or "").strip()
+            url = (item.get("content_url") or "").strip()
+            created = item.get("created_time") or item.get("last_modify_ts") or 0
+            created_str = ""
+            if created:
+                try:
+                    created_str = datetime.fromtimestamp(int(created)).strftime("%Y-%m-%d %H:%M:%S")
+                except (ValueError, OSError, TypeError):
+                    pass
+
+            voteup = item.get("voteup_count", 0) or 0
+            comment = item.get("comment_count", 0) or 0
+            pk = f"zhihu_{cid}"
+
+            cache_rows.append({
+                "bvid": pk,
+                "content_id": str(cid),
+                "title": title,
+                "up_name": author,
+                "author_name": author,
+                "content_url": url,
+                "like_count": voteup,
+                "comment_count": comment,
+                "body_text": content[:3000] if content else "",
+                "description": (desc or content)[:200],
+                "source": "zhihu-static-articles",
+                "source_platform": "zhihu",
+                "content_type": "article",
+                "topic_group": item.get("source_keyword", "") or "",
+                "discovered_at": created_str or None,
+            })
+
+            if content:
+                article_rows.append({
+                    "source_type": "zhihu",
+                    "source_name": "知乎文章",
+                    "title": title,
+                    "url": url or f"https://zhuanlan.zhihu.com/p/{cid}",
+                    "author": author,
+                    "content_text": content[:20000],
+                    "published_at": created_str,
+                    "tags": json.dumps([item["source_keyword"]] if item.get("source_keyword") else [], ensure_ascii=False),
+                })
+
+            if limit and len(cache_rows) >= limit:
+                break
+        if limit and len(cache_rows) >= limit:
+            break
+
+    logger.info("zhihu-static: 解析到 %d 篇文章, %d 篇含正文", len(cache_rows), len(article_rows))
+    if dry_run:
+        return {"ok": True, "dry_run": True, "source": "zhihu-static",
+                "count": len(cache_rows), "with_body": len(article_rows),
+                "sample": cache_rows[:3]}
+
+    inserted = _batch_insert_content_cache(cache_rows)
+    art_inserted = _batch_insert_articles(article_rows)
+    return {"ok": True, "source": "zhihu-static", "parsed": len(cache_rows),
+            "inserted": inserted, "articles_inserted": art_inserted}
+
+
+# ══════════════════════════════════════════════════════════
 #  批量插入工具函数
 # ══════════════════════════════════════════════════════════
 
@@ -488,7 +592,8 @@ def main() -> None:
     parser.add_argument("--xhs", action="store_true", help="导入小红书推荐流")
     parser.add_argument("--v2ex-hot", action="store_true", help="导入 V2EX 每日热门（含正文）")
     parser.add_argument("--zhihu", action="store_true", help="导入知乎推荐缓存")
-    parser.add_argument("--all", action="store_true", help="导入以上全部")
+    parser.add_argument("--zhihu-static", action="store_true", help="导入知乎静态网站JSON(含完整正文)")
+    parser.add_argument("--all", action="store_true", help="导入以上全部(不含zhihu-static)")
     parser.add_argument("--dry-run", action="store_true", help="只解析不写入数据库")
     parser.add_argument("--limit", type=int, default=0, help="每个数据源最大导入条数（0=全部）")
     args = parser.parse_args()
@@ -504,6 +609,8 @@ def main() -> None:
         sources.append(("v2ex-hot", import_v2ex_hot))
     if args.all or args.zhihu:
         sources.append(("zhihu", import_zhihu))
+    if args.zhihu_static:
+        sources.append(("zhihu-static", import_zhihu_static))
 
     if not sources:
         parser.print_help()
