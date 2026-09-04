@@ -328,10 +328,10 @@ _READING_STATUS_SYNONYMS: dict[str, str] = {
     "归档": "archived", "archived": "archived",
 }
 _READING_VALID_STATUSES = frozenset({"unread", "reading", "finished", "archived"})
-# 口语填充词：规则回退里从关键词中剔除（LLM 路径自带去停用词能力）。
-_READING_STOPWORDS = frozenset(
-    "的 了 呢 吗 啊 我 你 帮 找 想 要 看 读 些 点 最近 有没有 推荐 一些".split()
-)
+# 与 /api/articles/facets 的真实来源分布对齐；LLM 只允许取这些值。
+_READING_VALID_SOURCE_TYPES = frozenset(_READING_SOURCE_SYNONYMS.values())
+# 口语填充字：规则回退里从关键词中剔除（LLM 路径自带去停用词能力）。
+_READING_STOPCHARS = set("的了呢吗啊我你帮找想要看读些点最近有没有推荐一些")
 
 
 def _rule_parse_reading_intent(q: str) -> dict[str, Any]:
@@ -371,7 +371,10 @@ def _rule_parse_reading_intent(q: str) -> dict[str, Any]:
     keywords: list[str] = []
     for raw in _re.split(r"[,，、;；\s]+", cleaned):
         token = raw.strip()
-        if not token or token in _READING_STOPWORDS:
+        if not token:
+            continue
+        # 整段只由口语填充字组成（如「想看」「最近的」残片）→ 丢，避免 LIKE 噪声。
+        if all(ch in _READING_STOPCHARS for ch in token):
             continue
         if token not in keywords:
             keywords.append(token)
@@ -10835,6 +10838,134 @@ Keep keywords focused and specific. Remove stop words."""
                 "reading": reading,
                 "profile": {"updates": profile_updates},
                 "tomorrow": tomorrow,
+                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+
+    @app.get("/api/reading/intent-search")
+    async def reading_intent_search(
+        q: str = "",
+        limit: int = 30,
+        source_type: str = "",
+        status: str = "",
+    ) -> JSONResponse:
+        """自然语言意图搜索阅读库：把口语查询解析成关键词 / 排除 / 来源 / 状态。
+
+        与旧的 ``/api/articles?q=`` 纯子串匹配不同，这里先「理解」查询：
+
+        - **主路径 LLM**：用 ``soul_engine.llm_ask`` 把 ``q`` 拆成
+          ``{keywords, exclude, source_type, status}``（能处理同义词、
+          「不要营销号」这类排除、「最近想读点轻松的」这类口语）。
+        - **规则回退**：LLM 不可用 / 未配置 / 解析失败时走
+          :func:`_rule_parse_reading_intent`，按词表剥离来源、状态与
+          「不要 X」排除，剩余作关键词。
+        - 关键词并集检索（复用 FTS ``search_articles``）→ 排除过滤 →
+          按兴趣画像契合度（``_article_fit_score``）重排。
+
+        显式传入的 ``source_type`` / ``status`` 覆盖模型推断值，保证与
+        前端来源页 / 状态下拉一致。返回附 ``intent`` 供前端回显「我理解成
+        了什么」，让纠偏有据可依。
+        """
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        q = (q or "").strip()
+        limit = max(1, min(int(limit), 60))
+        if not q:
+            return JSONResponse({"ok": True, "items": [], "total": 0, "intent": {}})
+
+        intent: dict[str, Any] | None = None
+        soul_engine = getattr(ctx, "soul_engine", None)
+        llm_ask = getattr(soul_engine, "llm_ask", None) if soul_engine is not None else None
+        if callable(llm_ask) and len(q) >= 3:
+            with suppress(Exception):
+                sys_prompt = (
+                    "你是阅读库搜索的意图解析器。把用户的自然语言查询拆成结构化检索意图，"
+                    "只输出 JSON：{\"keywords\":[检索关键词],"
+                    "\"exclude\":[要排除的词，如『不要营销号』里的『营销号』],"
+                    "\"source_type\":来源或null,"
+                    "\"status\":unread|reading|finished|archived 之一或null}。"
+                    f"source_type 只能取这些值之一：{sorted(_READING_VALID_SOURCE_TYPES)}；"
+                    "不符合的填 null。keywords 用具体、聚焦的词，去掉停用词。"
+                )
+                raw = await llm_ask(sys_prompt, q)
+                if raw:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        kws = [
+                            str(k).strip()
+                            for k in (parsed.get("keywords") or [])
+                            if str(k).strip()
+                        ]
+                        exc = [
+                            str(e).strip()
+                            for e in (parsed.get("exclude") or [])
+                            if str(e).strip()
+                        ]
+                        src = str(parsed.get("source_type") or "").strip().lower()
+                        stt = str(parsed.get("status") or "").strip().lower()
+                        intent = {
+                            "keywords": kws[:6],
+                            "exclude": exc,
+                            "source_type": src if src in _READING_VALID_SOURCE_TYPES else "",
+                            "status": stt if stt in _READING_VALID_STATUSES else "",
+                            "llm_used": True,
+                        }
+        if intent is None:
+            intent = _rule_parse_reading_intent(q)
+
+        # 显式查询参数优先于模型推断，避免与前端筛选下拉打架。
+        if source_type.strip():
+            intent["source_type"] = source_type.strip().lower()
+        if status.strip():
+            intent["status"] = status.strip().lower()
+
+        src = intent["source_type"] or None
+        st = intent["status"] or None
+        terms = intent["keywords"] or [q]
+
+        merged: dict[int, dict[str, Any]] = {}
+        order: list[int] = []
+        per_term_limit = max(limit, 30)
+        for term in terms:
+            rows = database.search_articles(
+                q=term, limit=per_term_limit, offset=0,
+                source_type=src, status=st,
+            )
+            for row in rows:
+                try:
+                    rid = int(row.get("id"))
+                except (TypeError, ValueError):
+                    continue
+                if rid not in merged:
+                    merged[rid] = row
+                    order.append(rid)
+        items = [merged[rid] for rid in order]
+        items = _apply_reading_exclusions(items, intent.get("exclude") or [])
+
+        for item in items:
+            text = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("summary") or ""),
+                    str(item.get("tags") or ""),
+                ]
+            )
+            item["fit_score"] = _article_fit_score(text)
+        items.sort(
+            key=lambda it: (
+                float(it.get("fit_score") or 0.0),
+                str(it.get("published_at") or ""),
+            ),
+            reverse=True,
+        )
+        items = items[:limit]
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": items,
+                "total": len(items),
+                "intent": intent,
                 "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
         )

@@ -345,3 +345,61 @@ def test_daily_brief_endpoint_roundtrip(tmp_path) -> None:
         assert picked["fit_score"] > 0
     finally:
         os.environ.pop("OPENBILICLAW_PROJECT_ROOT", None)
+
+
+def test_rule_parse_reading_intent_helpers() -> None:
+    """意图解析纯函数：来源/状态/排除剥离 + 排除过滤。"""
+    from openbiliclaw.api.app import _apply_reading_exclusions, _rule_parse_reading_intent
+
+    intent = _rule_parse_reading_intent("知乎 北京古建筑 不要营销号")
+    assert intent["source_type"] == "zhihu"
+    assert intent["exclude"] == ["营销号"]
+    assert "北京古建筑" in intent["keywords"]
+    assert "营销号" not in intent["keywords"]
+
+    kept = _apply_reading_exclusions(
+        [
+            {"id": 1, "title": "某营销号水文", "summary": "", "tags": "[]", "author": "x"},
+            {"id": 2, "title": "胡同改造纪实", "summary": "", "tags": "[]", "author": "y"},
+        ],
+        ["营销号"],
+    )
+    assert [it["id"] for it in kept] == [2]
+
+
+def test_intent_search_endpoint_rule_fallback(tmp_path) -> None:
+    """无 LLM 时端点走规则回退：命中排除后不含被排词，附 intent 回显。"""
+    import os
+    import tempfile
+    from pathlib import Path as _Path
+
+    from fastapi.testclient import TestClient
+
+    from openbiliclaw.api.app import create_app
+    from openbiliclaw.config import Config, save_config
+
+    db = Database(tmp_path / "intent.db")
+    db.initialize()
+    db.upsert_article("zhihu", "知乎", "北京胡同改造纪实", "https://e/z1", tags=["城市更新"])
+    db.upsert_article("zhihu", "知乎", "营销号水文", "https://e/z2", tags=["营销号"])
+    db.upsert_article("rss", "观察站", "无关文章", "https://e/r1", tags=["科技"])
+
+    project_root = _Path(tempfile.mkdtemp()) / "rt"
+    os.environ["OPENBILICLAW_PROJECT_ROOT"] = str(project_root)
+    try:
+        save_config(Config(), project_root / "config.toml")
+        # soul_engine=object() 无 llm_ask → 强制规则回退
+        app = create_app(memory_manager=object(), database=db, soul_engine=object())
+        client = TestClient(app)
+        resp = client.get("/api/reading/intent-search", params={"q": "知乎 胡同 不要营销号"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["intent"]["llm_used"] is False
+        assert data["intent"]["source_type"] == "zhihu"
+        titles = [it["title"] for it in data["items"]]
+        assert "北京胡同改造纪实" in titles
+        assert "营销号水文" not in titles
+        assert all("营销号" not in t for t in titles)
+    finally:
+        os.environ.pop("OPENBILICLAW_PROJECT_ROOT", None)

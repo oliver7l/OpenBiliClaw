@@ -114,6 +114,17 @@
       margin: 0 auto;
     }
     .rl-empty { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 60px 0; }
+    /* 意图搜索回显条 */
+    .rl-intent-bar {
+      grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+      font-size: 13px; color: var(--muted);
+      border: 1px solid var(--line); border-left: 3px solid var(--accent);
+      border-radius: var(--radius); background: var(--panel); padding: 8px 14px; margin-bottom: 2px;
+    }
+    .rl-intent-lead { color: var(--accent); font-weight: 600; margin-right: 4px; white-space: nowrap; }
+    .rl-intent-k { color: var(--faint); white-space: nowrap; }
+    .rl-intent-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+    .rl-intent-none { color: var(--faint); font-style: italic; }
     .rl-card {
       border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
       padding: 14px 16px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
@@ -347,7 +358,7 @@
       <a class="rl-back-home" id="backHome" href="/library/" hidden>← 全部</a>
       <span class="rl-count" id="totalCount"></span>
       <form class="rl-search" id="searchForm" autocomplete="off">
-        <input id="q" type="search" placeholder="搜索标题 / 正文 / 标签 / 作者…" aria-label="搜索阅读库">
+        <input id="q" type="search" placeholder="说点什么，如「知乎 北京古建筑 不要营销号」…" aria-label="意图搜索阅读库">
         <button type="submit">搜索</button>
       </form>
       <select id="sortSel" class="rl-filter" aria-label="排序方式">
@@ -445,7 +456,7 @@
     };
     var STATUS_LABELS = { unread: "未读", reading: "在读", finished: "读完", archived: "归档", hidden: "已屏蔽" };
 
-    var state = { q: "", source: PLATFORM, status: "", tag: "", offset: 0, limit: 30, total: 0, current: [], random: true, sort: "", blocked: false };
+    var state = { q: "", source: PLATFORM, status: "", tag: "", offset: 0, limit: 30, total: 0, current: [], random: true, sort: "", blocked: false, intent: null };
     var readerState = { id: 0, article: null, notes: [], percent: 0, lastSave: 0 };
     var FONT_KEY = "rl-font-size";
 
@@ -581,6 +592,8 @@
     }
 
     function load() {
+      if (state.q && !state.blocked) { loadIntent(); return; }
+      state.intent = null;
       var isRandom = !state.q && state.random && !state.blocked;
       els.shuffleBtn.hidden = !isRandom;
       els.pager.hidden = isRandom;
@@ -595,6 +608,90 @@
       }).catch(function (e) {
         els.results.innerHTML = '<div class="rl-empty">加载失败：' + esc(e.message || e) + "</div>";
       });
+    }
+
+    /* 意图搜索：搜索框有内容时走这里，后端把口语查询解析成
+       关键词 / 排除 / 来源 / 状态再检索，命中结果按兴趣契合度重排。
+       结果上方回显「阿B 理解了什么」，便于判断是否需要纠偏。 */
+    function loadIntent() {
+      state.intent = null;
+      els.shuffleBtn.hidden = true;
+      els.pager.hidden = true;
+      els.results.innerHTML = '<div class="rl-empty">正在理解「' + esc(state.q) + "」…</div>";
+      var p = new URLSearchParams();
+      p.set("q", state.q);
+      p.set("limit", "30");
+      if (state.source) p.set("source_type", state.source);
+      if (state.status) p.set("status", state.status);
+      fetch("/api/reading/intent-search?" + p.toString()).then(function (r) { return r.json(); }).then(function (d) {
+        var items = d.items || [];
+        state.current = items;
+        state.total = items.length;
+        state.intent = d.intent || null;
+        renderIntent(items);
+        els.total.textContent = "· 意图搜索 " + items.length + " 篇";
+        window.scrollTo(0, 0);
+      }).catch(function (e) {
+        els.results.innerHTML = '<div class="rl-empty">搜索失败：' + esc(e.message || e) + "</div>";
+      });
+    }
+
+    function intentChips(list) {
+      var wrap = document.createElement("span");
+      wrap.className = "rl-intent-chips";
+      (list || []).forEach(function (t) {
+        var chip = document.createElement("span");
+        chip.className = "rl-tagchip";
+        chip.textContent = t;
+        wrap.appendChild(chip);
+      });
+      return wrap;
+    }
+
+    function renderIntent(items) {
+      els.results.innerHTML = "";
+      var bar = document.createElement("div");
+      bar.className = "rl-intent-bar";
+      var it = state.intent || {};
+      var lead = document.createElement("span");
+      lead.className = "rl-intent-lead";
+      lead.textContent = it.llm_used ? "阿B 理解：" : "按关键词理解：";
+      bar.appendChild(lead);
+      var parts = [];
+      if ((it.keywords || []).length) { parts.push(["关键词", intentChips(it.keywords)]); }
+      if ((it.exclude || []).length) { parts.push(["排除", intentChips(it.exclude)]); }
+      if (it.source_type) { parts.push(["来源", textChip(srcLabel(it.source_type))]); }
+      if (it.status) { parts.push(["状态", textChip(STATUS_LABELS[it.status] || it.status)]); }
+      if (!parts.length) {
+        var none = document.createElement("span");
+        none.className = "rl-intent-none";
+        none.textContent = "没解析出具体条件，按原文子串搜索";
+        bar.appendChild(none);
+      }
+      parts.forEach(function (kv, i) {
+        if (i) { bar.appendChild(document.createTextNode(" · ")); }
+        var lab = document.createElement("span");
+        lab.className = "rl-intent-k";
+        lab.textContent = kv[0] + " ";
+        bar.appendChild(lab);
+        bar.appendChild(kv[1]);
+      });
+      els.results.appendChild(bar);
+      if (!items.length) {
+        var empty = document.createElement("div");
+        empty.className = "rl-empty";
+        empty.textContent = "没有匹配「" + state.q + "」的内容，换个说法或去掉排除试试";
+        els.results.appendChild(empty);
+        return;
+      }
+      items.forEach(function (a) { els.results.appendChild(card(a)); });
+    }
+
+    function textChip(text) {
+      var chip = document.createElement("span");
+      chip.className = "rl-tagchip";
+      chip.textContent = text;
+      return chip;
     }
 
     function emptyText() {
