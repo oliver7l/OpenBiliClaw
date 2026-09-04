@@ -13,7 +13,7 @@ import sqlite3
 import time
 import urllib.request
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,8 @@ def _fetch_json(url: str) -> list[dict[str, Any]]:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with _DEFAULT_OPENER.open(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            parsed = json.loads(resp.read().decode("utf-8"))
+            return cast("list[dict[str, Any]]", parsed)
     except Exception as exc:
         logger.error("V2EX API request failed for %s: %s", url, exc)
         return []

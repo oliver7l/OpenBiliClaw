@@ -71,7 +71,7 @@ class InnerTubeConfig:
 
 def _scrapetube_search(query: str, limit: int) -> list[dict[str, Any]]:
     try:
-        import scrapetube  # type: ignore[import-untyped]
+        import scrapetube
 
         return [dict(v) for v in scrapetube.get_search(query, results_type="video", limit=limit)]
     except Exception as exc:

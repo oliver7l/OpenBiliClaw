@@ -390,6 +390,7 @@ class ExploreStrategy(DiscoveryStrategy):
         if not isinstance(parsed, dict) or not isinstance(parsed.get("domains"), list):
             return []
 
+        domains_raw = cast("list[object]", parsed["domains"])
         current_interests = {
             self._normalize_domain_key(interest_item.name)
             for interest_item in profile.preferences.interests[:10]
@@ -398,7 +399,7 @@ class ExploreStrategy(DiscoveryStrategy):
         anchor_set = self._interest_anchor_set(profile)
         domains: list[dict[str, object]] = []
         seen_domains: set[str] = set()
-        for item in parsed["domains"]:
+        for item in domains_raw:
             if not isinstance(item, dict):
                 continue
             domain = str(item.get("domain", "")).strip()

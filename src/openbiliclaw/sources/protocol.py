@@ -62,7 +62,7 @@ class SourceAdapter(Protocol):
     async def fetch(
         self,
         recipe: SourceRecipe,
-        profile: SoulProfile,
+        profile: SoulProfile | None = None,
         limit: int = 20,
     ) -> list[DiscoveredContent]:
         """Fetch content according to *recipe* and return normalised items.

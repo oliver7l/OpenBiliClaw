@@ -14,7 +14,7 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _load_sessdata() -> str | None:
     """Read SESSDATA from bili CLI credential file."""
     try:
         cred = json.loads(CREDENTIAL_PATH.read_text())
-        sessdata = cred.get("sessdata", "").strip()
+        sessdata: str = str(cred.get("sessdata", "")).strip()
         if sessdata:
             return sessdata
         logger.warning("credential file has no sessdata field")
@@ -72,7 +72,7 @@ def _fetch_feed() -> list[dict[str, Any]]:
         logger.warning("bilibili recommend API error: %s", data.get("message", "unknown"))
         return []
 
-    items = data.get("data", {}).get("item", [])
+    items: list[dict[str, Any]] = cast("list[dict[str, Any]]", data.get("data", {}).get("item", []))
     if not items:
         logger.info("bilibili recommend returned 0 items")
         return []

@@ -23,9 +23,16 @@ logger = logging.getLogger(__name__)
 class BilibiliAPIError(RuntimeError):
     """Raised when a Bilibili API request returns an application error."""
 
+    def __init__(self, message: str = "", code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class BilibiliAuthExpiredError(BilibiliAPIError):
     """Raised when Bilibili reports the current Cookie is logged out."""
+
+    def __init__(self, message: str = "", code: int | None = -101) -> None:
+        super().__init__(message, code=code)
 
 
 def _json_object(value: Any) -> dict[str, Any]:

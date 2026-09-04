@@ -17,7 +17,14 @@
 ## v0.3.166: 代码质量全面修复——ruff 清零 + mypy 大幅收敛（2026-09-04）
 
 - **ruff 全部清零**：从 195 个错误降至 0。包括 66 个自动修复（未使用导入/变量）、25 个非 E501 手动修复（SIM105 contextlib.suppress、SIM108 三元运算符、E702 分号多语句、F841 未使用变量、E741 歧义变量名、F601 字典重复 key、N806 函数内常量命名、TC003 类型检查导入、B023 闭包变量绑定）、16 个小文件 E501 行太长手动修复。大文件（app.py/database.py/refresh.py/cli.py）的 E501 在 `pyproject.toml` per-file-ignores 中标记，待后续重构拆分时统一处理。
-- **mypy 大幅收敛**：从 227 个错误降至 161（减少 66 个）。新增 `feedparser`/`rich`/`scrapetube`/`aiohttp` 的 ignore_missing_imports 配置；批量修复 65 个 `dict`/`set` 缺少类型参数错误（统一为 `dict[str, Any]` / `set[str]`），涉及 9 个 runtime producer 文件和 rag/retriever。剩余 161 个错误多为历史累积的复杂类型问题（BilibiliAPIError.code 属性、Returning Any、可选参数类型不匹配、JSONValue 联合类型迭代等），需后续逐模块深入修复。
+- **mypy 大幅收敛**：从 227 个错误降至 76（减少 151 个，减少 67%）。
+  - 配置层面：新增 `feedparser`/`rich`/`scrapetube`/`aiohttp`/`typer`/`claude_agent_sdk`/`google` 的 ignore_missing_imports；禁用 `cli.py` 和 `saved_sync_routes.py` 的 untyped-decorator 检查（第三方装饰器无类型存根）。
+  - 批量修复 65 个 `dict`/`set` 缺少类型参数错误（统一为 `dict[str, Any]` / `set[str]`），涉及 9 个 runtime producer 文件和 rag/retriever。
+  - `BilibiliAPIError`：添加 `code: int | None` 属性，`BilibiliAuthExpiredError` 默认 code=-101。
+  - `SourceAdapter.fetch`：将 `profile` 参数改为可选 `SoulProfile | None`，与 adapter 实现一致。
+  - Returning Any：修复多个 producer 中的返回类型问题（bili/v2ex/xhs/zhihu feed producer 添加 cast）。
+  - JSONValue 联合类型迭代：修复 explore.py 和 trending.py 中的类型 narrowing 问题（提取 `domains_raw`/`rids_raw` 变量并 cast）。
+- **剩余 76 个错误**：主要是 saved_sync 模块的 Database 方法缺失（约 30 个，需添加方法或修改调用）、storage/database.py 的 4 个错误、以及其他分散的类型问题，需后续逐模块深入修复。
 - **测试验证**：相关模块 290 个测试全部通过，无回归。
 
 ## v0.3.165: 虎扑搜索 API 集成——按关键词发现内容补充推荐池（2026-09-04）

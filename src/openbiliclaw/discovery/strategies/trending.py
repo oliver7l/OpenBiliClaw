@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from openbiliclaw.discovery.engine import (
     ContentDiscoveryEngine,
@@ -184,7 +184,8 @@ class TrendingStrategy(DiscoveryStrategy):
             # tolerantly instead of a bare json.loads.
             parsed = parse_llm_json_tolerant(str(getattr(response, "content", "")).strip())
             if isinstance(parsed, dict) and isinstance(parsed.get("rids"), list):
-                selected = [to_int(item) for item in parsed["rids"] if to_int(item) > 0]
+                rids_raw = cast("list[object]", parsed["rids"])
+                selected = [to_int(item) for item in rids_raw if to_int(item) > 0]
                 selected = self._dedupe_ints(selected)[: self.max_related_rids]
                 return [0, *selected]
         except Exception:

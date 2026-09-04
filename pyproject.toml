@@ -132,13 +132,27 @@ warn_unused_configs = true
 module = [
     "aiohttp",
     "aiohttp.*",
+    "claude_agent_sdk",
+    "claude_agent_sdk.*",
     "feedparser",
+    "google",
+    "google.*",
     "playwright.*",
     "rich.*",
     "scrapetube",
+    "typer",
+    "typer.*",
     "twitter_cli.*",
 ]
 ignore_missing_imports = true
+
+# CLI 和 saved_sync 路由大量使用 typer/FastAPI 装饰器，这些第三方装饰器无类型存根
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.cli",
+    "openbiliclaw.api.saved_sync_routes",
+]
+disable_error_code = ["untyped-decorator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

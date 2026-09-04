@@ -14,7 +14,7 @@ import sqlite3
 import subprocess
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,8 @@ def _fetch_feed() -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         logger.error("zhihu feed JSON parse error: %s", exc)
         return []
-    items = data.get("data", [])
+    raw_items = data.get("data", [])
+    items: list[dict[str, Any]] = cast("list[dict[str, Any]]", raw_items)
     if not items:
         logger.info("zhihu feed returned 0 items")
         return []
