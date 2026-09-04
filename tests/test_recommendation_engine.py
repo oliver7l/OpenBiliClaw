@@ -3207,6 +3207,8 @@ async def test_precompute_delight_scores_uses_llm_batch_scorer() -> None:
             temperature: float = 0.7,
             max_tokens: int = 4096,
             caller: str = "",
+            reasoning_effort: str | None = None,
+            inject_core_memory: bool = True,
         ) -> LLMResponse:
             return LLMResponse(
                 content=json.dumps(
