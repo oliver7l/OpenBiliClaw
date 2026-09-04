@@ -12,6 +12,17 @@
 
 ---
 
+---
+
+## v0.3.162: 虎扑步行街 (Buxingjie) 直接 HTTP 抓取 producer（2026-09-04）
+
+- **新数据源接入**：`runtime/hupu_feed_producer` 新增 `--bxj` 模式，通过直接 HTTP 抓取虎扑步行街主干道（`bbs.hupu.com/bxj`），无需登录或 API Key。每页 50 条，支持分页（`/bxj-2`、`/bxj-3`...），默认按最新回复排序。
+- **丰富字段**：每条帖子含标题、帖子 ID、回复数（→ `comment_count`）、浏览数（→ `view_count`）、作者名、作者 UID、发布时间、帖子 URL。比 CLI `hot` 模式（仅标题+链接）信息更完整。
+- **纯标准库实现**：使用 `urllib.request` 抓取 + 正则解析 HTML，不引入新依赖。`_parse_bxj_html` 基于 `<li class="bbs-sl-web-post-body">` 卡片结构解析，`_parse_int` 支持"万"单位和千分位逗号。
+- **`_insert_rows` 升级**：支持动态列插入，当行数据含 `reply_count` / `view_count` 时自动写入 `comment_count` / `view_count` 字段；旧版 DB 无这些列时自动回退到基础列。
+- **新增测试**：`tests/test_hupu_feed_producer.py` 新增 7 例（HTML 解析全字段、万单位解析、空输入降级、`_parse_int` 多格式、行规范化去重、分页 URL 常量），总计 13 例全过。ruff/mypy 干净。
+- **实测**：`--bxj --once --limit 50` 成功抓取并入库 50 条步行街帖子（最高回复 1548、浏览 93 万的"假如给你500万"帖）。
+
 ## v0.3.161: 抖音喜欢/收藏内容抓取 + 定时周期改为一天一抓（2026-09-04）
 
 - **新数据源接入**：`runtime/douyin_feed_producer` 新增 `--likes` 和 `--favorites` 两种模式，抓取用户登录态下的「喜欢」和「收藏」视频列表（各最近 50 条）。喜欢页直接导航 `?showTab=like`；收藏页需 JS 点击「收藏」tab 切换（URL 变为 `?showTab=favorite_collection`）。source 分别为 `douyin-likes` / `douyin-favorites`。
