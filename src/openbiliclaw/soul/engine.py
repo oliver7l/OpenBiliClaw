@@ -1633,14 +1633,21 @@ class SoulEngine:
         """Simple LLM ask method for ad-hoc queries.
 
         Sends a system + user message pair to the LLM and returns the text
-        response.  Used by the agent-recommend endpoint for intent extraction.
+        response.  Used by the agent-recommend endpoint and the reading
+        library intent search for intent extraction.
+
+        ``reasoning_effort=""`` disables the provider's chain-of-thought for
+        this call: intent parsing is a lightweight structured task and the
+        sensenova reasoning model otherwise spends 20s+ and hundreds of
+        thinking tokens (and, at low ``max_tokens``, returns empty content
+        with finish_reason=length). Disabling keeps it fast and cheap.
         """
-        from openbiliclaw.llm.service import ModuleOverride
-        override = ModuleOverride()
         result = await self._llm_service.complete_structured_task(
-            task_id="agent-recommend-intent",
-            system_prompt=system_prompt,
-            user_message=user_message,
-            override=override,
+            system_instruction=system_prompt,
+            user_input=user_message,
+            temperature=0.1,
+            caller="soul.llm_ask",
+            reasoning_effort="",
+            inject_core_memory=False,
         )
         return result.content if result else ""

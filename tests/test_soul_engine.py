@@ -1624,3 +1624,29 @@ def test_effective_disliked_topics_honors_specific_removal(tmp_path: Path) -> No
     effective = engine.get_effective_disliked_topics()
     assert "标题党" not in effective  # specific removal must reach the hard filter
     assert "低质内容" in effective
+
+
+def test_llm_ask_calls_complete_structured_task_with_valid_kwargs() -> None:
+    """回归：llm_ask 曾以 task_id/system_prompt/override 等不存在的关键字调用
+    complete_structured_task，每次抛 TypeError 被上层 suppress 吞掉 → LLM 意图
+    抽取静默永久失效。锁死正确参数名，防止退化。"""
+
+    captured: dict[str, object] = {}
+
+    class _FakeService:
+        async def complete_structured_task(self, **kwargs: object) -> LLMResponse:
+            captured.update(kwargs)
+            return LLMResponse(content='{"keywords":[]}', provider="openai")
+
+    class _Stub:  # 只需带 _llm_service 即可调用未绑定方法
+        _llm_service = _FakeService()
+
+    out = asyncio.run(SoulEngine.llm_ask(_Stub(), "SYS", "USR"))  # type: ignore[arg-type]
+    assert out == '{"keywords":[]}'
+    assert captured["system_instruction"] == "SYS"
+    assert captured["user_input"] == "USR"
+    assert captured.get("inject_core_memory") is False  # 解析任务不注入画像
+    assert captured.get("reasoning_effort") == ""  # 关思考链：快 + 省
+    # 绝不能再用旧错误参数
+    for bad in ("task_id", "system_prompt", "user_message", "override"):
+        assert bad not in captured
