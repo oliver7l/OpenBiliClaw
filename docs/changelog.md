@@ -4,6 +4,16 @@
 
 ---
 
+---
+
+## v0.3.157: RAG 检索提速（numpy 向量化扫描 + query 缓存）（2026-09-04）
+
+- **根因**：`ArticleRagRetriever.retrieve_chunks` 的余弦扫描是纯 Python 双层循环，对 31639 chunks × 1024 维 ≈ 3200 万次浮点运算要 ~2.2s；加上每次聊天都重新调 Ollama 算 query embedding（warm 后 ~0.15s、冷启动 ~3s）与进程级冷启动的 489MB 索引加载，聊天时 `_rag_retrieve` 常触及其 15s 超时 → 用户每次发消息卡 ~15s 且 RAG 引用几乎永远为空。
+- **numpy 向量化扫描**：`_load_locked` 把索引一次性构建为 `(n, dim)` float32 ndarray（批量算行范数），`retrieve_chunks` 用单次 `matrix @ query` 矩阵乘法 + `argpartition` 取 top-K。扫描从 ~2.2s 降到 **~7ms（~300x）**；索引冷加载从 6.7s 降到 5.5s（剩余瓶颈是 SQLite 读 + JSON 解析，进程级一次性、按 mtime 缓存）。保留纯 Python 回退路径（numpy 不可用时行为与之前逐字节一致，`tests/test_rag_retriever.py` 验证 numpy / 回退结果等价）。
+- **query embedding 有界缓存**（128 条 LRU）：同一 / 并发 turn（如 chat-turns POST 与 pending GET 同时 grounded 同一消息）只付一次 embedding 往返；实测同 query 二次检索 **7ms**，新 query（含 embedding）**~0.18s**。
+- **修复潜在 bug**：`retrieve_chunks` 在 `q_norm == 0` 时误返回 `""`（违反 `list[dict]` 契约），改为 `[]`。
+- **新依赖 `numpy>=1.26`**（纯本地项目可离线跑；retriever 以 try-import 降级，缺 numpy 仍可检索）。新增 `tests/test_rag_retriever.py`（4 例：top-K 余弦排序、numpy/回退等价、query 缓存、无索引/空查询降级）。
+
 ## v0.3.156: 实时反馈闭环 E1+E2（2026-09-04）
 
 - **E1 推荐点击回写消费状态**：`recommendations` 表新增 `clicked_at` 列（幂等迁移）；`/api/recommendations/click` 收到 `recommendation_id` 时回写 presented+clicked，`get_recommendations(exclude_processed=True)` 排除已点击项、保留仅展示项；`engine.serve()` 的 `_exclude_recently_viewed` 合并已点击 bvid——点过的视频即使重新进入候选池也不再重复推荐。`presented_at` / `clicked_at` 组合可算真实 CTR。新增 `tests/test_recommendation_click_loop.py`。

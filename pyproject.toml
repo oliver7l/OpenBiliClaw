@@ -41,6 +41,10 @@ dependencies = [
     "pydantic>=2.0",
     "apscheduler>=3.10",
     "uvicorn>=0.32",
+    # numpy accelerates the article-RAG cosine scan (~32M float ops → one
+    # vectorised matmul) and the cold index load; the retriever degrades to a
+    # pure-Python loop if numpy is unavailable.
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
