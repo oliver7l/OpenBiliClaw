@@ -110,6 +110,87 @@ def _rank_with_engine(
     return out
 
 
+async def _rank_with_llm_rerank(
+    candidates: list[CandidateItem],
+    *,
+    llm_service: Any,
+    profile: Any,
+    top_k: int = 30,
+    weight: float = 0.3,
+    batch_size: int = 5,
+    mmr_embeddings: dict[str, list[float]] | None = None,
+) -> list[CandidateItem]:
+    """Rank candidates with curator-style scores + LLM semantic rerank + MMR.
+
+    Mirrors the production ``serve()`` pipeline:
+    1. Use relevance_score as a curator-score proxy (offline eval has no
+       real PoolCurator, so relevance_score is the best available signal).
+    2. LLM rerank the top-K candidates against the user profile.
+    3. Blend curator + LLM scores.
+    4. MMR diversity selection (same as production).
+
+    Returns candidates in ranked order. On any LLM failure, falls back to
+    pure relevance-score ranking so the eval never crashes.
+    """
+    from openbiliclaw.recommendation.engine import RecommendationEngine
+    from openbiliclaw.recommendation.llm_reranker import LLMReranker, blend_scores
+
+    content = [_to_discovered_content(c) for c in candidates]
+    # Curator-score proxy: relevance_score from discovery evaluation
+    curator_scores = {
+        (getattr(c, "content_id", "") or getattr(c, "bvid", "")): float(
+            getattr(c, "relevance_score", 0.0) or 0.0
+        )
+        for c in content
+    }
+
+    try:
+        reranker = LLMReranker(
+            llm_service=llm_service,
+            batch_size=batch_size,
+            top_k=top_k,
+            weight=weight,
+        )
+        llm_scores = await reranker.rerank(
+            candidates=content,
+            profile=profile,
+            top_k=top_k,
+            curator_scores=curator_scores,
+        )
+        if llm_scores:
+            score_override = blend_scores(
+                curator_scores=curator_scores,
+                llm_scores=llm_scores,
+                weight=weight,
+            )
+            logger.info(
+                "LLM rerank eval: %d candidates scored, blended %d curator scores",
+                len(llm_scores),
+                len(score_override),
+            )
+        else:
+            score_override = curator_scores
+            logger.info("LLM rerank eval: LLM returned 0 scores, using pure relevance scores")
+    except Exception:
+        logger.exception("LLM rerank eval failed, falling back to pure relevance scores")
+        score_override = curator_scores
+
+    n = len(content)
+    ranked = RecommendationEngine._select_diversified_batch(
+        content,
+        limit=n,
+        score_override=score_override,
+        embeddings=mmr_embeddings,
+    )
+    by_id = {c.content_key.split(":", 1)[-1]: c for c in candidates}
+    out: list[CandidateItem] = []
+    for x in ranked:
+        item = by_id.get(x.content_id or x.bvid)
+        if item is not None:
+            out.append(item)
+    return out
+
+
 def _rank_random(candidates: list[CandidateItem], rng: random.Random) -> list[CandidateItem]:
     ranked = list(candidates)
     rng.shuffle(ranked)
@@ -198,5 +279,52 @@ def run_offline_eval(
         results.append(_to_result(unit, engine_ranked, method="engine"))
         if include_random_baseline:
             results.append(_to_result(unit, _rank_random(unit.candidates, rng), method="random"))
+    aggregated = _aggregate(results, k=k, embedding_store=embedding_store)
+    return {"k": k, "methods": aggregated}
+
+
+async def run_offline_eval_async(
+    units: list[EvalUnit],
+    *,
+    k: int = 10,
+    seed: int = 42,
+    include_random_baseline: bool = True,
+    mmr_embeddings: dict[str, list[float]] | None = None,
+    embedding_store: EmbeddingStore | None = None,
+    llm_service: Any = None,
+    profile: Any = None,
+    llm_rerank_top_k: int = 30,
+    llm_rerank_weight: float = 0.3,
+    llm_rerank_batch_size: int = 5,
+) -> dict[str, Any]:
+    """Async variant of :func:`run_offline_eval` with optional LLM rerank comparison.
+
+    When ``llm_service`` and ``profile`` are provided, an additional
+    ``engine+llm_rerank`` method is evaluated: curator-score proxy
+    (relevance_score) → LLM semantic rerank → blend → MMR diversity. This
+    lets you quantify the delta of enabling LLM rerank against the pure
+    engine baseline.
+
+    On LLM failure per-unit, that unit silently falls back to pure
+    relevance-score ranking (logged as warning) so the full eval completes.
+    """
+    results: list[UnitResult] = []
+    rng = random.Random(seed)
+    for unit in units:
+        engine_ranked = _rank_with_engine(unit.candidates, mmr_embeddings=mmr_embeddings)
+        results.append(_to_result(unit, engine_ranked, method="engine"))
+        if include_random_baseline:
+            results.append(_to_result(unit, _rank_random(unit.candidates, rng), method="random"))
+        if llm_service is not None and profile is not None:
+            llm_ranked = await _rank_with_llm_rerank(
+                unit.candidates,
+                llm_service=llm_service,
+                profile=profile,
+                top_k=llm_rerank_top_k,
+                weight=llm_rerank_weight,
+                batch_size=llm_rerank_batch_size,
+                mmr_embeddings=mmr_embeddings,
+            )
+            results.append(_to_result(unit, llm_ranked, method="engine+llm_rerank"))
     aggregated = _aggregate(results, k=k, embedding_store=embedding_store)
     return {"k": k, "methods": aggregated}

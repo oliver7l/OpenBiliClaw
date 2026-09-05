@@ -596,6 +596,11 @@ def _build_recommendation_engine() -> Any:
         database=database,
         embedding_service=embedding_service,
         xhs_self_info_provider=_xhs_self_info_provider,
+        # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
+        llm_reranker_enabled=bool(getattr(cfg.recommendation, "llm_reranker_enabled", False)),
+        llm_reranker_top_k=int(getattr(cfg.recommendation, "llm_reranker_top_k", 30)),
+        llm_reranker_weight=float(getattr(cfg.recommendation, "llm_reranker_weight", 0.3)),
+        llm_reranker_batch_size=int(getattr(cfg.recommendation, "llm_reranker_batch_size", 5)),
     )
 
 

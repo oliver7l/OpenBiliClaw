@@ -14,6 +14,67 @@
 
 ---
 
+## v0.3.172: 专题结构化导出 + SHA1去重 + 跨平台融合 + B站字幕抓取（2026-09-05）
+
+- feat: 新增 `src/openbiliclaw/topics/exporter.py`（18KB）——专题结构化管理三合一模块
+  - **结构化导出**：把数据库专题导出为 `data/topics/<slug>/` 文件结构（TOPIC.md + metadata.json + sources/<platform>/ + fusion_draft.md），可被外部 AI 直接读取
+  - **SHA1 指纹去重**：`compute_content_hash()` + `ensure_content_hash_column()` + `is_duplicate()`，articles 表新增 content_hash 列+索引，入库前自动去重
+  - **跨平台融合**：`fuse_topic_content()` 按平台分组提取关键词，找交叉主题锚点（出现在≥2个平台），生成 fusion_draft.md 融合草稿
+  - 全局自动生成 `data/topics/INDEX.md`（主索引）和 `AGENTS.md`（AI读取指南）
+- feat: 新增 `scripts/export_topics.py`——专题导出脚本，支持 --slug/--output/--no-content/--no-fusion/--backfill-hashes
+  - 已回填 21102 条 articles 的 content_hash
+  - 已导出 4 个专题共 1019 条内容到 data/topics/
+- feat: 新增 `src/openbiliclaw/bilibili/subtitle.py`（7KB）——B站字幕抓取模块
+  - 只抓字幕，不下载视频文件，无字幕自动跳过
+  - 支持 AI 字幕（ai-zh）和人工字幕，需 B 站 cookie 才能获取 AI 字幕
+  - `BilibiliSubtitleFetcher` 异步上下文管理器，含 get_cid/list_subtitles/fetch_subtitle_content/fetch_subtitles/fetch_subtitle_text
+  - 字幕可导出为带时间戳或纯文本格式
+- feat: 新增 `scripts/fetch_bilibili_subtitles.py`——批量字幕抓取脚本
+  - **频率控制**：默认每次只抓 1 篇（--limit 1），非常低频，建议配合定时任务每天运行一次实现"一天一篇"
+  - 已有 content_text 的文章默认跳过（避免覆盖），支持 --overwrite
+  - 支持 --slug/--dry-run/--delay 参数
+  - 实测：BV1p14y1H7ae（计算广告实战）成功抓取 755 字 AI 字幕
+- verify: ruff 0 错误，mypy 0 错误
+
+## v0.3.171: 对话式推荐原型——生成式推荐第二步（2026-09-05）
+
+- feat: 新增 `src/openbiliclaw/recommendation/chat_recommender.py`（16KB）——完整的对话式推荐模块
+  - `ChatIntent`：结构化意图数据（recommend/more/refresh/explain/filter/greeting/other）
+  - `parse_chat_intent()`：LLM 结构化意图解析 + 关键词正则 fallback（无 LLM 也能用）
+  - `ChatSession`：轻量对话状态（历史、上批推荐、累积筛选条件、轮次计数）
+  - `generate_chat_response()`：LLM 驱动的自然语言回复 + 模板 fallback，永远包含真实推荐数据
+  - `chat_recommend()`：端到端一轮对话推荐（解析意图 → 累积筛选 → 调用 engine.serve() → 生成回复 → 更新状态）
+- feat: 支持多轮对话语义："再来几个"自动排除已展示内容、"讲讲第二个"复用上次推荐、"B站视频"累积平台筛选
+- feat: 全链路降级：LLM 不可用 → 关键词解析 + 模板回复；engine 失败 → 友好提示；永远不崩溃
+- test: 新增 `tests/test_chat_recommender.py`（25 个测试）——关键词解析 9 个、LLM 解析 3 个、Session 2 个、模板回复 4 个、端到端 6 个、辅助方法 1 个，全部通过
+- verify: ruff 0 错误，mypy 0 错误，25 个测试全绿
+
+## v0.3.170: 离线评估脚本支持 LLM 精排对比 + 小规模验证通过（2026-09-05）
+
+- feat: `scripts/run_offline_eval.py` 新增 `--llm-rerank` 选项——自动构建 LLM 服务 + SoulEngine 画像，调用 `run_offline_eval_async` 输出 `engine+llm_rerank` 对比方法
+- feat: 新增 `--llm-rerank-top-k` / `--llm-rerank-weight` / `--llm-rerank-batch-size` 参数，支持精排参数调优
+- verify: 小规模真实数据验证通过（3 units × 8 candidates，2192 正样本，4468 候选池）——LLM 精排正常调用，无崩溃，ndcg@5=0.7603 与纯 engine 持平（未损害质量）
+- note: 小规模评估中 top_k=8 覆盖全部候选，LLM 精排无筛选空间；更大候选池（20+）才能体现精排效果差异
+
+## v0.3.169: LLM 精排离线评估集成——量化生成式推荐效果（2026-09-05）
+
+- feat: 离线评估 runner 新增 `_rank_with_llm_rerank()` 异步函数——完整复现生产 serve() 流水线：relevance_score 作为 curator 代理 → LLM 语义精排 top-K → blend_scores 融合 → MMR 多样性选择
+- feat: 新增 `run_offline_eval_async()` 异步入口——支持 `llm_service` + `profile` 参数，额外输出 `engine+llm_rerank` 方法对比，可直接量化 LLM 精排 vs 纯 engine 的 NDCG/HR/MRR/AUC/多样性指标差异
+- feat: LLM 失败安静降级——每个 unit 的 LLM 调用失败时自动回退纯 relevance_score 排序，不影响整体评估完成
+- test: 新增 4 个离线评估测试（llm_rerank 方法包含 / 无 llm_service 跳过 / LLM 失败降级 / LLM 精排不损害 NDCG），全部通过
+- verify: 离线评估 pipeline 8 个测试全部通过，ruff 0 错误
+
+## v0.3.168: LLM 语义精排模块——生成式推荐第一步（2026-09-05）
+
+- feat: 新增 `recommendation/llm_reranker.py`——LLMReranker 类，在 curator 评分之后、MMR 多样性选择之前插入 LLM 语义精排层。支持批量调用（batch_size=5）、top-K 候选限制（默认30）、评分融合（weight=0.3）、失败安静降级（LLM 是增强不是硬依赖）
+- feat: 新增 `blend_scores()` 函数——curator 评分与 LLM 评分加权融合，支持只在一方有评分的候选、评分 clamp 到 0-1
+- feat: config 新增 4 个配置项：`llm_reranker_enabled`（默认关闭）、`llm_reranker_top_k`（默认30）、`llm_reranker_weight`（默认0.3）、`llm_reranker_batch_size`（默认5），TOML 导出同步更新
+- feat: engine.py serve() 集成——curator 评分后调用 `reranker.rerank()` 获取 LLM 评分，`blend_scores()` 融合后传给 `_select_diversified_batch()`。3 个创建点（runtime_context / bootstrap / cli）同步传入配置
+- design: 评分维度 4 项——语义相关性(40%)、时效性与情境匹配(20%)、内容质量与深度(20%)、新鲜感与惊喜度(20%)。prompt 要求同一批候选至少 2 个低于 0.5，避免全高分
+- design: 成本估算——6 LLM calls/refresh × ~¥0.01 = ~¥0.06/cycle, ~¥0.48/day（top_k=30, batch_size=5）
+- test: 新增 40 个单元测试（blend_scores 8个 / extract_entries 9个 / profile_summary 7个 / init 5个 / rerank 11个），全部通过
+- verify: recommendation 相关测试 172 个全部通过，ruff 0 错误，mypy 0 错误
+
 ## v0.3.167: 离线评估 embedding 级多样性指标（2026-09-05）
 
 - feat: 新增 `eval/offline/embedding_store.py`——从 `embedding_cache.db` 加载内容向量，支持按标题查找、批量查找、覆盖率统计，自动 L2 归一化

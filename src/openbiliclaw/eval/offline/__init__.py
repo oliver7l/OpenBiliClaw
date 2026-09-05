@@ -25,7 +25,7 @@ from .ground_truth import (
     positive_pool_from_candidates,
 )
 from .metrics import auc, hr_at_k, mrr, ndcg_at_k, style_coverage, topic_coverage, topic_ils
-from .runner import run_offline_eval
+from .runner import run_offline_eval, run_offline_eval_async
 from .scenario import EvalUnit, build_units
 
 __all__ = [
@@ -48,6 +48,7 @@ __all__ = [
     "normalize_bvid",
     "positive_pool_from_candidates",
     "run_offline_eval",
+    "run_offline_eval_async",
     "style_coverage",
     "to_content_key",
     "topic_coverage",

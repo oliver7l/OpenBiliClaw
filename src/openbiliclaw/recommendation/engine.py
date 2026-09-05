@@ -243,6 +243,10 @@ class RecommendationEngine:
         task_registry: BackgroundTaskRegistry | None = None,
         xhs_self_info_provider: Callable[[], dict[str, object] | None] | None = None,
         expression_batch_concurrency: int = _DEFAULT_EXPRESSION_BATCH_CONCURRENCY,
+        llm_reranker_enabled: bool = False,
+        llm_reranker_top_k: int = 30,
+        llm_reranker_weight: float = 0.3,
+        llm_reranker_batch_size: int = 5,
     ) -> None:
         self._llm = llm
         self._database = database
@@ -250,6 +254,13 @@ class RecommendationEngine:
         self._embedding_service = embedding_service
         self._xhs_self_info_provider = xhs_self_info_provider
         self._expression_batch_concurrency = max(1, min(16, int(expression_batch_concurrency)))
+        # v0.4.0+: LLM semantic reranker (generative recommendation, step 1).
+        # Inserts between curator scoring and diversity selection. Off by
+        # default — opt in via config [recommendation] llm_reranker_enabled.
+        self._llm_reranker_enabled = llm_reranker_enabled
+        self._llm_reranker_top_k = max(1, int(llm_reranker_top_k))
+        self._llm_reranker_weight = max(0.0, min(1.0, float(llm_reranker_weight)))
+        self._llm_reranker_batch_size = max(1, int(llm_reranker_batch_size))
         # v0.3.63+: optional registry for detached fire-and-forget tasks
         # (classify_pool_backlog_detached, precompute_delight_scores_detached).
         # When provided, those tasks register here so RuntimeContext's
@@ -474,6 +485,49 @@ class RecommendationEngine:
                 quality_scores=quality_scores,
             )
             amplification_guard = context.over_budget_amplification_keys
+
+        # v0.4.0+: LLM semantic reranker (generative recommendation, step 1).
+        # Inserts between curator scoring and MMR diversity selection. Only
+        # reranks the top-K candidates to keep cost manageable; blends with
+        # curator score so a bad LLM call cannot destroy ranking stability.
+        # Off by default — opt in via config [recommendation] llm_reranker_enabled.
+        if self._llm_reranker_enabled and candidates and score_override is not None:
+            try:
+                from openbiliclaw.recommendation.llm_reranker import LLMReranker, blend_scores
+
+                reranker = LLMReranker(
+                    llm_service=self._llm,
+                    batch_size=self._llm_reranker_batch_size,
+                    top_k=self._llm_reranker_top_k,
+                    weight=self._llm_reranker_weight,
+                )
+                llm_scores = await reranker.rerank(
+                    candidates=candidates,
+                    profile=profile,
+                    top_k=self._llm_reranker_top_k,
+                    curator_scores=score_override,
+                )
+                if llm_scores:
+                    before_count = len(score_override)
+                    score_override = blend_scores(
+                        curator_scores=score_override,
+                        llm_scores=llm_scores,
+                        weight=self._llm_reranker_weight,
+                    )
+                    logger.info(
+                        "LLM rerank applied: %d candidates scored, "
+                        "blended %d curator scores (weight=%.2f)",
+                        len(llm_scores),
+                        before_count,
+                        self._llm_reranker_weight,
+                    )
+                else:
+                    logger.info(
+                        "LLM rerank returned 0 scores (LLM failure or all "
+                        "omitted); using pure curator scores"
+                    )
+            except Exception:
+                logger.exception("LLM rerank failed; falling back to pure curator scores")
 
         # v0.3.44+: pre-fetch embeddings for MMR-based diversification.
         # In v0.3.45+ discovery and classify_pool_backlog warm these into

@@ -20,6 +20,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -31,11 +32,64 @@ from openbiliclaw.eval.offline import (  # noqa: E402
     load_positive_samples,
     positive_pool_from_candidates,
     run_offline_eval,
+    run_offline_eval_async,
 )
 from openbiliclaw.eval.offline.report import render_json, render_markdown  # noqa: E402
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("offline_eval")
+
+
+def _run_eval_with_llm_rerank(
+    *,
+    units: list[Any],
+    k: int,
+    seed: int,
+    include_random_baseline: bool,
+    embedding_store: Any,
+    top_k: int,
+    weight: float,
+    batch_size: int,
+) -> dict[str, Any]:
+    """Build LLM service + soul profile, then run async eval with LLM rerank."""
+    import asyncio
+
+    from openbiliclaw.config import load_config
+    from openbiliclaw.llm import build_llm_registry
+    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
+    from openbiliclaw.memory.manager import MemoryManager
+    from openbiliclaw.soul.engine import SoulEngine
+
+    cfg = load_config()
+    memory = MemoryManager(data_dir=PROJECT_ROOT / "data")
+    registry = build_llm_registry(cfg)
+    llm_service = LLMService(
+        registry=registry,
+        memory=memory,
+        module_overrides=module_overrides_from_config(cfg),
+        concurrency=cfg.llm.concurrency,
+    )
+    soul_engine = SoulEngine(memory=memory, llm=llm_service)
+    profile = asyncio.run(soul_engine.get_profile())
+    logger.info(
+        "LLM rerank eval: profile loaded (top_interests=%d, current_focus=%s)",
+        len(getattr(profile, "top_interests", []) or []),
+        getattr(profile, "current_focus", "n/a"),
+    )
+    return asyncio.run(
+        run_offline_eval_async(
+            units,
+            k=k,
+            seed=seed,
+            include_random_baseline=include_random_baseline,
+            embedding_store=embedding_store,
+            llm_service=llm_service,
+            profile=profile,
+            llm_rerank_top_k=top_k,
+            llm_rerank_weight=weight,
+            llm_rerank_batch_size=batch_size,
+        )
+    )
 
 
 def main() -> int:
@@ -63,6 +117,29 @@ def main() -> int:
         "--history",
         action="store_true",
         help="only print the run history (no new run)",
+    )
+    parser.add_argument(
+        "--llm-rerank",
+        action="store_true",
+        help="add engine+llm_rerank method (requires config.toml with LLM + soul profile)",
+    )
+    parser.add_argument(
+        "--llm-rerank-top-k",
+        type=int,
+        default=30,
+        help="LLM rerank top-K candidates (default 30)",
+    )
+    parser.add_argument(
+        "--llm-rerank-weight",
+        type=float,
+        default=0.3,
+        help="LLM rerank score weight (default 0.3)",
+    )
+    parser.add_argument(
+        "--llm-rerank-batch-size",
+        type=int,
+        default=5,
+        help="LLM rerank batch size (default 5)",
     )
     args = parser.parse_args()
 
@@ -125,13 +202,26 @@ def main() -> int:
         else:
             embedding_store = EmbeddingStore(args.embedding_db)
             logger.info("embedding metrics enabled (db=%s)", args.embedding_db)
-    eval_result = run_offline_eval(
-        units,
-        k=args.k,
-        seed=args.seed,
-        include_random_baseline=not args.no_random,
-        embedding_store=embedding_store,
-    )
+
+    if args.llm_rerank:
+        eval_result = _run_eval_with_llm_rerank(
+            units=units,
+            k=args.k,
+            seed=args.seed,
+            include_random_baseline=not args.no_random,
+            embedding_store=embedding_store,
+            top_k=args.llm_rerank_top_k,
+            weight=args.llm_rerank_weight,
+            batch_size=args.llm_rerank_batch_size,
+        )
+    else:
+        eval_result = run_offline_eval(
+            units,
+            k=args.k,
+            seed=args.seed,
+            include_random_baseline=not args.no_random,
+            embedding_store=embedding_store,
+        )
 
     meta = {
         "db": str(db_path),
@@ -146,8 +236,17 @@ def main() -> int:
         "n_negative_pool": len(negative_pool),
         "eval_after": args.eval_after or "none",
         "engine_ranking": "RecommendationEngine._select_diversified_batch",
-        "baselines": ["engine", "random"] if not args.no_random else ["engine"],
+        "baselines": (
+            ["engine", "engine+llm_rerank", "random"]
+            if args.llm_rerank and not args.no_random
+            else ["engine", "engine+llm_rerank"] if args.llm_rerank
+            else ["engine", "random"] if not args.no_random
+            else ["engine"]
+        ),
         "embedding_metrics": args.embedding_metrics,
+        "llm_rerank": args.llm_rerank,
+        "llm_rerank_top_k": args.llm_rerank_top_k if args.llm_rerank else None,
+        "llm_rerank_weight": args.llm_rerank_weight if args.llm_rerank else None,
     }
     assumptions = (
         "负样本为候选池未消费内容（选择偏差已披露）；时间切片开启时正样本仅取 eval_after 之后行为。"

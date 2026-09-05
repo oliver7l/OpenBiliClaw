@@ -511,6 +511,17 @@ class RuntimeContext:
             embedding_service=new_embedding_service,
             task_registry=self.task_registry,
             xhs_self_info_provider=_xhs_self_info_provider,
+            # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
+            llm_reranker_enabled=bool(
+                getattr(new_config.recommendation, "llm_reranker_enabled", False)
+            ),
+            llm_reranker_top_k=int(getattr(new_config.recommendation, "llm_reranker_top_k", 30)),
+            llm_reranker_weight=float(
+                getattr(new_config.recommendation, "llm_reranker_weight", 0.3)
+            ),
+            llm_reranker_batch_size=int(
+                getattr(new_config.recommendation, "llm_reranker_batch_size", 5)
+            ),
         )
 
         # 7. Discovery engine + strategies

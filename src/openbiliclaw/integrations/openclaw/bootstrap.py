@@ -133,6 +133,19 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         database=database,
         curator=curator,
         embedding_service=embedding_service,
+        # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
+        llm_reranker_enabled=bool(
+            getattr(getattr(config, "recommendation", None), "llm_reranker_enabled", False)
+        ),
+        llm_reranker_top_k=int(
+            getattr(getattr(config, "recommendation", None), "llm_reranker_top_k", 30)
+        ),
+        llm_reranker_weight=float(
+            getattr(getattr(config, "recommendation", None), "llm_reranker_weight", 0.3)
+        ),
+        llm_reranker_batch_size=int(
+            getattr(getattr(config, "recommendation", None), "llm_reranker_batch_size", 5)
+        ),
     )
     bilibili_client = BilibiliAPIClient(
         cookie=resolve_runtime_cookie(

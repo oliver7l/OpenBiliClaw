@@ -376,6 +376,24 @@ class RecommendationScoringConfig:
     # Dwell at or past this many seconds counts as an implicit positive reward.
     ts_deep_dwell_seconds: float = 60.0
 
+    # ── LLM semantic reranker (generative recommendation, step 1) ──
+    # Inserts an LLM semantic reranking layer between curator scoring and
+    # diversity selection. Only reranks the top-K candidates to keep cost
+    # manageable; blends with curator score so a bad LLM call cannot destroy
+    # ranking stability. Off by default — opt in via config or settings page.
+    llm_reranker_enabled: bool = False
+    # Only rerank the top-K candidates (sorted by curator score). 30 is a
+    # sweet spot: enough to meaningfully reorder the diversity-selected batch
+    # (typically 10-20), but small enough to keep cost low (~6 LLM calls).
+    llm_reranker_top_k: int = 30
+    # LLM score weight in the blended final score. 0.3 means:
+    # final = 0.7 * curator + 0.3 * LLM. Keeps curator stability as the
+    # anchor while letting the LLM shift ~30% of the ranking signal.
+    llm_reranker_weight: float = 0.3
+    # Number of candidates per LLM call. 5 keeps each prompt small
+    # (cache-friendly, fast) while amortising per-call HTTP overhead.
+    llm_reranker_batch_size: int = 5
+
 
 @dataclass
 class AutostartConfig:
@@ -1308,6 +1326,27 @@ def _build_recommendation(recommendation_raw: object) -> RecommendationScoringCo
             table.get("ts_deep_dwell_seconds"),
             default=60.0,
             max_value=600.0,
+        ),
+        # LLM semantic reranker (generative recommendation, step 1)
+        llm_reranker_enabled=_coerce_bool(
+            table.get("llm_reranker_enabled"),
+            default=False,
+        ),
+        llm_reranker_top_k=_normalize_scheduler_int(
+            table.get("llm_reranker_top_k"),
+            default=30,
+            min_value=1,
+            max_value=200,
+        ),
+        llm_reranker_weight=_normalize_unit_float(
+            table.get("llm_reranker_weight"),
+            default=0.3,
+        ),
+        llm_reranker_batch_size=_normalize_scheduler_int(
+            table.get("llm_reranker_batch_size"),
+            default=5,
+            min_value=1,
+            max_value=20,
         ),
     )
 
@@ -2418,6 +2457,14 @@ def _render_config_toml(
             f"ts_exploration_weight = {config.recommendation.ts_exploration_weight:g}",
             f"ts_exploitation_weight = {config.recommendation.ts_exploitation_weight:g}",
             f"ts_deep_dwell_seconds = {config.recommendation.ts_deep_dwell_seconds:g}",
+            "",
+            "# LLM 语义精排（生成式推荐第一步）：在 curator 评分之后、多样性选择之前，",
+            "# 用 LLM 对 top-K 候选做语义精排，与 curator 评分加权融合。",
+            "# 默认关闭：排序保持纯 curator 确定性评分。",
+            f"llm_reranker_enabled = {_toml_bool(config.recommendation.llm_reranker_enabled)}",
+            f"llm_reranker_top_k = {config.recommendation.llm_reranker_top_k}",
+            f"llm_reranker_weight = {config.recommendation.llm_reranker_weight:g}",
+            f"llm_reranker_batch_size = {config.recommendation.llm_reranker_batch_size}",
             "",
             *_autostart_lines(
                 config,
