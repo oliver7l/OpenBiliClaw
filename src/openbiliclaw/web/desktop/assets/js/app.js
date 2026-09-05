@@ -2526,8 +2526,17 @@
       const trigger = document.getElementById("filterDropdownTrigger");
       if (!menu || !trigger) return;
       const isOpen = !menu.hidden;
-      menu.hidden = isOpen;
-      trigger.setAttribute("aria-expanded", String(!isOpen));
+      if (isOpen) {
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      } else {
+        // position: fixed，动态计算触发按钮下方的位置
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+      }
     }
     function closeFilterDropdown() {
       const menu = document.getElementById("filterDropdownMenu");

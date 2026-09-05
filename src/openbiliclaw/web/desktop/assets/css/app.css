@@ -1477,9 +1477,7 @@
   font-weight: 500;
 }
 .filter-dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
+  position: fixed;
   z-index: 200;
   min-width: 140px;
   width: max-content;
