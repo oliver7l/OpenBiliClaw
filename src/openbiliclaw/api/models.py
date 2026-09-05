@@ -953,6 +953,22 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class ChatRecommendIn(BaseModel):
+    """Conversational recommendation request."""
+
+    message: str
+    session_id: str | None = None
+    limit: int = 5
+
+
+class ChatRecommendResponse(BaseModel):
+    """Conversational recommendation response."""
+
+    reply: str
+    session_id: str
+    recommendations: list[RecommendationOut] = Field(default_factory=list)
+
+
 class ChatTurnIn(BaseModel):
     """Durable popup chat turn request.
 

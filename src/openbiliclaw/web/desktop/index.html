@@ -268,8 +268,13 @@
             <h2>聊聊口味</h2>
             <p class="video-meta">告诉阿B你的偏好、边界和最近想看的方向。</p>
           </div>
+          <div class="chat-mode-switch" role="tablist" aria-label="聊天模式">
+            <button class="chat-mode-btn is-active" id="chatModeNormal" type="button" role="tab" aria-selected="true">普通聊天</button>
+            <button class="chat-mode-btn" id="chatModeRecommend" type="button" role="tab" aria-selected="false">对话式推荐</button>
+          </div>
         </div>
         <div class="chat-log" id="chatLog"></div>
+        <div class="chat-recommend-results" id="chatRecommendResults" hidden></div>
       <form class="chat-input" id="chatForm"><input id="chatInput" placeholder="说说你最近怎么想——你是什么样的人、喜欢什么、讨厌什么，都可以直接说。"><button class="pill-btn primary" type="submit">发送</button></form>
       </section>
 

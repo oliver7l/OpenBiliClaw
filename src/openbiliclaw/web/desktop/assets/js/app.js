@@ -18,6 +18,7 @@
       feedback: "/feedback",
       click: "/recommendation-click",
       chatTurns: "/chat/turns",
+      chatRecommend: "/chat/recommend",
       interestProbeRespond: "/interest-probes/respond",
       avoidanceProbeRespond: "/avoidance-probes/respond",
       insightFeedback: "/insights/feedback",
@@ -8218,7 +8219,90 @@
     safeBind("#searchInput", "input", (event) => { state.query = event.target.value || ""; renderAll(); });
     safeBind("#searchForm", "submit", (event) => { event.preventDefault(); state.query = $("#searchInput")?.value || ""; renderAll(); });
     window.addEventListener("resize", scheduleActivityRailHeightSync);
-    safeBind("#chatForm", "submit", (event) => { event.preventDefault(); const input = $("#chatInput"); const text = input?.value?.trim() || ""; if (!text) return; input.value = ""; sendChat(text); });
+    safeBind("#chatForm", "submit", (event) => {
+      event.preventDefault();
+      const input = $("#chatInput");
+      const text = input?.value?.trim() || "";
+      if (!text) return;
+      input.value = "";
+      if (state.chatMode === "recommend") {
+        sendChatRecommend(text);
+      } else {
+        sendChat(text);
+      }
+    });
+    // 聊聊口味：模式切换（普通聊天 / 对话式推荐）
+    state.chatMode = "normal";
+    state.chatRecommendSessionId = null;
+    safeBind("#chatModeNormal", "click", () => setChatMode("normal"));
+    safeBind("#chatModeRecommend", "click", () => setChatMode("recommend"));
+    function setChatMode(mode) {
+      state.chatMode = mode;
+      const normalBtn = $("#chatModeNormal");
+      const recommendBtn = $("#chatModeRecommend");
+      const input = $("#chatInput");
+      const results = $("#chatRecommendResults");
+      if (normalBtn) normalBtn.classList.toggle("is-active", mode === "normal");
+      if (recommendBtn) recommendBtn.classList.toggle("is-active", mode === "recommend");
+      if (normalBtn) normalBtn.setAttribute("aria-selected", String(mode === "normal"));
+      if (recommendBtn) recommendBtn.setAttribute("aria-selected", String(mode === "recommend"));
+      if (input) {
+        input.placeholder = mode === "recommend"
+          ? '说说你想看什么，比如"给我推荐几个广告算法视频"、"再来几个"、"讲讲第二个"'
+          : "说说你最近怎么想——你是什么样的人、喜欢什么、讨厌什么，都可以直接说。";
+      }
+      if (results) results.hidden = mode !== "recommend";
+    }
+    async function sendChatRecommend(message) {
+      state.chat.push({ role: "user", text: message });
+      state.chat.push({ role: "agent", text: "正在为你推荐..." });
+      renderChat();
+      try {
+        const result = await requestJson(ENDPOINTS.chatRecommend, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            session_id: state.chatRecommendSessionId,
+            limit: 5
+          })
+        });
+        if (result?.reply) {
+          state.chatRecommendSessionId = result.session_id;
+          state.chat[state.chat.length - 1] = { role: "agent", text: result.reply };
+          // 渲染推荐结果卡片
+          const resultsEl = $("#chatRecommendResults");
+          if (resultsEl && Array.isArray(result.recommendations) && result.recommendations.length > 0) {
+            resultsEl.hidden = false;
+            let html = '<div class="section-head"><h3>推荐内容</h3></div><div class="card-grid">';
+            result.recommendations.forEach((item) => {
+              const platform = item.source_platform || item.platform || "";
+              const author = item.up_name || item.author || "";
+              const url = item.content_url || item.url || "#";
+              const reason = item.expression || item.reason || "";
+              html += `
+                <article class="video-card is-minimal">
+                  <p class="video-card-title"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(item.title || "无标题")}</a></p>
+                  <div class="video-card-meta">
+                    ${author ? `<span class="video-card-author">${escapeHtml(author)}</span>` : ""}
+                    ${platform ? `<span class="video-card-tag">${escapeHtml(platform)}</span>` : ""}
+                  </div>
+                  ${reason ? `<p class="video-card-reason">${escapeHtml(reason)}</p>` : ""}
+                </article>
+              `;
+            });
+            html += "</div>";
+            resultsEl.innerHTML = html;
+          }
+        } else {
+          state.chat[state.chat.length - 1] = { role: "agent", text: "推荐出了点问题，稍后再试。" };
+        }
+      } catch (e) {
+        console.error("Chat recommend failed:", e);
+        state.chat[state.chat.length - 1] = { role: "agent", text: "推荐出了点问题，稍后再试。" };
+      }
+      renderChat();
+    }
     safeBind("#messageChatBackBtn", "click", returnToMessages);
     safeBind("#messageChatForm", "submit", (event) => {
       event.preventDefault();
