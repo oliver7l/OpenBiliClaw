@@ -11800,4 +11800,159 @@ Keep keywords focused and specific. Remove stop words."""
     if _topics_dir.is_dir():
         app.mount("/topics", _StaticFiles(directory=_topics_dir, html=True), name="topics-page")
 
+    # ── Self-Evolution (自进化) API endpoints ─────────────────────
+    # Auto-generated insights, interest drift detection, topic mining,
+    # knowledge cards, knowledge graph, and proactive push notifications.
+
+    from openbiliclaw.self_evolution import (
+        InsightReportGenerator,
+        InterestDriftDetector,
+        TopicMiner,
+        KnowledgeCardGenerator,
+        KnowledgeGraphBuilder,
+        ProactivePushEngine,
+        PushConfig,
+    )
+
+    _self_evo_db = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
+    _self_evo_llm = getattr(ctx, "llm_service", None)
+
+    @app.get("/api/self-evolution/insight-reports")
+    async def list_insight_reports(limit: int = 20):
+        """List saved insight reports."""
+        gen = InsightReportGenerator(_self_evo_db)
+        return {"reports": gen.list_reports(limit=limit)}
+
+    @app.post("/api/self-evolution/insight-reports/generate")
+    async def generate_insight_report(window_days: int = 7, include_llm: bool = True):
+        """Generate a new insight report."""
+        llm_svc = _self_evo_llm if include_llm else None
+        gen = InsightReportGenerator(_self_evo_db, llm_service=llm_svc)
+        report = gen.generate_report(window_days=window_days, include_llm_summary=include_llm)
+        gen.save_report(report)
+        return report.to_dict()
+
+    @app.get("/api/self-evolution/insight-reports/{report_id}")
+    async def get_insight_report(report_id: str):
+        """Get a specific insight report."""
+        gen = InsightReportGenerator(_self_evo_db)
+        report = gen.get_report(report_id)
+        if not report:
+            return {"error": "Report not found"}
+        return report
+
+    @app.get("/api/self-evolution/drift")
+    async def get_interest_drift(current_window_days: int = 7, previous_window_days: int = 30):
+        """Get interest drift analysis."""
+        detector = InterestDriftDetector(_self_evo_db)
+        report = detector.detect(
+            current_window_days=current_window_days,
+            previous_window_days=previous_window_days,
+        )
+        detector.save_report(report)
+        return report.to_dict()
+
+    @app.get("/api/self-evolution/topics")
+    async def get_mined_topics(window_days: int = 14):
+        """Get auto-mined topic candidates."""
+        miner = TopicMiner(_self_evo_db)
+        report = miner.mine(window_days=window_days)
+        miner.save_report(report)
+        return report.to_dict()
+
+    @app.get("/api/self-evolution/knowledge-cards")
+    async def list_knowledge_cards(limit: int = 50, card_type: str = None):
+        """List knowledge cards."""
+        gen = KnowledgeCardGenerator(_self_evo_db)
+        cards = gen.list_cards(limit=limit, card_type=card_type)
+        return {"cards": [c.to_dict() for c in cards], "total": len(cards)}
+
+    @app.post("/api/self-evolution/knowledge-cards/generate")
+    async def generate_knowledge_cards(article_id: int = None, limit: int = 20, max_per_article: int = 3):
+        """Generate knowledge cards from articles."""
+        gen = KnowledgeCardGenerator(_self_evo_db, llm_service=_self_evo_llm)
+        if article_id:
+            cards = gen.generate_cards_from_article(article_id, max_cards=max_per_article)
+        else:
+            cards = gen.generate_cards_batch(limit=limit, max_cards_per_article=max_per_article)
+        return {"cards": [c.to_dict() for c in cards], "generated": len(cards)}
+
+    @app.get("/api/self-evolution/knowledge-cards/due")
+    async def get_due_cards(limit: int = 20):
+        """Get knowledge cards due for review."""
+        gen = KnowledgeCardGenerator(_self_evo_db)
+        session = gen.create_review_session(limit=limit)
+        return session.to_dict()
+
+    @app.post("/api/self-evolution/knowledge-cards/{card_id}/review")
+    async def review_card(card_id: str, quality: int = 4):
+        """Record a card review and update scheduling."""
+        gen = KnowledgeCardGenerator(_self_evo_db)
+        card = gen.record_review(card_id, quality)
+        if not card:
+            return {"error": "Card not found"}
+        return card.to_dict()
+
+    @app.get("/api/self-evolution/knowledge-graph")
+    async def get_knowledge_graph(limit: int = 500, min_mentions: int = 2):
+        """Build and return the personal knowledge graph."""
+        builder = KnowledgeGraphBuilder(_self_evo_db)
+        graph = builder.build(limit=limit, min_mentions=min_mentions)
+        builder.save_graph(graph)
+        return graph.to_dict()
+
+    @app.get("/api/self-evolution/knowledge-graph/entity/{entity_id}")
+    async def get_entity_subgraph(entity_id: str, depth: int = 2, max_nodes: int = 50):
+        """Get a subgraph around a specific entity."""
+        builder = KnowledgeGraphBuilder(_self_evo_db)
+        graph = builder.load_latest_graph()
+        if not graph:
+            graph = builder.build(limit=500, min_mentions=2)
+        return graph.get_subgraph(entity_id, depth=depth, max_nodes=max_nodes)
+
+    @app.get("/api/self-evolution/notifications")
+    async def list_notifications(limit: int = 20, unread_only: bool = False):
+        """List push notifications."""
+        engine = ProactivePushEngine(_self_evo_db)
+        notifs = engine.get_notifications(limit=limit, unread_only=unread_only)
+        return {"notifications": [n.to_dict() for n in notifs], "total": len(notifs)}
+
+    @app.post("/api/self-evolution/notifications/check")
+    async def check_and_push(dry_run: bool = False):
+        """Check for high-value content and push notifications."""
+        config = PushConfig(enabled=True)
+        engine = ProactivePushEngine(_self_evo_db, config=config)
+        notifs = engine.check_and_push(dry_run=dry_run)
+        return {"notifications": [n.to_dict() for n in notifs], "count": len(notifs)}
+
+    @app.post("/api/self-evolution/notifications/{notification_id}/read")
+    async def mark_notification_read(notification_id: str):
+        """Mark a notification as read."""
+        engine = ProactivePushEngine(_self_evo_db)
+        engine.mark_as_read(notification_id)
+        return {"status": "ok"}
+
+    @app.post("/api/self-evolution/notifications/{notification_id}/dismiss")
+    async def dismiss_notification(notification_id: str):
+        """Dismiss a notification."""
+        engine = ProactivePushEngine(_self_evo_db)
+        engine.dismiss(notification_id)
+        return {"status": "ok"}
+
+    @app.get("/api/self-evolution/status")
+    async def self_evolution_status():
+        """Get self-evolution module status and stats."""
+        import sqlite3
+        conn = sqlite3.connect(_self_evo_db)
+        stats = {}
+        for table in ["insight_reports", "drift_reports", "topic_mining_reports",
+                       "knowledge_cards", "knowledge_graph", "push_notifications"]:
+            try:
+                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                stats[table] = count
+            except Exception:
+                stats[table] = 0
+        conn.close()
+        return {"status": "running", "stats": stats}
+
     return app
