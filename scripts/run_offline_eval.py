@@ -11,6 +11,7 @@ Usage:
         [--eval-after "2026-08-01 00:00:00"] [--no-random] \
         [--out-dir data/eval_runs]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,6 +48,16 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--eval-after", default=None, help="time-slice guard (ISO datetime)")
     parser.add_argument("--no-random", action="store_true", help="skip random baseline")
+    parser.add_argument(
+        "--embedding-metrics",
+        action="store_true",
+        help="compute embedding-level ILS (requires embedding_cache.db)",
+    )
+    parser.add_argument(
+        "--embedding-db",
+        default=str(PROJECT_ROOT / "data" / "embedding_cache.db"),
+        help="path to embedding_cache.db (used with --embedding-metrics)",
+    )
     parser.add_argument("--out-dir", default=str(PROJECT_ROOT / "data" / "eval_runs"))
     parser.add_argument(
         "--history",
@@ -95,14 +106,31 @@ def main() -> int:
         unit_size=args.unit_size,
         seed=args.seed,
     )
-    logger.info("built %d eval units (unit_size=%d, pos/unit=%d)", len(units), args.unit_size, args.pos_per_unit)
+    logger.info(
+        "built %d eval units (unit_size=%d, pos/unit=%d)",
+        len(units),
+        args.unit_size,
+        args.pos_per_unit,
+    )
 
     logger.info("running offline eval (k=%d)", args.k)
+    embedding_store = None
+    if args.embedding_metrics:
+        from openbiliclaw.eval.offline.embedding_store import EmbeddingStore
+
+        if not Path(args.embedding_db).exists():
+            logger.warning(
+                "embedding db not found: %s (embedding metrics skipped)", args.embedding_db
+            )
+        else:
+            embedding_store = EmbeddingStore(args.embedding_db)
+            logger.info("embedding metrics enabled (db=%s)", args.embedding_db)
     eval_result = run_offline_eval(
         units,
         k=args.k,
         seed=args.seed,
         include_random_baseline=not args.no_random,
+        embedding_store=embedding_store,
     )
 
     meta = {
@@ -119,8 +147,11 @@ def main() -> int:
         "eval_after": args.eval_after or "none",
         "engine_ranking": "RecommendationEngine._select_diversified_batch",
         "baselines": ["engine", "random"] if not args.no_random else ["engine"],
+        "embedding_metrics": args.embedding_metrics,
     }
-    assumptions = "负样本为候选池未消费内容（选择偏差已披露）；时间切片开启时正样本仅取 eval_after 之后行为。"
+    assumptions = (
+        "负样本为候选池未消费内容（选择偏差已披露）；时间切片开启时正样本仅取 eval_after 之后行为。"
+    )
 
     markdown = render_markdown(eval_result, meta=meta, assumptions=assumptions)
     json_text = render_json(eval_result, meta=meta)
@@ -200,7 +231,7 @@ def _print_trend(history: list[dict], highlight_run_id: str | None) -> None:
         def _f(v: float | None) -> str:
             return "n/a" if v is None else f"{v:.3f}"
 
-        row = f"{rec.get('run_id','?'):<18} {_f(ndcg):>8} {_f(mrr):>7} {_f(auc_v):>7} {_f(hr):>7}"
+        row = f"{rec.get('run_id', '?'):<18} {_f(ndcg):>8} {_f(mrr):>7} {_f(auc_v):>7} {_f(hr):>7}"
         if highlight_run_id and rec.get("run_id") == highlight_run_id:
             row += "  ← 本次"
         lines.append(row)

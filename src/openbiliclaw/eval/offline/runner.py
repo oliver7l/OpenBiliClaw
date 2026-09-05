@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from .metrics import auc, hr_at_k, mrr, ndcg_at_k, style_coverage, topic_coverage, topic_ils
 
 if TYPE_CHECKING:
+    from .embedding_store import EmbeddingStore
     from .ground_truth import CandidateItem
     from .scenario import EvalUnit
 
@@ -36,11 +37,12 @@ class UnitResult:
     ranked_labels: list[int]
     ranked_topics: list[str]
     ranked_styles: list[str]
+    ranked_titles: list[str]
     relevance_scores: list[float]
     n_positives: int
 
-    def metrics(self, k: int) -> dict[str, float]:
-        return {
+    def metrics(self, k: int, *, embedding_store: EmbeddingStore | None = None) -> dict[str, float]:
+        result = {
             f"hr@{k}": hr_at_k(self.ranked_labels, k),
             f"ndcg@{k}": ndcg_at_k(self.ranked_labels, k),
             "mrr": mrr(self.ranked_labels),
@@ -49,6 +51,18 @@ class UnitResult:
             "topic_ils": topic_ils(self.ranked_topics),
             "style_coverage": float(style_coverage(self.ranked_styles)),
         }
+        if embedding_store is not None:
+            from .embedding_store import embedding_ils
+
+            vectors = [
+                v for v in (embedding_store.get(t) for t in self.ranked_titles) if v is not None
+            ]
+            if vectors:
+                result["embedding_ils"] = embedding_ils(vectors)
+                result["embedding_coverage"] = (
+                    len(vectors) / len(self.ranked_titles) if self.ranked_titles else 0.0
+                )
+        return result
 
 
 def _to_discovered_content(item: CandidateItem, content_id: str | None = None) -> Any:
@@ -108,12 +122,14 @@ def _to_result(unit: EvalUnit, ranked: list[CandidateItem], method: str) -> Unit
     ranked_labels: list[int] = []
     ranked_topics: list[str] = []
     ranked_styles: list[str] = []
+    ranked_titles: list[str] = []
     scores: list[float] = []
     for item in ranked:
         ranked_keys.append(item.content_key)
         ranked_labels.append(label_by_key.get(item.content_key, 0))
         ranked_topics.append(item.topic_group)
         ranked_styles.append(item.style_key)
+        ranked_titles.append(item.title)
         scores.append(item.relevance_score)
     return UnitResult(
         unit_id=unit.unit_id,
@@ -122,12 +138,18 @@ def _to_result(unit: EvalUnit, ranked: list[CandidateItem], method: str) -> Unit
         ranked_labels=ranked_labels,
         ranked_topics=ranked_topics,
         ranked_styles=ranked_styles,
+        ranked_titles=ranked_titles,
         relevance_scores=scores,
         n_positives=unit.n_positives,
     )
 
 
-def _aggregate(results: list[UnitResult], k: int) -> dict[str, Any]:
+def _aggregate(
+    results: list[UnitResult],
+    k: int,
+    *,
+    embedding_store: EmbeddingStore | None = None,
+) -> dict[str, Any]:
     """mean±std across units per method."""
     by_method: dict[str, list[UnitResult]] = {}
     for r in results:
@@ -138,7 +160,7 @@ def _aggregate(results: list[UnitResult], k: int) -> dict[str, Any]:
         keys: list[str] = []
         per_unit: list[dict[str, float]] = []
         for r in rs:
-            m = r.metrics(k)
+            m = r.metrics(k, embedding_store=embedding_store)
             per_unit.append(m)
             keys.extend(m.keys())
         keys = sorted(set(keys))
@@ -166,6 +188,7 @@ def run_offline_eval(
     seed: int = 42,
     include_random_baseline: bool = True,
     mmr_embeddings: dict[str, list[float]] | None = None,
+    embedding_store: EmbeddingStore | None = None,
 ) -> dict[str, Any]:
     """Rank every unit with the engine (and random baseline), aggregate."""
     results: list[UnitResult] = []
@@ -175,5 +198,5 @@ def run_offline_eval(
         results.append(_to_result(unit, engine_ranked, method="engine"))
         if include_random_baseline:
             results.append(_to_result(unit, _rank_random(unit.candidates, rng), method="random"))
-    aggregated = _aggregate(results, k=k)
+    aggregated = _aggregate(results, k=k, embedding_store=embedding_store)
     return {"k": k, "methods": aggregated}

@@ -258,7 +258,7 @@
 
 1. **严格时间切片的画像重建**：当前 `--eval-after` 只过滤正样本行为，未重建「历史时刻」的画像快照（relevance_score 仍用全量画像）。完整做法是保存历史画像快照、按 T0 重建——留作后续。
 2. **OptimizationLoop 自动接入**：现有 `OptimizationLoop` 面向画像 prompt 优化，未强行耦合。当前迭代方式为「调参 → 重跑 CLI → 对比 index 趋势」，已是标准闭环；如需全自动调参可基于 `eval/loop.py` 扩展。
-3. **embedding 级 ILS / 新颖性**：MVP 用确定性 topic 重合度近似；embedding_cache 为标题级 key，需先建「内容↔embedding」映射再升级。
+3. **embedding 级 ILS / 新颖性**：✅ **已实现（v0.3.167）**。`eval/offline/embedding_store.py` 从 `embedding_cache.db` 加载向量，`embedding_ils` 基于余弦相似度计算列表内相似度，`embedding_novelty` 基于向量距离计算新颖性。CLI 通过 `--embedding-metrics` 启用。注意：embedding_cache 的 key 是文本内容（标题/描述），用候选的 `title` 字段查找，覆盖率取决于候选标题是否在 embedding_cache 中。
 
 ---
 

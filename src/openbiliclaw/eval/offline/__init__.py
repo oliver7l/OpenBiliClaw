@@ -9,11 +9,13 @@ Submodules:
 - ``ground_truth`` — positive/negative sample construction from real data.
 - ``scenario`` — eval-unit bootstrap sampling.
 - ``metrics`` — deterministic HR/NDCG/MRR/AUC + diversity metrics.
+- ``embedding_store`` — embedding cache lookup + embedding-level ILS/novelty.
 - ``runner`` — ranks units with the real engine selection logic.
 - ``report`` — Markdown/JSON report rendering.
 """
 
 from .content_key import content_key_from_url, normalize_bvid, to_content_key
+from .embedding_store import EmbeddingStore, cosine_similarity, embedding_ils, embedding_novelty
 from .ground_truth import (
     CandidateItem,
     PositiveSample,
@@ -28,12 +30,16 @@ from .scenario import EvalUnit, build_units
 
 __all__ = [
     "CandidateItem",
+    "EmbeddingStore",
     "EvalUnit",
     "PositiveSample",
     "auc",
     "build_negative_pool",
     "build_units",
     "content_key_from_url",
+    "cosine_similarity",
+    "embedding_ils",
+    "embedding_novelty",
     "hr_at_k",
     "load_candidate_pool",
     "load_positive_samples",

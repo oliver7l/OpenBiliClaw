@@ -14,6 +14,15 @@
 
 ---
 
+## v0.3.167: 离线评估 embedding 级多样性指标（2026-09-05）
+
+- feat: 新增 `eval/offline/embedding_store.py`——从 `embedding_cache.db` 加载内容向量，支持按标题查找、批量查找、覆盖率统计，自动 L2 归一化
+- feat: 新增 embedding 级指标：`embedding_ils`（基于向量余弦相似度的列表内相似度，替代 topic 重合度近似）、`embedding_novelty`（基于向量距离的新颖性）、`cosine_similarity`
+- feat: runner 集成 embedding 级指标——`UnitResult.metrics(embedding_store=...)` 和 `run_offline_eval(embedding_store=...)`，自动计算 `embedding_ils` 和 `embedding_coverage`（有向量的候选占比）
+- feat: CLI 新增 `--embedding-metrics` 和 `--embedding-db` 参数，启用 embedding 级多样性评估
+- test: 新增 19 个单元测试（cosine_similarity / embedding_ils / embedding_novelty / EmbeddingStore / runner 集成），全部通过
+- 离线评估测试总数：31 个（原 12 + 新 19），ruff 0 错误，mypy 0 错误
+
 ## v0.3.166: 代码质量全面修复——ruff 清零 + mypy 大幅收敛（2026-09-04）
 
 - refactor: 合并V2EX四个producer（browser/cli/rss/api）为统一 v2ex_producer.py，通过 --mode 切换
