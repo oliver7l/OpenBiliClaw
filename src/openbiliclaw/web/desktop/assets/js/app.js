@@ -1238,6 +1238,13 @@
       const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
+      // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
+      const isFilterPage = pageId === "customFilterPage" || pageId === "poolFilterPage";
+      const filterTrigger = document.getElementById("filterDropdownTrigger");
+      if (filterTrigger) filterTrigger.classList.toggle("is-active", isFilterPage);
+      document.querySelectorAll(".filter-dropdown-item").forEach((item) => {
+        item.classList.toggle("is-active", item === activeTab);
+      });
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
@@ -2512,6 +2519,21 @@
         return null;
       }
       return Array.from(state.customFilterSources)[0];
+    }
+
+    function toggleFilterDropdown() {
+      const menu = document.getElementById("filterDropdownMenu");
+      const trigger = document.getElementById("filterDropdownTrigger");
+      if (!menu || !trigger) return;
+      const isOpen = !menu.hidden;
+      menu.hidden = isOpen;
+      trigger.setAttribute("aria-expanded", String(!isOpen));
+    }
+    function closeFilterDropdown() {
+      const menu = document.getElementById("filterDropdownMenu");
+      const trigger = document.getElementById("filterDropdownTrigger");
+      if (menu) menu.hidden = true;
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
     }
 
     function renderFilters() {
@@ -7917,7 +7939,17 @@
 
     safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
-    safeBind("#customFilterBtn", "click", () => navigateTo("/web/custom-filter"));
+    safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });
+    safeBind("#poolFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/pool-filter"); });
+    // 筛选下拉菜单：合并自定义筛选 + 池子筛选
+    safeBind("#filterDropdownTrigger", "click", (e) => {
+      e.stopPropagation();
+      toggleFilterDropdown();
+    });
+    document.addEventListener("click", (e) => {
+      const dropdown = document.getElementById("filterDropdown");
+      if (dropdown && !dropdown.contains(e.target)) closeFilterDropdown();
+    });
     safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
     safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);

@@ -1464,6 +1464,57 @@
 .tab-btn.is-active { color: #1a1a1a; font-weight: 500; }
 .tab-btn .nav-count-badge { margin-left: 6px; }
 
+/* 筛选下拉菜单：合并自定义筛选 + 池子筛选 */
+.filter-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+.filter-dropdown-trigger {
+  padding-right: 10px;
+}
+.filter-dropdown-trigger[aria-expanded="true"] {
+  color: #1a1a1a;
+  font-weight: 500;
+}
+.filter-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 200;
+  min-width: 140px;
+  width: max-content;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.filter-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: #333;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.filter-dropdown-item:hover {
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+.filter-dropdown-item.is-active {
+  background: #eef4ff;
+  color: #1a6dff;
+  font-weight: 500;
+}
+
 /* 首页运行状态条：通栏细条（背景级，不抢视觉） */
 .runtime-strip {
   display: flex;

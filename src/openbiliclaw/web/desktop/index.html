@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>古灵阁的大模型推荐系统</title>
-  <link rel="stylesheet" href="/web/assets/css/app.css?v=20260902-od">
+  <link rel="stylesheet" href="/web/assets/css/app.css">
 </head>
 <body>
   <div class="app-shell">
@@ -52,9 +52,14 @@
       <div class="tabbar-scroll" aria-label="全局导航">
         <button class="tab-btn" id="homeBtn" type="button">首页</button>
         <button class="tab-btn" id="agentRecommendBtn" type="button">🤖 Agent推荐</button>
-        <button class="tab-btn" id="customFilterBtn" type="button">自定义筛选</button>
+        <div class="filter-dropdown" id="filterDropdown">
+          <button class="tab-btn filter-dropdown-trigger" id="filterDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">筛选 ▾</button>
+          <div class="filter-dropdown-menu" id="filterDropdownMenu" role="menu" hidden>
+            <button class="filter-dropdown-item" id="customFilterBtn" type="button" role="menuitem">自定义筛选</button>
+            <button class="filter-dropdown-item" id="poolFilterBtn" type="button" role="menuitem">池子筛选</button>
+          </div>
+        </div>
         <button class="tab-btn" id="poolAllBtn" type="button">池子总览</button>
-        <button class="tab-btn" id="poolFilterBtn" type="button">池子筛选</button>
         <button class="tab-btn" id="observabilityBtn" type="button">观测</button>
         <button class="tab-btn" id="poolExploreBtn" type="button">池子探索</button>
         <button class="tab-btn" id="xhsFeedBtn" type="button">小红书推荐流</button>
@@ -926,5 +931,5 @@
   </section>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="/web/assets/js/app.js?v=20260902-od" defer></script>
+  <script src="/web/assets/js/app.js" defer></script>
 </body></html>
