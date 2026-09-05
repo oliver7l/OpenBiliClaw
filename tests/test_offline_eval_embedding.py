@@ -27,7 +27,11 @@ from openbiliclaw.eval.offline.scenario import EvalUnit, build_units
 
 
 def _make_embedding_db(tmp_path: Path, entries: dict[str, np.ndarray]) -> Path:
-    """Create a temporary embedding_cache.db with the given text→vector entries."""
+    """Create a temporary embedding_cache.db with the given text→vector entries.
+
+    Uses encoding=1 format: 12-byte OBLV header + float32 vector (matching
+    the real embedding_cache.db schema).
+    """
     db_path = tmp_path / "embedding_cache.db"
     con = sqlite3.connect(str(db_path))
     con.execute(
@@ -47,10 +51,19 @@ def _make_embedding_db(tmp_path: Path, entries: dict[str, np.ndarray]) -> Path:
     for text, vec in entries.items():
         norm = np.linalg.norm(vec)
         unit = vec / norm if norm > 0 else vec
+        # encoding=1 format: 12-byte header + float32 vector
+        # header: b"OBLV" (4) + version (2) + encoding (2) + dimension (4 LE)
+        header = (
+            b"OBLV"
+            + (1).to_bytes(2, "little")
+            + (1).to_bytes(2, "little")
+            + unit.size.to_bytes(4, "little")
+        )
+        blob = header + unit.astype(np.float32).tobytes()
         con.execute(
             "INSERT INTO embedding_cache (text_key, model, vector, encoding, dimension) "
             "VALUES (?, ?, ?, 1, ?)",
-            (text, "bge-m3", unit.astype(np.float32).tobytes(), unit.size),
+            (text, "bge-m3", blob, unit.size),
         )
     con.commit()
     con.close()
@@ -152,6 +165,49 @@ class TestEmbeddingStore:
             hits, total = store.coverage(["a", "b", "c", ""])
             assert hits == 2
             assert total == 3  # empty text excluded
+
+
+class TestPrefixMatch:
+    """Test that prefix matching finds embeddings when title is a prefix of the key."""
+
+    def test_prefix_match_hit(self, tmp_path):
+        # embedding key is "hello world description"
+        entries = {"hello world description": np.array([1.0, 0.0])}
+        db = _make_embedding_db(tmp_path, entries)
+        with EmbeddingStore(str(db), match_mode="prefix") as store:
+            # query with just "hello world" should match via prefix
+            result = store.get("hello world")
+            assert result is not None
+            assert result.shape == (2,)
+
+    def test_exact_mode_misses_prefix(self, tmp_path):
+        entries = {"hello world description": np.array([1.0, 0.0])}
+        db = _make_embedding_db(tmp_path, entries)
+        with EmbeddingStore(str(db), match_mode="exact") as store:
+            result = store.get("hello world")
+            assert result is None  # exact mode should miss
+
+    def test_prefix_match_shortest_key(self, tmp_path):
+        # Multiple matching keys, should pick the shortest (most likely pure title)
+        entries = {
+            "hello": np.array([1.0, 0.0]),
+            "hello world": np.array([0.0, 1.0]),
+            "hello world description": np.array([0.5, 0.5]),
+        }
+        db = _make_embedding_db(tmp_path, entries)
+        with EmbeddingStore(str(db), match_mode="prefix") as store:
+            result = store.get("hello")
+            assert result is not None
+            # shortest key "hello" has vector [1, 0], normalised is [1, 0]
+            assert result[0] == pytest.approx(1.0)
+            assert result[1] == pytest.approx(0.0)
+
+    def test_contains_match(self, tmp_path):
+        entries = {"some hello world text": np.array([1.0, 0.0])}
+        db = _make_embedding_db(tmp_path, entries)
+        with EmbeddingStore(str(db), match_mode="contains") as store:
+            result = store.get("hello world")
+            assert result is not None
 
 
 class TestRunnerEmbeddingIntegration:

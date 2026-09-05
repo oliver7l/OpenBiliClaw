@@ -5,15 +5,18 @@ a simple lookup interface keyed by text (title / description). Used by the
 offline-eval runner to compute embedding-level ILS and novelty when the
 ``--embedding-metrics`` flag is enabled.
 
-The cache key in ``embedding_cache.db`` is the raw text (not a content_key),
-so lookups use the candidate's ``title`` field. Misses are normal (not every
-candidate has been embedded) and simply skip that item from embedding metrics.
+The cache key in ``embedding_cache.db`` is the raw text (title + description +
+tags, not a content_key), so lookups use the candidate's ``title`` field with
+a prefix-match strategy (the embedding key typically starts with the title).
+This achieves ~98% coverage on real data vs ~16% for exact match. Misses are
+normal and simply skip that item from embedding metrics.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -25,6 +28,49 @@ try:
 except ImportError:  # pragma: no cover - numpy is a declared dependency
     _HAVE_NUMPY = False
 
+MatchMode = Literal["exact", "prefix", "contains"]
+
+# embedding_cache encoding=1 BLOB format: 12-byte header + float32 vector
+# header: b"OBLV" (4) + version (2) + encoding (2) + dimension (4, little-endian)
+_OBLV_HEADER_SIZE = 12
+
+
+def _parse_vector(raw: object, encoding: int, dimension: int) -> np.ndarray | None:
+    """Parse a vector from embedding_cache according to its encoding.
+
+    - encoding=0: JSON array string (legacy)
+    - encoding=1: custom BLOB with 12-byte OBLV header + float32 vector
+    """
+    if not _HAVE_NUMPY:
+        return None
+    if encoding == 0:
+        # Legacy JSON format
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        try:
+            parsed = json.loads(raw)  # type: ignore[arg-type]
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(parsed, list):
+            return None
+        return np.asarray(parsed, dtype=np.float32)
+    if encoding == 1:
+        # Custom OBLV binary format
+        if isinstance(raw, str):
+            raw = raw.encode("latin-1")
+        if not isinstance(raw, bytes) or len(raw) < _OBLV_HEADER_SIZE + 4:
+            return None
+        # Skip the 12-byte header, parse remaining as float32
+        vec_data = raw[_OBLV_HEADER_SIZE:]
+        try:
+            vec = np.frombuffer(vec_data, dtype=np.float32).copy()
+        except ValueError:
+            return None
+        if dimension and vec.size != dimension:
+            vec = vec[:dimension]
+        return vec
+    return None
+
 
 class EmbeddingStore:
     """Read-only embedding cache with in-memory lookup cache.
@@ -35,11 +81,23 @@ class EmbeddingStore:
         Path to ``embedding_cache.db``.
     model:
         Embedding model name to filter on (default ``"bge-m3"``).
+    match_mode:
+        How to match candidate titles to embedding keys:
+        - ``"exact"``: title == text_key (low coverage, ~16%)
+        - ``"prefix"``: text_key starts with title (high coverage, ~98%, default)
+        - ``"contains"``: text_key contains title (same as prefix for most cases)
     """
 
-    def __init__(self, db_path: str, *, model: str = "bge-m3") -> None:
+    def __init__(
+        self,
+        db_path: str,
+        *,
+        model: str = "bge-m3",
+        match_mode: MatchMode = "prefix",
+    ) -> None:
         self._db_path = db_path
         self._model = model
+        self._match_mode: MatchMode = match_mode
         self._cache: dict[str, np.ndarray] = {}
         self._misses: set[str] = set()
         self._conn: sqlite3.Connection | None = None
@@ -53,6 +111,31 @@ class EmbeddingStore:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def _query_row(self, text: str) -> sqlite3.Row | None:
+        """Query the embedding cache according to match_mode."""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self._db_path)
+            self._conn.row_factory = sqlite3.Row
+        if self._match_mode == "exact":
+            return self._conn.execute(
+                "SELECT vector, dimension, encoding FROM embedding_cache "
+                "WHERE text_key = ? AND model = ?",
+                (text, self._model),
+            ).fetchone()
+        if self._match_mode == "prefix":
+            # Prefix match: take the shortest matching key (most likely pure title)
+            return self._conn.execute(
+                "SELECT vector, dimension, encoding FROM embedding_cache "
+                "WHERE text_key LIKE ? AND model = ? ORDER BY length(text_key) ASC LIMIT 1",
+                (text + "%", self._model),
+            ).fetchone()
+        # contains
+        return self._conn.execute(
+            "SELECT vector, dimension, encoding FROM embedding_cache "
+            "WHERE text_key LIKE ? AND model = ? ORDER BY length(text_key) ASC LIMIT 1",
+            ("%" + text + "%", self._model),
+        ).fetchone()
 
     def get(self, text: str) -> np.ndarray | None:
         """Look up a single text embedding.
@@ -69,20 +152,14 @@ class EmbeddingStore:
         cached = self._cache.get(text)
         if cached is not None:
             return cached
-        if self._conn is None:
-            self._conn = sqlite3.connect(self._db_path)
-            self._conn.row_factory = sqlite3.Row
-        row = self._conn.execute(
-            "SELECT vector, dimension FROM embedding_cache WHERE text_key = ? AND model = ?",
-            (text, self._model),
-        ).fetchone()
+        row = self._query_row(text)
         if row is None:
             self._misses.add(text)
             return None
-        vec = np.frombuffer(bytes(row["vector"]), dtype=np.float32).copy()
-        dim = int(row["dimension"] or 0)
-        if dim and vec.size != dim:
-            vec = vec[:dim]
+        vec = _parse_vector(row["vector"], int(row["encoding"] or 0), int(row["dimension"] or 0))
+        if vec is None:
+            self._misses.add(text)
+            return None
         norm = float(np.linalg.norm(vec))
         if norm > 0:
             vec = vec / norm
