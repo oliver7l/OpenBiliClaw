@@ -74,6 +74,7 @@
         <button class="tab-btn" id="watchLaterBtn" type="button">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
         <button class="tab-btn" id="favoritesBtn" type="button">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
         <button class="tab-btn" id="profileBtn" type="button">我的画像</button>
+        <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="chatBtn" type="button">聊聊口味</button>
         <button class="tab-btn" id="settingsBtn" type="button">设置</button>
       </div>
@@ -276,6 +277,165 @@
         <div class="chat-log" id="chatLog"></div>
         <div class="chat-recommend-results" id="chatRecommendResults" hidden></div>
       <form class="chat-input" id="chatForm"><input id="chatInput" placeholder="说说你最近怎么想——你是什么样的人、喜欢什么、讨厌什么，都可以直接说。"><button class="pill-btn primary" type="submit">发送</button></form>
+      </section>
+
+      <!-- 自进化中心：系统自动从内容库中挖掘价值 -->
+      <section class="self-evolution-page content-page" id="selfEvolutionPage" aria-label="自进化中心" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Self-Evolution</p>
+            <h2>🧬 自进化中心</h2>
+            <p class="video-meta">系统自动从你的内容库中挖掘洞察、检测兴趣变化、生成知识卡片、构建知识图谱。</p>
+          </div>
+          <div class="self-evo-actions">
+            <button class="pill-btn" id="selfEvoRefreshBtn" type="button">↻ 刷新状态</button>
+          </div>
+        </div>
+
+        <!-- 状态概览 -->
+        <div class="self-evo-status" id="selfEvoStatus">
+          <div class="self-evo-stat-card">
+            <span class="self-evo-stat-val" id="statInsightReports">—</span>
+            <span class="self-evo-stat-label">洞察报告</span>
+          </div>
+          <div class="self-evo-stat-card">
+            <span class="self-evo-stat-val" id="statDriftReports">—</span>
+            <span class="self-evo-stat-label">漂移分析</span>
+          </div>
+          <div class="self-evo-stat-card">
+            <span class="self-evo-stat-val" id="statTopicMining">—</span>
+            <span class="self-evo-stat-label">专题挖掘</span>
+          </div>
+          <div class="self-evo-stat-card accent">
+            <span class="self-evo-stat-val" id="statKnowledgeCards">—</span>
+            <span class="self-evo-stat-label">知识卡片</span>
+          </div>
+          <div class="self-evo-stat-card">
+            <span class="self-evo-stat-val" id="statKnowledgeGraph">—</span>
+            <span class="self-evo-stat-label">知识图谱</span>
+          </div>
+          <div class="self-evo-stat-card warn">
+            <span class="self-evo-stat-val" id="statNotifications">—</span>
+            <span class="self-evo-stat-label">推送通知</span>
+          </div>
+        </div>
+
+        <!-- 模块卡片网格 -->
+        <div class="self-evo-modules">
+          <!-- 1. 周期性洞察报告 -->
+          <div class="self-evo-module-card" id="moduleInsight">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">📊</span>
+              <div>
+                <h3>周期性洞察报告</h3>
+                <p class="self-evo-module-desc">每周自动生成阅读洞察，包括平台分布、主题趋势、兴趣变化和深读建议。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="insightReportContent">
+              <p class="self-evo-empty">点击下方按钮生成本周洞察报告</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="generateInsightBtn" type="button">生成本周报告</button>
+              <button class="pill-btn" id="viewInsightHistoryBtn" type="button">历史报告</button>
+            </div>
+          </div>
+
+          <!-- 2. 兴趣漂移检测 -->
+          <div class="self-evo-module-card" id="moduleDrift">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">📈</span>
+              <div>
+                <h3>兴趣漂移检测</h3>
+                <p class="self-evo-module-desc">对比近期与历史阅读行为，发现上升、下降和新增的兴趣方向。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="driftContent">
+              <p class="self-evo-empty">点击分析兴趣变化趋势</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="analyzeDriftBtn" type="button">分析兴趣漂移</button>
+            </div>
+          </div>
+
+          <!-- 3. 自动专题挖掘 -->
+          <div class="self-evo-module-card" id="moduleTopics">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">🏷️</span>
+              <div>
+                <h3>自动专题挖掘</h3>
+                <p class="self-evo-module-desc">从内容库中发现新兴主题，自动评估质量并建议创建专题。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="topicsContent">
+              <p class="self-evo-empty">点击挖掘潜在专题</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="mineTopicsBtn" type="button">挖掘专题</button>
+            </div>
+          </div>
+
+          <!-- 4. 知识卡片生成 -->
+          <div class="self-evo-module-card" id="moduleCards">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">🃏</span>
+              <div>
+                <h3>知识卡片生成</h3>
+                <p class="self-evo-module-desc">从收藏的深度文章中提取核心观点，生成可复习的知识卡片。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="cardsContent">
+              <p class="self-evo-empty">点击生成知识卡片或开始复习</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="generateCardsBtn" type="button">生成卡片</button>
+              <button class="pill-btn" id="reviewCardsBtn" type="button">开始复习</button>
+            </div>
+          </div>
+
+          <!-- 5. 个人知识图谱 -->
+          <div class="self-evo-module-card" id="moduleGraph">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">🕸️</span>
+              <div>
+                <h3>个人知识图谱</h3>
+                <p class="self-evo-module-desc">从内容中提取实体和关系，构建你的个人知识网络。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="graphContent">
+              <p class="self-evo-empty">点击构建知识图谱</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="buildGraphBtn" type="button">构建图谱</button>
+            </div>
+          </div>
+
+          <!-- 6. 主动推送 -->
+          <div class="self-evo-module-card" id="modulePush">
+            <div class="self-evo-module-head">
+              <span class="self-evo-module-icon">🔔</span>
+              <div>
+                <h3>主动推送</h3>
+                <p class="self-evo-module-desc">发现高价值内容、新兴趣和阅读提醒时主动通知你。</p>
+              </div>
+            </div>
+            <div class="self-evo-module-body" id="pushContent">
+              <p class="self-evo-empty">点击检查是否有值得推送的内容</p>
+            </div>
+            <div class="self-evo-module-actions">
+              <button class="pill-btn primary" id="checkPushBtn" type="button">检查推送</button>
+              <button class="pill-btn" id="viewNotificationsBtn" type="button">查看通知</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详情面板（用于展示详细内容） -->
+        <div class="self-evo-detail" id="selfEvoDetail" hidden>
+          <div class="self-evo-detail-head">
+            <h3 id="selfEvoDetailTitle">详情</h3>
+            <button class="icon-btn" id="selfEvoDetailClose" type="button" aria-label="关闭">✕</button>
+          </div>
+          <div class="self-evo-detail-body" id="selfEvoDetailBody"></div>
+        </div>
       </section>
 
       <!-- 池子总览：所有池子内容，包括待处理、已过期、已抑制等 -->
