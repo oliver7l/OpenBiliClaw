@@ -13605,6 +13605,134 @@ Keep keywords focused and specific. Remove stop words."""
     if _topics_dir.is_dir():
         app.mount("/topics", _StaticFiles(directory=_topics_dir, html=True), name="topics-page")
 
+    # ── URL Content Extraction (单篇URL内容提取) ───────────────────
+    # Inspired by Agent-SaveMark's processor pattern. Extracts structured
+    # content from a single URL using platform-specific processors.
+    # Supported: Zhihu, V2EX, Hupu, Bilibili, Xiaohongshu, YouTube,
+    # Xiaoyuzhou, and generic web pages (fallback).
+
+    @app.get("/api/url/processors")
+    async def list_url_processors():
+        """List all registered URL content processors."""
+        from openbiliclaw.sources.url_processors import list_processors, get_all_source_types
+        processors = list_processors()
+        return {
+            "processors": processors,
+            "source_types": get_all_source_types(),
+            "total": len(processors),
+        }
+
+    @app.post("/api/url/extract")
+    async def extract_url_content(payload: dict[str, Any]):
+        """Extract content from a single URL.
+
+        Request body:
+            url: The URL to extract content from.
+            cookies: Optional dict of authentication cookies.
+            save: Whether to save the extracted content to the articles table (default: false).
+        """
+        from openbiliclaw.sources.url_processors import match_processor
+        from openbiliclaw.sources.url_processors.base import ProcessorStatus
+
+        url = payload.get("url", "").strip()
+        if not url:
+            return JSONResponse({"error": "url is required"}, status_code=400)
+
+        cookies = payload.get("cookies", {})
+        should_save = payload.get("save", False)
+
+        try:
+            processor = match_processor(url)
+            result = await processor.process(url, cookies=cookies)
+
+            response_data = {
+                "status": result.status.value,
+                "source_type": result.source_type,
+                "source_name": result.source_name,
+                "title": result.title,
+                "author": result.author,
+                "summary": result.summary,
+                "content_text": result.content_text,
+                "published_at": result.published_at,
+                "tags": result.tags,
+                "url": result.url,
+                "metadata": result.metadata,
+                "error": result.error,
+            }
+
+            # Save to articles table if requested
+            if should_save and result.status == ProcessorStatus.success:
+                article_id = await _save_extracted_article(result)
+                response_data["saved"] = True
+                response_data["article_id"] = article_id
+            else:
+                response_data["saved"] = False
+
+            return response_data
+
+        except Exception as e:
+            logger.exception("URL extraction failed for %s", url)
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    async def _save_extracted_article(result) -> int | None:
+        """Save extracted content to the articles table.
+
+        Args:
+            result: ProcessorResult with extracted content.
+
+        Returns:
+            The inserted article ID, or None if insertion failed.
+        """
+        import sqlite3
+        import json
+        from datetime import datetime, timezone
+
+        # Get database path from config
+        db_path = "data/openbiliclaw.db"
+        try:
+            cfg = getattr(ctx, "config", None)
+            if cfg and hasattr(cfg, "storage") and cfg.storage:
+                db_path = str(cfg.storage.db_path)
+        except Exception:
+            pass
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            article_dict = result.to_article_dict()
+
+            # Check for duplicate by content_hash
+            if article_dict.get("content_hash"):
+                existing = cursor.execute(
+                    "SELECT id FROM articles WHERE content_hash = ? LIMIT 1",
+                    (article_dict["content_hash"],),
+                ).fetchone()
+                if existing:
+                    logger.info("Article already exists (id=%s), skipping insert", existing[0])
+                    conn.close()
+                    return existing[0]
+
+            # Insert article
+            columns = ", ".join(article_dict.keys())
+            placeholders = ", ".join(["?"] * len(article_dict))
+            values = list(article_dict.values())
+
+            cursor.execute(
+                f"INSERT INTO articles ({columns}) VALUES ({placeholders})",
+                values,
+            )
+            article_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+
+            logger.info("Saved extracted article (id=%s): %s", article_id, result.title)
+            return article_id
+
+        except Exception as e:
+            logger.exception("Failed to save extracted article: %s", e)
+            return None
+
     # ── Self-Evolution (自进化) API endpoints ─────────────────────
     # Auto-generated insights, interest drift detection, topic mining,
     # knowledge cards, knowledge graph, and proactive push notifications.
