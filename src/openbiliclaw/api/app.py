@@ -11925,6 +11925,164 @@ Keep keywords focused and specific. Remove stop words."""
                 status_code=500,
             )
 
+    # ─── 日记反思 API（周报/月度反思/年度回顾/里程碑） ─────────────────
+
+    @app.get("/api/diary/reflection/weekly")
+    def diary_reflection_weekly(week_start: str | None = None) -> JSONResponse:
+        """获取周报统计数据。
+
+        Query:
+        - week_start: 周开始日期（YYYY-MM-DD），默认本周一
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        report = reflection.generate_weekly_report(week_start)
+        return JSONResponse({"ok": True, "data": report.__dict__})
+
+    @app.post("/api/diary/reflection/weekly/generate")
+    async def diary_reflection_weekly_generate(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """生成 AI 周报。
+
+        请求体（可选）：
+        - week_start: 周开始日期（YYYY-MM-DD），默认本周一
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        payload = payload or {}
+        reflection = ReflectionService(svc.store)
+        report = reflection.generate_weekly_report(payload.get("week_start"))
+        if report.entry_count == 0:
+            return JSONResponse({"ok": False, "error": "本周暂无日记"}, status_code=404)
+
+        prompt = reflection.build_weekly_report_prompt(report)
+        try:
+            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
+            return JSONResponse({
+                "ok": True,
+                "data": report.__dict__,
+                "ai_result": ai_result,
+            })
+        except Exception as exc:
+            logger.exception("周报生成失败")
+            return JSONResponse(
+                {"ok": False, "error": f"生成失败: {exc}", "data": report.__dict__},
+                status_code=500,
+            )
+
+    @app.get("/api/diary/reflection/monthly/{year}/{month}")
+    def diary_reflection_monthly(year: int, month: int) -> JSONResponse:
+        """获取月度反思统计数据。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        result = reflection.generate_monthly_reflection(year, month)
+        return JSONResponse({"ok": True, "data": result.__dict__})
+
+    @app.post("/api/diary/reflection/monthly/{year}/{month}/generate")
+    async def diary_reflection_monthly_generate(year: int, month: int) -> JSONResponse:
+        """生成 AI 月度反思。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        result = reflection.generate_monthly_reflection(year, month)
+        if result.entry_count == 0:
+            return JSONResponse({"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404)
+
+        prompt = reflection.build_monthly_reflection_prompt(result)
+        try:
+            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
+            return JSONResponse({
+                "ok": True,
+                "data": result.__dict__,
+                "ai_result": ai_result,
+            })
+        except Exception as exc:
+            logger.exception("月度反思生成失败")
+            return JSONResponse(
+                {"ok": False, "error": f"生成失败: {exc}", "data": result.__dict__},
+                status_code=500,
+            )
+
+    @app.get("/api/diary/reflection/yearly/{year}")
+    def diary_reflection_yearly(year: int) -> JSONResponse:
+        """获取年度回顾统计数据。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        result = reflection.generate_yearly_review(year)
+        return JSONResponse({"ok": True, "data": result.__dict__})
+
+    @app.post("/api/diary/reflection/yearly/{year}/generate")
+    async def diary_reflection_yearly_generate(year: int) -> JSONResponse:
+        """生成 AI 年度回顾。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        result = reflection.generate_yearly_review(year)
+        if result.entry_count == 0:
+            return JSONResponse({"ok": False, "error": f"{year}年暂无日记"}, status_code=404)
+
+        prompt = reflection.build_yearly_review_prompt(result)
+        try:
+            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
+            return JSONResponse({
+                "ok": True,
+                "data": result.__dict__,
+                "ai_result": ai_result,
+            })
+        except Exception as exc:
+            logger.exception("年度回顾生成失败")
+            return JSONResponse(
+                {"ok": False, "error": f"生成失败: {exc}", "data": result.__dict__},
+                status_code=500,
+            )
+
+    @app.get("/api/diary/reflection/milestones")
+    def diary_reflection_milestones(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 50,
+    ) -> JSONResponse:
+        """获取人生里程碑列表。
+
+        Query:
+        - start_date: 开始日期（YYYY-MM-DD），默认 2000-01-01
+        - end_date: 结束日期（YYYY-MM-DD），默认今天
+        - limit: 返回数量上限，默认 50
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import ReflectionService
+
+        reflection = ReflectionService(svc.store)
+        milestones = reflection.detect_milestones(start_date, end_date)
+        milestones = milestones[:limit]
+        return JSONResponse({
+            "ok": True,
+            "data": [m.__dict__ for m in milestones],
+            "total": len(milestones),
+        })
+
     # ─── 碎片（随手记）API ───────────────────────────────────────────
 
     @app.get("/api/diary/fragments")

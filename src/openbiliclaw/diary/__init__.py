@@ -29,6 +29,13 @@ from .models import (
     TagType,
 )
 from .rag import DiaryRAGService, RAGAnswer, SearchResult
+from .reflection import (
+    Milestone,
+    MonthlyReflection,
+    ReflectionService,
+    WeeklyReport,
+    YearlyReview,
+)
 from .service import DiaryService
 
 __all__ = [
@@ -46,12 +53,17 @@ __all__ = [
     "DiaryStats",
     "DiaryTag",
     "ExtractionResult",
+    "Milestone",
     "MoodAnalyzer",
     "MoodLevel",
     "MoodTrendPoint",
+    "MonthlyReflection",
     "RAGAnswer",
+    "ReflectionService",
     "SearchResult",
     "TagType",
+    "WeeklyReport",
     "WritingStreak",
     "YearlyInsight",
+    "YearlyReview",
 ]
