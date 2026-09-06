@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from ..storage.database import Database
 from .models import (
@@ -182,9 +185,37 @@ class DiaryStore:
         """初始化日记数据表。"""
         if self._initialized:
             return
+        # 先执行迁移（为已有表添加缺失的列），避免 CREATE INDEX 失败
+        self._migrate_diary_fragments()
         self.conn.executescript(_SCHEMA_SQL)
         self.conn.commit()
         self._initialized = True
+
+    def _migrate_diary_fragments(self) -> None:
+        """为 diary_fragments 表添加缺失的列（向后兼容）。"""
+        # 先检查表是否存在
+        cursor = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='diary_fragments'"
+        )
+        if cursor.fetchone() is None:
+            return  # 表不存在，不需要迁移
+
+        cursor = self.conn.execute("PRAGMA table_info(diary_fragments)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+
+        new_columns = {
+            "fragment_type": "TEXT DEFAULT 'text'",
+            "media_path": "TEXT DEFAULT ''",
+            "media_description": "TEXT DEFAULT ''",
+            "tags": "TEXT DEFAULT '[]'",
+        }
+
+        for col_name, col_def in new_columns.items():
+            if col_name not in existing_columns:
+                self.conn.execute(
+                    f"ALTER TABLE diary_fragments ADD COLUMN {col_name} {col_def}"
+                )
+                logger.info("数据库迁移：为 diary_fragments 添加列 %s", col_name)
 
     # ── 日记条目 CRUD ──────────────────────────────────────────
 

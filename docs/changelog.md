@@ -4,6 +4,51 @@
 
 ---
 
+## v0.3.183: 碎片化快速记录增强——多类型碎片 + AI 自动标签 + 证据驱动日记生成（2026-09-06）
+
+增强随手记（碎片）功能，支持多种碎片类型（文字/图片/语音/链接），实现 AI 自动标签和情绪识别，升级为证据驱动的日记生成（参考 echolog 项目设计）。这是日记系统优化计划的第二阶段。
+
+- feat: 碎片数据模型增强
+  - `DiaryFragment` 新增字段：fragment_type（text/image/voice/link）、media_path、media_description、tags
+  - `DiaryFragmentCreate` 同步支持新字段
+  - 数据库自动迁移：为已有 diary_fragments 表添加缺失列，向后兼容
+- feat: 碎片存储层增强
+  - `create_fragment` 支持新参数（fragment_type/media_path/media_description/tags）
+  - `list_fragments` 支持按 fragment_type 筛选
+  - 新增 `update_fragment_tags` 和 `update_fragment_mood` 方法
+  - 新增 `_migrate_diary_fragments` 数据库迁移方法
+- feat: AI 自动标签和情绪识别
+  - 新增 `auto_tag_fragment` 方法：对单条碎片执行 AI 自动标签和情绪识别
+  - 新增 `batch_auto_tag_fragments` 方法：批量对未标注的碎片执行自动标注
+  - 无 LLM 时降级为基于关键词的规则提取（工作/家庭/健康/旅行/美食等主题 + 情绪识别）
+  - 已有标签和情绪时跳过，避免重复处理
+- feat: 证据驱动的日记生成（升级）
+  - 参考 echolog 项目设计：事实先行，不堆空洞形容词
+  - 每条结论都要有原始碎片支撑，不编造没有的内容
+  - 保留碎片的时间顺序、类型、媒体描述、标签
+  - 自动提取当天整体情绪和标签
+  - 合并碎片中的标签和 AI 提取的标签
+- feat: API 端点增强
+  - `POST /api/diary/fragments` — 创建碎片支持新参数（fragment_type/media_description/tags）
+  - `GET /api/diary/fragments` — 列表支持 fragment_type 筛选
+  - `POST /api/diary/fragments/{id}/auto-tag` — 单条碎片自动标签
+  - `POST /api/diary/fragments/auto-tag-batch` — 批量自动标签
+- feat: 前端页面增强
+  - 新增碎片类型选择器（📝文字/🖼️图片/🎙️语音/🔗链接）
+  - 图片/语音类型时显示媒体描述输入框
+  - 新增"🏷️ 自动标注"按钮（创建并自动标注）
+  - 新增"🏷️ 批量标注"按钮（批量标注未标注的碎片）
+  - 碎片卡片增强：显示类型图标、情绪、时间、媒体描述、标签
+  - 悬停显示删除按钮，更简洁的交互
+  - 响应式布局适配移动端
+- feat: CSS 样式增强
+  - 新增约 150 行样式：碎片卡片、标签、媒体描述、响应式布局
+  - 渐变标签样式、悬停动画、卡片阴影效果
+- note: 技术实现
+  - 数据库迁移：先迁移后建表，避免 CREATE INDEX 引用不存在的列
+  - 规则提取降级：无 LLM 时使用关键词匹配，保证基本功能可用
+  - 证据驱动 Prompt：明确要求"事实先行"、"不堆空洞形容词"、"每条结论都要有原始碎片支撑"
+
 ## v0.3.182: RAG 语义搜索与日记对话——基于 embedding 的智能搜索 + 基于日记内容的 AI 问答（2026-09-06）
 
 为日记系统新增 RAG（检索增强生成）能力，基于本地 Ollama + bge-m3 模型为全部 925 篇日记生成 1024 维向量，实现自然语言语义搜索和基于日记内容的 AI 问答对话。这是日记系统优化计划的第一阶段，参考了 ai-journal、memex、echolog 等开源项目的设计。

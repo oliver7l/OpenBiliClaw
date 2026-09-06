@@ -13940,7 +13940,7 @@ Keep keywords focused and specific. Remove stop words."""
         stats = {}
         for table in ["insight_reports", "drift_reports", "topic_mining_reports",
                        "knowledge_cards", "knowledge_graph", "push_notifications",
-                       "learning_paths"]:
+                       "learning_paths", "article_tldrs", "content_insights_reports"]:
             try:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 stats[table] = count

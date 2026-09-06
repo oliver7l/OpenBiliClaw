@@ -388,6 +388,28 @@
     if (genBtn) {
       genBtn.addEventListener("click", generateDiaryFromFragments);
     }
+    const autoTagBtn = document.getElementById("fragmentAutoTagBtn");
+    if (autoTagBtn) {
+      autoTagBtn.addEventListener("click", autoTagCurrentFragment);
+    }
+    const batchAutoTagBtn = document.getElementById("batchAutoTagBtn");
+    if (batchAutoTagBtn) {
+      batchAutoTagBtn.addEventListener("click", batchAutoTagFragments);
+    }
+    // 碎片类型切换
+    const typeSelect = document.getElementById("fragmentType");
+    if (typeSelect) {
+      typeSelect.addEventListener("change", () => {
+        const mediaDescInput = document.getElementById("fragmentMediaDesc");
+        if (mediaDescInput) {
+          if (typeSelect.value === "image" || typeSelect.value === "voice") {
+            mediaDescInput.style.display = "block";
+          } else {
+            mediaDescInput.style.display = "none";
+          }
+        }
+      });
+    }
     // 回车快捷添加
     const input = document.getElementById("fragmentInput");
     if (input) {
@@ -414,6 +436,8 @@
   async function addFragment() {
     const input = document.getElementById("fragmentInput");
     const moodSelect = document.getElementById("fragmentMood");
+    const typeSelect = document.getElementById("fragmentType");
+    const mediaDescInput = document.getElementById("fragmentMediaDesc");
     const text = input.value.trim();
     if (!text) {
       input.focus();
@@ -431,12 +455,15 @@
           content: text,
           mood: moodSelect.value || "unknown",
           source: "web",
+          fragment_type: typeSelect ? typeSelect.value : "text",
+          media_description: mediaDescInput ? mediaDescInput.value.trim() : "",
         }),
       });
       const data = await res.json();
       if (data.ok) {
         input.value = "";
         moodSelect.value = "";
+        if (mediaDescInput) mediaDescInput.value = "";
         await renderFragments();
       } else {
         alert("添加失败：" + (data.error || "未知错误"));
@@ -446,6 +473,81 @@
     } finally {
       addBtn.disabled = false;
       addBtn.textContent = "➕ 添加碎片";
+    }
+  }
+
+  async function autoTagCurrentFragment() {
+    const input = document.getElementById("fragmentInput");
+    const text = input.value.trim();
+    if (!text) {
+      alert("请先输入碎片内容");
+      return;
+    }
+    const btn = document.getElementById("fragmentAutoTagBtn");
+    btn.disabled = true;
+    btn.textContent = "🏷️ 标注中...";
+    try {
+      // 先创建碎片，然后自动标注
+      const moodSelect = document.getElementById("fragmentMood");
+      const typeSelect = document.getElementById("fragmentType");
+      const mediaDescInput = document.getElementById("fragmentMediaDesc");
+      const res = await fetch("/api/diary/fragments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: text,
+          mood: moodSelect.value || "unknown",
+          source: "web",
+          fragment_type: typeSelect ? typeSelect.value : "text",
+          media_description: mediaDescInput ? mediaDescInput.value.trim() : "",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.data) {
+        // 自动标注
+        const tagRes = await fetch(`/api/diary/fragments/${data.data.id}/auto-tag`, { method: "POST" });
+        const tagData = await tagRes.json();
+        if (tagData.ok) {
+          input.value = "";
+          if (mediaDescInput) mediaDescInput.value = "";
+          await renderFragments();
+          alert("✅ 已自动标注标签和情绪！");
+        } else {
+          alert("标注失败：" + (tagData.error || "未知错误"));
+        }
+      } else {
+        alert("创建失败：" + (data.error || "未知错误"));
+      }
+    } catch (e) {
+      alert("操作失败：" + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🏷️ 自动标注";
+    }
+  }
+
+  async function batchAutoTagFragments() {
+    const btn = document.getElementById("batchAutoTagBtn");
+    btn.disabled = true;
+    btn.textContent = "🏷️ 批量标注中...";
+    try {
+      const res = await fetch("/api/diary/fragments/auto-tag-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await renderFragments();
+        alert(`✅ 批量标注完成！成功 ${data.data.success} 条，失败 ${data.data.failed} 条`);
+      } else {
+        alert("批量标注失败：" + (data.error || "未知错误"));
+      }
+    } catch (e) {
+      alert("批量标注失败：" + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🏷️ 批量标注";
     }
   }
 
@@ -480,17 +582,28 @@
       angry: "😠 生气",
     };
 
+    const typeMap = {
+      text: "📝",
+      image: "🖼️",
+      voice: "🎙️",
+      link: "🔗",
+    };
+
     let html = "";
     fragments.forEach((f) => {
       const time = f.created_at ? new Date(f.created_at).toLocaleString("zh-CN") : "";
+      const typeIcon = typeMap[f.fragment_type] || "📝";
       html += `
         <div class="diary-fragment-item">
           <div class="diary-fragment-content">
-            <div class="diary-fragment-text">${escapeHtml(f.content)}</div>
-            <div class="diary-fragment-meta">
-              <span>${time}</span>
+            <div class="diary-fragment-header">
+              <span class="diary-fragment-type">${typeIcon}</span>
               ${f.mood && f.mood !== "unknown" ? `<span class="diary-fragment-mood">${moodMap[f.mood] || f.mood}</span>` : ""}
+              <span class="diary-fragment-time">${time}</span>
             </div>
+            <div class="diary-fragment-text">${escapeHtml(f.content)}</div>
+            ${f.media_description ? `<div class="diary-fragment-media-desc">📎 ${escapeHtml(f.media_description)}</div>` : ""}
+            ${f.tags && f.tags.length > 0 ? `<div class="diary-fragment-tags">${f.tags.map(t => `<span class="diary-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
           </div>
           <button class="diary-fragment-delete" onclick="window.__deleteDiaryFragment(${f.id})" title="删除">×</button>
         </div>`;

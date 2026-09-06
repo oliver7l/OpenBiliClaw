@@ -525,19 +525,32 @@
           <div class="diary-fragments-intro">
             <div class="diary-fragments-icon">✨</div>
             <h3>随手记 — 白天丢碎片，夜里成日记</h3>
-            <p>随时记录生活中的小片段、小情绪、小想法。积累一天后，AI 会自动帮你整理成一篇完整的日记。</p>
+            <p>随时记录生活中的小片段、小情绪、小想法。支持文字、图片、语音多种类型。积累一天后，AI 会自动帮你整理成一篇完整的日记。</p>
           </div>
           <div class="diary-fragments-input">
-            <textarea id="fragmentInput" class="diary-fragment-textarea" placeholder="此刻想到了什么？随手记下来..." rows="3"></textarea>
-            <div class="diary-fragments-input-actions">
+            <div class="diary-fragments-input-row">
+              <select id="fragmentType" class="diary-filter-select small">
+                <option value="text">📝 文字</option>
+                <option value="image">🖼️ 图片</option>
+                <option value="voice">🎙️ 语音</option>
+                <option value="link">🔗 链接</option>
+              </select>
               <select id="fragmentMood" class="diary-filter-select small"><option value="">此刻情绪</option><option value="very_happy">😄 非常开心</option><option value="happy">🙂 开心</option><option value="neutral">😐 平静</option><option value="sad">😔 低落</option><option value="anxious">😰 焦虑</option><option value="angry">😠 生气</option></select>
+            </div>
+            <textarea id="fragmentInput" class="diary-fragment-textarea" placeholder="此刻想到了什么？随手记下来..." rows="3"></textarea>
+            <input type="text" id="fragmentMediaDesc" class="diary-fragment-input" placeholder="媒体内容描述（图片/语音转写内容，可选）" style="display:none;">
+            <div class="diary-fragments-input-actions">
+              <button class="small-btn" id="fragmentAutoTagBtn" type="button">🏷️ 自动标注</button>
               <button class="pill-btn primary" id="fragmentAddBtn" type="button">➕ 添加碎片</button>
             </div>
           </div>
           <div class="diary-fragments-list-header">
             <h4>今日碎片</h4>
             <span class="diary-fragments-count" id="fragmentsCount">0 条</span>
-            <button class="small-btn primary" id="generateDiaryFromFragmentsBtn" type="button">🌙 生成今日日记</button>
+            <div class="diary-fragments-actions">
+              <button class="small-btn" id="batchAutoTagBtn" type="button">🏷️ 批量标注</button>
+              <button class="small-btn primary" id="generateDiaryFromFragmentsBtn" type="button">🌙 生成今日日记</button>
+            </div>
           </div>
           <div class="diary-fragments-list" id="diaryFragmentsList">
             <div class="diary-fragments-empty">还没有碎片，随手记点什么吧 ✨</div>

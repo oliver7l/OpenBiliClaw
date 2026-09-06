@@ -109,7 +109,9 @@ class DiaryFragment(BaseModel):
     source: str = Field(default="manual", description="来源：manual / api / voice / image / bot")
     fragment_type: str = Field(default="text", description="碎片类型：text / image / voice / link")
     media_path: str = Field(default="", description="媒体文件路径（图片/语音）")
-    media_description: str = Field(default="", description="媒体内容的 AI 描述（图片理解/语音转写）")
+    media_description: str = Field(
+        default="", description="媒体内容的 AI 描述（图片理解/语音转写）"
+    )
     tags: list[str] = Field(default_factory=list, description="AI 自动提取的标签")
     created_at: datetime = Field(description="创建时间")
 
