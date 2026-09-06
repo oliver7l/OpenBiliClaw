@@ -103,10 +103,7 @@ class ReflectionService:
 
     def get_week_range(self, date_str: str | None = None) -> tuple[str, str]:
         """获取指定日期所在周的起止日期（周一到周日）。"""
-        if date_str:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-        else:
-            dt = datetime.now()
+        dt = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
         # 周一为一周开始
         start = dt - timedelta(days=dt.weekday())
         end = start + timedelta(days=6)
@@ -224,11 +221,10 @@ class ReflectionService:
     def generate_monthly_reflection(self, year: int, month: int) -> MonthlyReflection:
         """生成月度反思统计数据（不调用 LLM）。"""
         month_start = f"{year}-{month:02d}-01"
-        if month == 12:
-            next_month = f"{year + 1}-01-01"
-        else:
-            next_month = f"{year}-{month + 1:02d}-01"
-        month_end = (datetime.strptime(next_month, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        next_month = f"{year + 1}-01-01" if month == 12 else f"{year}-{month + 1:02d}-01"
+        month_end = (datetime.strptime(next_month, "%Y-%m-%d") - timedelta(days=1)).strftime(
+            "%Y-%m-%d"
+        )
 
         entries = self._get_entries_in_range(month_start, month_end)
         if not entries:
@@ -289,7 +285,11 @@ class ReflectionService:
         events_text = "\n".join(reflection.key_events) if reflection.key_events else "无"
         milestones_text = "\n".join(reflection.milestones) if reflection.milestones else "无"
         themes_text = ", ".join(reflection.themes) if reflection.themes else "无"
-        tags_text = ", ".join([f"{tag}({count})" for tag, count in reflection.top_tags]) if reflection.top_tags else "无"
+        tags_text = (
+            ", ".join([f"{tag}({count})" for tag, count in reflection.top_tags])
+            if reflection.top_tags
+            else "无"
+        )
 
         return f"""你是一位温柔的日记陪伴者，正在帮用户回顾这一个月的生活。
 
@@ -361,18 +361,21 @@ class ReflectionService:
             month_entries = [e for e in entries if e.entry_date.startswith(f"{year}-{month:02d}")]
             if month_entries:
                 month_moods = self._count_moods(month_entries)
-                monthly_stats.append({
-                    "month": month,
-                    "entry_count": len(month_entries),
-                    "total_words": sum(e.word_count for e in month_entries),
-                    "dominant_mood": max(month_moods, key=month_moods.get) if month_moods else "unknown",
-                })
+                monthly_stats.append(
+                    {
+                        "month": month,
+                        "entry_count": len(month_entries),
+                        "total_words": sum(e.word_count for e in month_entries),
+                        "dominant_mood": max(month_moods, key=month_moods.get)
+                        if month_moods
+                        else "unknown",
+                    }
+                )
 
         # 十大事件（按字数和标题筛选）
         sorted_entries = sorted(entries, key=lambda e: e.word_count, reverse=True)
         top_10_events = [
-            f"[{e.entry_date}] {e.title or e.content[:50]}"
-            for e in sorted_entries[:10]
+            f"[{e.entry_date}] {e.title or e.content[:50]}" for e in sorted_entries[:10]
         ]
 
         # 里程碑
@@ -388,7 +391,9 @@ class ReflectionService:
         people_met = self._get_people_in_range(year_start, year_end)
 
         # 去过的地方（从标签提取）
-        places_visited = [tag for tag, _ in top_tags if any(kw in tag for kw in ["旅行", "旅游", "城市", "地方"])]
+        places_visited = [
+            tag for tag, _ in top_tags if any(kw in tag for kw in ["旅行", "旅游", "城市", "地方"])
+        ]
 
         return YearlyReview(
             year=year,
@@ -410,14 +415,24 @@ class ReflectionService:
         events_text = "\n".join(review.top_10_events) if review.top_10_events else "无"
         milestones_text = "\n".join(review.milestones) if review.milestones else "无"
         themes_text = ", ".join(review.themes) if review.themes else "无"
-        tags_text = ", ".join([f"{tag}({count})" for tag, count in review.top_tags]) if review.top_tags else "无"
+        tags_text = (
+            ", ".join([f"{tag}({count})" for tag, count in review.top_tags])
+            if review.top_tags
+            else "无"
+        )
         people_text = ", ".join(review.people_met) if review.people_met else "无"
         places_text = ", ".join(review.places_visited) if review.places_visited else "无"
 
-        monthly_text = "\n".join([
-            f"{m['month']}月：{m['entry_count']}篇，{m['total_words']}字，主导情绪{m['dominant_mood']}"
-            for m in review.monthly_stats
-        ]) if review.monthly_stats else "无"
+        monthly_text = (
+            "\n".join(
+                [
+                    f"{m['month']}月：{m['entry_count']}篇，{m['total_words']}字，主导情绪{m['dominant_mood']}"
+                    for m in review.monthly_stats
+                ]
+            )
+            if review.monthly_stats
+            else "无"
+        )
 
         return f"""你是一位温柔的日记陪伴者，正在帮用户做年度回顾。
 
@@ -463,7 +478,9 @@ class ReflectionService:
     # 里程碑识别
     # ═══════════════════════════════════════════
 
-    def detect_milestones(self, start_date: str | None = None, end_date: str | None = None) -> list[Milestone]:
+    def detect_milestones(
+        self, start_date: str | None = None, end_date: str | None = None
+    ) -> list[Milestone]:
         """识别人生里程碑（基于规则，不调用 LLM）。"""
         if start_date is None:
             start_date = "2000-01-01"
@@ -476,8 +493,32 @@ class ReflectionService:
 
         milestones = []
         milestone_keywords = {
-            "career": ["入职", "离职", "跳槽", "升职", "加薪", "转正", "面试", "offer", "工作", "项目", "创业"],
-            "relationship": ["结婚", "恋爱", "分手", "表白", "相亲", "订婚", "纪念日", "男朋友", "女朋友", "老公", "老婆"],
+            "career": [
+                "入职",
+                "离职",
+                "跳槽",
+                "升职",
+                "加薪",
+                "转正",
+                "面试",
+                "offer",
+                "工作",
+                "项目",
+                "创业",
+            ],
+            "relationship": [
+                "结婚",
+                "恋爱",
+                "分手",
+                "表白",
+                "相亲",
+                "订婚",
+                "纪念日",
+                "男朋友",
+                "女朋友",
+                "老公",
+                "老婆",
+            ],
             "health": ["生病", "住院", "手术", "体检", "康复", "怀孕", "生产", "宝宝", "出生"],
             "finance": ["买房", "买车", "投资", "理财", "贷款", "存款", "涨薪", "奖金"],
             "family": ["搬家", "装修", "团聚", "春节", "回家", "父母", "孩子", "生日"],
@@ -494,16 +535,21 @@ class ReflectionService:
 
             if matched_categories and (entry.title or len(entry.content) > 150):
                 # 计算重要性（基于内容长度和匹配的类别数）
-                significance = min(1.0, (len(entry.content) / 1000) * 0.5 + len(matched_categories) * 0.2)
+                significance = min(
+                    1.0, (len(entry.content) / 1000) * 0.5 + len(matched_categories) * 0.2
+                )
 
-                milestones.append(Milestone(
-                    date=entry.entry_date,
-                    title=entry.title or content[:50],
-                    description=entry.content[:200] + ("..." if len(entry.content) > 200 else ""),
-                    category=matched_categories[0],
-                    significance=significance,
-                    related_entries=[entry.id],
-                ))
+                milestones.append(
+                    Milestone(
+                        date=entry.entry_date,
+                        title=entry.title or content[:50],
+                        description=entry.content[:200]
+                        + ("..." if len(entry.content) > 200 else ""),
+                        category=matched_categories[0],
+                        significance=significance,
+                        related_entries=[entry.id],
+                    )
+                )
 
         # 按重要性排序
         milestones.sort(key=lambda m: m.significance, reverse=True)
@@ -516,10 +562,7 @@ class ReflectionService:
     def _get_entries_in_range(self, start_date: str, end_date: str) -> list[DiaryEntry]:
         """获取指定日期范围内的日记。"""
         all_entries = self.store.list_entries(limit=5000)
-        return [
-            e for e in all_entries
-            if start_date <= e.entry_date <= end_date
-        ]
+        return [e for e in all_entries if start_date <= e.entry_date <= end_date]
 
     def _count_moods(self, entries: list[DiaryEntry]) -> dict[str, int]:
         """统计情绪分布。"""
@@ -549,12 +592,14 @@ class ReflectionService:
             group_entries = grouped[key]
             moods = self._count_moods(group_entries)
             dominant = max(moods, key=moods.get) if moods else "unknown"
-            trend.append({
-                "period": key,
-                "entry_count": len(group_entries),
-                "dominant_mood": dominant,
-                "mood_distribution": moods,
-            })
+            trend.append(
+                {
+                    "period": key,
+                    "entry_count": len(group_entries),
+                    "dominant_mood": dominant,
+                    "mood_distribution": moods,
+                }
+            )
         return trend
 
     def _extract_themes(self, entries: list[DiaryEntry], top_n: int = 10) -> list[str]:
@@ -582,15 +627,38 @@ class ReflectionService:
     def _detect_milestones_from_entries(self, entries: list[DiaryEntry]) -> list[str]:
         """从日记中识别里程碑（简单规则）。"""
         milestone_keywords = [
-            "入职", "离职", "跳槽", "升职", "结婚", "恋爱", "分手",
-            "生病", "住院", "手术", "买房", "买车", "搬家", "装修",
-            "旅行", "旅游", "出国", "毕业", "入学", "宝宝", "出生",
-            "纪念日", "生日", "春节", "团聚",
+            "入职",
+            "离职",
+            "跳槽",
+            "升职",
+            "结婚",
+            "恋爱",
+            "分手",
+            "生病",
+            "住院",
+            "手术",
+            "买房",
+            "买车",
+            "搬家",
+            "装修",
+            "旅行",
+            "旅游",
+            "出国",
+            "毕业",
+            "入学",
+            "宝宝",
+            "出生",
+            "纪念日",
+            "生日",
+            "春节",
+            "团聚",
         ]
         milestones = []
         for e in entries:
             content = (e.title or "") + " " + e.content
-            if any(kw in content for kw in milestone_keywords) and (e.title or len(e.content) > 150):
+            if any(kw in content for kw in milestone_keywords) and (
+                e.title or len(e.content) > 150
+            ):
                 milestones.append(f"[{e.entry_date}] {e.title or e.content[:50]}")
         return milestones
 

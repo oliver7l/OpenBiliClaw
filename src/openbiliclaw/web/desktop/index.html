@@ -308,6 +308,8 @@
           <button class="diary-subtab" data-view="insights" type="button">📊 数据洞察</button>
           <button class="diary-subtab" data-view="people" type="button">👥 人物与标签</button>
           <button class="diary-subtab" data-view="fragments" type="button">✨ 随手记</button>
+          <button class="diary-subtab" data-view="reflection" type="button">📈 反思回顾</button>
+          <button class="diary-subtab" data-view="knowledge" type="button">🕸️ 知识网络</button>
           <button class="diary-subtab" data-view="semantic" type="button">🔍 语义搜索</button>
           <button class="diary-subtab" data-view="chat" type="button">💬 日记对话</button>
         </div>
@@ -555,6 +557,128 @@
           <div class="diary-fragments-list" id="diaryFragmentsList">
             <div class="diary-fragments-empty">还没有碎片，随手记点什么吧 ✨</div>
           </div>
+        </div>
+
+        <!-- 反思回顾视图 -->
+        <div class="diary-reflection-view" id="diaryReflectionView" hidden>
+          <div class="diary-reflection-intro">
+            <div class="diary-reflection-icon">📈</div>
+            <h3>反思回顾 — 从日记中看见成长的自己</h3>
+            <p>自动生成周报、月度反思、年度回顾，识别人生重要里程碑。让过去的日记成为未来的镜子。</p>
+          </div>
+          <!-- 反思子 Tab -->
+          <div class="diary-reflection-subtabs">
+            <button class="diary-reflection-subtab active" data-reflection-view="weekly" type="button">📅 周报</button>
+            <button class="diary-reflection-subtab" data-reflection-view="monthly" type="button">📆 月度反思</button>
+            <button class="diary-reflection-subtab" data-reflection-view="yearly" type="button">🎊 年度回顾</button>
+            <button class="diary-reflection-subtab" data-reflection-view="milestones" type="button">🏆 人生里程碑</button>
+          </div>
+
+          <!-- 周报内容 -->
+          <div class="diary-reflection-content" id="reflectionWeeklyContent">
+            <div class="diary-reflection-controls">
+              <input type="date" id="weeklyDateInput" class="diary-filter-select small" title="选择本周任意日期">
+              <button class="small-btn" id="weeklyPrevBtn" type="button">← 上一周</button>
+              <button class="small-btn" id="weeklyNextBtn" type="button">下一周 →</button>
+              <button class="small-btn primary" id="weeklyGenerateBtn" type="button">✨ AI 生成周报</button>
+            </div>
+            <div class="diary-reflection-loading" id="weeklyLoading" hidden>正在生成周报...</div>
+            <div class="diary-reflection-result" id="weeklyResult"></div>
+          </div>
+
+          <!-- 月度反思内容 -->
+          <div class="diary-reflection-content" id="reflectionMonthlyContent" hidden>
+            <div class="diary-reflection-controls">
+              <input type="month" id="monthlyDateInput" class="diary-filter-select small" title="选择月份">
+              <button class="small-btn" id="monthlyPrevBtn" type="button">← 上月</button>
+              <button class="small-btn" id="monthlyNextBtn" type="button">下月 →</button>
+              <button class="small-btn primary" id="monthlyGenerateBtn" type="button">✨ AI 生成月度反思</button>
+            </div>
+            <div class="diary-reflection-loading" id="monthlyLoading" hidden>正在生成月度反思...</div>
+            <div class="diary-reflection-result" id="monthlyResult"></div>
+          </div>
+
+          <!-- 年度回顾内容 -->
+          <div class="diary-reflection-content" id="reflectionYearlyContent" hidden>
+            <div class="diary-reflection-controls">
+              <select id="yearlyYearSelect" class="diary-filter-select small">
+                <option value="2026">2026年</option>
+                <option value="2025">2025年</option>
+                <option value="2024">2024年</option>
+                <option value="2023">2023年</option>
+                <option value="2022">2022年</option>
+                <option value="2021">2021年</option>
+                <option value="2020">2020年</option>
+                <option value="2019">2019年</option>
+                <option value="2018">2018年</option>
+                <option value="2017">2017年</option>
+                <option value="2016">2016年</option>
+              </select>
+              <button class="small-btn primary" id="yearlyGenerateBtn" type="button">✨ AI 生成年度回顾</button>
+            </div>
+            <div class="diary-reflection-loading" id="yearlyLoading" hidden>正在生成年度回顾...</div>
+            <div class="diary-reflection-result" id="yearlyResult"></div>
+          </div>
+
+          <!-- 人生里程碑内容 -->
+          <div class="diary-reflection-content" id="reflectionMilestonesContent" hidden>
+            <div class="diary-reflection-controls">
+              <input type="date" id="milestoneStartDate" class="diary-filter-select small" title="起始日期">
+              <span class="diary-filter-sep">至</span>
+              <input type="date" id="milestoneEndDate" class="diary-filter-select small" title="结束日期">
+              <button class="small-btn primary" id="milestoneLoadBtn" type="button">🔍 识别里程碑</button>
+            </div>
+            <div class="diary-reflection-loading" id="milestonesLoading" hidden>正在识别里程碑...</div>
+            <div class="diary-reflection-result" id="milestonesResult"></div>
+          </div>
+        </div>
+
+        <!-- 知识网络视图 -->
+        <div class="diary-knowledge-view" id="diaryKnowledgeView" hidden>
+          <div class="diary-knowledge-intro">
+            <div class="diary-knowledge-icon">🕸️</div>
+            <h3>知识网络 — 看见你生活中的关联与结构</h3>
+            <p>基于 925 篇日记构建个人知识网络，可视化标签之间的关联、人物之间的关系，点击节点查看详情。</p>
+          </div>
+
+          <!-- 知识网络子 Tab -->
+          <div class="diary-knowledge-subtabs">
+            <button class="diary-knowledge-subtab active" data-kg-view="mixed" type="button">🔗 混合网络</button>
+            <button class="diary-knowledge-subtab" data-kg-view="tags" type="button">🏷️ 标签网络</button>
+            <button class="diary-knowledge-subtab" data-kg-view="persons" type="button">👥 人物网络</button>
+            <button class="diary-knowledge-subtab" data-kg-view="stats" type="button">📊 网络统计</button>
+          </div>
+
+          <!-- 控制栏 -->
+          <div class="diary-knowledge-controls">
+            <input type="date" id="kgStartDate" class="diary-filter-select small" title="起始日期">
+            <span class="diary-filter-sep">至</span>
+            <input type="date" id="kgEndDate" class="diary-filter-select small" title="结束日期">
+            <label class="diary-knowledge-threshold">
+              最小出现次数:
+              <input type="number" id="kgMinCount" value="2" min="1" max="100" class="diary-filter-select small" style="width:60px">
+            </label>
+            <button class="small-btn primary" id="kgLoadBtn" type="button">🔄 重新加载</button>
+          </div>
+
+          <!-- 图谱画布 -->
+          <div class="diary-knowledge-canvas-container">
+            <canvas id="diaryKnowledgeCanvas" width="900" height="600"></canvas>
+            <div class="diary-knowledge-loading" id="kgLoading" hidden>正在构建知识网络...</div>
+            <div class="diary-knowledge-empty" id="kgEmpty" hidden>暂无数据，调整筛选条件后重试</div>
+          </div>
+
+          <!-- 节点详情面板 -->
+          <div class="diary-knowledge-detail" id="kgDetailPanel" hidden>
+            <div class="diary-knowledge-detail-header">
+              <h4 id="kgDetailTitle">节点详情</h4>
+              <button class="diary-knowledge-detail-close" id="kgDetailClose" type="button">×</button>
+            </div>
+            <div class="diary-knowledge-detail-content" id="kgDetailContent"></div>
+          </div>
+
+          <!-- 网络统计内容 -->
+          <div class="diary-knowledge-stats" id="kgStatsContent" hidden></div>
         </div>
 
         <!-- 语义搜索视图 -->
@@ -1552,4 +1676,6 @@
   <script src="/web/assets/js/diary-people.js" defer></script>
   <script src="/web/assets/js/diary-semantic.js" defer></script>
   <script src="/web/assets/js/diary-chat.js" defer></script>
+  <script src="/web/assets/js/diary-reflection.js" defer></script>
+  <script src="/web/assets/js/diary-knowledge.js" defer></script>
 </body></html>

@@ -12083,6 +12083,151 @@ Keep keywords focused and specific. Remove stop words."""
             "total": len(milestones),
         })
 
+    # ─── 知识图谱 API（标签关联+人物关系+知识网络） ─────────────────
+
+    @app.get("/api/diary/knowledge-graph/tag-network")
+    def diary_kg_tag_network(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        min_count: int = 2,
+        max_nodes: int = 50,
+    ) -> JSONResponse:
+        """获取标签关联网络。
+
+        Query:
+        - start_date: 开始日期
+        - end_date: 结束日期
+        - min_count: 最小出现次数，默认 2
+        - max_nodes: 最大节点数，默认 50
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        graph = kg.build_tag_network(start_date, end_date, min_count, max_nodes)
+        return JSONResponse({"ok": True, "data": graph.to_dict()})
+
+    @app.get("/api/diary/knowledge-graph/person-network")
+    def diary_kg_person_network(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        min_count: int = 1,
+        max_nodes: int = 30,
+    ) -> JSONResponse:
+        """获取人物关系图谱。
+
+        Query:
+        - start_date: 开始日期
+        - end_date: 结束日期
+        - min_count: 最小出现次数，默认 1
+        - max_nodes: 最大节点数，默认 30
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        graph = kg.build_person_network(start_date, end_date, min_count, max_nodes)
+        return JSONResponse({"ok": True, "data": graph.to_dict()})
+
+    @app.get("/api/diary/knowledge-graph/mixed")
+    def diary_kg_mixed(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        min_count: int = 2,
+        max_nodes: int = 60,
+    ) -> JSONResponse:
+        """获取混合知识网络（标签 + 人物 + 标签-人物关联）。
+
+        Query:
+        - start_date: 开始日期
+        - end_date: 结束日期
+        - min_count: 最小出现次数，默认 2
+        - max_nodes: 最大节点数，默认 60
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        graph = kg.build_mixed_network(start_date, end_date, min_count, max_nodes)
+        return JSONResponse({"ok": True, "data": graph.to_dict()})
+
+    @app.get("/api/diary/knowledge-graph/stats")
+    def diary_kg_stats(
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> JSONResponse:
+        """获取知识网络统计信息。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        stats = kg.get_network_stats(start_date, end_date)
+        return JSONResponse({"ok": True, "data": stats})
+
+    @app.get("/api/diary/knowledge-graph/node/{node_id}")
+    def diary_kg_node_detail(
+        node_id: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 20,
+    ) -> JSONResponse:
+        """获取知识节点详情。
+
+        Path:
+        - node_id: 节点 ID（格式：tag:xxx 或 person:xxx）
+
+        Query:
+        - start_date: 开始日期
+        - end_date: 结束日期
+        - limit: 相关日记数量上限，默认 20
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        detail = kg.get_node_detail(node_id, start_date, end_date, limit)
+        if detail is None:
+            return JSONResponse({"ok": False, "error": "节点不存在或无相关日记"}, status_code=404)
+        return JSONResponse({"ok": True, "data": detail.__dict__})
+
+    @app.get("/api/diary/knowledge-graph/person/{person_name}/relations")
+    def diary_kg_person_relations(
+        person_name: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> JSONResponse:
+        """分析某个人物与其他人物的关系。
+
+        Path:
+        - person_name: 人物名称
+
+        Query:
+        - start_date: 开始日期
+        - end_date: 结束日期
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import KnowledgeGraphService
+
+        kg = KnowledgeGraphService(svc.store)
+        relations = kg.analyze_person_relations(person_name, start_date, end_date)
+        return JSONResponse({
+            "ok": True,
+            "data": [r.__dict__ for r in relations],
+            "total": len(relations),
+        })
+
     # ─── 碎片（随手记）API ───────────────────────────────────────────
 
     @app.get("/api/diary/fragments")

@@ -13,6 +13,14 @@ from .insights import (
     WritingStreak,
     YearlyInsight,
 )
+from .knowledge_graph import (
+    GraphEdge,
+    GraphNode,
+    KnowledgeGraph,
+    KnowledgeGraphService,
+    KnowledgeNodeDetail,
+    PersonRelation,
+)
 from .models import (
     DiaryAnalysis,
     DiaryEntry,
@@ -53,11 +61,17 @@ __all__ = [
     "DiaryStats",
     "DiaryTag",
     "ExtractionResult",
+    "GraphEdge",
+    "GraphNode",
+    "KnowledgeGraph",
+    "KnowledgeGraphService",
+    "KnowledgeNodeDetail",
     "Milestone",
     "MoodAnalyzer",
     "MoodLevel",
     "MoodTrendPoint",
     "MonthlyReflection",
+    "PersonRelation",
     "RAGAnswer",
     "ReflectionService",
     "SearchResult",

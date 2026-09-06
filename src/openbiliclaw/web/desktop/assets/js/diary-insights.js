@@ -40,6 +40,12 @@
     document.getElementById("diaryInsightsView").hidden = view !== "insights";
     document.getElementById("diaryPeopleView").hidden = view !== "people";
     document.getElementById("diaryFragmentsView").hidden = view !== "fragments";
+    // 反思回顾视图
+    const reflectionView = document.getElementById("diaryReflectionView");
+    if (reflectionView) reflectionView.hidden = view !== "reflection";
+    // 知识网络视图
+    const knowledgeView = document.getElementById("diaryKnowledgeView");
+    if (knowledgeView) knowledgeView.hidden = view !== "knowledge";
     // 语义搜索和日记对话视图
     const semanticView = document.getElementById("diarySemanticView");
     const chatView = document.getElementById("diaryChatView");
@@ -56,6 +62,18 @@
     // 进入随手记视图时加载碎片
     if (view === "fragments") {
       renderFragments();
+    }
+    // 进入反思回顾视图时初始化
+    if (view === "reflection") {
+      if (typeof window.initDiaryReflection === "function") {
+        window.initDiaryReflection();
+      }
+    }
+    // 进入知识网络视图时初始化
+    if (view === "knowledge") {
+      if (typeof window.initDiaryKnowledge === "function") {
+        window.initDiaryKnowledge();
+      }
     }
   }
 

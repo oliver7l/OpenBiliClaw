@@ -349,6 +349,37 @@
       opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 80;
     }
     .rl-toast.show { opacity: .92; }
+    /* URL 提取弹窗 */
+    .rl-extract-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 90;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .rl-extract-modal[hidden] { display: none; }
+    .rl-extract-box {
+      background: var(--panel); border-radius: 14px; padding: 24px; width: 100%; max-width: 560px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.15);
+    }
+    .rl-extract-box h3 { margin: 0 0 16px; font-size: 17px; font-weight: 600; }
+    .rl-extract-input {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 10px;
+      font-size: 14px; outline: none; margin-bottom: 12px; box-sizing: border-box;
+    }
+    .rl-extract-input:focus { border-color: var(--accent); }
+    .rl-extract-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .rl-extract-btn {
+      padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; border: 1px solid var(--line-strong);
+      background: var(--panel); color: var(--ink);
+    }
+    .rl-extract-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .rl-extract-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .rl-extract-result {
+      margin-top: 16px; padding: 14px; background: var(--accent-soft); border-radius: 10px;
+      font-size: 13px; line-height: 1.6; max-height: 300px; overflow-y: auto;
+    }
+    .rl-extract-result .title { font-weight: 600; margin-bottom: 6px; }
+    .rl-extract-result .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .rl-extract-result .content { color: var(--ink); }
+    .rl-extract-error { color: #dc2626; font-size: 13px; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -376,6 +407,7 @@
       <input id="tagInput" class="rl-filter rl-tag" type="text" placeholder="标签，如 算法" aria-label="标签过滤">
       <button class="rl-shuffle" id="shuffleBtn" type="button">换一批</button>
       <div class="rl-tools">
+        <button class="rl-tool" id="extractBtn" type="button">提取链接</button>
         <button class="rl-tool" id="suggestBtn" type="button">今日建议</button>
         <button class="rl-tool" id="autoTagBtn" type="button">补标签</button>
         <button class="rl-tool" id="statsBtn" type="button">看板</button>
@@ -476,6 +508,16 @@
       autoTagBtn: document.getElementById("autoTagBtn"),
       statsBtn: document.getElementById("statsBtn"),
       blockedBtn: document.getElementById("blockedBtn"),
+      extractBtn: document.getElementById("extractBtn"),
+      extractModal: document.getElementById("extractModal"),
+      extractUrl: document.getElementById("extractUrl"),
+      extractCancel: document.getElementById("extractCancel"),
+      extractSubmit: document.getElementById("extractSubmit"),
+      extractError: document.getElementById("extractError"),
+      extractResult: document.getElementById("extractResult"),
+      extractResultTitle: document.getElementById("extractResultTitle"),
+      extractResultMeta: document.getElementById("extractResultMeta"),
+      extractResultContent: document.getElementById("extractResultContent"),
       platforms: document.getElementById("platforms"),
       pager: document.getElementById("pager"),
       prev: document.getElementById("prevBtn"),
@@ -1475,6 +1517,80 @@
         });
     }
 
+    // URL 提取功能
+    function openExtractModal() {
+      els.extractUrl.value = "";
+      els.extractError.hidden = true;
+      els.extractResult.hidden = true;
+      els.extractModal.hidden = false;
+      setTimeout(function () { els.extractUrl.focus(); }, 50);
+    }
+
+    function closeExtractModal() {
+      els.extractModal.hidden = true;
+    }
+
+    function extractUrlContent() {
+      var url = els.extractUrl.value.trim();
+      if (!url) {
+        showExtractError("请输入文章链接");
+        return;
+      }
+      if (!/^https?:\/\//i.test(url)) {
+        showExtractError("请输入有效的 URL（以 http:// 或 https:// 开头）");
+        return;
+      }
+
+      var btn = els.extractSubmit;
+      btn.disabled = true;
+      btn.textContent = "提取中…";
+      els.extractError.hidden = true;
+      els.extractResult.hidden = true;
+
+      fetch("/api/url/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url, save: true })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || d.status === "failed") {
+            showExtractError("提取失败：" + (d.error || "未知错误"));
+            return;
+          }
+          showExtractResult(d);
+          toast("已提取并入库：" + (d.title || url).substring(0, 30));
+          state.offset = 0;
+          load();
+        })
+        .catch(function (e) {
+          showExtractError("请求失败：" + e.message);
+        })
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = "提取并入库";
+        });
+    }
+
+    function showExtractError(msg) {
+      els.extractError.textContent = msg;
+      els.extractError.hidden = false;
+      els.extractResult.hidden = true;
+    }
+
+    function showExtractResult(d) {
+      els.extractResultTitle.textContent = d.title || "（无标题）";
+      var metaParts = [];
+      if (d.source_name) metaParts.push(d.source_name);
+      if (d.author) metaParts.push(d.author);
+      if (d.published_at) metaParts.push(d.published_at.substring(0, 10));
+      if (d.tags && d.tags.length) metaParts.push(d.tags.slice(0, 3).join(" / "));
+      els.extractResultMeta.textContent = metaParts.join(" · ");
+      var content = d.content_text || d.summary || "（无正文内容）";
+      els.extractResultContent.textContent = content.length > 500 ? content.substring(0, 500) + "…" : content;
+      els.extractResult.hidden = false;
+    }
+
     /* ── 每日简报 ───────────────────────────────────── */
 
     function briefHeadline(d) {
@@ -1657,6 +1773,16 @@
       state.offset = 0;
       load();
     });
+    // URL 提取功能
+    els.extractBtn.addEventListener("click", openExtractModal);
+    els.extractCancel.addEventListener("click", closeExtractModal);
+    els.extractModal.addEventListener("click", function (e) {
+      if (e.target === els.extractModal) closeExtractModal();
+    });
+    els.extractSubmit.addEventListener("click", extractUrlContent);
+    els.extractUrl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") extractUrlContent();
+    });
     els.drawerClose.addEventListener("click", function () { els.drawer.classList.remove("open"); });
     els.readerAI.addEventListener("click", requestSummary);
     els.fontMinus.addEventListener("click", function () {
@@ -1703,5 +1829,23 @@
     load();
   })();
   </script>
+
+  <!-- URL 提取弹窗 -->
+  <div class="rl-extract-modal" id="extractModal" hidden>
+    <div class="rl-extract-box">
+      <h3>提取链接内容</h3>
+      <input type="url" id="extractUrl" class="rl-extract-input" placeholder="粘贴文章链接，支持知乎/V2EX/B站/小红书/微信公众号/微博等18个平台" />
+      <div class="rl-extract-actions">
+        <button class="rl-extract-btn" id="extractCancel" type="button">取消</button>
+        <button class="rl-extract-btn primary" id="extractSubmit" type="button">提取并入库</button>
+      </div>
+      <div class="rl-extract-error" id="extractError" hidden></div>
+      <div class="rl-extract-result" id="extractResult" hidden>
+        <div class="title" id="extractResultTitle"></div>
+        <div class="meta" id="extractResultMeta"></div>
+        <div class="content" id="extractResultContent"></div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
