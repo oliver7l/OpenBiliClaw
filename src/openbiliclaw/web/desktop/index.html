@@ -73,6 +73,7 @@
         <button class="tab-btn" id="delightTabBtn" type="button">惊喜</button>
         <button class="tab-btn" id="watchLaterBtn" type="button">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
         <button class="tab-btn" id="favoritesBtn" type="button">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
+        <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
         <button class="tab-btn" id="profileBtn" type="button">我的画像</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="chatBtn" type="button">聊聊口味</button>
@@ -261,6 +262,443 @@
         <div class="profile-list profile-page-list" id="profileDetails"></div>
         <div class="drawer-actions profile-page-actions"><button class="pill-btn dark" id="profileMemoryMoreBtn" type="button" hidden="">加载更多近期记忆</button></div>
       </section>
+
+      <!-- 日记系统：记录、浏览、分析个人日记 -->
+      <section class="diary-page content-page" id="diaryPage" aria-label="日记" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Diary</p>
+            <h2>📔 我的日记</h2>
+            <p class="video-meta">记录生活点滴，AI 帮你回溯成长轨迹与情绪变化。</p>
+          </div>
+          <div class="diary-page-actions">
+            <button class="pill-btn primary" id="diaryNewBtn" type="button">✏️ 写日记</button>
+            <button class="pill-btn" id="diaryImportBtn" type="button">📥 导入</button>
+            <button class="pill-btn" id="diaryAnalyzeBtn" type="button">🤖 批量分析</button>
+          </div>
+        </div>
+
+        <!-- 统计概览 -->
+        <div class="diary-stats" id="diaryStats">
+          <div class="diary-stat-card">
+            <span class="diary-stat-val" id="diaryStatTotal">—</span>
+            <span class="diary-stat-label">日记总数</span>
+          </div>
+          <div class="diary-stat-card">
+            <span class="diary-stat-val" id="diaryStatWords">—</span>
+            <span class="diary-stat-label">总字数</span>
+          </div>
+          <div class="diary-stat-card">
+            <span class="diary-stat-val" id="diaryStatAvg">—</span>
+            <span class="diary-stat-label">平均字数</span>
+          </div>
+          <div class="diary-stat-card accent">
+            <span class="diary-stat-val" id="diaryStatAnalyzed">—</span>
+            <span class="diary-stat-label">已分析</span>
+          </div>
+          <div class="diary-stat-card">
+            <span class="diary-stat-val" id="diaryStatRange">—</span>
+            <span class="diary-stat-label">时间跨度</span>
+          </div>
+        </div>
+
+        <!-- 子 Tab 切换 -->
+        <div class="diary-subtabs">
+          <button class="diary-subtab active" data-view="list" type="button">📝 日记</button>
+          <button class="diary-subtab" data-view="insights" type="button">📊 数据洞察</button>
+          <button class="diary-subtab" data-view="people" type="button">👥 人物与标签</button>
+          <button class="diary-subtab" data-view="fragments" type="button">✨ 随手记</button>
+          <button class="diary-subtab" data-view="semantic" type="button">🔍 语义搜索</button>
+          <button class="diary-subtab" data-view="chat" type="button">💬 日记对话</button>
+        </div>
+
+        <!-- 日记列表视图 -->
+        <div class="diary-list-view" id="diaryListView">
+        <!-- 搜索和筛选 -->
+        <div class="diary-filter-bar">
+          <input type="search" id="diarySearchInput" placeholder="搜索日记内容..." class="diary-search-input">
+          <select id="diaryMoodFilter" class="diary-filter-select">
+            <option value="">全部情绪</option>
+            <option value="very_happy">非常开心</option>
+            <option value="happy">开心</option>
+            <option value="neutral">平静</option>
+            <option value="sad">低落</option>
+            <option value="very_sad">非常低落</option>
+            <option value="angry">生气</option>
+            <option value="anxious">焦虑</option>
+            <option value="unknown">未标注</option>
+          </select>
+          <select id="diarySourceFilter" class="diary-filter-select">
+            <option value="">全部来源</option>
+            <option value="manual">手动创建</option>
+            <option value="import_lele">乐乐日记</option>
+            <option value="import_text">文本导入</option>
+            <option value="import_markdown">Markdown导入</option>
+            <option value="api">API</option>
+          </select>
+          <button class="pill-btn" id="diaryResetFilterBtn" type="button">重置</button>
+        </div>
+
+        <!-- 主内容区：列表 + 详情 -->
+        <div class="diary-main-layout">
+          <!-- 日记列表 -->
+          <div class="diary-list-panel">
+            <div class="diary-list-header">
+              <h3>日记列表</h3>
+              <span class="diary-list-count" id="diaryListCount">0 篇</span>
+            </div>
+            <div class="diary-list" id="diaryList"></div>
+            <div class="diary-list-loadmore">
+              <button class="pill-btn" id="diaryLoadMoreBtn" type="button" hidden>加载更多</button>
+            </div>
+          </div>
+
+          <!-- 日记详情/编辑 -->
+          <div class="diary-detail-panel" id="diaryDetailPanel">
+            <div class="diary-detail-empty" id="diaryDetailEmpty">
+              <div class="diary-empty-icon">📝</div>
+              <p>选择一篇日记查看详情</p>
+              <p class="diary-empty-hint">或点击"写日记"开始记录</p>
+            </div>
+            <div class="diary-detail-content" id="diaryDetailContent" hidden>
+              <div class="diary-detail-header">
+                <div class="diary-detail-meta">
+                  <span class="diary-detail-date" id="diaryDetailDate"></span>
+                  <span class="diary-detail-mood" id="diaryDetailMood"></span>
+                  <span class="diary-detail-source" id="diaryDetailSource"></span>
+                </div>
+                <div class="diary-detail-actions">
+                  <button class="small-btn" id="diaryEditBtn" type="button">编辑</button>
+                  <button class="small-btn" id="diaryAnalyzeOneBtn" type="button">🤖 分析</button>
+                  <button class="small-btn danger" id="diaryDeleteBtn" type="button">删除</button>
+                </div>
+              </div>
+              <h3 class="diary-detail-title" id="diaryDetailTitle"></h3>
+              <div class="diary-detail-body" id="diaryDetailBody"></div>
+              <div class="diary-detail-tags" id="diaryDetailTags"></div>
+
+              <!-- AI 分析结果 -->
+              <div class="diary-analysis-section" id="diaryAnalysisSection" hidden>
+                <h4>🤖 AI 分析</h4>
+                <div class="diary-analysis-summary" id="diaryAnalysisSummary"></div>
+                <div class="diary-analysis-grid">
+                  <div class="diary-analysis-block">
+                    <h5>关键要点</h5>
+                    <ul id="diaryAnalysisKeyPoints"></ul>
+                  </div>
+                  <div class="diary-analysis-block">
+                    <h5>情绪分布</h5>
+                    <div id="diaryAnalysisEmotions"></div>
+                  </div>
+                  <div class="diary-analysis-block">
+                    <h5>主题标签</h5>
+                    <div id="diaryAnalysisThemes"></div>
+                  </div>
+                  <div class="diary-analysis-block">
+                    <h5>提到的人</h5>
+                    <div id="diaryAnalysisPeople"></div>
+                  </div>
+                </div>
+                <div class="diary-analysis-insight">
+                  <h5>💡 成长洞察</h5>
+                  <p id="diaryAnalysisInsight"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </div><!-- /diary-list-view -->
+
+        <!-- 数据洞察视图 -->
+        <div class="diary-insights-view" id="diaryInsightsView" hidden>
+          <div class="diary-streak-cards">
+            <div class="diary-streak-card"><span class="diary-streak-val" id="streakCurrent">—</span><span class="diary-streak-label">当前连续</span></div>
+            <div class="diary-streak-card accent"><span class="diary-streak-val" id="streakLongest">—</span><span class="diary-streak-label">最长连续</span></div>
+            <div class="diary-streak-card"><span class="diary-streak-val" id="streakTotal">—</span><span class="diary-streak-label">总写作天数</span></div>
+            <div class="diary-streak-card"><span class="diary-streak-val" id="streakWeek">—</span><span class="diary-streak-label">本周</span></div>
+            <div class="diary-streak-card"><span class="diary-streak-val" id="streakMonth">—</span><span class="diary-streak-label">本月</span></div>
+          </div>
+          <div class="diary-chart-card">
+            <div class="diary-chart-header"><h3>📈 情绪变化趋势</h3>
+              <div class="diary-chart-controls">
+                <button class="small-btn active" data-mood-gran="month" type="button">按月</button>
+                <button class="small-btn" data-mood-gran="year" type="button">按年</button>
+              </div>
+            </div>
+            <div class="diary-chart-container" id="moodTrendChart"></div>
+          </div>
+          <div class="diary-chart-card">
+            <div class="diary-chart-header"><h3>✍️ 写作字数趋势</h3>
+              <div class="diary-chart-controls">
+                <button class="small-btn active" data-word-gran="year" type="button">按年</button>
+                <button class="small-btn" data-word-gran="month" type="button">按月</button>
+              </div>
+            </div>
+            <div class="diary-chart-container" id="wordTrendChart"></div>
+          </div>
+          <div class="diary-chart-card">
+            <div class="diary-chart-header"><h3>🎂 年度洞察报告</h3>
+              <div class="diary-chart-controls">
+                <select id="yearReportSelect" class="diary-filter-select small"><option value="2025">2025年</option><option value="2024">2024年</option><option value="2023">2023年</option><option value="2022">2022年</option><option value="2021">2021年</option></select>
+                <button class="small-btn primary" id="generateYearReportBtn" type="button">✨ 生成报告</button>
+              </div>
+            </div>
+            <div class="diary-year-stats" id="diaryYearStats"></div>
+            <div class="diary-year-report" id="diaryYearReport" hidden>
+              <div class="diary-report-loading" id="diaryReportLoading">正在生成年度报告，请稍候...</div>
+              <div class="diary-report-content" id="diaryReportContent"></div>
+            </div>
+          </div>
+          <div class="diary-chart-card">
+            <div class="diary-chart-header"><h3>☁️ 高频关键词</h3></div>
+            <div class="diary-wordcloud" id="diaryWordCloud"></div>
+          </div>
+        </div>
+
+        <!-- 人物与标签视图 -->
+        <div class="diary-people-view" id="diaryPeopleView" hidden>
+          <div class="diary-people-intro">
+            <div class="diary-people-icon">👥</div>
+            <h3>人物与标签 — AI 自动从日记中提取</h3>
+            <p>AI 自动识别你日记中出现的人物和主题，建立人物档案和标签云，让十年日记变得可浏览、可关联。</p>
+          </div>
+          <div class="diary-people-stats" id="diaryPeopleStats">
+            <div class="diary-stat-card"><div class="diary-stat-value" id="statTotalPersons">-</div><div class="diary-stat-label">识别人物</div></div>
+            <div class="diary-stat-card"><div class="diary-stat-value" id="statTotalTags">-</div><div class="diary-stat-label">提取标签</div></div>
+            <div class="diary-stat-card"><div class="diary-stat-value" id="statExtractedEntries">-</div><div class="diary-stat-label">已处理日记</div></div>
+            <div class="diary-stat-card">
+              <button class="small-btn primary" id="extractBatchBtn" type="button">🚀 批量提取</button>
+              <div class="diary-stat-label" style="margin-top:8px">AI 提取标签和人物</div>
+            </div>
+          </div>
+          <div class="diary-people-content">
+            <div class="diary-people-section">
+              <div class="diary-people-section-header">
+                <h4>👤 人物列表</h4>
+                <select id="personRelationFilter" class="diary-filter-select small">
+                  <option value="">全部关系</option>
+                  <option value="家人">家人</option>
+                  <option value="朋友">朋友</option>
+                  <option value="同事">同事</option>
+                  <option value="儿子">儿子</option>
+                  <option value="母亲">母亲</option>
+                  <option value="伴侣">伴侣</option>
+                </select>
+              </div>
+              <div class="diary-people-list" id="diaryPeopleList">
+                <div class="diary-people-empty">暂无人物数据，点击「批量提取」开始 AI 分析</div>
+              </div>
+            </div>
+            <div class="diary-people-section">
+              <div class="diary-people-section-header">
+                <h4>🏷️ 标签云</h4>
+                <select id="tagTypeFilter" class="diary-filter-select small">
+                  <option value="">全部类型</option>
+                  <option value="emotion">情绪</option>
+                  <option value="topic">主题</option>
+                  <option value="event">事件</option>
+                  <option value="location">地点</option>
+                  <option value="work">工作</option>
+                  <option value="family">家庭</option>
+                  <option value="health">健康</option>
+                </select>
+              </div>
+              <div class="diary-tagcloud" id="diaryTagCloud">
+                <div class="diary-people-empty">暂无标签数据</div>
+              </div>
+            </div>
+          </div>
+          <!-- 人物详情弹窗 -->
+          <div class="diary-modal" id="personDetailModal" hidden>
+            <div class="diary-modal-content" style="max-width:700px">
+              <div class="diary-modal-header">
+                <h3 id="personDetailName">人物详情</h3>
+                <button class="diary-modal-close" onclick="document.getElementById('personDetailModal').hidden=true" type="button">×</button>
+              </div>
+              <div class="diary-modal-body" id="personDetailBody"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 随手记视图 -->
+        <div class="diary-fragments-view" id="diaryFragmentsView" hidden>
+          <div class="diary-fragments-intro">
+            <div class="diary-fragments-icon">✨</div>
+            <h3>随手记 — 白天丢碎片，夜里成日记</h3>
+            <p>随时记录生活中的小片段、小情绪、小想法。积累一天后，AI 会自动帮你整理成一篇完整的日记。</p>
+          </div>
+          <div class="diary-fragments-input">
+            <textarea id="fragmentInput" class="diary-fragment-textarea" placeholder="此刻想到了什么？随手记下来..." rows="3"></textarea>
+            <div class="diary-fragments-input-actions">
+              <select id="fragmentMood" class="diary-filter-select small"><option value="">此刻情绪</option><option value="very_happy">😄 非常开心</option><option value="happy">🙂 开心</option><option value="neutral">😐 平静</option><option value="sad">😔 低落</option><option value="anxious">😰 焦虑</option><option value="angry">😠 生气</option></select>
+              <button class="pill-btn primary" id="fragmentAddBtn" type="button">➕ 添加碎片</button>
+            </div>
+          </div>
+          <div class="diary-fragments-list-header">
+            <h4>今日碎片</h4>
+            <span class="diary-fragments-count" id="fragmentsCount">0 条</span>
+            <button class="small-btn primary" id="generateDiaryFromFragmentsBtn" type="button">🌙 生成今日日记</button>
+          </div>
+          <div class="diary-fragments-list" id="diaryFragmentsList">
+            <div class="diary-fragments-empty">还没有碎片，随手记点什么吧 ✨</div>
+          </div>
+        </div>
+
+        <!-- 语义搜索视图 -->
+        <div class="diary-semantic-view" id="diarySemanticView" hidden>
+          <div class="diary-semantic-intro">
+            <div class="diary-semantic-icon">🔍</div>
+            <h3>语义搜索 — 用自然语言找到你的日记</h3>
+            <p>不用记关键词，用自然语言描述你想找的内容。AI 会理解你的意思，从 925 篇日记中找到最相关的内容。</p>
+          </div>
+          <div class="diary-semantic-search-bar">
+            <input type="search" id="semanticSearchInput" class="diary-semantic-input" placeholder="例如：我和艳艳吵架最多的时候、去年夏天的旅行、工作焦虑的日记..." />
+            <button class="pill-btn primary" id="semanticSearchBtn" type="button">🔍 搜索</button>
+          </div>
+          <div class="diary-semantic-filters">
+            <select id="semanticSourceFilter" class="diary-filter-select small">
+              <option value="">全部来源</option>
+              <option value="import_mindback">MindBack</option>
+              <option value="youdao_note">有道云</option>
+              <option value="apple_notes">苹果备忘录</option>
+              <option value="import_lele">乐乐日记</option>
+              <option value="wps_note">WPS笔记</option>
+            </select>
+            <input type="date" id="semanticStartDate" class="diary-filter-select small" title="起始日期">
+            <span class="diary-filter-sep">至</span>
+            <input type="date" id="semanticEndDate" class="diary-filter-select small" title="结束日期">
+            <label class="diary-semantic-threshold">
+              相似度阈值
+              <input type="range" id="semanticThreshold" min="0.1" max="0.8" step="0.05" value="0.3">
+              <span id="semanticThresholdVal">0.30</span>
+            </label>
+          </div>
+          <div class="diary-semantic-results-header">
+            <h4>搜索结果</h4>
+            <span class="diary-semantic-results-count" id="semanticResultsCount">输入关键词开始搜索</span>
+          </div>
+          <div class="diary-semantic-results" id="semanticResultsList">
+            <div class="diary-semantic-empty">
+              <div class="diary-semantic-empty-icon">💭</div>
+              <p>试试搜索："我最开心的日子"、"和妈妈的回忆"、"工作迷茫的时候"</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 日记对话视图 -->
+        <div class="diary-chat-view" id="diaryChatView" hidden>
+          <div class="diary-chat-intro">
+            <div class="diary-chat-icon">💬</div>
+            <h3>日记对话 — 和你的过去对话</h3>
+            <p>基于你 925 篇、33 万字的日记，AI 可以回答关于你过去的问题。每个回答都会引用具体的日记作为证据。</p>
+          </div>
+          <div class="diary-chat-container">
+            <div class="diary-chat-messages" id="diaryChatMessages">
+              <div class="diary-chat-message ai">
+                <div class="diary-chat-avatar">🤖</div>
+                <div class="diary-chat-bubble">
+                  <p>你好！我是你的日记助手。我已经读完了你 925 篇日记，可以回答关于你过去的任何问题。</p>
+                  <p>你可以问我：</p>
+                  <ul>
+                    <li>"我和艳艳的关系是怎么变化的？"</li>
+                    <li>"2024 年我最大的成长是什么？"</li>
+                    <li>"我最焦虑的时候是什么时候？"</li>
+                    <li>"总结一下我对工作的态度变化"</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="diary-chat-input-area">
+              <textarea id="diaryChatInput" class="diary-chat-input" placeholder="问我任何关于你过去的问题..." rows="2"></textarea>
+              <button class="pill-btn primary" id="diaryChatSendBtn" type="button">发送</button>
+            </div>
+            <div class="diary-chat-suggestions" id="diaryChatSuggestions">
+              <button class="diary-chat-suggestion" data-q="我和艳艳的关系是怎么变化的？" type="button">💑 我和艳艳的关系变化</button>
+              <button class="diary-chat-suggestion" data-q="2024年我最大的成长是什么？" type="button">🌱 2024年最大成长</button>
+              <button class="diary-chat-suggestion" data-q="我最焦虑的时候是什么时候？" type="button">😰 最焦虑的时候</button>
+              <button class="diary-chat-suggestion" data-q="总结一下我对工作的态度变化" type="button">💼 工作态度变化</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日记编辑弹窗 -->
+      <div class="diary-editor-modal" id="diaryEditorModal" hidden>
+        <div class="diary-editor-overlay" id="diaryEditorOverlay"></div>
+        <div class="diary-editor-dialog" role="dialog" aria-modal="true">
+          <div class="diary-editor-header">
+            <h3 id="diaryEditorTitle">写日记</h3>
+            <button class="icon-btn" id="diaryEditorCloseBtn" type="button" aria-label="关闭">×</button>
+          </div>
+          <div class="diary-editor-body">
+            <div class="diary-editor-row">
+              <label for="diaryEditorDate">日期</label>
+              <input type="date" id="diaryEditorDate" class="diary-editor-input">
+            </div>
+            <div class="diary-editor-row">
+              <label for="diaryEditorTitleInput">标题（可选）</label>
+              <input type="text" id="diaryEditorTitleInput" class="diary-editor-input" placeholder="给今天起个标题...">
+            </div>
+            <div class="diary-editor-row">
+              <label for="diaryEditorContent">内容</label>
+              <textarea id="diaryEditorContent" class="diary-editor-textarea" placeholder="记录今天的所思所想..." rows="12"></textarea>
+            </div>
+            <div class="diary-editor-row">
+              <label for="diaryEditorTags">标签（逗号分隔）</label>
+              <input type="text" id="diaryEditorTags" class="diary-editor-input" placeholder="例如：生活,感悟,工作">
+            </div>
+            <div class="diary-editor-row">
+              <label for="diaryEditorMood">情绪</label>
+              <select id="diaryEditorMood" class="diary-editor-input">
+                <option value="unknown">未标注</option>
+                <option value="very_happy">非常开心</option>
+                <option value="happy">开心</option>
+                <option value="neutral">平静</option>
+                <option value="sad">低落</option>
+                <option value="very_sad">非常低落</option>
+                <option value="angry">生气</option>
+                <option value="anxious">焦虑</option>
+              </select>
+            </div>
+          </div>
+          <div class="diary-editor-footer">
+            <button class="pill-btn" id="diaryEditorCancelBtn" type="button">取消</button>
+            <button class="pill-btn primary" id="diaryEditorSaveBtn" type="button">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 导入弹窗 -->
+      <div class="diary-import-modal" id="diaryImportModal" hidden>
+        <div class="diary-import-overlay" id="diaryImportOverlay"></div>
+        <div class="diary-import-dialog" role="dialog" aria-modal="true">
+          <div class="diary-import-header">
+            <h3>导入日记</h3>
+            <button class="icon-btn" id="diaryImportCloseBtn" type="button" aria-label="关闭">×</button>
+          </div>
+          <div class="diary-import-body">
+            <p class="diary-import-hint">输入本地文件路径，支持乐乐日记格式、纯文本、Markdown。</p>
+            <div class="diary-editor-row">
+              <label for="diaryImportPath">文件路径</label>
+              <input type="text" id="diaryImportPath" class="diary-editor-input" placeholder="/path/to/diary.txt">
+            </div>
+            <div class="diary-editor-row">
+              <label for="diaryImportFormat">格式</label>
+              <select id="diaryImportFormat" class="diary-editor-input">
+                <option value="auto">自动检测</option>
+                <option value="lele">乐乐日记格式</option>
+                <option value="text">纯文本</option>
+                <option value="markdown">Markdown</option>
+              </select>
+            </div>
+            <div class="diary-import-result" id="diaryImportResult" hidden></div>
+          </div>
+          <div class="diary-import-footer">
+            <button class="pill-btn" id="diaryImportCancelBtn" type="button">取消</button>
+            <button class="pill-btn primary" id="diaryImportConfirmBtn" type="button">开始导入</button>
+          </div>
+        </div>
+      </div>
 
       <section class="chat-page content-page" id="chatPage" aria-label="聊聊口味" hidden>
         <div class="content-page-head">
@@ -1097,4 +1535,8 @@
 
   <div class="toast" id="toast" role="status"></div>
   <script src="/web/assets/js/app.js" defer></script>
+  <script src="/web/assets/js/diary-insights.js" defer></script>
+  <script src="/web/assets/js/diary-people.js" defer></script>
+  <script src="/web/assets/js/diary-semantic.js" defer></script>
+  <script src="/web/assets/js/diary-chat.js" defer></script>
 </body></html>

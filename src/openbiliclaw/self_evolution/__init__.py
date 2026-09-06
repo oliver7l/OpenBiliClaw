@@ -33,6 +33,11 @@ from openbiliclaw.self_evolution.knowledge_graph import (
     KnowledgeGraphBuilder,
     Relationship,
 )
+from openbiliclaw.self_evolution.learning_path import (
+    LearningPath,
+    LearningPathGenerator,
+    PathStep,
+)
 from openbiliclaw.self_evolution.proactive_push import (
     PushConfig,
     PushNotification,
@@ -68,6 +73,10 @@ __all__ = [
     "KnowledgeGraph",
     "KnowledgeGraphBuilder",
     "Relationship",
+    # Learning path
+    "LearningPath",
+    "LearningPathGenerator",
+    "PathStep",
     # Proactive push
     "PushConfig",
     "PushNotification",

@@ -4,15 +4,276 @@
 
 ---
 
----
+## v0.3.181: 苹果备忘录日记导入——通过 AppleScript 读取 macOS 备忘录并导入日记系统（2026-09-06）
+
+通过 AppleScript 读取 macOS 系统备忘录应用，导出"每日记录"文件夹的 67 篇备忘录，解析月度汇总为单篇日记，去重后成功导入 85 篇新日记。
+
+- feat: 苹果备忘录读取与导出
+  - 通过 AppleScript 控制备忘录应用，无需数据库文件访问权限
+  - 导出"每日记录"文件夹的 67 篇备忘录（HTML 格式）
+  - HTML 转纯文本解析，清理格式标签
+  - 25 篇为单天日记（标题含具体日期），42 篇为月度汇总需拆分
+- feat: 月度汇总智能拆分
+  - 自动识别月度汇总中的日期分隔符（2022年06月07日等格式）
+  - 按日期拆分为单独日记条目，合并同一天的多篇内容
+  - 从 67 篇备忘录中解析出 116 篇单独日记，总字数 86,030 字
+  - 日期范围 2019-10-06 ~ 2026-09-03
+- feat: 去重与导入
+  - 与已有 840 篇日记去重，跳过 31 篇重复
+  - 成功导入 85 篇新日记（来源标记为 `apple_notes`）
+  - 数据库日记总数从 840 篇增加到 925 篇，总字数 330,716 字
+- note: 数据库最终状态
+  - 日记总数：925 篇
+  - 总字数：330,716 字
+  - 日期范围：2016-04-12 ~ 2026-09-03
+  - 按来源：import_mindback 657 篇、youdao_note 126 篇、apple_notes 85 篇、import_lele 47 篇、wps_note 10 篇
+
+## v0.3.180: 日记去重合并与 AI 分析保存——跨来源重复日记合并 + 有道云 AI 分析内容保存（2026-09-06）
+
+对多来源导入的日记进行全面去重检查，合并跨来源重复条目，并将有道云笔记中的 AI 分析内容保存到日记分析表。
+
+- feat: 跨来源日记去重合并
+  - 检测 952 篇日记中的重复项，发现 112 对潜在重复（主要是 youdao_note 与 import_mindback 之间的格式差异导致）
+  - 合并策略：保留内容较长的那篇，长度相同时优先保留 import_mindback 来源
+  - 成功删除 112 篇重复日记，数据库日记总数从 952 篇减少到 840 篇
+  - 删除分布：youdao_note 96 篇、import_mindback 15 篇、import_lele 1 篇
+  - 剩余 33 个日期有多篇日记，经确认是同一天的不同日记（非重复），予以保留
+- feat: 有道云 AI 分析内容保存
+  - 从有道云笔记中提取 12 篇日记的 AI 分析内容（内容解读、核心总结、针对性建议、深度反馈）
+  - 保存到 diary_analyses 表，model_used 标记为 `youdao_ai_analysis`
+  - 修复 emotions 字段格式问题（dict[str, float]，不接受字符串值）
+  - 数据库分析记录总数达到 12 篇
+- note: 数据库最终状态
+  - 日记总数：840 篇
+  - 总字数：262,481 字
+  - 日期范围：2016-04-12 ~ 2026-07-31
+  - 按来源：import_mindback 657 篇、youdao_note 126 篇、import_lele 47 篇、wps_note 10 篇
+
+## v0.3.179: 有道云笔记日记导入——浏览器自动化抓取有道云笔记并导入日记系统（2026-09-06）
+
+通过浏览器自动化（Cookie 注入登录）成功访问有道云笔记（note.youdao.com），递归遍历所有目录，提取 53 篇月度笔记文件，解析出 771 篇单独日记，去重后成功导入 222 篇新日记到日记系统。
+
+- feat: 有道云笔记浏览器自动化抓取
+  - 通过用户提供的 Cookie（YNOTE_PERS / YNOTE_SESS / YNOTE_CSTK）注入浏览器实现自动登录
+  - 递归遍历所有目录（01-每日记录 11 个年份子目录 + 02-年度回顾与总结）
+  - 从新版编辑器 iframe（bulb-editor）中精确提取笔记完整内容
+  - 自动解析月度笔记文件，按日期拆分为单独日记条目
+  - 自动过滤 AI 分析内容（内容解读、核心总结、针对性建议、深度反馈等）
+  - 自动去重（日期 + 内容前50字），合并同一天的多篇日记
+- feat: 有道云笔记日记导入
+  - 从 53 篇月度笔记中解析出 771 篇日记
+  - 去重后成功导入 222 篇新日记（来源标记为 `youdao_note`）
+  - 跳过 549 篇与已有 MindBack 日记重复的条目
+  - 新日记总字数 102,379 字，日期范围 2017-08-28 ~ 2026-03-30
+  - 数据库日记总数从 730 篇增加到 952 篇，总字数 298,717 字
+- feat: 新日记标签人物自动提取
+  - 对 360 篇未提取的日记批量运行标签人物提取（规则提取模式）
+  - 全部成功提取，标签总数 27 个，人物总数 10 个
+- note: 有道云笔记 API 探索
+  - 旧版下载 API（/yws/api/personal/sync?method=download）返回 "request not valid"
+  - 新版编辑器笔记无法通过旧版 API 读取内容，改用浏览器自动化方案
+  - 参考 youdaonote-pull 开源项目了解 API 接口和 .note 文件格式
+
+## v0.3.178: WPS 笔记日记导入——浏览器自动化抓取 WPS 云笔记并导入日记系统（2026-09-06）
+
+通过浏览器自动化（Cookie 注入登录）成功访问 WPS 笔记（note.wps.cn），遍历 7 个分组（每日记录、近期记录、乐乐日记、重要信息、反复观看、网盘资源、周期记录），提取并整理 10 篇有效日记导入到日记系统。
+
+- feat: WPS 笔记浏览器自动化抓取
+  - 通过用户提供的 Cookie（wps_sid / kso_sid）注入浏览器实现自动登录
+  - 遍历所有分组，滚动加载全部笔记
+  - 从 DOM 精确提取笔记标题、日期、内容
+  - 自动去重（日期 + 内容前50字）和日期格式修复（修复 "202026年" 等异常格式）
+- feat: WPS 笔记日记导入
+  - 成功导入 10 篇日记（来源标记为 `wps_note`）
+  - 跳过 1 篇重复（2026-07-16 乐乐日记已存在）
+  - 数据库日记总数从 720 篇增加到 730 篇
+- note: WPS 开放平台 API 探索
+  - 成功验证 WPS Agent API Key 鉴权流程（Token 有效期 12 小时）
+  - 成功读取 WPS 云文档内容（V7 内容抽取接口，需从 openapi.wps.cn 回退到 api.wps.cn）
+  - 发现 WPS V7 API 未提供云盘文件列表接口，改用浏览器自动化方案
+
+## v0.3.177: 健康系统第四阶段增强——预约复诊、服药依从性、药物相互作用检查、紧急联系人（2026-09-06）
+
+深入研究 3 个开源健康管理项目（EHR-django、HealthCare-Management-System、MedSync-AI），借鉴其设计理念，为个人健康管理系统新增预约复诊管理、服药记录与依从性追踪、药物相互作用安全检查、患者紧急联系人等功能。
+
+- feat: 新增 **预约/复诊管理** 模块
+  - **数据模型**：Appointment（标题、类型、状态、日期时间、医院、科室、医生、原因、备注、提醒设置）
+  - **预约类型**：follow_up（复诊）、consultation（咨询）、checkup（体检）、procedure（检查/治疗）、vaccination（疫苗）、other
+  - **状态管理**：scheduled（已预约）、confirmed（已确认）、completed（已完成）、cancelled（已取消）、no_show（未就诊）
+  - **提醒功能**：支持开启/关闭提醒，设置提前提醒天数
+  - **数据库表**：health_appointments
+- feat: 新增 **服药记录/用药依从性追踪** 模块
+  - **数据模型**：MedicationLog（药物、剂量、计划时间、实际服用时间、状态、备注）
+  - **状态**：taken（已服用）、missed（漏服）、skipped（跳过）、late（延迟服用）
+  - **依从率计算**：按时间段统计总剂量、已服用、漏服、依从率百分比
+  - **数据库表**：health_medication_logs
+- feat: 新增 **药物相互作用安全检查**
+  - 内置 17 组已知危险药物对（华法林+阿司匹林、辛伐他汀+克拉霉素等）
+  - 支持模糊匹配（药物名前缀匹配）
+  - 严重程度分级：major（严重）、moderate（中等）、minor（轻微）
+  - API：`POST /api/health/check-drug-interactions`
+- feat: 患者档案新增 **紧急联系人** 字段
+  - emergency_contact_name（姓名）、emergency_contact_phone（电话）、emergency_contact_relation（关系）
+  - 数据库自动迁移，兼容已有数据
+- feat: 新增 13 个 RESTful API 端点
+  - 预约：GET/POST/PUT/DELETE `/api/health/appointments`
+  - 服药记录：GET/POST/DELETE `/api/health/medication-logs`
+  - 依从率：GET `/api/health/medication-adherence`
+  - 药物相互作用：POST `/api/health/check-drug-interactions`
+- feat: 前端页面扩展到 **14 个标签页**
+  - 新增「预约复诊」标签页：即将到来/历史记录分组展示，新增预约表单，状态快速更新
+  - 新增「服药记录」标签页：依从率统计卡片，服药记录列表，药物相互作用一键检查
+  - 概览页新增「即将预约」「服药记录」统计卡片
+  - 健康时间线新增预约事件类型
+- 数据导入：自动创建胆总管结石复诊预约（9月9日）、今日3次匹维溴铵服药记录、患者紧急联系人（狄胖胖/伴侣）
+- 健康模块表数量：13 → **15 张**
+- 健康模块 API 数量：50+ → **60+**
 
 ---
 
----
+## v0.3.176: 日记系统增强——AI 自动标签提取、人物档案、标签云、人物时间线（2026-09-06）
+
+深入分析 10 个开源日记/知识管理项目（Memos、Reor、AnythingLLM、obsidian-second-brain、Night-Journal、memex、Journiv、nightDiary、Nightly Journal、cube-diary），借鉴其设计理念，为日记系统新增 AI 自动标签和人物提取功能。
+
+- feat: 新增 **AI 标签与人物提取** 模块
+  - **数据模型**：DiaryTag（标签+类型+使用次数）、DiaryPerson（人物档案+关系+首次/最后出现+出现次数）、ExtractionResult
+  - **标签类型**：emotion（情绪）、topic（主题）、event（事件）、location（地点）、work、family、health、finance、other
+  - **数据库表**：diary_tags、diary_entry_tags（关联表）、diary_persons、diary_entry_persons（关联表+上下文）
+  - **AI 提取**：精心设计的 Prompt，从日记中提取 3-8 个标签和人物，含置信度和上下文
+  - **规则提取降级**：无 LLM 时基于关键词词典快速提取，720 篇仅需 0.5 秒
+- feat: 新增 7 个 RESTful API 端点
+  - `GET /api/diary/tags` — 标签列表（可按类型筛选）
+  - `GET /api/diary/persons` — 人物列表（可按关系筛选）
+  - `GET /api/diary/persons/{id}` — 人物详情（含相关日记列表）
+  - `GET /api/diary/{id}/tags` — 某篇日记的标签和人物
+  - `POST /api/diary/{id}/extract` — 单篇日记 AI 提取
+  - `POST /api/diary/extract-batch` — 批量提取
+  - `GET /api/diary/extraction-stats` — 提取统计
+- feat: 桌面端日记页面新增 **👥 人物与标签** 子 Tab
+  - 统计卡片（识别人物数、提取标签数、已处理日记数、批量提取按钮）
+  - 人物列表（头像+名称+关系+出现次数+时间跨度，点击查看详情）
+  - 人物详情弹窗（统计信息+相关日记列表，含上下文片段）
+  - 标签云（按类型着色，字号随使用次数变化，悬停显示详情）
+  - 按关系/类型筛选器
+- data: 已对 **720 篇日记** 执行批量提取（规则提取模式）
+  - 成功提取 710 篇，提取 **27 个标签** 和 **9 个人物**
+  - **人物 TOP**：艳艳(135次)、乐乐(115次)、妈妈(102次)、爸爸(62次)、朋友(51次)、同事(13次)
+  - **标签 TOP**：家(268次)、工作(173次)、开心(136次)、累(128次)、妈妈(101次)、焦虑(67次)、跑步(60次)
+- feat: 克隆 4 个知识管理/AI 参考项目到 `references/`
+  - Memos（45.6k stars，碎片化记录标杆）
+  - Reor（本地 AI + RAG + 向量数据库）
+  - AnythingLLM（完整 RAG 实现，多工作区）
+  - obsidian-second-brain（AI 自动整理，自我重写笔记）
+- test: 19 个日记单元测试全部通过
+
+## v0.3.175: 健康管理系统增强——文档库、医生信息、AI报告解读、健康时间线（2026-09-06）
+
+参考 HealthLog (MBombeck/HealthLog)、OwnHealthRecord (petrk94/ownhealthrecord) 等开源项目，对健康管理模块进行功能增强：
+
+- feat: 新增 **文档附件管理** 模块（`health_documents` 表）
+  - 支持 7 种文档类型：检查/化验报告、处方、病历、诊断证明、费用单据、影像资料、其他
+  - 支持标签、分类、全文搜索、分页
+  - 存储文件元数据（文件名、路径、大小、MIME类型）和内容摘要
+  - 已导入用户 7 份真实看病资料
+- feat: 新增 **医生信息管理** 模块（`health_doctors` 表）
+  - 记录医生姓名、职称、专科、医院、科室、联系方式、备注
+  - 支持按专科筛选和全文搜索
+  - 已导入 2 位就诊医生信息
+- feat: 新增 **AI 报告解读** 功能（`health_insights` 表）
+  - 复用项目 LLMService，支持化验报告和检查报告的 AI 解读
+  - 解读结果自动保存，可追溯
+  - 严格安全边界：只做信息整理和科普解释，不给出确诊或治疗方案，必须建议咨询专业医生
+  - API：`POST /api/health/lab-results/{id}/interpret`、`POST /api/health/procedures/{id}/interpret`
+- feat: 新增 **健康时间线** API
+  - 聚合就诊、检查、化验、用药、健康问题、文档、疫苗等所有事件
+  - 按日期排序，彩色图标区分事件类型
+  - API：`GET /api/health/timeline?patient_id={id}`
+- feat: 前端页面增强（12 个标签页）
+  - 新增「健康时间线」标签页：时间线视图展示所有健康事件
+  - 新增「文档资料」标签页：卡片式展示看病资料，支持新增/详情/删除
+  - 新增「医生信息」标签页：医生和医疗机构管理
+  - 化验/检查详情弹窗新增「🤖 AI解读」按钮
+  - 概览页新增文档资料、医生信息统计卡片
+- feat: 健康模块表数量从 10 张扩展到 13 张，API 端点从 40+ 扩展到 50+
+- docs: 更新 `docs/modules/health.md`，新增模块说明、API 参考、设计决策
+- data: 导入用户 7 份看病资料为文档记录，2 位医生信息
+
+## v0.3.174: 健康管理系统——个人与家庭医疗档案管理（2026-09-06）
+
+- feat: 新增 `src/openbiliclaw/health/` 完整健康管理模块（4 个文件，约 2500 行）
+  - **数据模型** `models.py`：10 类医疗实体（Patient、Encounter、Condition、Medication、LabResult+LabTestComponent、Procedure、Allergy、Vitals、Immunization）及 15 个枚举类型，参考 MediKeep (afairgiant/MediKeep) 设计
+  - **存储层** `store.py`：HealthStore 管理 10 张 SQLite 表（health_ 前缀），支持 CRUD、多条件筛选、全文搜索、化验明细关联、统计
+  - **业务层** `service.py`：HealthService 封装存储，提供患者完整档案摘要、化验项目历史趋势查询
+- feat: 新增 40+ RESTful API 端点（在 `api/app.py` 中），覆盖 9 大模块的完整 CRUD
+  - `GET /api/health/stats`：全局统计概览
+  - `/api/health/patients`：患者档案管理
+  - `/api/health/encounters`：就诊记录（门诊/急诊/住院/体检/复查）
+  - `/api/health/conditions`：健康问题追踪（活跃/慢性/已缓解）
+  - `/api/health/medications`：用药记录（处方药/OTC/保健品）
+  - `/api/health/lab-results`：化验结果（主表+项目明细，自动标记异常）
+  - `/api/health/lab-trend`：化验项目历史趋势
+  - `/api/health/procedures`：检查/手术记录（CT/MRI/超声/内镜，需复查标记）
+  - `/api/health/allergies`：过敏史
+  - `/api/health/vitals`：生命体征（血压/心率/体温/体重/血氧/血糖）
+  - `/api/health/immunizations`：疫苗接种
+- feat: 新增独立前端页面 `web/health/index.html`，挂载在 `/health`，9 个标签页（概览/就诊/健康问题/用药/化验/检查/过敏/体征/疫苗），支持表单录入和详情弹窗
+- feat: 新增数据导入脚本 `scripts/import_health_data.py`，已导入用户真实看病资料（童力，7 份资料：急诊+门诊+CT+彩超+生化+血常规+诊断证明书）
+- docs: 新增 `docs/modules/health.md` 模块文档
 
 ---
 
----
+## v0.3.173: 日记系统——个人日记记录、AI 分析与多格式导入（2026-09-06）
+
+- feat: 新增 `src/openbiliclaw/diary/` 完整日记系统模块（5 个文件，约 1000 行）
+  - **数据模型** `models.py`：DiaryEntry、DiaryAnalysis、DiaryStats、MoodLevel 等 Pydantic 模型
+  - **存储层** `store.py`：独立 DiaryStore，管理 diary_entries 和 diary_analyses 两张表，支持 CRUD、多条件筛选、全文搜索、统计、未分析查询
+  - **业务层** `service.py`：DiaryService 封装存储与 LLM 分析，支持单篇/批量 AI 分析、时间线视图、搜索、统计
+  - **导入器** `importer.py`：支持乐乐日记格式、通用纯文本、Markdown 三种格式导入，具备幂等性
+- feat: 新增 13 个 RESTful API 端点（在 `api/app.py` 中）
+  - `GET/POST/PUT/DELETE /api/diary`：日记 CRUD
+  - `GET /api/diary/stats`：统计概览
+  - `GET /api/diary/timeline`：时间线视图
+  - `GET /api/diary/search`：全文搜索
+  - `GET/POST /api/diary/{id}/analysis`：AI 分析
+  - `POST /api/diary/analyze-batch`：批量分析
+  - `POST /api/diary/import`：数据导入
+- feat: 桌面端新增完整日记页面（`/web/diary`）
+  - 统计概览卡片（总数、字数、平均、已分析、时间跨度）
+  - 多条件筛选（关键词搜索、情绪、来源）
+  - 左侧日记列表 + 右侧详情面板的双栏布局
+  - 写日记弹窗编辑器（日期、标题、内容、标签、情绪）
+  - AI 分析结果展示（摘要、关键要点、情绪分布、主题、人物、成长洞察）
+  - 导入功能弹窗（支持本地文件路径导入）
+- feat: 新增 `scripts/import_lele_diary.py`——乐乐日记导入脚本
+- feat: 新增 `scripts/import_mindback_diary.py`——MindBack 日记数据库导入脚本
+- data: 已导入 **720 篇日记**（共 195,462 字，跨越 2016-04-12 ~ 2026-07-17 十年）
+  - **672 篇个人日记**（来源：MindBack 备份数据库 `unified_notes.db` 的 `diary_entries` 表）
+  - **48 篇乐乐成长日记**（来源：`wechat-tools/scripts/lele-diary.txt`）
+  - 按年份分布：2016(27) / 2017(28) / 2018(26) / 2019(54) / 2020(26) / 2021(108) / 2022(90) / 2023(59) / 2024(136) / 2025(161) / 2026(5)
+- test: 新增 `tests/test_diary.py`（19 个测试）——模型 2 个、存储层 10 个、业务层 4 个、导入器 3 个，全部通过
+- docs: 新增 `docs/modules/diary.md` 完整模块文档
+- feat: 新增 **数据洞察模块** `src/openbiliclaw/diary/insights.py`（约 500 行）
+  - **情绪趋势分析**：按月/按年统计平均情绪分，基于关键词词典的快速情绪推断（无 LLM 时也能用）
+  - **连续打卡统计**：当前连续天数、最长连续天数、总写作天数、本周/本月写作天数
+  - **字数趋势分析**：按年/按月统计总字数、平均字数、篇数
+  - **高频关键词提取**：简易中文分词 + 停用词过滤，生成词云数据
+  - **年度洞察报告**：年度统计数据 + LLM 生成温暖真实的年度回顾（借鉴 Night-Journal 的写作风格）
+  - **MoodAnalyzer**：基于中文情绪关键词词典的快速分析器，支持正面/负面/焦虑/愤怒四类情绪识别
+- feat: 新增 **随手记（碎片）功能**——借鉴 Night-Journal "白天丢碎片，夜里成日记" 的设计
+  - **数据模型**：DiaryFragment（碎片内容 + 情绪标签 + 日期 + 来源）
+  - **数据库表**：`diary_fragments`（含日期、情绪索引）
+  - **CRUD API**：`GET/POST /api/diary/fragments`、`DELETE /api/diary/fragments/{id}`
+  - **AI 聚合生成日记**：`POST /api/diary/fragments/generate-diary`——把当天碎片用 LLM 整理成一篇连贯日记（温柔真实风格，第一人称，不说教不鸡汤），生成后自动删除已用碎片
+  - **降级策略**：无 LLM 时直接拼接碎片为日记
+- feat: 新增 10 个 RESTful API 端点
+  - 洞察：`/api/diary/insights/mood-trend`、`/streak`、`/word-trend`、`/keywords`、`/yearly/{year}`、`/yearly/{year}/generate`
+  - 碎片：`/api/diary/fragments`（GET/POST）、`/fragments/{id}`（DELETE）、`/fragments/generate-diary`（POST）
+- feat: 桌面端日记页面新增 **三个子 Tab**：📝 日记 / 📊 数据洞察 / ✨ 随手记
+  - **数据洞察页**：连续打卡卡片（5项）、情绪变化趋势图（SVG 折线图，支持按月/按年切换）、写作字数趋势图（CSS 柱状图）、年度洞察报告（选择年份 + LLM 生成）、高频关键词词云
+  - **随手记页**：碎片输入框（支持情绪标签 + Ctrl+Enter 快捷添加）、今日碎片列表、一键 AI 聚合生成日记
+- feat: 新增前端 JS `assets/js/diary-insights.js`（约 500 行）——子 Tab 切换、洞察数据加载、SVG 折线图渲染、CSS 柱状图渲染、词云渲染、碎片 CRUD、AI 聚合生成
+- feat: 克隆 6 个优秀开源日记项目到 `references/diary-projects/` 供参考借鉴
+  - Night-Journal（AI 碎片聚合日记）、memex（local-first AI 日记）、Journiv（自托管私人日记）、nightDiary（Multi-Agent AI 心理陪伴日记）、Nightly Journal（AI 采访式日记）、cube-diary（轻量级全栈日记）
 
 ## v0.3.172: 专题结构化导出 + SHA1去重 + 跨平台融合 + B站字幕抓取（2026-09-05）
 

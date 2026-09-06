@@ -24,6 +24,223 @@ logger = logging.getLogger("self_evolution.knowledge_graph")
 
 
 # ---------------------------------------------------------------------------
+# Entity canonicalization helpers
+# ---------------------------------------------------------------------------
+
+# Common alias mappings (lowercase normalized form -> canonical name)
+_COMMON_ALIASES: dict[str, str] = {
+    "js": "JavaScript",
+    "javascript": "JavaScript",
+    "ai": "人工智能",
+    "人工智能": "人工智能",
+    "llm": "大语言模型",
+    "大语言模型": "大语言模型",
+    "大模型": "大语言模型",
+    "ml": "机器学习",
+    "机器学习": "机器学习",
+    "dl": "深度学习",
+    "深度学习": "深度学习",
+    "nlp": "自然语言处理",
+    "自然语言处理": "自然语言处理",
+    "cv": "计算机视觉",
+    "计算机视觉": "计算机视觉",
+    "rl": "强化学习",
+    "强化学习": "强化学习",
+    "rag": "检索增强生成",
+    "检索增强生成": "检索增强生成",
+    "sql": "SQL",
+    "python": "Python",
+    "java": "Java",
+    "cpp": "C++",
+    "c++": "C++",
+    "golang": "Go",
+    "go": "Go",
+    "rust": "Rust",
+    "typescript": "TypeScript",
+    "ts": "TypeScript",
+    "html": "HTML",
+    "css": "CSS",
+    "api": "API",
+    "cli": "CLI",
+    "ui": "UI",
+    "ux": "UX",
+    "db": "数据库",
+    "数据库": "数据库",
+    "ctr": "CTR",
+    "cvr": "CVR",
+    "roi": "ROI",
+    "roas": "ROAS",
+    "dsp": "DSP",
+    "rtb": "RTB",
+    "ssp": "SSP",
+    "dmp": "DMP",
+    "cdn": "CDN",
+    "tcp": "TCP",
+    "ip": "IP",
+    "http": "HTTP",
+    "https": "HTTPS",
+    "json": "JSON",
+    "xml": "XML",
+    "yaml": "YAML",
+    "git": "Git",
+    "docker": "Docker",
+    "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
+    "aws": "AWS",
+    "gcp": "GCP",
+    "azure": "Azure",
+    "v2ex": "V2EX",
+    "b站": "B站",
+    "bilibili": "B站",
+    "知乎": "知乎",
+    "小红书": "小红书",
+    "抖音": "抖音",
+    "youtube": "YouTube",
+    "github": "GitHub",
+    "chatgpt": "ChatGPT",
+    "gpt": "GPT",
+    "claude": "Claude",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+    "qwen": "通义千问",
+    "通义千问": "通义千问",
+    "doubao": "豆包",
+    "豆包": "豆包",
+    "百度": "百度",
+    "阿里": "阿里巴巴",
+    "阿里巴巴": "阿里巴巴",
+    "腾讯": "腾讯",
+    "字节": "字节跳动",
+    "字节跳动": "字节跳动",
+    "美团": "美团",
+    "京东": "京东",
+    "拼多多": "拼多多",
+    "华为": "华为",
+    "小米": "小米",
+    "苹果": "Apple",
+    "apple": "Apple",
+    "谷歌": "Google",
+    "google": "Google",
+    "微软": "Microsoft",
+    "microsoft": "Microsoft",
+    "meta": "Meta",
+    "facebook": "Meta",
+    "亚马逊": "Amazon",
+    "amazon": "Amazon",
+    "netflix": "Netflix",
+    "特斯拉": "Tesla",
+    "tesla": "Tesla",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "huggingface": "Hugging Face",
+    "hugging face": "Hugging Face",
+    "pytorch": "PyTorch",
+    "tensorflow": "TensorFlow",
+    "pandas": "Pandas",
+    "numpy": "NumPy",
+    "scikit-learn": "scikit-learn",
+    "sklearn": "scikit-learn",
+    "fastapi": "FastAPI",
+    "flask": "Flask",
+    "django": "Django",
+    "react": "React",
+    "vue": "Vue",
+    "angular": "Angular",
+    "nextjs": "Next.js",
+    "next.js": "Next.js",
+    "nuxt": "Nuxt",
+    "svelte": "Svelte",
+    "tailwind": "Tailwind CSS",
+    "tailwindcss": "Tailwind CSS",
+    "bootstrap": "Bootstrap",
+    "vite": "Vite",
+    "webpack": "Webpack",
+    "nodejs": "Node.js",
+    "node.js": "Node.js",
+    "deno": "Deno",
+    "bun": "Bun",
+    "redis": "Redis",
+    "mongodb": "MongoDB",
+    "postgresql": "PostgreSQL",
+    "postgres": "PostgreSQL",
+    "mysql": "MySQL",
+    "sqlite": "SQLite",
+    "elasticsearch": "Elasticsearch",
+    "kafka": "Kafka",
+    "rabbitmq": "RabbitMQ",
+    "nginx": "Nginx",
+    "linux": "Linux",
+    "unix": "Unix",
+    "macos": "macOS",
+    "windows": "Windows",
+    "android": "Android",
+    "ios": "iOS",
+    "鸿蒙": "HarmonyOS",
+    "harmonyos": "HarmonyOS",
+}
+
+
+def _normalize_entity_name(name: str) -> str:
+    """Normalize entity name for fuzzy matching.
+
+    Strips punctuation, collapses whitespace, lowercases.
+    Used for Tier-2 matching in canonicalization.
+    """
+    import re
+
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\s]", "", s)  # strip punctuation
+    s = re.sub(r"\s+", " ", s)  # collapse whitespace
+    return s
+
+
+def _canonicalize_name(name: str) -> str:
+    """Return the canonical name for an entity, handling common aliases.
+
+    Three-tier matching:
+    1. Exact match in _COMMON_ALIASES (case-insensitive)
+    2. Normalized name match in _COMMON_ALIASES
+    3. Return original name (capitalized first letter)
+
+    Returns the canonical display name.
+    """
+    # Tier 1: exact case-insensitive match
+    lower = name.lower().strip()
+    if lower in _COMMON_ALIASES:
+        return _COMMON_ALIASES[lower]
+
+    # Tier 2: normalized match
+    normalized = _normalize_entity_name(name)
+    if normalized in _COMMON_ALIASES:
+        return _COMMON_ALIASES[normalized]
+
+    # Tier 3: return original with first letter capitalized
+    if name and name[0].islower() and len(name) > 1:
+        return name[0].upper() + name[1:]
+    return name
+
+
+def _merge_descriptions(existing: str, new: str, max_length: int = 1000) -> str:
+    """Merge two entity descriptions, avoiding duplicates.
+
+    If the new description adds meaningful info, append it.
+    Returns the merged description, truncated to max_length.
+    """
+    if not new:
+        return existing or ""
+    if not existing:
+        return new[:max_length]
+
+    # If new description is a substring of existing (case-insensitive), skip
+    if new.lower().strip() in existing.lower():
+        return existing
+
+    # Append with separator, truncate
+    merged = f"{existing.rstrip('.')}. {new.strip()}"
+    return merged[:max_length]
+
+
+# ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
 
@@ -231,27 +448,36 @@ class KnowledgeGraphBuilder:
                 # Extract entities (simplified: use topic extraction + known entity patterns)
                 entities = self._extract_entities(text, entity_types)
 
-                # Update entity mentions
+                # Update entity mentions (with canonicalization)
                 for entity_name, entity_type in entities:
-                    eid = self._entity_id(entity_name)
+                    # Canonicalize: handle aliases like "JS" -> "JavaScript"
+                    canonical_name = _canonicalize_name(entity_name)
+                    eid = self._entity_id(canonical_name)
+
                     if eid not in graph.entities:
                         graph.entities[eid] = Entity(
                             entity_id=eid,
-                            name=entity_name,
+                            name=canonical_name,
                             entity_type=entity_type,
                             first_seen=row["created_at"] or "",
                             last_seen=row["created_at"] or "",
+                            aliases=[entity_name] if entity_name != canonical_name else [],
                         )
                     entity = graph.entities[eid]
                     entity.mention_count += 1
+
+                    # Track alias if it's a new surface form
+                    if entity_name != canonical_name and entity_name not in entity.aliases:
+                        entity.aliases.append(entity_name)
+
                     if row["created_at"]:
                         if not entity.first_seen or row["created_at"] < entity.first_seen:
                             entity.first_seen = row["created_at"]
                         if not entity.last_seen or row["created_at"] > entity.last_seen:
                             entity.last_seen = row["created_at"]
 
-                # Track co-occurrences within this article
-                entity_ids = list(set([self._entity_id(name) for name, _ in entities]))
+                # Track co-occurrences within this article (use canonical IDs)
+                entity_ids = list(set([self._entity_id(_canonicalize_name(name)) for name, _ in entities]))
                 article_entities.append(entity_ids)
 
                 for i, e1 in enumerate(entity_ids):

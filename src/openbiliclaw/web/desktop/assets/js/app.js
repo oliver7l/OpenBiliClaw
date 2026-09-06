@@ -1236,7 +1236,7 @@
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1272,6 +1272,7 @@
       watchLater: () => openWatchLaterPage(),
       profile: () => openProfilePage(),
       chat: () => openChatPage(),
+      diary: () => openDiaryPage(),
       "self-evolution": () => openSelfEvolutionPage(),
       library: () => openLibraryPage(),
       "read-archive": () => openReadArchivePage(),
@@ -7949,6 +7950,7 @@
     });
 
     safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
+    safeBind("#diaryBtn", "click", () => navigateTo("/web/diary"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });
     safeBind("#poolFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/pool-filter"); });
@@ -8927,5 +8929,510 @@
     safeBind("#selfEvoDetailClose", "click", () => {
       document.getElementById("selfEvoDetail").hidden = true;
     });
+
+    // ── 日记系统 Diary ──────────────────────────────────────────
+
+    const diaryState = {
+      entries: [],
+      total: 0,
+      offset: 0,
+      limit: 50,
+      selectedId: null,
+      editingId: null,
+      search: "",
+      moodFilter: "",
+      sourceFilter: "",
+      loading: false,
+    };
+
+    const MOOD_LABELS = {
+      very_happy: "非常开心",
+      happy: "开心",
+      neutral: "平静",
+      sad: "低落",
+      very_sad: "非常低落",
+      angry: "生气",
+      anxious: "焦虑",
+      unknown: "未标注",
+    };
+
+    const SOURCE_LABELS = {
+      manual: "手动",
+      import_lele: "乐乐日记",
+      import_text: "文本导入",
+      import_markdown: "Markdown",
+      api: "API",
+    };
+
+    function openDiaryPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("diaryPage");
+      diaryState.offset = 0;
+      diaryState.selectedId = null;
+      loadDiaryStats();
+      loadDiaryList();
+      bindDiaryEvents();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    let diaryEventsBound = false;
+    function bindDiaryEvents() {
+      if (diaryEventsBound) return;
+      diaryEventsBound = true;
+
+      safeBind("#diaryNewBtn", "click", () => openDiaryEditor());
+      safeBind("#diaryImportBtn", "click", () => openDiaryImport());
+      safeBind("#diaryAnalyzeBtn", "click", () => batchAnalyzeDiary());
+      safeBind("#diaryLoadMoreBtn", "click", loadMoreDiary);
+      safeBind("#diaryResetFilterBtn", "click", resetDiaryFilters);
+
+      // 搜索
+      let searchTimer;
+      const searchInput = document.getElementById("diarySearchInput");
+      if (searchInput) {
+        searchInput.addEventListener("input", () => {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(() => {
+            diaryState.search = searchInput.value.trim();
+            diaryState.offset = 0;
+            loadDiaryList();
+          }, 400);
+        });
+      }
+
+      // 筛选
+      const moodFilter = document.getElementById("diaryMoodFilter");
+      if (moodFilter) {
+        moodFilter.addEventListener("change", () => {
+          diaryState.moodFilter = moodFilter.value;
+          diaryState.offset = 0;
+          loadDiaryList();
+        });
+      }
+      const sourceFilter = document.getElementById("diarySourceFilter");
+      if (sourceFilter) {
+        sourceFilter.addEventListener("change", () => {
+          diaryState.sourceFilter = sourceFilter.value;
+          diaryState.offset = 0;
+          loadDiaryList();
+        });
+      }
+
+      // 编辑器
+      safeBind("#diaryEditorCloseBtn", "click", closeDiaryEditor);
+      safeBind("#diaryEditorCancelBtn", "click", closeDiaryEditor);
+      safeBind("#diaryEditorOverlay", "click", closeDiaryEditor);
+      safeBind("#diaryEditorSaveBtn", "click", saveDiaryEntry);
+
+      // 详情操作
+      safeBind("#diaryEditBtn", "click", () => {
+        if (diaryState.selectedId) openDiaryEditor(diaryState.selectedId);
+      });
+      safeBind("#diaryAnalyzeOneBtn", "click", () => {
+        if (diaryState.selectedId) analyzeDiaryEntry(diaryState.selectedId);
+      });
+      safeBind("#diaryDeleteBtn", "click", () => {
+        if (diaryState.selectedId) deleteDiaryEntry(diaryState.selectedId);
+      });
+
+      // 导入
+      safeBind("#diaryImportCloseBtn", "click", closeDiaryImport);
+      safeBind("#diaryImportCancelBtn", "click", closeDiaryImport);
+      safeBind("#diaryImportOverlay", "click", closeDiaryImport);
+      safeBind("#diaryImportConfirmBtn", "click", confirmDiaryImport);
+    }
+
+    async function loadDiaryStats() {
+      try {
+        const resp = await fetch("/api/diary/stats");
+        const data = await resp.json();
+        if (data.ok && data.stats) {
+          const s = data.stats;
+          document.getElementById("diaryStatTotal").textContent = s.total_entries;
+          document.getElementById("diaryStatWords").textContent = formatNumber(s.total_words);
+          document.getElementById("diaryStatAvg").textContent = s.avg_words_per_entry;
+          document.getElementById("diaryStatAnalyzed").textContent = s.analyzed_count;
+          const range = s.earliest_date && s.latest_date ? `${s.earliest_date} ~ ${s.latest_date}` : "—";
+          document.getElementById("diaryStatRange").textContent = range;
+        }
+      } catch (e) {
+        console.error("加载日记统计失败:", e);
+      }
+    }
+
+    async function loadDiaryList() {
+      if (diaryState.loading) return;
+      diaryState.loading = true;
+      const params = new URLSearchParams({
+        limit: diaryState.limit,
+        offset: diaryState.offset,
+        sort_by: "entry_date",
+        sort_order: "DESC",
+      });
+      if (diaryState.search) params.set("search", diaryState.search);
+      if (diaryState.moodFilter) params.set("mood", diaryState.moodFilter);
+      if (diaryState.sourceFilter) params.set("source", diaryState.sourceFilter);
+
+      try {
+        const resp = await fetch(`/api/diary?${params}`);
+        const data = await resp.json();
+        if (data.ok) {
+          if (diaryState.offset === 0) {
+            diaryState.entries = data.items;
+          } else {
+            diaryState.entries = diaryState.entries.concat(data.items);
+          }
+          diaryState.total = data.total;
+          renderDiaryList();
+          document.getElementById("diaryListCount").textContent = `${data.total} 篇`;
+          const loadMoreBtn = document.getElementById("diaryLoadMoreBtn");
+          if (loadMoreBtn) {
+            loadMoreBtn.hidden = diaryState.entries.length >= data.total;
+          }
+        }
+      } catch (e) {
+        console.error("加载日记列表失败:", e);
+      } finally {
+        diaryState.loading = false;
+      }
+    }
+
+    function renderDiaryList() {
+      const listEl = document.getElementById("diaryList");
+      if (!listEl) return;
+      if (diaryState.entries.length === 0) {
+        listEl.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;">暂无日记，点击"写日记"开始记录</div>';
+        return;
+      }
+      listEl.innerHTML = diaryState.entries.map((entry) => {
+        const isActive = entry.id === diaryState.selectedId;
+        const preview = entry.content.replace(/\n/g, " ").substring(0, 80);
+        const moodLabel = MOOD_LABELS[entry.mood] || entry.mood;
+        const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
+        return `
+          <div class="diary-list-item ${isActive ? "active" : ""}" data-id="${entry.id}">
+            <div class="diary-list-item-date">${entry.entry_date}${entry.title ? " · " + escapeHtml(entry.title) : ""}</div>
+            <div class="diary-list-item-preview">${escapeHtml(preview)}${entry.content.length > 80 ? "..." : ""}</div>
+            <div class="diary-list-item-meta">
+              <span class="diary-list-item-mood">${moodLabel}</span>
+              <span class="diary-list-item-source">${sourceLabel}</span>
+              <span style="margin-left:auto;color:var(--meta);">${entry.word_count}字</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      listEl.querySelectorAll(".diary-list-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          const id = parseInt(item.dataset.id);
+          selectDiaryEntry(id);
+        });
+      });
+    }
+
+    async function selectDiaryEntry(id) {
+      diaryState.selectedId = id;
+      renderDiaryList();
+      await loadDiaryDetail(id);
+    }
+
+    async function loadDiaryDetail(id) {
+      const emptyEl = document.getElementById("diaryDetailEmpty");
+      const contentEl = document.getElementById("diaryDetailContent");
+      try {
+        const resp = await fetch(`/api/diary/${id}`);
+        const data = await resp.json();
+        if (data.ok && data.entry) {
+          const entry = data.entry;
+          emptyEl.hidden = true;
+          contentEl.hidden = false;
+
+          document.getElementById("diaryDetailDate").textContent = entry.entry_date;
+          document.getElementById("diaryDetailMood").textContent = MOOD_LABELS[entry.mood] || entry.mood;
+          document.getElementById("diaryDetailSource").textContent = SOURCE_LABELS[entry.source] || entry.source;
+          document.getElementById("diaryDetailTitle").textContent = entry.title || "(无标题)";
+          document.getElementById("diaryDetailBody").textContent = entry.content;
+
+          const tagsEl = document.getElementById("diaryDetailTags");
+          if (entry.tags && entry.tags.length > 0) {
+            tagsEl.innerHTML = entry.tags.map((t) => `<span class="diary-detail-tag">${escapeHtml(t)}</span>`).join("");
+            tagsEl.style.display = "flex";
+          } else {
+            tagsEl.innerHTML = "";
+            tagsEl.style.display = "none";
+          }
+
+          // 分析结果
+          if (data.analysis) {
+            renderDiaryAnalysis(data.analysis);
+          } else {
+            document.getElementById("diaryAnalysisSection").hidden = true;
+          }
+        }
+      } catch (e) {
+        console.error("加载日记详情失败:", e);
+      }
+    }
+
+    function renderDiaryAnalysis(analysis) {
+      const section = document.getElementById("diaryAnalysisSection");
+      section.hidden = false;
+      document.getElementById("diaryAnalysisSummary").textContent = analysis.summary || "暂无摘要";
+
+      const keyPointsEl = document.getElementById("diaryAnalysisKeyPoints");
+      keyPointsEl.innerHTML = (analysis.key_points || []).map((p) => `<li>${escapeHtml(p)}</li>`).join("") || "<li>暂无</li>";
+
+      const emotionsEl = document.getElementById("diaryAnalysisEmotions");
+      const emotions = analysis.emotions || {};
+      emotionsEl.innerHTML = Object.entries(emotions).map(([k, v]) =>
+        `<div class="diary-analysis-emotion-item"><span>${escapeHtml(k)}</span><span>${(v * 100).toFixed(0)}%</span></div>`
+      ).join("") || '<span style="color:var(--muted);font-size:13px;">暂无</span>';
+
+      const themesEl = document.getElementById("diaryAnalysisThemes");
+      themesEl.innerHTML = (analysis.themes || []).map((t) => `<span class="diary-analysis-theme-tag">${escapeHtml(t)}</span>`).join("") || '<span style="color:var(--muted);font-size:13px;">暂无</span>';
+
+      const peopleEl = document.getElementById("diaryAnalysisPeople");
+      peopleEl.innerHTML = (analysis.people_mentioned || []).map((p) => `<span class="diary-analysis-person-tag">${escapeHtml(p)}</span>`).join("") || '<span style="color:var(--muted);font-size:13px;">暂无</span>';
+
+      document.getElementById("diaryAnalysisInsight").textContent = analysis.growth_insight || "暂无成长洞察";
+    }
+
+    function openDiaryEditor(id = null) {
+      diaryState.editingId = id;
+      const modal = document.getElementById("diaryEditorModal");
+      const titleEl = document.getElementById("diaryEditorTitle");
+      const dateInput = document.getElementById("diaryEditorDate");
+      const titleInput = document.getElementById("diaryEditorTitleInput");
+      const contentInput = document.getElementById("diaryEditorContent");
+      const tagsInput = document.getElementById("diaryEditorTags");
+      const moodInput = document.getElementById("diaryEditorMood");
+
+      if (id) {
+        titleEl.textContent = "编辑日记";
+        const entry = diaryState.entries.find((e) => e.id === id);
+        if (entry) {
+          dateInput.value = entry.entry_date;
+          titleInput.value = entry.title || "";
+          contentInput.value = entry.content;
+          tagsInput.value = (entry.tags || []).join(", ");
+          moodInput.value = entry.mood;
+        }
+      } else {
+        titleEl.textContent = "写日记";
+        dateInput.value = new Date().toISOString().split("T")[0];
+        titleInput.value = "";
+        contentInput.value = "";
+        tagsInput.value = "";
+        moodInput.value = "unknown";
+      }
+      modal.hidden = false;
+      setTimeout(() => contentInput.focus(), 100);
+    }
+
+    function closeDiaryEditor() {
+      document.getElementById("diaryEditorModal").hidden = true;
+      diaryState.editingId = null;
+    }
+
+    async function saveDiaryEntry() {
+      const date = document.getElementById("diaryEditorDate").value;
+      const title = document.getElementById("diaryEditorTitleInput").value.trim();
+      const content = document.getElementById("diaryEditorContent").value.trim();
+      const tagsStr = document.getElementById("diaryEditorTags").value.trim();
+      const mood = document.getElementById("diaryEditorMood").value;
+
+      if (!content) {
+        alert("日记内容不能为空");
+        return;
+      }
+      if (!date) {
+        alert("请选择日期");
+        return;
+      }
+
+      const tags = tagsStr ? tagsStr.split(/[,，]/).map((t) => t.trim()).filter(Boolean) : [];
+      const payload = { entry_date: date, title, content, tags, mood, source: "manual" };
+
+      try {
+        let resp;
+        if (diaryState.editingId) {
+          resp = await fetch(`/api/diary/${diaryState.editingId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          resp = await fetch("/api/diary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        }
+        const data = await resp.json();
+        if (data.ok) {
+          closeDiaryEditor();
+          diaryState.offset = 0;
+          await loadDiaryStats();
+          await loadDiaryList();
+          if (data.entry) {
+            selectDiaryEntry(data.entry.id);
+          }
+        } else {
+          alert("保存失败: " + (data.error || "未知错误"));
+        }
+      } catch (e) {
+        alert("保存失败: " + e.message);
+      }
+    }
+
+    async function deleteDiaryEntry(id) {
+      if (!confirm("确定要删除这篇日记吗？此操作不可撤销。")) return;
+      try {
+        const resp = await fetch(`/api/diary/${id}`, { method: "DELETE" });
+        const data = await resp.json();
+        if (data.ok) {
+          diaryState.selectedId = null;
+          document.getElementById("diaryDetailEmpty").hidden = false;
+          document.getElementById("diaryDetailContent").hidden = true;
+          diaryState.offset = 0;
+          await loadDiaryStats();
+          await loadDiaryList();
+        }
+      } catch (e) {
+        alert("删除失败: " + e.message);
+      }
+    }
+
+    async function analyzeDiaryEntry(id) {
+      const btn = document.getElementById("diaryAnalyzeOneBtn");
+      const originalText = btn.textContent;
+      btn.textContent = "分析中...";
+      btn.disabled = true;
+      try {
+        const resp = await fetch(`/api/diary/${id}/analyze?force=true`, { method: "POST" });
+        const data = await resp.json();
+        if (data.ok && data.analysis) {
+          renderDiaryAnalysis(data.analysis);
+          await loadDiaryStats();
+        } else {
+          alert("分析失败: " + (data.error || "未知错误"));
+        }
+      } catch (e) {
+        alert("分析失败: " + e.message);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function batchAnalyzeDiary() {
+      if (!confirm("将对所有未分析的日记进行批量 AI 分析，可能需要较长时间，确定继续吗？")) return;
+      const btn = document.getElementById("diaryAnalyzeBtn");
+      const originalText = btn.textContent;
+      btn.textContent = "批量分析中...";
+      btn.disabled = true;
+      try {
+        const resp = await fetch("/api/diary/analyze-batch?limit=100&concurrency=3", { method: "POST" });
+        const data = await resp.json();
+        if (data.ok) {
+          alert(`批量分析完成：成功 ${data.success} 篇，失败 ${data.failed} 篇`);
+          await loadDiaryStats();
+          if (diaryState.selectedId) await loadDiaryDetail(diaryState.selectedId);
+        } else {
+          alert("批量分析失败: " + (data.error || "未知错误"));
+        }
+      } catch (e) {
+        alert("批量分析失败: " + e.message);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    function openDiaryImport() {
+      document.getElementById("diaryImportModal").hidden = false;
+      document.getElementById("diaryImportPath").value = "";
+      document.getElementById("diaryImportFormat").value = "auto";
+      document.getElementById("diaryImportResult").hidden = true;
+    }
+
+    function closeDiaryImport() {
+      document.getElementById("diaryImportModal").hidden = true;
+    }
+
+    async function confirmDiaryImport() {
+      const path = document.getElementById("diaryImportPath").value.trim();
+      const format = document.getElementById("diaryImportFormat").value;
+      const resultEl = document.getElementById("diaryImportResult");
+
+      if (!path) {
+        resultEl.textContent = "请输入文件路径";
+        resultEl.className = "diary-import-result error";
+        resultEl.hidden = false;
+        return;
+      }
+
+      const btn = document.getElementById("diaryImportConfirmBtn");
+      btn.textContent = "导入中...";
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/diary/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_path: path, format }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          resultEl.textContent = `导入成功！共导入 ${data.imported} 篇日记`;
+          resultEl.className = "diary-import-result success";
+          resultEl.hidden = false;
+          diaryState.offset = 0;
+          await loadDiaryStats();
+          await loadDiaryList();
+          setTimeout(() => closeDiaryImport(), 1500);
+        } else {
+          resultEl.textContent = "导入失败: " + (data.error || "未知错误");
+          resultEl.className = "diary-import-result error";
+          resultEl.hidden = false;
+        }
+      } catch (e) {
+        resultEl.textContent = "导入失败: " + e.message;
+        resultEl.className = "diary-import-result error";
+        resultEl.hidden = false;
+      } finally {
+        btn.textContent = "开始导入";
+        btn.disabled = false;
+      }
+    }
+
+    function loadMoreDiary() {
+      diaryState.offset += diaryState.limit;
+      loadDiaryList();
+    }
+
+    function resetDiaryFilters() {
+      diaryState.search = "";
+      diaryState.moodFilter = "";
+      diaryState.sourceFilter = "";
+      diaryState.offset = 0;
+      document.getElementById("diarySearchInput").value = "";
+      document.getElementById("diaryMoodFilter").value = "";
+      document.getElementById("diarySourceFilter").value = "";
+      loadDiaryList();
+    }
+
+    function formatNumber(n) {
+      if (n >= 10000) return (n / 10000).toFixed(1) + "w";
+      if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+      return n.toString();
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
 
     })();

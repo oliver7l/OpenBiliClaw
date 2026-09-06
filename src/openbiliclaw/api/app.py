@@ -175,6 +175,34 @@ from openbiliclaw.soul.dislike_writeback import (
     apply_new_dislikes,
     topics_for_confirmed_avoidance,
 )
+from openbiliclaw.diary import DiaryService, DiaryEntryCreate, DiaryEntryUpdate, MoodLevel
+from openbiliclaw.diary.importer import DiaryImporter
+from openbiliclaw.health import (
+    HealthService,
+    PatientCreate,
+    PatientUpdate,
+    EncounterCreate,
+    EncounterUpdate,
+    ConditionCreate,
+    ConditionUpdate,
+    MedicationCreate,
+    MedicationUpdate,
+    LabResultCreate,
+    LabResultUpdate,
+    ProcedureCreate,
+    ProcedureUpdate,
+    AllergyCreate,
+    VitalsCreate,
+    ImmunizationCreate,
+    DoctorCreate,
+    DoctorUpdate,
+    HealthDocumentCreate,
+    HealthDocumentUpdate,
+    HealthInsightCreate,
+    AppointmentCreate,
+    AppointmentUpdate,
+    MedicationLogCreate,
+)
 
 # Project root: src/openbiliclaw/api/app.py → ../../..
 _PROJECT_ROOT = _Path(__file__).resolve().parent.parent.parent.parent
@@ -11525,6 +11553,1733 @@ Keep keywords focused and specific. Remove stop words."""
         ]
         return JSONResponse({"ok": True, "target_id": id, "items": items})
 
+    # ── 日记系统 API ─────────────────────────────────────────────
+
+    _diary_service: DiaryService | None = None
+
+    def _get_diary_service() -> DiaryService | None:
+        """获取或创建日记服务实例（懒加载）。"""
+        nonlocal _diary_service
+        if _diary_service is not None:
+            return _diary_service
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return None
+        llm_service = getattr(ctx, "llm_service", None)
+        _diary_service = DiaryService(database=database, llm_service=llm_service)
+        return _diary_service
+
+    @app.get("/api/diary")
+    def diary_list(
+        limit: int = 50,
+        offset: int = 0,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        mood: str | None = None,
+        source: str | None = None,
+        tag: str | None = None,
+        search: str | None = None,
+        sort_by: str = "entry_date",
+        sort_order: str = "DESC",
+    ) -> JSONResponse:
+        """列出日记，支持多条件筛选与搜索。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        mood_enum = MoodLevel(mood) if mood else None
+        entries, total = svc.list_entries(
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
+            start_date=start_date,
+            end_date=end_date,
+            mood=mood_enum,
+            source=source,
+            tag=tag,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [e.model_dump(mode="json") for e in entries],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+
+    @app.get("/api/diary/stats")
+    def diary_stats() -> JSONResponse:
+        """获取日记统计信息。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        stats = svc.get_stats()
+        return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
+
+    @app.get("/api/diary/timeline")
+    def diary_timeline(year: int | None = None, month: int | None = None) -> JSONResponse:
+        """获取日记时间线视图。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        entries = svc.get_timeline(year=year, month=month)
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [e.model_dump(mode="json") for e in entries],
+                "year": year,
+                "month": month,
+            }
+        )
+
+    @app.get("/api/diary/search")
+    def diary_search(q: str, limit: int = 50) -> JSONResponse:
+        """全文搜索日记。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        entries = svc.search_entries(q, limit=max(1, min(int(limit), 200)))
+        return JSONResponse(
+            {
+                "ok": True,
+                "query": q,
+                "items": [e.model_dump(mode="json") for e in entries],
+                "total": len(entries),
+            }
+        )
+
+    @app.get("/api/diary/{entry_id}")
+    def diary_get(entry_id: int) -> JSONResponse:
+        """获取单篇日记详情（含分析结果）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            entry = svc.get_entry(entry_id)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        analysis = svc.get_analysis(entry_id)
+        return JSONResponse(
+            {
+                "ok": True,
+                "entry": entry.model_dump(mode="json"),
+                "analysis": analysis.model_dump(mode="json") if analysis else None,
+            }
+        )
+
+    @app.post("/api/diary")
+    def diary_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建一篇日记。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = DiaryEntryCreate(**payload)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"invalid payload: {exc}"}, status_code=400)
+        entry = svc.create_entry(data)
+        return JSONResponse({"ok": True, "entry": entry.model_dump(mode="json")}, status_code=201)
+
+    @app.put("/api/diary/{entry_id}")
+    def diary_update(entry_id: int, payload: dict[str, Any]) -> JSONResponse:
+        """更新日记。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = DiaryEntryUpdate(**payload)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"invalid payload: {exc}"}, status_code=400)
+        try:
+            entry = svc.update_entry(entry_id, data)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        return JSONResponse({"ok": True, "entry": entry.model_dump(mode="json")})
+
+    @app.delete("/api/diary/{entry_id}")
+    def diary_delete(entry_id: int) -> JSONResponse:
+        """删除日记。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_entry(entry_id)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        return JSONResponse({"ok": True, "deleted": entry_id})
+
+    @app.get("/api/diary/{entry_id}/analysis")
+    def diary_get_analysis(entry_id: int) -> JSONResponse:
+        """获取日记的分析结果。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        analysis = svc.get_analysis(entry_id)
+        if analysis is None:
+            return JSONResponse({"ok": True, "analysis": None, "message": "未分析"})
+        return JSONResponse({"ok": True, "analysis": analysis.model_dump(mode="json")})
+
+    @app.post("/api/diary/{entry_id}/analyze")
+    async def diary_analyze(entry_id: int, force: bool = False) -> JSONResponse:
+        """分析单篇日记（调用 LLM）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if svc.llm_service is None:
+            return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
+        try:
+            analysis = await svc.analyze_entry(entry_id, force=force)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        if analysis is None:
+            return JSONResponse({"ok": False, "error": "分析失败"}, status_code=500)
+        return JSONResponse({"ok": True, "analysis": analysis.model_dump(mode="json")})
+
+    @app.post("/api/diary/analyze-batch")
+    async def diary_analyze_batch(limit: int = 50, concurrency: int = 3) -> JSONResponse:
+        """批量分析所有未分析的日记。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if svc.llm_service is None:
+            return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
+        results = await svc.analyze_unanalyzed(limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10)))
+        success = sum(1 for v in results.values() if v is not None)
+        return JSONResponse(
+            {
+                "ok": True,
+                "total": len(results),
+                "success": success,
+                "failed": len(results) - success,
+                "results": {str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()},
+            }
+        )
+
+    @app.post("/api/diary/import")
+    def diary_import(payload: dict[str, Any]) -> JSONResponse:
+        """导入日记文件。
+
+        请求体：
+        - file_path: 本地文件路径
+        - format: lele / text / markdown（默认自动检测）
+        - source: 来源标识
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        file_path = payload.get("file_path", "")
+        if not file_path:
+            return JSONResponse({"ok": False, "error": "缺少 file_path"}, status_code=400)
+        fmt = payload.get("format", "auto")
+        source = payload.get("source", "")
+        importer = DiaryImporter(svc)
+        try:
+            if fmt == "lele" or (fmt == "auto" and "lele" in file_path.lower()):
+                count, entries = importer.import_lele_diary(file_path, source=source or "import_lele")
+            elif fmt == "markdown" or (fmt == "auto" and file_path.lower().endswith(".md")):
+                count, entries = importer.import_markdown_file(file_path, source=source or "import_markdown")
+            else:
+                count, entries = importer.import_text_file(file_path, source=source or "import_text")
+        except FileNotFoundError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            logger.exception("日记导入失败")
+            return JSONResponse({"ok": False, "error": f"导入失败: {exc}"}, status_code=500)
+        return JSONResponse(
+            {
+                "ok": True,
+                "imported": count,
+                "entries": [e.model_dump(mode="json") for e in entries],
+                "format": fmt,
+                "file_path": file_path,
+            }
+        )
+
+    # ─── 日记数据洞察 API ───────────────────────────────────────────
+
+    @app.get("/api/diary/insights/mood-trend")
+    def diary_insights_mood_trend(
+        granularity: str = "month",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> JSONResponse:
+        """获取情绪趋势数据。
+
+        Args:
+            granularity: month / year
+            start_date: 起始日期 YYYY-MM-DD
+            end_date: 结束日期 YYYY-MM-DD
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        trend = insights.get_mood_trend(granularity, start_date, end_date)
+        return JSONResponse(
+            {
+                "ok": True,
+                "granularity": granularity,
+                "data": [
+                    {
+                        "period": p.period,
+                        "avg_score": p.avg_score,
+                        "entry_count": p.entry_count,
+                        "mood_distribution": p.mood_distribution,
+                    }
+                    for p in trend
+                ],
+            }
+        )
+
+    @app.get("/api/diary/insights/streak")
+    def diary_insights_streak() -> JSONResponse:
+        """获取写作连续打卡统计。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        streak = insights.get_writing_streak()
+        return JSONResponse(
+            {
+                "ok": True,
+                "current_streak": streak.current_streak,
+                "longest_streak": streak.longest_streak,
+                "total_days": streak.total_days,
+                "this_week_count": streak.this_week_count,
+                "this_month_count": streak.this_month_count,
+            }
+        )
+
+    @app.get("/api/diary/insights/word-trend")
+    def diary_insights_word_trend(granularity: str = "month") -> JSONResponse:
+        """获取字数趋势数据。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        trend = insights.get_word_trend(granularity)
+        return JSONResponse({"ok": True, "granularity": granularity, "data": trend})
+
+    @app.get("/api/diary/insights/keywords")
+    def diary_insights_keywords(
+        limit: int = 50,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> JSONResponse:
+        """获取高频关键词（词云数据）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        keywords = insights.get_top_keywords(limit, start_date, end_date)
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [{"word": w, "count": c} for w, c in keywords],
+            }
+        )
+
+    @app.get("/api/diary/insights/yearly/{year}")
+    def diary_insights_yearly(year: int) -> JSONResponse:
+        """获取年度洞察统计数据。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        stats = insights.get_yearly_insight_stats(year)
+        return JSONResponse({"ok": True, "year": year, "data": stats})
+
+    @app.post("/api/diary/insights/yearly/{year}/generate")
+    async def diary_insights_yearly_generate(year: int) -> JSONResponse:
+        """生成年度洞察报告（调用 LLM）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import DiaryInsightsService
+
+        insights = DiaryInsightsService(svc.store)
+        stats = insights.get_yearly_insight_stats(year)
+        if stats.get("entry_count", 0) == 0:
+            return JSONResponse({"ok": False, "error": f"{year}年暂无日记"}, status_code=404)
+
+        prompt = DiaryInsightsService.build_yearly_report_prompt(year, stats)
+        try:
+            report = await svc._call_llm(prompt)  # noqa: SLF001
+            return JSONResponse({"ok": True, "year": year, "report": report, "stats": stats})
+        except Exception as exc:
+            logger.exception("年度洞察报告生成失败")
+            return JSONResponse(
+                {"ok": False, "error": f"生成失败: {exc}", "stats": stats},
+                status_code=500,
+            )
+
+    # ─── 碎片（随手记）API ───────────────────────────────────────────
+
+    @app.get("/api/diary/fragments")
+    def diary_fragments_list(
+        fragment_date: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        """列出碎片，可按日期筛选。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        fragments = svc.list_fragments(fragment_date, limit, offset)
+        total = svc.store.count_fragments(fragment_date)
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [f.model_dump(mode="json") for f in fragments],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+
+    @app.post("/api/diary/fragments")
+    def diary_fragments_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建一条碎片。
+
+        请求体：
+        - content: 碎片内容（必填）
+        - mood: 情绪标签（可选）
+        - fragment_date: 日期（可选，默认今天）
+        - source: 来源（可选）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        content = payload.get("content", "").strip()
+        if not content:
+            return JSONResponse({"ok": False, "error": "缺少 content"}, status_code=400)
+        mood_str = payload.get("mood", "unknown")
+        try:
+            from openbiliclaw.diary import MoodLevel
+
+            mood = MoodLevel(mood_str)
+        except (ValueError, KeyError):
+            mood = MoodLevel.UNKNOWN
+        fragment = svc.create_fragment(
+            content=content,
+            mood=mood,
+            fragment_date=payload.get("fragment_date"),
+            source=payload.get("source", "manual"),
+        )
+        return JSONResponse({"ok": True, "data": fragment.model_dump(mode="json")})
+
+    @app.delete("/api/diary/fragments/{fragment_id}")
+    def diary_fragments_delete(fragment_id: int) -> JSONResponse:
+        """删除一条碎片。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        ok = svc.delete_fragment(fragment_id)
+        return JSONResponse({"ok": ok, "id": fragment_id})
+
+    @app.post("/api/diary/fragments/generate-diary")
+    async def diary_fragments_generate_diary(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """从当天碎片 AI 聚合生成一篇完整日记。
+
+        请求体（可选）：
+        - fragment_date: 碎片日期（默认今天）
+        - auto_delete: 生成后是否删除碎片（默认 true）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        payload = payload or {}
+        try:
+            entry = await svc.generate_diary_from_fragments(
+                fragment_date=payload.get("fragment_date"),
+                auto_delete=payload.get("auto_delete", True),
+            )
+            if entry is None:
+                return JSONResponse({"ok": False, "error": "当天没有碎片"}, status_code=404)
+            return JSONResponse({"ok": True, "data": entry.model_dump(mode="json")})
+        except Exception as exc:
+            logger.exception("碎片生成日记失败")
+            return JSONResponse({"ok": False, "error": f"生成失败: {exc}"}, status_code=500)
+
+    # ── 日记标签与人物提取 API ────────────────────────────────
+
+    @app.get("/api/diary/tags")
+    def diary_tags_list(
+        type: str | None = None,
+        limit: int = 200,
+        min_count: int = 1,
+    ) -> JSONResponse:
+        """获取标签列表，可按类型筛选。
+
+        Query:
+        - type: 标签类型（emotion/topic/event/location/work/family/health/finance/other）
+        - limit: 返回数量上限
+        - min_count: 最小使用次数
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            from openbiliclaw.diary.models import TagType
+            tag_type = TagType(type) if type else None
+            tags = svc.get_tags(tag_type=tag_type, limit=limit, min_count=min_count)
+            return JSONResponse({
+                "ok": True,
+                "data": [t.model_dump(mode="json") for t in tags],
+                "total": len(tags),
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/diary/persons")
+    def diary_persons_list(
+        relation: str | None = None,
+        limit: int = 200,
+        min_appearances: int = 1,
+    ) -> JSONResponse:
+        """获取人物列表，可按关系筛选。
+
+        Query:
+        - relation: 关系筛选（家人/朋友/同事等）
+        - limit: 返回数量上限
+        - min_appearances: 最小出现次数
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            persons = svc.get_persons(relation=relation, limit=limit, min_appearances=min_appearances)
+            return JSONResponse({
+                "ok": True,
+                "data": [p.model_dump(mode="json") for p in persons],
+                "total": len(persons),
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/diary/persons/{person_id}")
+    def diary_persons_detail(person_id: int) -> JSONResponse:
+        """获取人物详情，包含相关日记列表。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            detail = svc.get_person_detail(person_id)
+            if detail is None:
+                return JSONResponse({"ok": False, "error": "人物不存在"}, status_code=404)
+            return JSONResponse({"ok": True, "data": detail})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/diary/{entry_id}/tags")
+    def diary_entry_tags(entry_id: int) -> JSONResponse:
+        """获取某篇日记的标签和人物。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = svc.get_entry_tags_and_persons(entry_id)
+            return JSONResponse({"ok": True, "data": data})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.post("/api/diary/{entry_id}/extract")
+    async def diary_entry_extract(entry_id: int) -> JSONResponse:
+        """对单篇日记执行 AI 标签和人物提取。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            result = await svc.extract_tags_and_persons(entry_id)
+            if result is None:
+                return JSONResponse({"ok": False, "error": "提取失败或日记不存在"}, status_code=404)
+            return JSONResponse({"ok": True, "data": result.model_dump(mode="json")})
+        except Exception as exc:
+            logger.exception(f"提取日记 {entry_id} 失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.post("/api/diary/extract-batch")
+    async def diary_extract_batch(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """批量提取日记的标签和人物。
+
+        请求体（可选）：
+        - limit: 处理数量上限（默认 100）
+        - start_id: 起始日记 ID
+        - only_unextracted: 只处理未提取过的日记（默认 true）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        payload = payload or {}
+        try:
+            stats = await svc.batch_extract(
+                limit=payload.get("limit", 100),
+                start_id=payload.get("start_id"),
+                only_unextracted=payload.get("only_unextracted", True),
+            )
+            return JSONResponse({"ok": True, "data": stats})
+        except Exception as exc:
+            logger.exception("批量提取失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.get("/api/diary/extraction-stats")
+    def diary_extraction_stats() -> JSONResponse:
+        """获取标签和人物提取的统计信息。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            stats = svc.get_extraction_stats()
+            return JSONResponse({"ok": True, "data": stats})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    # ─── RAG 语义搜索与问答 API ─────────────────────────────────────
+
+    _diary_rag_service = None
+
+    def _get_diary_rag_service():
+        """获取或创建日记 RAG 服务实例（懒加载）。"""
+        nonlocal _diary_rag_service
+        if _diary_rag_service is not None:
+            return _diary_rag_service
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return None
+        from openbiliclaw.diary import DiaryRAGService
+
+        rag = DiaryRAGService(database=database)
+        # 注入 embedding 和 llm 服务
+        embedding_service = getattr(ctx, "embedding_service", None)
+        llm_service = getattr(ctx, "llm_service", None)
+        if embedding_service is not None:
+            rag.set_embedding_service(embedding_service)
+        if llm_service is not None:
+            rag.set_llm_service(llm_service)
+        _diary_rag_service = rag
+        return rag
+
+    @app.get("/api/diary/rag/stats")
+    def diary_rag_stats() -> JSONResponse:
+        """获取向量生成统计信息。"""
+        rag = _get_diary_rag_service()
+        if rag is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        stats = rag.get_embedding_stats()
+        return JSONResponse({"ok": True, "data": stats})
+
+    @app.post("/api/diary/rag/generate-embeddings")
+    async def diary_rag_generate_embeddings(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """批量为日记生成 embedding 向量。
+
+        请求体（可选）：
+        - limit: 最多处理多少篇（默认 100）
+        - batch_size: 每批并发数（默认 10）
+        """
+        rag = _get_diary_rag_service()
+        if rag is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if rag.embedding_service is None:
+            return JSONResponse({"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"}, status_code=400)
+        payload = payload or {}
+        try:
+            stats = await rag.batch_generate_embeddings(
+                limit=payload.get("limit", 100),
+                batch_size=payload.get("batch_size", 10),
+            )
+            return JSONResponse({"ok": True, "data": stats})
+        except Exception as exc:
+            logger.exception("批量生成 embedding 失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.get("/api/diary/rag/search")
+    async def diary_rag_search(
+        q: str,
+        top_k: int = 10,
+        min_score: float = 0.3,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        source: str | None = None,
+    ) -> JSONResponse:
+        """语义搜索日记（用自然语言搜索，按语义相似度排序）。
+
+        参数：
+        - q: 搜索查询（自然语言）
+        - top_k: 返回最多多少条（默认 10）
+        - min_score: 最低相似度阈值 0-1（默认 0.3）
+        - start_date / end_date: 日期范围过滤
+        - source: 来源过滤
+        """
+        rag = _get_diary_rag_service()
+        if rag is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if rag.embedding_service is None:
+            return JSONResponse({"ok": False, "error": "Embedding 服务未配置"}, status_code=400)
+        if not q.strip():
+            return JSONResponse({"ok": False, "error": "缺少搜索关键词 q"}, status_code=400)
+        try:
+            results = await rag.semantic_search(
+                query=q,
+                top_k=top_k,
+                min_score=min_score,
+                start_date=start_date,
+                end_date=end_date,
+                source=source,
+            )
+            return JSONResponse({
+                "ok": True,
+                "query": q,
+                "count": len(results),
+                "results": [
+                    {
+                        "id": r.entry.id,
+                        "date": r.entry.entry_date,
+                        "title": r.entry.title,
+                        "content": r.entry.content[:500] + ("..." if len(r.entry.content) > 500 else ""),
+                        "source": r.entry.source,
+                        "mood": r.entry.mood.value,
+                        "score": round(r.score, 4),
+                        "highlight": r.highlight,
+                    }
+                    for r in results
+                ],
+            })
+        except Exception as exc:
+            logger.exception("语义搜索失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.get("/api/diary/rag/similar/{entry_id}")
+    def diary_rag_similar(entry_id: int, top_k: int = 5, min_score: float = 0.5) -> JSONResponse:
+        """查找与指定日记相似的历史日记。
+
+        参数：
+        - entry_id: 目标日记 ID
+        - top_k: 返回最多多少条（默认 5）
+        - min_score: 最低相似度阈值（默认 0.5）
+        """
+        rag = _get_diary_rag_service()
+        if rag is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            results = rag.find_similar_entries(entry_id=entry_id, top_k=top_k, min_score=min_score)
+            return JSONResponse({
+                "ok": True,
+                "entry_id": entry_id,
+                "count": len(results),
+                "results": [
+                    {
+                        "id": r.entry.id,
+                        "date": r.entry.entry_date,
+                        "title": r.entry.title,
+                        "content": r.entry.content[:300] + ("..." if len(r.entry.content) > 300 else ""),
+                        "score": round(r.score, 4),
+                    }
+                    for r in results
+                ],
+            })
+        except Exception as exc:
+            logger.exception("相似日记查询失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.post("/api/diary/rag/ask")
+    async def diary_rag_ask(payload: dict[str, Any]) -> JSONResponse:
+        """基于日记内容回答问题（RAG 问答）。
+
+        请求体：
+        - question: 用户问题（必填）
+        - top_k: 检索多少篇相关日记（默认 8）
+        """
+        rag = _get_diary_rag_service()
+        if rag is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if rag.llm_service is None:
+            return JSONResponse({"ok": False, "error": "LLM 服务未配置"}, status_code=400)
+        question = payload.get("question", "").strip()
+        if not question:
+            return JSONResponse({"ok": False, "error": "缺少 question"}, status_code=400)
+        try:
+            answer = await rag.ask_question(
+                question=question,
+                top_k=payload.get("top_k", 8),
+            )
+            return JSONResponse({
+                "ok": True,
+                "question": question,
+                "answer": answer.answer,
+                "sources": answer.sources,
+                "related_questions": answer.related_questions,
+            })
+        except Exception as exc:
+            logger.exception("RAG 问答失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    # ── 健康管理系统 API ───────────────────────────────────────
+
+    _health_service: HealthService | None = None
+
+    def _get_health_service() -> HealthService | None:
+        """获取或创建健康管理服务实例（懒加载）。"""
+        nonlocal _health_service
+        if _health_service is not None:
+            return _health_service
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return None
+        llm_service = getattr(ctx, "llm_service", None)
+        _health_service = HealthService(database=database, llm_service=llm_service)
+        return _health_service
+
+    # ── 统计概览 ──
+
+    @app.get("/api/health/stats")
+    def health_stats() -> JSONResponse:
+        """获取健康档案统计概览。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        stats = svc.get_stats()
+        return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
+
+    # ── 患者档案 ──
+
+    @app.get("/api/health/patients")
+    def health_patients_list() -> JSONResponse:
+        """列出所有患者档案。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        patients = svc.list_patients()
+        return JSONResponse({"ok": True, "items": [p.model_dump(mode="json") for p in patients]})
+
+    @app.post("/api/health/patients")
+    def health_patients_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建患者档案。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = PatientCreate(**payload)
+            patient = svc.create_patient(data)
+            return JSONResponse({"ok": True, "data": patient.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/patients/{patient_id}")
+    def health_patients_get(patient_id: int) -> JSONResponse:
+        """获取患者档案详情（含各模块统计）。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            summary = svc.get_patient_summary(patient_id)
+            return JSONResponse({"ok": True, "data": summary})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/patients/{patient_id}")
+    def health_patients_update(patient_id: int, payload: dict[str, Any]) -> JSONResponse:
+        """更新患者档案。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = PatientUpdate(**payload)
+            patient = svc.update_patient(patient_id, data)
+            return JSONResponse({"ok": True, "data": patient.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/patients/{patient_id}")
+    def health_patients_delete(patient_id: int) -> JSONResponse:
+        """删除患者档案。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_patient(patient_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 就诊记录 ──
+
+    @app.get("/api/health/encounters")
+    def health_encounters_list(
+        patient_id: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        encounter_type: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        search: str | None = None,
+    ) -> JSONResponse:
+        """列就诊记录，支持筛选与搜索。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_encounters(
+            patient_id=patient_id,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
+            encounter_type=encounter_type,
+            start_date=start_date,
+            end_date=end_date,
+            search=search,
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [e.model_dump(mode="json") for e in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        })
+
+    @app.post("/api/health/encounters")
+    def health_encounters_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建就诊记录。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = EncounterCreate(**payload)
+            encounter = svc.create_encounter(data)
+            return JSONResponse({"ok": True, "data": encounter.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/encounters/{encounter_id}")
+    def health_encounters_get(encounter_id: int) -> JSONResponse:
+        """获取单条就诊记录详情。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            encounter = svc.get_encounter(encounter_id)
+            return JSONResponse({"ok": True, "data": encounter.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/encounters/{encounter_id}")
+    def health_encounters_update(encounter_id: int, payload: dict[str, Any]) -> JSONResponse:
+        """更新就诊记录。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = EncounterUpdate(**payload)
+            encounter = svc.update_encounter(encounter_id, data)
+            return JSONResponse({"ok": True, "data": encounter.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/encounters/{encounter_id}")
+    def health_encounters_delete(encounter_id: int) -> JSONResponse:
+        """删除就诊记录。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_encounter(encounter_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 健康问题 ──
+
+    @app.get("/api/health/conditions")
+    def health_conditions_list(
+        patient_id: int | None = None,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        """列出健康问题。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_conditions(
+            patient_id=patient_id, status=status,
+            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [c.model_dump(mode="json") for c in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/conditions")
+    def health_conditions_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建健康问题。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = ConditionCreate(**payload)
+            condition = svc.create_condition(data)
+            return JSONResponse({"ok": True, "data": condition.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/conditions/{condition_id}")
+    def health_conditions_get(condition_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            condition = svc.get_condition(condition_id)
+            return JSONResponse({"ok": True, "data": condition.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/conditions/{condition_id}")
+    def health_conditions_update(condition_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = ConditionUpdate(**payload)
+            condition = svc.update_condition(condition_id, data)
+            return JSONResponse({"ok": True, "data": condition.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/conditions/{condition_id}")
+    def health_conditions_delete(condition_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_condition(condition_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 用药记录 ──
+
+    @app.get("/api/health/medications")
+    def health_medications_list(
+        patient_id: int | None = None,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_medications(
+            patient_id=patient_id, status=status,
+            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [m.model_dump(mode="json") for m in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/medications")
+    def health_medications_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = MedicationCreate(**payload)
+            medication = svc.create_medication(data)
+            return JSONResponse({"ok": True, "data": medication.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/medications/{medication_id}")
+    def health_medications_get(medication_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            medication = svc.get_medication(medication_id)
+            return JSONResponse({"ok": True, "data": medication.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/medications/{medication_id}")
+    def health_medications_update(medication_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = MedicationUpdate(**payload)
+            medication = svc.update_medication(medication_id, data)
+            return JSONResponse({"ok": True, "data": medication.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/medications/{medication_id}")
+    def health_medications_delete(medication_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_medication(medication_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 化验结果 ──
+
+    @app.get("/api/health/lab-results")
+    def health_lab_results_list(
+        patient_id: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        search: str | None = None,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_lab_results(
+            patient_id=patient_id,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
+            search=search,
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [l.model_dump(mode="json") for l in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/lab-results")
+    def health_lab_results_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = LabResultCreate(**payload)
+            lab_result = svc.create_lab_result(data)
+            return JSONResponse({"ok": True, "data": lab_result.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/lab-results/{lab_result_id}")
+    def health_lab_results_get(lab_result_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            lab_result = svc.get_lab_result(lab_result_id)
+            return JSONResponse({"ok": True, "data": lab_result.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/lab-results/{lab_result_id}")
+    def health_lab_results_update(lab_result_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = LabResultUpdate(**payload)
+            lab_result = svc.update_lab_result(lab_result_id, data)
+            return JSONResponse({"ok": True, "data": lab_result.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/lab-results/{lab_result_id}")
+    def health_lab_results_delete(lab_result_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_lab_result(lab_result_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.get("/api/health/lab-trend")
+    def health_lab_trend(patient_id: int, test_name: str, limit: int = 50) -> JSONResponse:
+        """获取某个化验项目的历史趋势。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        trend = svc.get_lab_trend(patient_id=patient_id, test_name=test_name, limit=limit)
+        return JSONResponse({"ok": True, "test_name": test_name, "items": trend})
+
+    # ── 检查 / 手术 ──
+
+    @app.get("/api/health/procedures")
+    def health_procedures_list(
+        patient_id: int | None = None,
+        procedure_type: str | None = None,
+        needs_follow_up: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_procedures(
+            patient_id=patient_id,
+            procedure_type=procedure_type,
+            needs_follow_up=needs_follow_up,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [p.model_dump(mode="json") for p in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/procedures")
+    def health_procedures_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = ProcedureCreate(**payload)
+            procedure = svc.create_procedure(data)
+            return JSONResponse({"ok": True, "data": procedure.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/procedures/{procedure_id}")
+    def health_procedures_get(procedure_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            procedure = svc.get_procedure(procedure_id)
+            return JSONResponse({"ok": True, "data": procedure.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/procedures/{procedure_id}")
+    def health_procedures_update(procedure_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = ProcedureUpdate(**payload)
+            procedure = svc.update_procedure(procedure_id, data)
+            return JSONResponse({"ok": True, "data": procedure.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/procedures/{procedure_id}")
+    def health_procedures_delete(procedure_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_procedure(procedure_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 过敏史 ──
+
+    @app.get("/api/health/allergies")
+    def health_allergies_list(patient_id: int | None = None) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items = svc.list_allergies(patient_id=patient_id)
+        return JSONResponse({"ok": True, "items": [a.model_dump(mode="json") for a in items]})
+
+    @app.post("/api/health/allergies")
+    def health_allergies_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = AllergyCreate(**payload)
+            allergy = svc.create_allergy(data)
+            return JSONResponse({"ok": True, "data": allergy.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/allergies/{allergy_id}")
+    def health_allergies_delete(allergy_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_allergy(allergy_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 生命体征 ──
+
+    @app.get("/api/health/vitals")
+    def health_vitals_list(patient_id: int, limit: int = 100, offset: int = 0) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_vitals(
+            patient_id=patient_id,
+            limit=max(1, min(int(limit), 500)),
+            offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [v.model_dump(mode="json") for v in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/vitals")
+    def health_vitals_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = VitalsCreate(**payload)
+            vitals = svc.create_vitals(data)
+            return JSONResponse({"ok": True, "data": vitals.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/vitals/{vitals_id}")
+    def health_vitals_delete(vitals_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_vitals(vitals_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 疫苗接种 ──
+
+    @app.get("/api/health/immunizations")
+    def health_immunizations_list(patient_id: int | None = None) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items = svc.list_immunizations(patient_id=patient_id)
+        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
+
+    @app.post("/api/health/immunizations")
+    def health_immunizations_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = ImmunizationCreate(**payload)
+            immunization = svc.create_immunization(data)
+            return JSONResponse({"ok": True, "data": immunization.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/immunizations/{immunization_id}")
+    def health_immunizations_delete(immunization_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_immunization(immunization_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 医生信息 ──
+
+    @app.get("/api/health/doctors")
+    def health_doctors_list(specialty: str | None = None, search: str | None = None) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items = svc.list_doctors(specialty=specialty, search=search)
+        return JSONResponse({"ok": True, "items": [d.model_dump(mode="json") for d in items]})
+
+    @app.post("/api/health/doctors")
+    def health_doctors_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = DoctorCreate(**payload)
+            doctor = svc.create_doctor(data)
+            return JSONResponse({"ok": True, "data": doctor.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/doctors/{doctor_id}")
+    def health_doctors_get(doctor_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            doctor = svc.get_doctor(doctor_id)
+            return JSONResponse({"ok": True, "data": doctor.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/doctors/{doctor_id}")
+    def health_doctors_update(doctor_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = DoctorUpdate(**payload)
+            doctor = svc.update_doctor(doctor_id, data)
+            return JSONResponse({"ok": True, "data": doctor.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/doctors/{doctor_id}")
+    def health_doctors_delete(doctor_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_doctor(doctor_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 文档 / 附件 ──
+
+    @app.get("/api/health/documents")
+    def health_documents_list(
+        patient_id: int | None = None,
+        document_type: str | None = None,
+        encounter_id: int | None = None,
+        search: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_documents(
+            patient_id=patient_id, document_type=document_type,
+            encounter_id=encounter_id, search=search,
+            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [d.model_dump(mode="json") for d in items],
+            "total": total,
+        })
+
+    @app.post("/api/health/documents")
+    def health_documents_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = HealthDocumentCreate(**payload)
+            doc = svc.create_document(data)
+            return JSONResponse({"ok": True, "data": doc.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/documents/{document_id}")
+    def health_documents_get(document_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            doc = svc.get_document(document_id)
+            return JSONResponse({"ok": True, "data": doc.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/documents/{document_id}")
+    def health_documents_update(document_id: int, payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = HealthDocumentUpdate(**payload)
+            doc = svc.update_document(document_id, data)
+            return JSONResponse({"ok": True, "data": doc.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/documents/{document_id}")
+    def health_documents_delete(document_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_document(document_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── AI 健康洞察 ──
+
+    @app.get("/api/health/insights")
+    def health_insights_list(
+        patient_id: int | None = None,
+        target_type: str | None = None,
+        target_id: int | None = None,
+        limit: int = 50,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items = svc.list_insights(
+            patient_id=patient_id, target_type=target_type,
+            target_id=target_id, limit=max(1, min(int(limit), 200)),
+        )
+        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
+
+    @app.post("/api/health/insights")
+    def health_insights_create(payload: dict[str, Any]) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            data = HealthInsightCreate(**payload)
+            insight = svc.create_insight(data)
+            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/health/insights/{insight_id}")
+    def health_insights_delete(insight_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_insight(insight_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 健康时间线 ──
+
+    @app.get("/api/health/timeline")
+    def health_timeline(patient_id: int, limit: int = 100, offset: int = 0) -> JSONResponse:
+        """获取患者健康时间线，聚合所有类型的健康事件。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        events = svc.get_timeline(
+            patient_id=patient_id,
+            limit=max(1, min(int(limit), 500)),
+            offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True,
+            "patient_id": patient_id,
+            "items": [e.model_dump(mode="json") for e in events],
+            "total": len(events),
+        })
+
+    # ── 预约 / 复诊 ──
+
+    @app.get("/api/health/appointments")
+    def health_appointments_list(
+        patient_id: int | None = None,
+        status: str | None = None,
+        upcoming_only: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_appointments(
+            patient_id=patient_id, status=status,
+            upcoming_only=upcoming_only,
+            limit=max(1, min(int(limit), 500)),
+            offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True, "items": [a.model_dump(mode="json") for a in items], "total": total,
+        })
+
+    @app.post("/api/health/appointments")
+    def health_appointments_create(data: AppointmentCreate) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            item = svc.create_appointment(data)
+            return JSONResponse({"ok": True, "item": item.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/appointments/{appointment_id}")
+    def health_appointments_get(appointment_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            item = svc.get_appointment(appointment_id)
+            return JSONResponse({"ok": True, "item": item.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.put("/api/health/appointments/{appointment_id}")
+    def health_appointments_update(appointment_id: int, data: AppointmentUpdate) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            item = svc.update_appointment(appointment_id, data)
+            return JSONResponse({"ok": True, "item": item.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.delete("/api/health/appointments/{appointment_id}")
+    def health_appointments_delete(appointment_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_appointment(appointment_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # ── 服药记录 / 用药依从性 ──
+
+    @app.get("/api/health/medication-logs")
+    def health_medication_logs_list(
+        patient_id: int | None = None,
+        medication_id: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        items, total = svc.list_medication_logs(
+            patient_id=patient_id, medication_id=medication_id,
+            start_date=start_date, end_date=end_date,
+            limit=max(1, min(int(limit), 500)),
+            offset=max(0, int(offset)),
+        )
+        return JSONResponse({
+            "ok": True, "items": [m.model_dump(mode="json") for m in items], "total": total,
+        })
+
+    @app.post("/api/health/medication-logs")
+    def health_medication_logs_create(data: MedicationLogCreate) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            item = svc.create_medication_log(data)
+            return JSONResponse({"ok": True, "item": item.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/health/medication-logs/{log_id}")
+    def health_medication_logs_get(log_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            item = svc.get_medication_log(log_id)
+            return JSONResponse({"ok": True, "item": item.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.delete("/api/health/medication-logs/{log_id}")
+    def health_medication_logs_delete(log_id: int) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            svc.delete_medication_log(log_id)
+            return JSONResponse({"ok": True})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.get("/api/health/medication-adherence")
+    def health_medication_adherence(patient_id: int, days: int = 30) -> JSONResponse:
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        result = svc.get_medication_adherence(patient_id, max(1, min(int(days), 365)))
+        return JSONResponse({"ok": True, **result})
+
+    # ── 药物相互作用检查 ──
+
+    @app.post("/api/health/check-drug-interactions")
+    def health_check_drug_interactions(drug_name: str, existing_drugs: str) -> JSONResponse:
+        """检查新药与现有药物的相互作用。existing_drugs 用逗号分隔。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        drugs = [d.strip() for d in existing_drugs.split(",") if d.strip()]
+        interactions = svc.check_drug_interactions(drug_name, drugs)
+        return JSONResponse({
+            "ok": True,
+            "drug_name": drug_name,
+            "existing_drugs": drugs,
+            "interactions": [i.model_dump(mode="json") for i in interactions],
+            "has_interaction": len(interactions) > 0,
+        })
+
+    # ── AI 报告解读 ──
+
+    @app.post("/api/health/lab-results/{lab_result_id}/interpret")
+    async def health_lab_interpret(lab_result_id: int) -> JSONResponse:
+        """使用 AI 解读化验报告。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if svc.llm_service is None:
+            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
+        try:
+            insight = await svc.interpret_lab_result(lab_result_id)
+            if insight is None:
+                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @app.post("/api/health/procedures/{procedure_id}/interpret")
+    async def health_procedure_interpret(procedure_id: int) -> JSONResponse:
+        """使用 AI 解读检查报告。"""
+        svc = _get_health_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if svc.llm_service is None:
+            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
+        try:
+            insight = await svc.interpret_procedure(procedure_id)
+            if insight is None:
+                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
     @app.get("/api/subscriptions/stats", response_model=SubscriptionStatsOut)
     def list_subscriptions_with_stats() -> SubscriptionStatsOut:
         """List all subscriptions with item count and last fetch statistics."""
@@ -11719,6 +13474,7 @@ Keep keywords focused and specific. Remove stop words."""
             "saved",
             "profile",
             "chat",
+            "diary",
             "library",
             "read-archive",
             "settings",
@@ -11791,6 +13547,13 @@ Keep keywords focused and specific. Remove stop words."""
         app.mount(
             "/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library"
         )
+
+    # ── Standalone Health (健康档案) page ────────────────────────
+    # Personal/family medical records: encounters, conditions, medications,
+    # lab results, procedures, allergies, vitals, immunizations.
+    _health_dir = _web_dir / "health"
+    if _health_dir.is_dir():
+        app.mount("/health", _StaticFiles(directory=_health_dir, html=True), name="health-page")
 
     # ── Standalone Topics (专题) page ────────────────────────────
     # Bookmarkable /topics page listing user-curated topic collections with
@@ -11939,6 +13702,89 @@ Keep keywords focused and specific. Remove stop words."""
         engine.dismiss(notification_id)
         return {"status": "ok"}
 
+    # ─── Learning Paths ───────────────────────────────────────────────
+
+    @app.get("/api/self-evolution/learning-paths")
+    async def list_learning_paths(status: str | None = None, limit: int = 20):
+        """List all learning paths."""
+        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
+        paths = generator.list_paths(status=status, limit=limit)
+        return {"paths": [p.to_dict() for p in paths]}
+
+    @app.post("/api/self-evolution/learning-paths/generate")
+    async def generate_learning_path(payload: dict[str, Any]):
+        """Generate a learning path for a topic.
+
+        Request body:
+        - topic: 学习主题（必填）
+        - description: 学习目标/描述（可选）
+        - max_articles: 最多考虑多少篇文章（默认30）
+        """
+        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+        topic = (payload or {}).get("topic", "").strip()
+        if not topic:
+            return JSONResponse({"error": "topic is required"}, status_code=400)
+        description = (payload or {}).get("description", "")
+        max_articles = int((payload or {}).get("max_articles", 30))
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
+        try:
+            path = generator.generate_path(
+                topic, description=description, max_articles=max_articles
+            )
+            return {"status": "ok", "path": path.to_dict()}
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        except Exception as e:
+            logger.exception("学习路径生成失败")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.get("/api/self-evolution/learning-paths/{path_id}")
+    async def get_learning_path(path_id: str):
+        """Get a learning path by ID."""
+        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
+        path = generator.get_path(path_id)
+        if path is None:
+            return JSONResponse({"error": "path not found"}, status_code=404)
+        return {"path": path.to_dict()}
+
+    @app.patch("/api/self-evolution/learning-paths/{path_id}/steps/{step_index}")
+    async def update_learning_step(
+        path_id: str, step_index: int, payload: dict[str, Any]
+    ):
+        """Update progress on a learning path step.
+
+        Request body:
+        - completed: 是否完成（布尔）
+        - notes: 学习笔记（可选）
+        """
+        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
+        completed = (payload or {}).get("completed")
+        notes = (payload or {}).get("notes")
+        path = generator.update_step_progress(
+            path_id, step_index, completed=completed, notes=notes
+        )
+        if path is None:
+            return JSONResponse({"error": "path or step not found"}, status_code=404)
+        return {"status": "ok", "path": path.to_dict()}
+
+    @app.delete("/api/self-evolution/learning-paths/{path_id}")
+    async def delete_learning_path(path_id: str):
+        """Delete a learning path."""
+        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
+        ok = generator.delete_path(path_id)
+        if not ok:
+            return JSONResponse({"error": "path not found"}, status_code=404)
+        return {"status": "ok"}
+
     @app.get("/api/self-evolution/status")
     async def self_evolution_status():
         """Get self-evolution module status and stats."""
@@ -11946,7 +13792,8 @@ Keep keywords focused and specific. Remove stop words."""
         conn = sqlite3.connect(_self_evo_db)
         stats = {}
         for table in ["insight_reports", "drift_reports", "topic_mining_reports",
-                       "knowledge_cards", "knowledge_graph", "push_notifications"]:
+                       "knowledge_cards", "knowledge_graph", "push_notifications",
+                       "learning_paths"]:
             try:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 stats[table] = count
