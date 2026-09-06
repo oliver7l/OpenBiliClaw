@@ -12,6 +12,7 @@ import logging
 import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import UTC
 from typing import Any
 from urllib.parse import urlparse
 
@@ -92,6 +93,7 @@ class ProcessorResult:
     author: str | None = None
     summary: str | None = None
     content_text: str | None = None
+    content_html: str | None = None  # 原始 HTML 快照，用于离线存档
     published_at: str | None = None
     tags: list[str] = field(default_factory=list)
     source_type: str = "generic"
@@ -110,13 +112,13 @@ class ProcessorResult:
         """
         import hashlib
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         content_hash = ""
         if self.content_text:
             content_hash = hashlib.sha256(self.content_text.encode("utf-8")).hexdigest()[:32]
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         return {
             "source_type": self.source_type,
             "source_name": self.source_name,

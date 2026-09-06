@@ -159,24 +159,28 @@ class KnowledgeGraphService:
             count = tag_counter[tag]
             # 节点大小基于出现次数（对数缩放）
             size = max(10, min(50, 10 + count * 2))
-            nodes.append(GraphNode(
-                id=f"tag:{tag}",
-                label=tag,
-                type="tag",
-                size=size,
-                metadata={"count": count},
-            ))
+            nodes.append(
+                GraphNode(
+                    id=f"tag:{tag}",
+                    label=tag,
+                    type="tag",
+                    size=size,
+                    metadata={"count": count},
+                )
+            )
 
         # 构建边（共现关系）
         edges = []
         for (tag1, tag2), count in co_occurrence.items():
             if tag1 in top_tag_set and tag2 in top_tag_set and count >= 1:
-                edges.append(GraphEdge(
-                    source=f"tag:{tag1}",
-                    target=f"tag:{tag2}",
-                    weight=count,
-                    type="co-occurrence",
-                ))
+                edges.append(
+                    GraphEdge(
+                        source=f"tag:{tag1}",
+                        target=f"tag:{tag2}",
+                        weight=count,
+                        type="co-occurrence",
+                    )
+                )
 
         # 按权重排序，取前 100 条边
         edges.sort(key=lambda e: e.weight, reverse=True)
@@ -239,7 +243,9 @@ class KnowledgeGraphService:
                     co_occurrence[pair] += 1
 
         # 筛选高频人物
-        top_persons = [p for p, count in person_counter.most_common(max_nodes) if count >= min_count]
+        top_persons = [
+            p for p, count in person_counter.most_common(max_nodes) if count >= min_count
+        ]
         top_person_set = set(top_persons)
 
         # 构建节点
@@ -247,28 +253,32 @@ class KnowledgeGraphService:
         for person in top_persons:
             count = person_counter[person]
             size = max(10, min(50, 10 + count * 2))
-            nodes.append(GraphNode(
-                id=f"person:{person}",
-                label=person,
-                type="person",
-                size=size,
-                metadata={
-                    "count": count,
-                    "first_appeared": first_appeared.get(person, ""),
-                    "last_appeared": last_appeared.get(person, ""),
-                },
-            ))
+            nodes.append(
+                GraphNode(
+                    id=f"person:{person}",
+                    label=person,
+                    type="person",
+                    size=size,
+                    metadata={
+                        "count": count,
+                        "first_appeared": first_appeared.get(person, ""),
+                        "last_appeared": last_appeared.get(person, ""),
+                    },
+                )
+            )
 
         # 构建边（共现关系）
         edges = []
         for (p1, p2), count in co_occurrence.items():
             if p1 in top_person_set and p2 in top_person_set and count >= 1:
-                edges.append(GraphEdge(
-                    source=f"person:{p1}",
-                    target=f"person:{p2}",
-                    weight=count,
-                    type="co-occurrence",
-                ))
+                edges.append(
+                    GraphEdge(
+                        source=f"person:{p1}",
+                        target=f"person:{p2}",
+                        weight=count,
+                        type="co-occurrence",
+                    )
+                )
 
         edges.sort(key=lambda e: e.weight, reverse=True)
         edges = edges[:80]
@@ -325,12 +335,14 @@ class KnowledgeGraphService:
             tag_id = f"tag:{tag}"
             person_id = f"person:{person}"
             if tag_id in tag_ids and person_id in person_ids and count >= 1:
-                all_edges.append(GraphEdge(
-                    source=tag_id,
-                    target=person_id,
-                    weight=count,
-                    type="tag-person",
-                ))
+                all_edges.append(
+                    GraphEdge(
+                        source=tag_id,
+                        target=person_id,
+                        weight=count,
+                        type="tag-person",
+                    )
+                )
 
         return KnowledgeGraph(nodes=all_nodes, edges=all_edges)
 
@@ -385,14 +397,16 @@ class KnowledgeGraphService:
         result = []
         for other, data in relations.items():
             relation_type = self._infer_relation_type(person_name, other, data["count"])
-            result.append(PersonRelation(
-                person=person_name,
-                related_person=other,
-                relation_type=relation_type,
-                co_occurrence_count=data["count"],
-                first_appeared=data["first"],
-                last_appeared=data["last"],
-            ))
+            result.append(
+                PersonRelation(
+                    person=person_name,
+                    related_person=other,
+                    relation_type=relation_type,
+                    co_occurrence_count=data["count"],
+                    first_appeared=data["first"],
+                    last_appeared=data["last"],
+                )
+            )
 
         result.sort(key=lambda r: r.co_occurrence_count, reverse=True)
         return result
@@ -400,7 +414,18 @@ class KnowledgeGraphService:
     def _infer_relation_type(self, person1: str, person2: str, co_count: int) -> str:
         """推断人物关系类型。"""
         # 基于关键词的简单推断
-        family_keywords = ["妈妈", "爸爸", "老公", "老婆", "儿子", "女儿", "宝宝", "乐乐", "家人", "父母"]
+        family_keywords = [
+            "妈妈",
+            "爸爸",
+            "老公",
+            "老婆",
+            "儿子",
+            "女儿",
+            "宝宝",
+            "乐乐",
+            "家人",
+            "父母",
+        ]
         partner_keywords = ["艳艳", "老公", "老婆", "男朋友", "女朋友", "爱人"]
         friend_keywords = ["朋友", "闺蜜", "哥们", "兄弟"]
         colleague_keywords = ["同事", "老板", "领导", "客户"]
@@ -455,12 +480,10 @@ class KnowledgeGraphService:
         related_entries = []
         for entry in entries:
             content = (entry.title or "") + " " + entry.content
-            if node_type == "tag":
-                if node_label in (entry.tags or []) or node_label in content:
-                    related_entries.append(entry)
-            elif node_type == "person":
-                if node_label in content:
-                    related_entries.append(entry)
+            if node_type == "tag" and (
+                node_label in (entry.tags or []) or node_label in content
+            ) or node_type == "person" and node_label in content:
+                related_entries.append(entry)
 
         if not related_entries:
             return None
@@ -484,7 +507,7 @@ class KnowledgeGraphService:
         # 统计相关节点
         related_nodes: Counter[str] = Counter()
         for entry in related_entries:
-            for tag in (entry.tags or []):
+            for tag in entry.tags or []:
                 if tag != node_label:
                     related_nodes[f"tag:{tag}"] += 1
 
@@ -500,8 +523,7 @@ class KnowledgeGraphService:
             timeline[month] += 1
 
         timeline_data = [
-            {"month": month, "count": count}
-            for month, count in sorted(timeline.items())
+            {"month": month, "count": count} for month, count in sorted(timeline.items())
         ]
 
         return KnowledgeNodeDetail(
@@ -544,7 +566,7 @@ class KnowledgeGraphService:
         # 统计标签
         all_tags: Counter[str] = Counter()
         for entry in entries:
-            for tag in (entry.tags or []):
+            for tag in entry.tags or []:
                 if tag:
                     all_tags[tag] += 1
 
@@ -578,14 +600,19 @@ class KnowledgeGraphService:
             "person_relations": person_relations,
             "avg_tags_per_entry": round(sum(len(e.tags or []) for e in entries) / len(entries), 2),
             "top_tags": [{"tag": tag, "count": count} for tag, count in all_tags.most_common(10)],
-            "top_persons": [{"person": person, "count": count} for person, count in person_counter.most_common(10)],
+            "top_persons": [
+                {"person": person, "count": count}
+                for person, count in person_counter.most_common(10)
+            ],
         }
 
     # ═══════════════════════════════════════════
     # 内部辅助方法
     # ═══════════════════════════════════════════
 
-    def _get_entries_in_range(self, start_date: str | None, end_date: str | None) -> list[DiaryEntry]:
+    def _get_entries_in_range(
+        self, start_date: str | None, end_date: str | None
+    ) -> list[DiaryEntry]:
         """获取指定日期范围内的日记。"""
         all_entries = self.store.list_entries(limit=5000)
         if start_date and end_date:
@@ -606,8 +633,15 @@ class KnowledgeGraphService:
 
         # 添加常见人物名（从用户数据中观察到的）
         common_names = [
-            "艳艳", "乐乐", "妈妈", "爸爸", "老公", "老婆",
-            "狄胖胖", "童先海", "周英",
+            "艳艳",
+            "乐乐",
+            "妈妈",
+            "爸爸",
+            "老公",
+            "老婆",
+            "狄胖胖",
+            "童先海",
+            "周英",
         ]
         for name in common_names:
             if name not in names:

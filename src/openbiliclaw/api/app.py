@@ -13956,6 +13956,7 @@ Keep keywords focused and specific. Remove stop words."""
                 "author": result.author,
                 "summary": result.summary,
                 "content_text": result.content_text,
+                "content_html": result.content_html,
                 "published_at": result.published_at,
                 "tags": result.tags,
                 "url": result.url,
@@ -14026,8 +14027,30 @@ Keep keywords focused and specific. Remove stop words."""
                 values,
             )
             article_id = cursor.lastrowid
+
+            # 保存离线存档（HTML 快照）
+            if result.content_html or result.content_text:
+                try:
+                    cursor.execute(
+                        """INSERT INTO article_snapshots
+                           (article_id, url, content_html, content_text, fetch_source)
+                           VALUES (?, ?, ?, ?, 'url_extractor')""",
+                        (article_id, result.url, result.content_html or "", result.content_text or ""),
+                    )
+                    logger.info("Saved snapshot for article (id=%s)", article_id)
+                except Exception as snap_err:
+                    logger.warning("Failed to save snapshot for article %s: %s", article_id, snap_err)
+
             conn.commit()
             conn.close()
+
+            # 自动注册到阅读调度系统
+            try:
+                from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+                scheduler = ReadingScheduler(db_path)
+                scheduler.register_article(article_id, initial_delay_days=1.0)
+            except Exception as sched_err:
+                logger.warning("Failed to register article %s to reading schedule: %s", article_id, sched_err)
 
             logger.info("Saved extracted article (id=%s): %s", article_id, result.title)
             return article_id
@@ -14035,6 +14058,110 @@ Keep keywords focused and specific. Remove stop words."""
         except Exception as e:
             logger.exception("Failed to save extracted article: %s", e)
             return None
+
+    @app.get("/api/articles/{article_id}/snapshot")
+    async def get_article_snapshot(article_id: int):
+        """Get the offline HTML snapshot for an article.
+
+        Args:
+            article_id: The article ID.
+
+        Returns:
+            JSON with snapshot data (content_html, content_text, fetched_at).
+        """
+        import sqlite3
+
+        db_path = "data/openbiliclaw.db"
+        try:
+            cfg = getattr(ctx, "config", None)
+            if cfg and hasattr(cfg, "storage") and cfg.storage:
+                db_path = str(cfg.storage.db_path)
+        except Exception:
+            pass
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # 先查文章基本信息
+            article = cursor.execute(
+                "SELECT id, title, url, source_type FROM articles WHERE id = ?",
+                (article_id,),
+            ).fetchone()
+            if not article:
+                conn.close()
+                return JSONResponse({"error": "Article not found"}, status_code=404)
+
+            # 查快照
+            snapshot = cursor.execute(
+                """SELECT id, content_html, content_text, fetch_source, fetched_at
+                   FROM article_snapshots WHERE article_id = ? ORDER BY id DESC LIMIT 1""",
+                (article_id,),
+            ).fetchone()
+            conn.close()
+
+            if not snapshot:
+                return {
+                    "article_id": article_id,
+                    "title": article[1],
+                    "url": article[2],
+                    "source_type": article[3],
+                    "has_snapshot": False,
+                    "message": "No offline snapshot available for this article",
+                }
+
+            return {
+                "article_id": article_id,
+                "title": article[1],
+                "url": article[2],
+                "source_type": article[3],
+                "has_snapshot": True,
+                "snapshot_id": snapshot[0],
+                "content_html": snapshot[1],
+                "content_text": snapshot[2],
+                "fetch_source": snapshot[3],
+                "fetched_at": snapshot[4],
+            }
+
+        except Exception as e:
+            logger.exception("Failed to get snapshot for article %s: %s", article_id, e)
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.get("/api/snapshots/stats")
+    async def get_snapshots_stats():
+        """Get statistics about offline snapshots."""
+        import sqlite3
+
+        db_path = "data/openbiliclaw.db"
+        try:
+            cfg = getattr(ctx, "config", None)
+            if cfg and hasattr(cfg, "storage") and cfg.storage:
+                db_path = str(cfg.storage.db_path)
+        except Exception:
+            pass
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            total = cursor.execute("SELECT COUNT(*) FROM article_snapshots").fetchone()[0]
+            with_html = cursor.execute(
+                "SELECT COUNT(*) FROM article_snapshots WHERE content_html != '' AND content_html IS NOT NULL"
+            ).fetchone()[0]
+            sources = cursor.execute(
+                "SELECT fetch_source, COUNT(*) FROM article_snapshots GROUP BY fetch_source"
+            ).fetchall()
+            conn.close()
+
+            return {
+                "total_snapshots": total,
+                "with_html": with_html,
+                "by_source": {s[0]: s[1] for s in sources},
+            }
+
+        except Exception as e:
+            logger.exception("Failed to get snapshot stats: %s", e)
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     # ── Self-Evolution (自进化) API endpoints ─────────────────────
     # Auto-generated insights, interest drift detection, topic mining,
@@ -14363,6 +14490,79 @@ Keep keywords focused and specific. Remove stop words."""
             return JSONResponse({"error": "no report found, generate one first"}, status_code=404)
         return {"report": report.to_dict()}
 
+    # ─── Reading Schedule (智能阅读调度) ─────────────────────────────
+
+    @app.get("/api/self-evolution/reading-schedule/stats")
+    async def reading_schedule_stats():
+        """Get reading schedule statistics."""
+        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+        scheduler = ReadingScheduler(_self_evo_db)
+        return scheduler.get_stats()
+
+    @app.get("/api/self-evolution/reading-schedule/daily")
+    async def reading_schedule_daily(limit: int = 20, include_new: bool = True, new_count: int = 5):
+        """Get today's reading queue.
+
+        Args:
+            limit: Maximum number of articles in queue.
+            include_new: Whether to include new articles.
+            new_count: Maximum number of new articles.
+        """
+        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+        scheduler = ReadingScheduler(_self_evo_db)
+        queue = scheduler.get_daily_queue(limit=limit, include_new=include_new, new_count=new_count)
+        return {"queue": [item.to_dict() for item in queue], "count": len(queue)}
+
+    @app.get("/api/self-evolution/reading-schedule/{article_id}")
+    async def reading_schedule_article(article_id: int):
+        """Get reading schedule for a specific article."""
+        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+        scheduler = ReadingScheduler(_self_evo_db)
+        item = scheduler.get_article_schedule(article_id)
+        if item is None:
+            return JSONResponse({"error": "article not found in reading schedule"}, status_code=404)
+        return item.to_dict()
+
+    @app.post("/api/self-evolution/reading-schedule/{article_id}/review")
+    async def reading_schedule_review(article_id: int, payload: dict[str, Any] | None = None):
+        """Submit reading feedback for an article.
+
+        Request body:
+        - rating: Review rating (again/hard/good/easy)
+        - reading_percent: Reading progress percentage (0-100), optional
+        """
+        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler, ReviewRating
+        payload = payload or {}
+        rating_str = payload.get("rating", "good")
+        try:
+            rating = ReviewRating(rating_str)
+        except ValueError:
+            return JSONResponse({"error": f"invalid rating: {rating_str}, must be one of: again/hard/good/easy"}, status_code=400)
+
+        reading_percent = payload.get("reading_percent")
+        if reading_percent is not None:
+            reading_percent = float(reading_percent)
+
+        scheduler = ReadingScheduler(_self_evo_db)
+        item = scheduler.review_article(article_id, rating, reading_percent=reading_percent)
+        if item is None:
+            return JSONResponse({"error": "article not found in reading schedule"}, status_code=404)
+        return item.to_dict()
+
+    @app.post("/api/self-evolution/reading-schedule/batch-register")
+    async def reading_schedule_batch_register(payload: dict[str, Any] | None = None):
+        """Batch register articles into reading schedule.
+
+        Request body (optional):
+        - limit: Maximum number of articles to register (default 1000)
+        """
+        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+        payload = payload or {}
+        limit = int(payload.get("limit", 1000))
+        scheduler = ReadingScheduler(_self_evo_db)
+        count = scheduler.batch_register_from_articles(limit=limit)
+        return {"status": "ok", "registered": count}
+
     @app.get("/api/self-evolution/status")
     async def self_evolution_status():
         """Get self-evolution module status and stats."""
@@ -14371,7 +14571,8 @@ Keep keywords focused and specific. Remove stop words."""
         stats = {}
         for table in ["insight_reports", "drift_reports", "topic_mining_reports",
                        "knowledge_cards", "knowledge_graph", "push_notifications",
-                       "learning_paths", "article_tldrs", "content_insights_reports"]:
+                       "learning_paths", "article_tldrs", "content_insights_reports",
+                       "reading_schedule", "article_snapshots"]:
             try:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 stats[table] = count

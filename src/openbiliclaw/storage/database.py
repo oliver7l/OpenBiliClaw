@@ -6379,6 +6379,21 @@ class Database:
             );
             CREATE INDEX IF NOT EXISTS idx_article_notes_article
                 ON article_notes(article_id);
+
+            -- 离线存档：保存文章原始 HTML 快照，防止链接失效
+            CREATE TABLE IF NOT EXISTS article_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                url TEXT NOT NULL,
+                content_html TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                fetch_source TEXT DEFAULT 'url_extractor',
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_snapshots_article
+                ON article_snapshots(article_id);
+            CREATE INDEX IF NOT EXISTS idx_snapshots_url
+                ON article_snapshots(url);
         """)
 
         # 全文索引：首次或为空时从 articles 重建（trigram 适配中文子串）

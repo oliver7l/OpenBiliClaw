@@ -64,8 +64,9 @@ class GenericURLProcessor(BaseProcessor):
             response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
             response.raise_for_status()
             response.encoding = response.apparent_encoding or "utf-8"
+            raw_html = response.text
 
-            soup = BeautifulSoup(response.text, "lxml")
+            soup = BeautifulSoup(raw_html, "lxml")
 
             # Extract title
             title = None
@@ -118,6 +119,7 @@ class GenericURLProcessor(BaseProcessor):
                 author=author,
                 summary=summary,
                 content_text=content_text,
+                content_html=raw_html,  # 保存原始 HTML 用于离线存档
                 published_at=published_at,
                 tags=tags[:10],
                 source_type=self.source_type,
