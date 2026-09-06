@@ -11,6 +11,7 @@ generates reviewable knowledge cards.  Provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from dataclasses import dataclass, field
@@ -18,6 +19,19 @@ from datetime import datetime, timedelta
 from typing import Any
 
 logger = logging.getLogger("self_evolution.knowledge_card")
+
+
+def _run_async(coro: Any) -> Any:
+    """Run an async coroutine from sync or async context."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +314,7 @@ class KnowledgeCardGenerator:
         user_input = f"文章标题：{title}\n文章摘要：{summary}\n文章内容：{content}"
 
         try:
-            result = generate_structured(
+            result = _run_async(generate_structured(
                 self.llm_service,
                 system_instruction=system_instruction,
                 user_input=user_input,
@@ -308,7 +322,7 @@ class KnowledgeCardGenerator:
                 label="knowledge_card_generation",
                 temperature=0.3,
                 max_tokens=1000,
-            )
+            ))
 
             cards: list[KnowledgeCard] = []
             if isinstance(result, list):

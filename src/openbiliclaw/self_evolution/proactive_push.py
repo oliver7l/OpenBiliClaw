@@ -238,21 +238,46 @@ class ProactivePushEngine:
         """Find recently added high-value content."""
         conn = self._get_conn()
         try:
-            # Look for content added in the last 24 hours with high quality
+            # Look for content added in the last 24 hours with indicators of high value
             start = (datetime.now() - timedelta(hours=24)).isoformat()
 
-            rows = conn.execute(
-                """
-                SELECT id, title, url, source_type, tags, quality_score, ai_summary, created_at
-                FROM articles
-                WHERE created_at >= ?
-                  AND quality_score >= ?
-                  AND content_text IS NOT NULL AND length(content_text) > 500
-                ORDER BY quality_score DESC
-                LIMIT 10
-                """,
-                (start, self.config.min_quality_threshold),
-            ).fetchall()
+            # Use available columns as quality proxies:
+            # - ai_summary exists → was processed by LLM
+            # - content_text length → substantial content
+            # - reading_percent → user engagement
+            # - tags → categorized content
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT id, title, url, source_type, tags, ai_summary,
+                           reading_percent, content_text, created_at
+                    FROM articles
+                    WHERE created_at >= ?
+                      AND content_text IS NOT NULL AND length(content_text) > 500
+                      AND (ai_summary IS NOT NULL AND length(ai_summary) > 10
+                           OR reading_percent >= 50
+                           OR tags IS NOT NULL AND length(tags) > 2)
+                    ORDER BY COALESCE(reading_percent, 0) DESC, length(content_text) DESC
+                    LIMIT 10
+                    """,
+                    (start,),
+                ).fetchall()
+            except Exception:
+                # Fallback if reading_percent column doesn't exist
+                rows = conn.execute(
+                    """
+                    SELECT id, title, url, source_type, tags, ai_summary,
+                           content_text, created_at
+                    FROM articles
+                    WHERE created_at >= ?
+                      AND content_text IS NOT NULL AND length(content_text) > 500
+                      AND (ai_summary IS NOT NULL AND length(ai_summary) > 10
+                           OR tags IS NOT NULL AND length(tags) > 2)
+                    ORDER BY length(content_text) DESC
+                    LIMIT 10
+                    """,
+                    (start,),
+                ).fetchall()
 
             # Filter out already-notified content
             notified_ids = self._get_notified_content_ids()

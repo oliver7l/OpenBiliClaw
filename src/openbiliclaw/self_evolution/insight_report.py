@@ -14,6 +14,7 @@ served via the API or pushed as notifications.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -22,6 +23,24 @@ from datetime import datetime, timedelta
 from typing import Any
 
 logger = logging.getLogger("self_evolution.insight")
+
+
+def _run_async(coro: Any) -> Any:
+    """Run an async coroutine from sync or async context.
+
+    Handles both cases:
+    - Called from sync context: use asyncio.run()
+    - Called from async context (e.g., FastAPI): run in a thread
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +638,7 @@ class InsightReportGenerator:
         user_input = f"用户阅读数据：\n{json.dumps(data_summary, ensure_ascii=False, indent=2)}"
 
         try:
-            result = generate_structured(
+            result = _run_async(generate_structured(
                 self.llm_service,
                 system_instruction=system_instruction,
                 user_input=user_input,
@@ -627,7 +646,7 @@ class InsightReportGenerator:
                 label="insight_report_summary",
                 temperature=0.7,
                 max_tokens=500,
-            )
+            ))
             report.natural_language_summary = str(result).strip()
         except Exception:
             logger.exception("LLM summary generation failed")
@@ -635,7 +654,7 @@ class InsightReportGenerator:
 
         # Generate key takeaways
         try:
-            takeaway_result = generate_structured(
+            takeaway_result = _run_async(generate_structured(
                 self.llm_service,
                 system_instruction=(
                     "根据用户阅读数据，提取3-5条关键洞察，每条不超过30字。"
@@ -646,7 +665,7 @@ class InsightReportGenerator:
                 label="insight_report_takeaways",
                 temperature=0.5,
                 max_tokens=200,
-            )
+            ))
             text = str(takeaway_result).strip()
             report.key_takeaways = [
                 line.strip().lstrip("0123456789.、) ")
