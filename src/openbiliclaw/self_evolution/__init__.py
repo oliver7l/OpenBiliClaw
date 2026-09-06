@@ -42,6 +42,12 @@ from openbiliclaw.self_evolution.tldr import (
     TLDR,
     TLDRGenerator,
 )
+from openbiliclaw.self_evolution.insights import (
+    ContentInsightsAnalyzer,
+    CrossPlatformInsight,
+    InsightsReport,
+    KnowledgeGap,
+)
 from openbiliclaw.self_evolution.proactive_push import (
     PushConfig,
     PushNotification,
@@ -84,6 +90,11 @@ __all__ = [
     # TL;DR
     "TLDR",
     "TLDRGenerator",
+    # Content Insights
+    "ContentInsightsAnalyzer",
+    "CrossPlatformInsight",
+    "InsightsReport",
+    "KnowledgeGap",
     # Proactive push
     "PushConfig",
     "PushNotification",

@@ -11932,12 +11932,13 @@ Keep keywords focused and specific. Remove stop words."""
         fragment_date: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        fragment_type: str | None = None,
     ) -> JSONResponse:
-        """列出碎片，可按日期筛选。"""
+        """列出碎片，可按日期和类型筛选。"""
         svc = _get_diary_service()
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        fragments = svc.list_fragments(fragment_date, limit, offset)
+        fragments = svc.list_fragments(fragment_date, limit, offset, fragment_type)
         total = svc.store.count_fragments(fragment_date)
         return JSONResponse(
             {
@@ -11958,6 +11959,10 @@ Keep keywords focused and specific. Remove stop words."""
         - mood: 情绪标签（可选）
         - fragment_date: 日期（可选，默认今天）
         - source: 来源（可选）
+        - fragment_type: 碎片类型（可选，text/image/voice/link）
+        - media_path: 媒体文件路径（可选）
+        - media_description: 媒体内容描述（可选）
+        - tags: 标签列表（可选）
         """
         svc = _get_diary_service()
         if svc is None:
@@ -11977,6 +11982,10 @@ Keep keywords focused and specific. Remove stop words."""
             mood=mood,
             fragment_date=payload.get("fragment_date"),
             source=payload.get("source", "manual"),
+            fragment_type=payload.get("fragment_type", "text"),
+            media_path=payload.get("media_path", ""),
+            media_description=payload.get("media_description", ""),
+            tags=payload.get("tags", []),
         )
         return JSONResponse({"ok": True, "data": fragment.model_dump(mode="json")})
 
@@ -11989,9 +11998,42 @@ Keep keywords focused and specific. Remove stop words."""
         ok = svc.delete_fragment(fragment_id)
         return JSONResponse({"ok": ok, "id": fragment_id})
 
+    @app.post("/api/diary/fragments/{fragment_id}/auto-tag")
+    async def diary_fragments_auto_tag(fragment_id: int) -> JSONResponse:
+        """对单条碎片执行 AI 自动标签和情绪识别。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            fragment = await svc.auto_tag_fragment(fragment_id)
+            if fragment is None:
+                return JSONResponse({"ok": False, "error": "碎片不存在"}, status_code=404)
+            return JSONResponse({"ok": True, "data": fragment.model_dump(mode="json")})
+        except Exception as exc:
+            logger.exception(f"碎片 {fragment_id} 自动标签失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.post("/api/diary/fragments/auto-tag-batch")
+    async def diary_fragments_auto_tag_batch(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """批量对未标注的碎片执行自动标签和情绪识别。
+
+        请求体（可选）：
+        - limit: 处理数量上限（默认 50）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        payload = payload or {}
+        try:
+            stats = await svc.batch_auto_tag_fragments(limit=payload.get("limit", 50))
+            return JSONResponse({"ok": True, "data": stats})
+        except Exception as exc:
+            logger.exception("碎片批量自动标签失败")
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
     @app.post("/api/diary/fragments/generate-diary")
     async def diary_fragments_generate_diary(payload: dict[str, Any] | None = None) -> JSONResponse:
-        """从当天碎片 AI 聚合生成一篇完整日记。
+        """从当天碎片 AI 聚合生成一篇完整日记（证据驱动版）。
 
         请求体（可选）：
         - fragment_date: 碎片日期（默认今天）
@@ -13852,6 +13894,43 @@ Keep keywords focused and specific. Remove stop words."""
         if not ok:
             return JSONResponse({"error": "tldr not found"}, status_code=404)
         return {"status": "ok"}
+
+    # ─── Content Insights (Knowledge Gaps + Cross-Platform) ───────────
+
+    @app.post("/api/self-evolution/insights/generate")
+    async def generate_insights(payload: dict[str, Any] | None = None):
+        """Generate content insights report (knowledge gaps + cross-platform insights).
+
+        Request body (optional):
+        - min_articles_per_topic: minimum articles per topic (default 3)
+        - max_gaps: maximum knowledge gaps (default 15)
+        - max_cross_platform: maximum cross-platform insights (default 10)
+        """
+        from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
+        payload = payload or {}
+        llm_service = getattr(ctx, "llm_service", None)
+        analyzer = ContentInsightsAnalyzer(_self_evo_db, llm_service=llm_service)
+        try:
+            report = analyzer.generate_report(
+                min_articles_per_topic=int(payload.get("min_articles_per_topic", 3)),
+                max_gaps=int(payload.get("max_gaps", 15)),
+                max_cross_platform=int(payload.get("max_cross_platform", 10)),
+            )
+            return {"status": "ok", "report": report.to_dict()}
+        except Exception as e:
+            logger.exception("生成内容洞察报告失败")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.get("/api/self-evolution/insights/latest")
+    async def get_latest_insights():
+        """Get the latest content insights report."""
+        from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
+        llm_service = getattr(ctx, "llm_service", None)
+        analyzer = ContentInsightsAnalyzer(_self_evo_db, llm_service=llm_service)
+        report = analyzer.get_latest_report()
+        if report is None:
+            return JSONResponse({"error": "no report found, generate one first"}, status_code=404)
+        return {"report": report.to_dict()}
 
     @app.get("/api/self-evolution/status")
     async def self_evolution_status():

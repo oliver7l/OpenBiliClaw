@@ -516,9 +516,10 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 
     async def generate_diary_from_fragments(self, fragment_date: str | None = None,
                                                auto_delete: bool = True) -> DiaryEntry | None:
-        """从当天碎片 AI 聚合生成一篇完整日记。
+        """从当天碎片 AI 聚合生成一篇完整日记（证据驱动版）。
 
-        借鉴 Night-Journal 的设计：把白天的碎片整理成一篇连贯、私人的日记。
+        借鉴 Night-Journal 和 echolog 的设计：把白天的碎片整理成一篇连贯、私人的日记。
+        证据驱动：每条结论都要有原始碎片支撑，事实先行，不堆空洞形容词。
         生成后默认删除已使用的碎片。
 
         Args:
@@ -532,21 +533,44 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         if not fragments:
             return None
 
-        # 构建碎片文本
-        fragments_text = "\n".join(
-            f"{i+1}. {f.content}" + (f"（情绪：{f.mood.value}）" if f.mood != MoodLevel.UNKNOWN else "")
-            for i, f in enumerate(fragments)
-        )
+        # 构建碎片文本（包含时间、类型、媒体描述）
+        fragments_parts = []
+        for i, f in enumerate(fragments):
+            time_str = f.created_at.strftime("%H:%M") if hasattr(f.created_at, "strftime") else ""
+            type_label = {
+                "text": "📝 文字",
+                "image": "🖼️ 图片",
+                "voice": "🎙️ 语音",
+                "link": "🔗 链接",
+            }.get(f.fragment_type, "📝 文字")
 
-        # 构建 AI prompt（借鉴 Night-Journal 的温柔真实风格）
+            part = f"【碎片 {i+1}】{time_str} {type_label}"
+            if f.mood != MoodLevel.UNKNOWN:
+                part += f"（情绪：{f.mood.value}）"
+            part += f"\n{f.content}"
+            if f.media_description:
+                part += f"\n媒体描述：{f.media_description}"
+            if f.tags:
+                part += f"\n标签：{', '.join(f.tags)}"
+            fragments_parts.append(part)
+
+        fragments_text = "\n\n".join(fragments_parts)
+
+        # 构建 AI prompt（证据驱动，参考 echolog 的设计）
         prompt = f"""你是一个安静的记录者，坐在用户这一天的记忆里，把零散的念头、情绪和画面整理成一篇属于他自己的日记。
 
-今天的碎片记录：
+今天的碎片记录（按时间顺序）：
 {fragments_text}
 
 请根据以上碎片，生成一篇连贯的日记。
 
-要求：
+【核心原则：证据驱动】
+1. 事实先行：每一个描述都必须来自上面的碎片，不要编造没有的内容
+2. 不堆空洞形容词：不要写"非常开心"、"特别难过"这种空洞的词，用具体的细节和画面来表达
+3. 保留原始语气：用户怎么说的就怎么写，不要过度润色
+4. 时间顺序：尽量按碎片的时间顺序组织，但可以把相关的碎片放在一起
+
+【写作要求】
 1. 用第一人称「我」写作，像用户本人在回望这一天
 2. 感受碎片里的情绪变化，让每一句话都从他自己的视角自然流出
 3. 不只做事实罗列，而是找出这一天真正碰到他的东西
@@ -555,46 +579,70 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 6. 信息少的时候就写短一点，不硬凑
 7. 正文结尾可以留一句轻微的余味，但不要鸡汤
 
-输出 JSON（不要包含任何其他文字）：
+【输出格式】
+请严格输出 JSON（不要包含任何其他文字，不要使用 markdown 代码块）：
 {{
-  "title": "日记标题（简短，不超过15字）",
-  "content": "完整日记正文（300-800字）"
+  "title": "日记标题（简短，不超过15字，从碎片中提炼）",
+  "content": "完整日记正文（根据碎片数量调整长度，一般 200-800 字）",
+  "tags": ["从碎片中提取的 3-5 个标签"],
+  "mood": "当天整体情绪：very_happy|happy|neutral|sad|very_sad|angry|anxious|unknown"
 }}"""
 
         # 调用 LLM
         llm = self.llm_service
+        all_tags = []
+        overall_mood = MoodLevel.UNKNOWN
+
         if llm is None:
             # 没有 LLM 时，直接把碎片拼接成日记
             content = "\n\n".join(f.content for f in fragments)
-            entry = self.create_entry(
-                DiaryEntryCreate(
-                    entry_date=fragment_date,
-                    title=f"{fragment_date} 日记",
-                    content=content,
-                    source="fragment",
-                    tags=["随手记"],
-                )
-            )
+            title = f"{fragment_date} 日记"
+            # 从碎片中收集标签
+            for f in fragments:
+                all_tags.extend(f.tags)
+            all_tags = list(set(all_tags))[:5]
         else:
             try:
                 response = await llm.chat(prompt)
                 parsed = self._parse_analysis_response(response)
-                title = parsed.get("title", f"{fragment_date} 日记") if parsed else f"{fragment_date} 日记"
-                content = parsed.get("content", fragments_text) if parsed else fragments_text
+                if parsed:
+                    title = parsed.get("title", f"{fragment_date} 日记")
+                    content = parsed.get("content", fragments_text)
+                    all_tags = parsed.get("tags", [])
+                    mood_str = parsed.get("mood", "unknown")
+                    try:
+                        overall_mood = MoodLevel(mood_str)
+                    except (ValueError, KeyError):
+                        overall_mood = MoodLevel.UNKNOWN
+                else:
+                    title = f"{fragment_date} 日记"
+                    content = fragments_text
             except Exception:
                 # LLM 失败时降级为直接拼接
                 title = f"{fragment_date} 日记"
                 content = fragments_text
 
-            entry = self.create_entry(
-                DiaryEntryCreate(
-                    entry_date=fragment_date,
-                    title=title,
-                    content=content,
-                    source="fragment",
-                    tags=["随手记", "AI聚合"],
-                )
+        # 合并碎片中的标签和 AI 提取的标签
+        for f in fragments:
+            all_tags.extend(f.tags)
+        all_tags = list(set(all_tags))
+        if "随手记" not in all_tags:
+            all_tags.append("随手记")
+        if "AI聚合" not in all_tags:
+            all_tags.append("AI聚合")
+        all_tags = all_tags[:8]
+
+        # 创建日记
+        entry = self.create_entry(
+            DiaryEntryCreate(
+                entry_date=fragment_date,
+                title=title,
+                content=content,
+                source="fragment",
+                tags=all_tags,
+                mood=overall_mood,
             )
+        )
 
         # 删除已使用的碎片
         if auto_delete:
