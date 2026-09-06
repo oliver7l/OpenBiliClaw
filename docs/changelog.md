@@ -4,6 +4,50 @@
 
 ---
 
+## v0.3.182: RAG 语义搜索与日记对话——基于 embedding 的智能搜索 + 基于日记内容的 AI 问答（2026-09-06）
+
+为日记系统新增 RAG（检索增强生成）能力，基于本地 Ollama + bge-m3 模型为全部 925 篇日记生成 1024 维向量，实现自然语言语义搜索和基于日记内容的 AI 问答对话。这是日记系统优化计划的第一阶段，参考了 ai-journal、memex、echolog 等开源项目的设计。
+
+- feat: 日记向量存储与 RAG 服务
+  - 新增 `diary_embeddings` 表，存储每篇日记的 1024 维 embedding 向量
+  - 新增 `src/openbiliclaw/diary/rag.py` 模块，实现 `DiaryRAGService` 核心服务
+  - 复用项目已有的 `EmbeddingService`（L1 内存缓存 + L2 SQLite 持久化缓存）
+  - 支持批量生成 embedding、语义搜索、相似日记推荐、RAG 问答四大核心功能
+- feat: 批量生成 925 篇日记 embedding
+  - 使用本地 Ollama + bge-m3 模型（567M 参数，F16 量化，1024 维向量）
+  - 完全本地运行，无需 API 调用，数据不出机器
+  - 925 篇日记全部成功生成，100% 覆盖率，仅耗时 1.5 分钟
+- feat: 语义搜索 API
+  - `GET /api/diary/rag/search` — 自然语言语义搜索，按相似度排序
+  - 支持来源、日期范围、相似度阈值筛选
+  - 返回匹配度分数、日记摘要、高亮片段
+  - 测试效果："和艳艳吵架"精准找到吵架日记（相似度 0.67-0.70），"乐乐成长记录"精准匹配（相似度 0.67-0.71）
+- feat: 相似日记推荐 API
+  - `GET /api/diary/rag/similar/{entry_id}` — 查找与指定日记相似的历史日记
+  - 查看一篇日记时自动推荐相关的历史日记，发现隐藏的关联
+- feat: RAG 问答 API
+  - `POST /api/diary/rag/ask` — 基于日记内容回答问题
+  - 自动检索最相关的 8 篇日记作为上下文
+  - 回答引用具体日记作为证据（可点击查看详情）
+  - 自动推荐相关问题，引导深度探索
+- feat: 前端页面
+  - 新增"🔍 语义搜索"子 Tab：搜索框、筛选器（来源/日期/阈值）、结果卡片（相似度进度条、日记摘要、查看详情按钮）
+  - 新增"💬 日记对话"子 Tab：聊天界面、AI 回答、引用来源展示、相关问题推荐、快捷问题按钮
+  - 新增 `assets/js/diary-semantic.js` 和 `assets/js/diary-chat.js`
+  - 新增约 500 行 CSS 样式（渐变背景、动画效果、响应式布局）
+- feat: 向量管理 API
+  - `GET /api/diary/rag/stats` — 查看向量生成统计（总数/已生成/覆盖率）
+  - `POST /api/diary/rag/generate-embeddings` — 批量为未生成向量的日记生成 embedding
+- note: 技术实现
+  - 向量库：SQLite 存储（无需额外依赖，与现有数据库一致）
+  - 相似度计算：纯 Python cosine similarity，925 篇全量搜索 < 100ms
+  - Embedding 模型：bge-m3（多语言支持，中文效果优秀）
+  - LLM 问答：复用项目已有的 LLMService，支持 OpenAI/Claude/Gemini/DeepSeek 等
+- note: 参考项目
+  - ai-journal (JohannesRabauer) — RAG 语义记忆、向量嵌入设计
+  - memex (memex-lab) — 多 agent 组织、时间线卡片
+  - echolog (BillLucky) — 证据驱动日记、聊天式输入
+
 ## v0.3.181: 苹果备忘录日记导入——通过 AppleScript 读取 macOS 备忘录并导入日记系统（2026-09-06）
 
 通过 AppleScript 读取 macOS 系统备忘录应用，导出"每日记录"文件夹的 67 篇备忘录，解析月度汇总为单篇日记，去重后成功导入 85 篇新日记。

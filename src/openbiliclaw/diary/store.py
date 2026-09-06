@@ -74,10 +74,15 @@ CREATE TABLE IF NOT EXISTS diary_fragments (
     mood TEXT DEFAULT 'unknown',
     fragment_date TEXT NOT NULL,
     source TEXT DEFAULT 'manual',
+    fragment_type TEXT DEFAULT 'text',
+    media_path TEXT DEFAULT '',
+    media_description TEXT DEFAULT '',
+    tags TEXT DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_diary_fragments_date ON diary_fragments(fragment_date);
 CREATE INDEX IF NOT EXISTS idx_diary_fragments_mood ON diary_fragments(mood);
+CREATE INDEX IF NOT EXISTS idx_diary_fragments_type ON diary_fragments(fragment_type);
 
 -- 标签表：AI 自动提取的结构化标签
 CREATE TABLE IF NOT EXISTS diary_tags (
@@ -508,18 +513,42 @@ class DiaryStore:
 
     # ─── 碎片（随手记）操作 ───
 
-    def create_fragment(self, content: str, mood: MoodLevel = MoodLevel.UNKNOWN,
-                         fragment_date: str | None = None, source: str = "manual") -> DiaryFragment:
-        """创建一条碎片。"""
+    def create_fragment(
+        self,
+        content: str,
+        mood: MoodLevel = MoodLevel.UNKNOWN,
+        fragment_date: str | None = None,
+        source: str = "manual",
+        fragment_type: str = "text",
+        media_path: str = "",
+        media_description: str = "",
+        tags: list[str] | None = None,
+    ) -> DiaryFragment:
+        """创建一条碎片。
+
+        Args:
+            content: 碎片内容
+            mood: 情绪标签
+            fragment_date: 日期，默认今天
+            source: 来源
+            fragment_type: 碎片类型（text/image/voice/link）
+            media_path: 媒体文件路径
+            media_description: 媒体内容描述
+            tags: 标签列表
+        """
         self.initialize()
         if fragment_date is None:
             fragment_date = datetime.now().strftime("%Y-%m-%d")
+        tags_json = json.dumps(tags or [], ensure_ascii=False)
         cursor = self.conn.execute(
             """
-            INSERT INTO diary_fragments (content, mood, fragment_date, source)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO diary_fragments
+                (content, mood, fragment_date, source, fragment_type,
+                 media_path, media_description, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (content, mood.value, fragment_date, source),
+            (content, mood.value, fragment_date, source, fragment_type,
+             media_path, media_description, tags_json),
         )
         self.conn.commit()
         return self.get_fragment(cursor.lastrowid)
@@ -533,30 +562,55 @@ class DiaryStore:
         row = cursor.fetchone()
         return self._row_to_fragment(row) if row else None
 
-    def list_fragments(self, fragment_date: str | None = None,
-                        limit: int = 100, offset: int = 0) -> list[DiaryFragment]:
-        """列出碎片，可按日期筛选。"""
+    def list_fragments(
+        self,
+        fragment_date: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        fragment_type: str | None = None,
+    ) -> list[DiaryFragment]:
+        """列出碎片，可按日期和类型筛选。"""
         self.initialize()
+        conditions = []
+        params: list = []
         if fragment_date:
-            cursor = self.conn.execute(
-                """
-                SELECT * FROM diary_fragments
-                WHERE fragment_date = ?
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (fragment_date, limit, offset),
-            )
-        else:
-            cursor = self.conn.execute(
-                """
-                SELECT * FROM diary_fragments
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (limit, offset),
-            )
+            conditions.append("fragment_date = ?")
+            params.append(fragment_date)
+        if fragment_type:
+            conditions.append("fragment_type = ?")
+            params.append(fragment_type)
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+        params.extend([limit, offset])
+        cursor = self.conn.execute(
+            f"""
+            SELECT * FROM diary_fragments
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        )
         return [self._row_to_fragment(row) for row in cursor.fetchall()]
+
+    def update_fragment_tags(self, fragment_id: int, tags: list[str]) -> bool:
+        """更新碎片的标签。"""
+        self.initialize()
+        cursor = self.conn.execute(
+            "UPDATE diary_fragments SET tags = ? WHERE id = ?",
+            (json.dumps(tags, ensure_ascii=False), fragment_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def update_fragment_mood(self, fragment_id: int, mood: MoodLevel) -> bool:
+        """更新碎片的情绪。"""
+        self.initialize()
+        cursor = self.conn.execute(
+            "UPDATE diary_fragments SET mood = ? WHERE id = ?",
+            (mood.value, fragment_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
 
     def delete_fragment(self, fragment_id: int) -> bool:
         """删除碎片。"""
@@ -579,14 +633,41 @@ class DiaryStore:
             cursor = self.conn.execute("SELECT COUNT(*) FROM diary_fragments")
         return int(cursor.fetchone()[0])
 
+    def get_fragment_date_range(self) -> tuple[str, str] | None:
+        """获取碎片的日期范围。"""
+        self.initialize()
+        cursor = self.conn.execute(
+            "SELECT MIN(fragment_date), MAX(fragment_date) FROM diary_fragments"
+        )
+        row = cursor.fetchone()
+        if row and row[0] and row[1]:
+            return (row[0], row[1])
+        return None
+
     def _row_to_fragment(self, row: sqlite3.Row) -> DiaryFragment:
         """将数据库行转换为 DiaryFragment 对象。"""
+        # 兼容旧表结构（没有新字段时使用默认值）
+        def safe_get(key: str, default=None):
+            try:
+                return row[key]
+            except (IndexError, KeyError):
+                return default
+
+        try:
+            tags = json.loads(safe_get("tags", "[]")) if safe_get("tags") else []
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+
         return DiaryFragment(
             id=row["id"],
             content=row["content"],
             mood=MoodLevel(row["mood"]) if row["mood"] else MoodLevel.UNKNOWN,
             fragment_date=row["fragment_date"],
-            source=row["source"] or "manual",
+            source=safe_get("source", "manual") or "manual",
+            fragment_type=safe_get("fragment_type", "text") or "text",
+            media_path=safe_get("media_path", "") or "",
+            media_description=safe_get("media_description", "") or "",
+            tags=tags,
             created_at=datetime.fromisoformat(row["created_at"])
             if isinstance(row["created_at"], str)
             else row["created_at"],

@@ -98,15 +98,19 @@ class DiaryStats(BaseModel):
 class DiaryFragment(BaseModel):
     """随手记碎片。
 
-    借鉴 Night-Journal 的设计：白天随手记录碎片（文字+情绪），
-    晚上 AI 自动聚合为完整日记。
+    借鉴 Night-Journal 和 echolog 的设计：白天随手记录碎片（文字+情绪+图片+语音），
+    晚上 AI 自动聚合为完整日记。支持多种碎片类型，自动标签和情绪识别。
     """
 
     id: int = Field(description="碎片唯一 ID")
     content: str = Field(description="碎片内容")
     mood: MoodLevel = Field(default=MoodLevel.UNKNOWN, description="情绪标签")
     fragment_date: str = Field(description="碎片所属日期 YYYY-MM-DD")
-    source: str = Field(default="manual", description="来源：manual / api / voice")
+    source: str = Field(default="manual", description="来源：manual / api / voice / image / bot")
+    fragment_type: str = Field(default="text", description="碎片类型：text / image / voice / link")
+    media_path: str = Field(default="", description="媒体文件路径（图片/语音）")
+    media_description: str = Field(default="", description="媒体内容的 AI 描述（图片理解/语音转写）")
+    tags: list[str] = Field(default_factory=list, description="AI 自动提取的标签")
     created_at: datetime = Field(description="创建时间")
 
 
@@ -117,6 +121,10 @@ class DiaryFragmentCreate(BaseModel):
     mood: MoodLevel = Field(default=MoodLevel.UNKNOWN, description="情绪标签")
     fragment_date: str | None = Field(default=None, description="日期，默认今天")
     source: str = Field(default="manual", description="来源")
+    fragment_type: str = Field(default="text", description="碎片类型：text / image / voice / link")
+    media_path: str = Field(default="", description="媒体文件路径")
+    media_description: str = Field(default="", description="媒体内容描述")
+    tags: list[str] = Field(default_factory=list, description="标签列表")
 
 
 class TagType(str, Enum):

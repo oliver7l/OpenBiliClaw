@@ -15,14 +15,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ..llm.embedding import EmbeddingService, cosine_similarity
-from ..llm.service import LLMService
-from ..storage.database import Database
-from .models import DiaryEntry
 from .store import DiaryStore
+
+if TYPE_CHECKING:
+    from ..llm.service import LLMService
+    from ..storage.database import Database
+    from .models import DiaryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +48,20 @@ class RAGAnswer:
 
 
 # RAG 问答的系统 Prompt
-_RAG_SYSTEM_PROMPT = """你是一位专业的个人日记分析助手。用户会问关于他/她日记的问题，你需要基于提供的日记内容来回答。
-
-回答规则：
-1. **必须基于提供的日记内容回答**，不要编造日记中没有的信息
-2. 如果日记内容不足以回答问题，诚实地说"根据现有日记，无法确定..."
-3. 引用日记时，用 [日期] 格式标注来源，例如 [2024-03-15]
-4. 回答要客观、有洞察力，不要过度解读
-5. 如果涉及情绪分析，要基于日记中的具体描述，不要凭空猜测
-6. 回答长度适中，重点突出，不要冗长
-
-用户的问题：{question}
-
-相关日记内容：
-{context}
-
-请基于以上日记内容回答用户的问题。"""
+_RAG_SYSTEM_PROMPT = (
+    "你是一位专业的个人日记分析助手。用户会问关于他/她日记的问题，"
+    "你需要基于提供的日记内容来回答。\n\n"
+    "回答规则：\n"
+    "1. **必须基于提供的日记内容回答**，不要编造日记中没有的信息\n"
+    "2. 如果日记内容不足以回答问题，诚实地说\"根据现有日记，无法确定...\"\n"
+    "3. 引用日记时，用 [日期] 格式标注来源，例如 [2024-03-15]\n"
+    "4. 回答要客观、有洞察力，不要过度解读\n"
+    "5. 如果涉及情绪分析，要基于日记中的具体描述，不要凭空猜测\n"
+    "6. 回答长度适中，重点突出，不要冗长\n\n"
+    "用户的问题：{question}\n\n"
+    "相关日记内容：\n{context}\n\n"
+    "请基于以上日记内容回答用户的问题。"
+)
 
 
 # 生成相关问题的 Prompt
@@ -133,7 +133,13 @@ class DiaryRAGService:
 
         entries = self.store.get_unembedded_entries(limit=limit)
         if not entries:
-            return {"total": 0, "success": 0, "failed": 0, "skipped": 0, "message": "所有日记都已有向量"}
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "skipped": 0,
+                "message": "所有日记都已有向量",
+            }
 
         logger.info("开始为 %d 篇日记生成 embedding", len(entries))
         success = 0
@@ -152,7 +158,9 @@ class DiaryRAGService:
                 elif result:
                     success += 1
 
-            logger.info("已处理 %d/%d，成功 %d，失败 %d", i + len(batch), len(entries), success, failed)
+            logger.info(
+                "已处理 %d/%d，成功 %d，失败 %d", i + len(batch), len(entries), success, failed
+            )
 
         return {
             "total": len(entries),
@@ -316,7 +324,9 @@ class DiaryRAGService:
         for eid, score in scored_entries[:top_k]:
             try:
                 entry = self.store.get_entry(eid)
-                highlight = self._extract_highlight(entry.content, entry.title or entry.content[:50])
+                highlight = self._extract_highlight(
+                    entry.content, entry.title or entry.content[:50]
+                )
                 results.append(SearchResult(entry=entry, score=score, highlight=highlight))
             except Exception:
                 continue
@@ -364,13 +374,15 @@ class DiaryRAGService:
                 f"相似度：{result.score:.2f}\n"
                 f"内容：{snippet}\n"
             )
-            sources.append({
-                "id": entry.id,
-                "date": entry.entry_date,
-                "title": entry.title or "",
-                "snippet": snippet[:200] + ("..." if len(snippet) > 200 else ""),
-                "score": round(result.score, 4),
-            })
+            sources.append(
+                {
+                    "id": entry.id,
+                    "date": entry.entry_date,
+                    "title": entry.title or "",
+                    "snippet": snippet[:200] + ("..." if len(snippet) > 200 else ""),
+                    "score": round(result.score, 4),
+                }
+            )
 
         context = "\n---\n".join(context_parts)
 
@@ -403,7 +415,11 @@ class DiaryRAGService:
         try:
             result = await self._llm_service.complete(prompt)
             # 解析每行一个问题
-            questions = [line.strip().lstrip("0123456789.、- ") for line in result.strip().split("\n") if line.strip()]
+            questions = [
+                line.strip().lstrip("0123456789.、- ")
+                for line in result.strip().split("\n")
+                if line.strip()
+            ]
             return questions[:3]
         except Exception as e:
             logger.warning("生成相关问题失败: %s", e)

@@ -13785,6 +13785,74 @@ Keep keywords focused and specific. Remove stop words."""
             return JSONResponse({"error": "path not found"}, status_code=404)
         return {"status": "ok"}
 
+    # ─── TL;DR (Too Long; Didn't Read) ────────────────────────────────
+
+    @app.get("/api/self-evolution/tldrs")
+    async def list_tldrs(limit: int = 50, source_type: str | None = None):
+        """List all cached TL;DR summaries."""
+        from openbiliclaw.self_evolution.tldr import TLDRGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
+        tldrs = generator.list_tldrs(limit=limit, source_type=source_type)
+        return {"tldrs": [t.to_dict() for t in tldrs], "count": len(tldrs)}
+
+    @app.get("/api/self-evolution/tldrs/{article_id}")
+    async def get_tldr(article_id: int):
+        """Get a TL;DR for a specific article (generates if not cached)."""
+        from openbiliclaw.self_evolution.tldr import TLDRGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
+        tldr = generator.generate_tldr(article_id)
+        if tldr is None:
+            return JSONResponse({"error": "article not found"}, status_code=404)
+        return {"tldr": tldr.to_dict()}
+
+    @app.post("/api/self-evolution/tldrs/{article_id}/regenerate")
+    async def regenerate_tldr(article_id: int):
+        """Force regenerate a TL;DR for an article."""
+        from openbiliclaw.self_evolution.tldr import TLDRGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
+        tldr = generator.generate_tldr(article_id, force=True)
+        if tldr is None:
+            return JSONResponse({"error": "article not found"}, status_code=404)
+        return {"status": "ok", "tldr": tldr.to_dict()}
+
+    @app.post("/api/self-evolution/tldrs/batch-generate")
+    async def batch_generate_tldrs(payload: dict[str, Any] | None = None):
+        """Batch generate TL;DRs for favorited articles.
+
+        Request body (optional):
+        - only_favorited: only generate for favorited articles (default true)
+        - limit: maximum number to generate (default 20)
+        - force: regenerate even if exists (default false)
+        """
+        from openbiliclaw.self_evolution.tldr import TLDRGenerator
+        payload = payload or {}
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
+        try:
+            results = generator.batch_generate(
+                only_favorited=payload.get("only_favorited", True),
+                limit=int(payload.get("limit", 20)),
+                force=payload.get("force", False),
+            )
+            return {"status": "ok", "generated": len(results), "tldrs": [t.to_dict() for t in results]}
+        except Exception as e:
+            logger.exception("批量生成 TL;DR 失败")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.delete("/api/self-evolution/tldrs/{article_id}")
+    async def delete_tldr(article_id: int):
+        """Delete a cached TL;DR."""
+        from openbiliclaw.self_evolution.tldr import TLDRGenerator
+        llm_service = getattr(ctx, "llm_service", None)
+        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
+        ok = generator.delete_tldr(article_id)
+        if not ok:
+            return JSONResponse({"error": "tldr not found"}, status_code=404)
+        return {"status": "ok"}
+
     @app.get("/api/self-evolution/status")
     async def self_evolution_status():
         """Get self-evolution module status and stats."""

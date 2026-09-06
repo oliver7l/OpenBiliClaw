@@ -38,6 +38,10 @@ from openbiliclaw.self_evolution.learning_path import (
     LearningPathGenerator,
     PathStep,
 )
+from openbiliclaw.self_evolution.tldr import (
+    TLDR,
+    TLDRGenerator,
+)
 from openbiliclaw.self_evolution.proactive_push import (
     PushConfig,
     PushNotification,
@@ -77,6 +81,9 @@ __all__ = [
     "LearningPath",
     "LearningPathGenerator",
     "PathStep",
+    # TL;DR
+    "TLDR",
+    "TLDRGenerator",
     # Proactive push
     "PushConfig",
     "PushNotification",

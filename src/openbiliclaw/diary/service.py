@@ -330,19 +330,189 @@ class DiaryService:
 
     # ─── 碎片（随手记）业务逻辑 ───
 
-    def create_fragment(self, content: str, mood: MoodLevel = MoodLevel.UNKNOWN,
-                         fragment_date: str | None = None, source: str = "manual") -> DiaryFragment:
-        """创建一条碎片。"""
-        return self.store.create_fragment(content, mood, fragment_date, source)
+    def create_fragment(
+        self,
+        content: str,
+        mood: MoodLevel = MoodLevel.UNKNOWN,
+        fragment_date: str | None = None,
+        source: str = "manual",
+        fragment_type: str = "text",
+        media_path: str = "",
+        media_description: str = "",
+        tags: list[str] | None = None,
+    ) -> DiaryFragment:
+        """创建一条碎片。
 
-    def list_fragments(self, fragment_date: str | None = None,
-                        limit: int = 100, offset: int = 0) -> list[DiaryFragment]:
+        Args:
+            content: 碎片内容
+            mood: 情绪标签
+            fragment_date: 日期，默认今天
+            source: 来源
+            fragment_type: 碎片类型（text/image/voice/link）
+            media_path: 媒体文件路径
+            media_description: 媒体内容描述
+            tags: 标签列表
+        """
+        return self.store.create_fragment(
+            content=content,
+            mood=mood,
+            fragment_date=fragment_date,
+            source=source,
+            fragment_type=fragment_type,
+            media_path=media_path,
+            media_description=media_description,
+            tags=tags,
+        )
+
+    def list_fragments(
+        self,
+        fragment_date: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        fragment_type: str | None = None,
+    ) -> list[DiaryFragment]:
         """列出碎片。"""
-        return self.store.list_fragments(fragment_date, limit, offset)
+        return self.store.list_fragments(fragment_date, limit, offset, fragment_type)
 
     def delete_fragment(self, fragment_id: int) -> bool:
         """删除碎片。"""
         return self.store.delete_fragment(fragment_id)
+
+    async def auto_tag_fragment(self, fragment_id: int) -> DiaryFragment | None:
+        """对单条碎片执行 AI 自动标签和情绪识别。
+
+        如果没有 LLM 服务，使用基于关键词的规则提取降级方案。
+        """
+        fragment = self.store.get_fragment(fragment_id)
+        if fragment is None:
+            return None
+
+        # 已有标签和情绪时跳过
+        if fragment.tags and fragment.mood != MoodLevel.UNKNOWN:
+            return fragment
+
+        llm = self.llm_service
+        if llm is None:
+            # 无 LLM 时使用规则提取
+            tags, mood = self._extract_tags_and_mood_by_rules(fragment.content)
+        else:
+            try:
+                prompt = f"""请分析以下随手记碎片，提取标签和情绪。
+
+碎片内容：{fragment.content}
+
+请严格输出 JSON（不要输出其他文字）：
+{{
+  "tags": ["标签1", "标签2", "标签3"],
+  "mood": "very_happy|happy|neutral|sad|very_sad|angry|anxious|unknown"
+}}
+
+标签要求：3-5 个，涵盖主题、情绪、人物、地点等。
+mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unknown"""
+                response = await llm.chat(prompt)
+                parsed = self._parse_analysis_response(response)
+                tags = parsed.get("tags", []) if parsed else []
+                mood_str = parsed.get("mood", "unknown") if parsed else "unknown"
+                try:
+                    mood = MoodLevel(mood_str)
+                except (ValueError, KeyError):
+                    mood = MoodLevel.UNKNOWN
+            except Exception:
+                tags, mood = self._extract_tags_and_mood_by_rules(fragment.content)
+
+        # 保存标签和情绪
+        if tags:
+            self.store.update_fragment_tags(fragment_id, tags)
+        if mood != MoodLevel.UNKNOWN:
+            self.store.update_fragment_mood(fragment_id, mood)
+
+        return self.store.get_fragment(fragment_id)
+
+    async def batch_auto_tag_fragments(self, limit: int = 50) -> dict:
+        """批量对未标注的碎片执行自动标签和情绪识别。"""
+        # 获取所有碎片，筛选未标注的
+        all_fragments = self.store.list_fragments(limit=500)
+        untagged = [
+            f for f in all_fragments
+            if not f.tags or f.mood == MoodLevel.UNKNOWN
+        ][:limit]
+
+        if not untagged:
+            return {"total": 0, "success": 0, "failed": 0, "message": "所有碎片都已标注"}
+
+        success = 0
+        failed = 0
+        for fragment in untagged:
+            try:
+                result = await self.auto_tag_fragment(fragment.id)
+                if result:
+                    success += 1
+                else:
+                    failed += 1
+            except Exception:
+                failed += 1
+
+        return {"total": len(untagged), "success": success, "failed": failed}
+
+    def _extract_tags_and_mood_by_rules(self, content: str) -> tuple[list[str], MoodLevel]:
+        """基于关键词规则的标签和情绪提取（无 LLM 时的降级方案）。"""
+        tags = []
+        content_lower = content.lower()
+
+        # 情绪关键词
+        happy_keywords = ["开心", "高兴", "快乐", "幸福", "满足", "惊喜", "棒", "好", "爱", "喜欢", "笑"]
+        sad_keywords = ["难过", "伤心", "失落", "沮丧", "痛苦", "哭", "累", "疲惫", "无力", "绝望"]
+        anxious_keywords = ["焦虑", "紧张", "担心", "害怕", "不安", "压力", "烦", "烦躁", "纠结"]
+        angry_keywords = ["生气", "愤怒", "火", "气", "讨厌", "烦", "不爽", "吵架"]
+
+        # 主题关键词
+        work_keywords = ["工作", "上班", "加班", "会议", "项目", "同事", "老板", "公司", "代码", "bug", "需求"]
+        family_keywords = ["妈妈", "爸爸", "老公", "老婆", "孩子", "儿子", "女儿", "家", "家人", "乐乐", "艳艳"]
+        health_keywords = ["身体", "生病", "医院", "医生", "药", "睡", "失眠", "运动", "健身", "跑步"]
+        travel_keywords = ["旅行", "旅游", "出去玩", "度假", "景点", "酒店", "飞机", "高铁", "开车"]
+        food_keywords = ["吃", "美食", "饭", "菜", "火锅", "烧烤", "咖啡", "奶茶", "蛋糕"]
+
+        # 检测情绪
+        happy_count = sum(1 for k in happy_keywords if k in content_lower)
+        sad_count = sum(1 for k in sad_keywords if k in content_lower)
+        anxious_count = sum(1 for k in anxious_keywords if k in content_lower)
+        angry_count = sum(1 for k in angry_keywords if k in content_lower)
+
+        mood = MoodLevel.UNKNOWN
+        if happy_count > sad_count and happy_count > anxious_count and happy_count > angry_count:
+            mood = MoodLevel.HAPPY if happy_count < 3 else MoodLevel.VERY_HAPPY
+        elif sad_count > happy_count and sad_count > anxious_count:
+            mood = MoodLevel.SAD if sad_count < 3 else MoodLevel.VERY_SAD
+        elif anxious_count > happy_count and anxious_count > sad_count:
+            mood = MoodLevel.ANXIOUS
+        elif angry_count > happy_count:
+            mood = MoodLevel.ANGRY
+        elif happy_count > 0:
+            mood = MoodLevel.HAPPY
+
+        # 检测主题标签
+        if any(k in content_lower for k in work_keywords):
+            tags.append("工作")
+        if any(k in content_lower for k in family_keywords):
+            tags.append("家庭")
+        if any(k in content_lower for k in health_keywords):
+            tags.append("健康")
+        if any(k in content_lower for k in travel_keywords):
+            tags.append("旅行")
+        if any(k in content_lower for k in food_keywords):
+            tags.append("美食")
+
+        # 情绪标签
+        if mood in (MoodLevel.HAPPY, MoodLevel.VERY_HAPPY):
+            tags.append("开心")
+        elif mood in (MoodLevel.SAD, MoodLevel.VERY_SAD):
+            tags.append("难过")
+        elif mood == MoodLevel.ANXIOUS:
+            tags.append("焦虑")
+        elif mood == MoodLevel.ANGRY:
+            tags.append("生气")
+
+        return tags[:5], mood
 
     async def generate_diary_from_fragments(self, fragment_date: str | None = None,
                                                auto_delete: bool = True) -> DiaryEntry | None:
