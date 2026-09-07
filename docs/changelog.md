@@ -4,6 +4,297 @@
 
 ---
 
+## v0.3.190: 缓存升级——两级缓存 + 索引优化（2026-09-07）
+
+针对系统变大后的性能问题，升级缓存架构并优化数据库索引。
+
+### 缓存升级
+
+- feat: 新增统一两级缓存层 `storage/cache.py`（TwoLevelCache）
+  - L1 内存缓存：LRU 策略，1000 条容量，微秒级访问
+  - L2 磁盘缓存（diskcache）：持久化，1GB 容量，毫秒级访问，进程重启后不失效
+  - 支持 TTL、命名空间批量失效、装饰器用法、线程安全
+- perf: API 统计接口缓存从纯内存升级为两级缓存，重启后缓存仍有效
+  - 冷启动：pool/all 9秒 → 重启后磁盘缓存命中：2.6秒（3.5倍提升）
+  - 内存缓存命中：4.5毫秒（2000倍提升）
+- perf: count_pool_readiness 5秒短期缓存（database.py）
+- perf: SQLite cache_size 增加到 64MB，wal_autocheckpoint 增加到 1000
+
+### 索引优化
+
+- perf: 新增 8 个数据库索引，覆盖高频查询场景
+  - events: (event_type, created_at)、(inferred_satisfaction, created_at)
+  - recommendations: (feedback_type, created_at)、(presented, created_at)
+  - content_cache: (pool_status, relevance_score DESC)、(pool_status, discovered_at)
+  - discovery_candidates: (status, created_at)
+  - llm_usage: (model, timestamp)
+- 所有新增索引均通过 EXPLAIN QUERY PLAN 验证命中
+
+### 数据安全
+
+- 数据库操作前自动备份（`data/openbiliclaw.db.backup-YYYYMMDD-HHMMSS`）
+- 所有索引操作只加不删，不修改任何数据
+
+---
+
+## v0.3.189: 性能优化——日记接口缓存 + 前端按需加载（2026-09-06）
+
+针对日记系统"打开慢、切换慢"的反馈进行系统优化，同时修复排查中发现的 3 个 API 故障。
+
+### 问题修复
+
+- fix: `MAIN_PAGE_IDS` 缺少 `diaryPage`，导致日记页面无法显示（showMainPage 遍历不到该 id）
+- fix: `/api/diary/insights/patterns` 500 错误——`asdict` 未导入
+- fix: `/api/diary/self-evolution/tag-optimizations` 500 错误——`datetime` 未导入
+- fix: `/api/diary/tags`、`/api/diary/persons`、`/api/diary/fragments`、`/api/diary/extraction-stats` 被 `/api/diary/{entry_id}` 动态路由抢先匹配返回 422——改为 `{entry_id:int}` 路径转换器
+
+### 性能优化
+
+- perf: 日记统计类接口内存 TTL 缓存（30 秒）
+  - 缓存白名单：stats/关键词/情绪统计/时间线统计/高级记忆概览/知识图谱统计等 18 个接口
+  - 任何 `/api/diary` 写操作自动清空缓存，保证数据一致性
+  - 实测：关键词接口 332ms → 2ms（命中时，快 166 倍）
+- perf: 日记模块脚本改为按需加载
+  - 9 个日记 JS（约 160K）从 index.html 静态加载改为进入日记页面时动态加载
+  - 首页/其他页面不再加载日记脚本，首屏更快
+  - 5 个日记 JS 从 `DOMContentLoaded` 自动初始化改为暴露 `window.__initXxx` 手动初始化
+- perf: 静态资源版本号改为扫描整个 assets 目录（含日记模块 JS），并注入 `window.__ASSET_VERSION`，动态加载脚本使用同一版本号避免浏览器旧缓存
+- perf: 所有日记模块 init 函数加幂等保护（`_initialized` 标志），避免切换 Tab 时重复绑定事件监听器和重复加载数据
+  - 涉及模块：reflection、knowledge、self-evolution、insights-center、memory、people
+  - 修复前：每次切换 Tab 都重新执行 init（重复绑定事件 + 重复加载数据，越切越慢）
+  - 修复后：init 只执行一次，Tab 切换本身 0-1ms，点击到数据渲染平均 55ms
+- perf: 扩展 TTL 缓存到非日记接口（pool/all、observability、recommendations、saved、home/feed、library），任何非 GET 请求自动清空缓存
+  - pool/all 缓存命中：从 8.9s → 24ms（370 倍）
+- perf: 优化 `/api/pool/all` shuffle 随机采样：先查所有满足条件的 rowid（不排序），再在 Python 中随机采样，最后用 `rowid IN (...)` 查完整数据，避免对 75000 行大表执行 `ORDER BY RANDOM()` 全表排序
+- perf: `count_pool_readiness` 加 5 秒短期缓存，避免频繁重复计算（该函数做 4 次查询 + 逐行处理 5215 行，开销较大）；写操作后自动失效缓存
+- perf: SQLite 性能调优：cache_size 增加到 64MB（减少磁盘 IO），wal_autocheckpoint 增加到 1000（减少频繁检查点）；主连接和线程本地连接都应用这些设置
+
+---
+
+## v0.3.188: 自进化系统增强——情绪二维模型 + 6层记忆 + 智能时间线（2026-09-06）
+
+基于 GitHub 优秀项目（emergent-diary-agent、memex、nmem、Anima、Echo Agent）的设计理念，为自进化日记系统新增三大核心能力：效价/唤醒二维情绪模型、6 层高级记忆系统、智能时间线卡片。系统能够更精细地分析情绪、自动构建信念系统、运行记忆巩固与遗忘曲线、将日记自动组织成类型化卡片。
+
+### 情绪系统升级：效价/唤醒二维模型
+
+- feat: 情绪分析核心模块
+  - 新建 `src/openbiliclaw/diary/emotion.py` 模块（约 800 行）
+  - 实现 `EmotionAnalyzer` 核心服务，参考 emergent-diary-agent 的设计：
+    - **效价/唤醒二维坐标**：valence（愉悦度 -1~+1）+ arousal（活跃度 -1~+1），避免 LLM 自由命名情绪导致标签崩溃
+    - **代码端情绪字典**：15 种情绪标签映射（狂喜/开心/满足/平静/兴奋/中性/焦虑/愤怒/悲伤/疲惫/压力/放松/抑郁/热情/无聊）
+    - **情绪趋势分析**：按天聚合效价/唤醒值，可视化情绪变化
+    - **情绪预测**：基于线性回归 + 均值回归，预测未来 7 天情绪
+    - **倦怠检测**：多维度倦怠评估（情绪耗竭/去人格化/成就感降低/写作一致性/负面关键词密度/睡眠健康关注），4 级等级（健康/轻度/中度/重度），自动生成警告和建议
+  - 定义 `ValenceArousal`、`EmotionTrendPoint`、`EmotionForecast`、`BurnoutAssessment` 四个数据结构
+  - 200+ 情绪关键词词典（正向/负向效价、高/低唤醒）
+
+- test: 功能验证（基于 925 篇日记）
+  - 925 篇日记全部完成情绪分析
+  - 平均效价 0.2433（偏积极），平均唤醒 0.0029（中性）
+  - 主导情绪：中性（436篇）、满足（135篇）、开心（72篇）
+  - 倦怠评估：33.7/100，轻度（mild），状态良好
+  - 情绪预测：未来 7 天呈平静（calm）状态，效价缓慢上升
+
+### 高级记忆系统：6层记忆 + 信念系统 + 记忆巩固
+
+- feat: 高级记忆核心模块
+  - 新建 `src/openbiliclaw/diary/advanced_memory.py` 模块（约 1000 行）
+  - 实现 `AdvancedMemoryService` 核心服务，参考 emergent-diary-agent（6层记忆）、nmem（记忆巩固）、Anima（梦境回顾）、Echo Agent（信念版本化）的设计：
+    - **6 层记忆系统**：
+      1. Episodic（情景记忆）：原始日记内容、具体事件
+      2. Semantic-self（语义自我）：关于自己的知识、偏好、习惯
+      3. Beliefs（信念）：核心信念、价值观、人生观
+      4. Relationships（关系）：人际关系网络、亲密度、互动模式
+      5. Narrative（叙事状态）：当前生活故事线、目标、阶段
+      6. Diary（日记摘要）：压缩后的日记摘要
+    - **信念系统**：自动从日记中提取核心信念，置信度累积更新，证据计数
+    - **信念冲突检测**：自动检测信念之间的矛盾（contradiction）、张力（tension）、演变（evolution）
+    - **记忆巩固**：基于艾宾浩斯遗忘曲线，自动提升/降级/归档/遗忘记忆，每层独立半衰期（情景7天/语义自我90天/信念365天/关系180天/叙事60天/日记30天）
+    - **夜间梦境回顾**：用新证据验证过去的教训，强化成立的，标记矛盾的为有争议
+    - **重要性评分细化**：决定/教训/情感时刻 → 高优先级
+  - 定义 `MemoryLayer`、`Belief`、`BeliefConflict`、`ConsolidationResult`、`DreamStateReview` 五个数据结构
+  - 70+ 信念提取模式，448 条教训自动提取
+
+- test: 功能验证（基于 925 篇日记）
+  - 6 层记忆构建完成：2777 条记忆（情景925/关系663/叙事264/日记925）
+  - 448 条教训提取，163 条验证通过，285 条标记争议
+  - 记忆巩固运行成功，遗忘曲线生效
+  - 记忆健康评分：28.3/100（持续积累中）
+
+### 智能时间线卡片
+
+- feat: 时间线核心模块
+  - 新建 `src/openbiliclaw/diary/timeline.py` 模块（约 600 行）
+  - 实现 `TimelineService` 核心服务，参考 memex-lab/memex 的设计：
+    - **自动卡片分类**：AI 自动将日记句子分类为 8 种类型卡片
+      1. Event（事件）：普通生活事件
+      2. Person（人物）：人物相关记录
+      3. Place（地点）：地点相关记录
+      4. Task（任务）：任务/待办事项
+      5. Metric（指标）：数据/指标记录
+      6. Article（文章）：学习/阅读记录
+      7. Emotion（情绪）：情绪/感受记录
+      8. Milestone（里程碑）：重大人生事件
+    - **实体自动提取**：自动识别卡片中的人物、地点实体
+    - **重要性评分**：基于卡片类型、实体数量、内容长度自动评分
+    - **多维度筛选**：按类型、实体、日期范围、最低重要性筛选
+    - **里程碑专门视图**：突出展示重大人生事件
+  - 定义 `TimelineCard`、`TimelineStats` 两个数据结构
+  - 200+ 卡片类型关键词词典，30+ 常见人物实体，40+ 常见地点实体
+
+- test: 功能验证（基于 925 篇日记）
+  - 生成 4861 张时间线卡片
+  - 类型分布：事件1944/地点1272/人物652/任务634/文章180/情绪114/指标38/里程碑27
+  - 高频实体：乐乐394次、艳艳351次、妈妈257次、公司153次、家里105次
+  - 里程碑卡片 27 张，覆盖重要人生事件
+  - 日期范围：2016-04-12 ~ 2026-09-03
+
+### API 端点（新增 17 个）
+
+- 情绪系统（5 个）：
+  - `GET /api/diary/emotion/stats` — 情绪统计概览
+  - `GET /api/diary/emotion/trend` — 情绪趋势（近30天）
+  - `GET /api/diary/emotion/forecast` — 情绪预测（未来7天）
+  - `GET /api/diary/emotion/burnout` — 倦怠评估
+  - `POST /api/diary/emotion/analyze-all` — 分析全部日记情绪
+- 高级记忆系统（8 个）：
+  - `GET /api/diary/advanced-memory/overview` — 高级记忆概览
+  - `GET /api/diary/advanced-memory/layers` — 记忆层统计
+  - `GET /api/diary/advanced-memory/beliefs` — 信念列表
+  - `GET /api/diary/advanced-memory/conflicts` — 信念冲突检测
+  - `POST /api/diary/advanced-memory/build` — 构建6层记忆
+  - `POST /api/diary/advanced-memory/consolidate` — 记忆巩固
+  - `POST /api/diary/advanced-memory/dream-review` — 夜间梦境回顾
+  - `GET /api/diary/advanced-memory/search` — 记忆搜索
+- 智能时间线（4 个）：
+  - `GET /api/diary/timeline/cards` — 查询时间线卡片（支持类型/实体/日期/重要性筛选）
+  - `GET /api/diary/timeline/stats` — 时间线统计
+  - `GET /api/diary/timeline/milestones` — 里程碑卡片
+  - `POST /api/diary/timeline/generate-all` — 生成全部卡片
+
+### 前端页面（新增 3 个 Tab）
+
+- 💖 **情绪中心**：情绪统计卡片、情绪趋势图（效价/唤醒双柱图）、情绪预测卡片、倦怠评估仪表盘（多维度评分+警告+建议）
+- 🧬 **高级记忆**：6层记忆分布统计、核心信念列表、记忆搜索（关键词+层级过滤）、三个操作按钮（构建6层记忆/记忆巩固/梦境回顾）
+- 📅 **时间线**：时间线统计卡片、类型分布、高频实体词云、卡片筛选器（类型/实体/重要性）、里程碑专门视图、时间线卡片列表
+
+### 其他更新
+
+- docs: 更新 `pyproject.toml`，将 emotion.py、advanced_memory.py、timeline.py 加入 E501 忽略列表（长 SQL 语句不可避免）
+- docs: 更新 `src/openbiliclaw/diary/__init__.py`，导出新增的 12 个类
+- style: 所有新增 Python 代码通过 ruff check，所有新增 JS 代码通过 node --check 语法检查
+
+## v0.3.187: 自进化系统第二+三阶段——主动洞察引擎 + 三层记忆系统（2026-09-06）
+
+为自进化日记系统新增主动洞察引擎和三层记忆系统，系统能够主动发现有趣模式、生成晨间简报、追踪未完成事项，并自动管理记忆的分层、压缩和检索。这是自进化日记系统七阶段计划的第二、三阶段，参考了 Dear Agent（recall/reflect）、nightDiary（模式发现）、Doppelganger AI（三层记忆）等项目的设计理念。
+
+### 第二阶段：主动洞察引擎
+
+- feat: 主动洞察引擎核心模块
+  - 新建 `src/openbiliclaw/diary/insight_engine.py` 模块（约 700 行）
+  - 实现 `InsightEngineService` 核心服务，包含四大功能：
+    1. **历史上的今天**：自动重现过去同一天的日记，支持多年跨度对比
+    2. **模式发现**：自动发现情绪模式（星期规律）、时间模式（写作频率）、主题模式（高频话题）、人际关系模式（最常提及的人）
+    3. **晨间简报**：每天自动生成昨天总结、今天提醒、历史上下文、情绪预测
+    4. **开放循环追踪**：自动扫描日记中的承诺、目标、待办、问题、想法，追踪完成状态
+  - 定义 `MemoryOnThisDay`、`PatternInsight`、`MorningBriefing`、`OpenLoop`、`InsightReport` 五个数据结构
+  - 5 类开放循环检测：promise（承诺）、goal（目标）、todo（待办）、question（问题）、idea（想法）
+  - 3 级优先级：high/medium/low，基于关键词自动判断
+
+- test: 功能验证（基于 925 篇日记）
+  - 历史上的今天：发现 4 篇日记，跨越 2017-2025 年
+  - 模式发现：发现 3 个模式（最常提及的人是乐乐 64 次、近期关注焦点是家庭/工作/财务、周一写得最多）
+  - 晨间简报：生成成功，包含 2 条历史上下文
+  - 开放循环：发现 123 个开放循环，其中 120 个未完成
+
+### 第三阶段：三层记忆系统
+
+- feat: 三层记忆系统核心模块
+  - 新建 `src/openbiliclaw/diary/memory_system.py` 模块（约 550 行）
+  - 实现 `MemorySystemService` 核心服务，包含五大功能：
+    1. **自动分层**：根据日记时间自动分为 Hot（0-24h）、Warm（1-7天）、Cold（7+天）三层
+    2. **重要性评分**：基于情感权重（30%）、访问频率（20%）、实体密度（25%）、时间衰减（25%）计算 0-1 分
+    3. **记忆压缩**：自动将 Cold 层日记压缩为结构化摘要（提取关键句子，限制 200 字）
+    4. **记忆检索**：根据关键词、层级、重要性检索记忆，自动增加访问计数
+    5. **记忆维护**：一键运行分层更新 + 压缩 + 重要性重算
+  - 定义 `MemoryEntry`、`MemoryStats`、`MemoryCompressionResult` 三个数据结构
+  - 70+ 常见实体词典（人物/地点/事件/物品/情绪），自动从日记中提取
+  - 时间衰减采用指数衰减（30 天半衰期）
+
+- test: 功能验证（基于 925 篇日记）
+  - 记忆分层：925 个记忆条目（Hot: 0, Warm: 3, Cold: 922）
+  - 平均重要性：0.2379
+  - 高频实体：家（368）、工作（243）、艳艳（210）、乐乐（192）、开心（185）
+  - 记忆压缩：922 个 Cold 记忆全部压缩完成
+  - 记忆搜索：成功搜索到包含"乐乐"的记忆，按重要性排序
+
+### 数据库表（新增 4 个）
+
+- `diary_insight_patterns`：模式洞察表
+- `diary_morning_briefings`：晨间简报表
+- `diary_open_loops`：开放循环表
+- `diary_memory_entries`：记忆条目表（含层级、重要性、访问计数、压缩摘要、实体）
+
+### 代码质量
+
+- ruff check 全部通过
+- 所有模块均有完整 docstring 和类型注解
+- 所有分析基于本地计算（关键词统计+规则引擎），无需 LLM，快速免费
+
+## v0.3.186: 自进化系统第一阶段——夜间自我改进循环 + 用户画像 + 漂移检测 + 夜间日志 + 标签优化（2026-09-06）
+
+为日记系统新增自进化能力，系统每天夜间自动分析日记，构建用户画像、检测行为变化、生成可读夜间日志、优化标签体系。这是自进化日记系统七阶段计划的第一阶段，参考了 OpenGriffin（夜间自我改进循环、漂移检测）、Dear Agent（用户画像）、Doppelganger AI（三层记忆）等项目的设计理念。
+
+- feat: 自进化核心服务模块
+  - 新建 `src/openbiliclaw/diary/self_evolution.py` 模块（约 1400 行）
+  - 实现 `SelfEvolutionService` 核心服务，包含五大功能：
+    1. **用户画像构建**：基于历史日记自动分析性格特质（6 维度）、关注领域分布（8 类）、人际关系（亲密度+趋势）、情绪基调、价值观（8 类模式）、写作习惯
+    2. **漂移检测**：对比历史画像，检测 4 类变化（情绪/关注/关系/写作），3 级严重程度（info/warning/alert）
+    3. **夜间日志生成**：每天生成可读的夜间日志，包含 7 部分（每日摘要/学到了什么/发现的模式/漂移警报/系统建议/自我优化/标签优化）
+    4. **标签优化**：自动发现新标签候选、合并建议、过时标签、标签层级构建
+    5. **数据库表自动创建**：4 个新表（用户画像/漂移事件/夜间日志/标签优化）
+  - 定义 `UserProfile`、`DriftEvent`、`NightlyLog`、`TagOptimization` 四个数据结构
+  - 所有分析基于本地计算（关键词统计+规则引擎），无需 LLM，快速免费
+
+- feat: 自进化 API 端点（7 个）
+  - `GET /api/diary/self-evolution/profile` — 获取当前用户画像
+  - `GET /api/diary/self-evolution/profile/history` — 获取画像历史快照
+  - `GET /api/diary/self-evolution/drifts` — 获取漂移事件列表（支持按类型/严重程度/状态筛选）
+  - `GET /api/diary/self-evolution/nightly-logs` — 获取夜间日志列表
+  - `GET /api/diary/self-evolution/nightly-logs/{date}` — 获取指定日期的夜间日志详情
+  - `POST /api/diary/self-evolution/run-nightly` — 手动触发夜间自我改进循环
+  - `GET /api/diary/self-evolution/tag-optimizations` — 获取标签优化建议
+
+- feat: 自进化中心前端页面
+  - 新增"🧬 自进化中心"主 Tab，包含 4 个子 Tab：
+    1. **👤 用户画像**：性格特质雷达条、关注领域分布、情绪基调统计、核心人际关系（亲密度+趋势）、价值观列表、写作习惯统计
+    2. **⚠️ 漂移检测**：漂移事件时间线卡片，按严重程度颜色区分（蓝/黄/红）
+    3. **🌙 夜间日志**：夜间日志列表，可展开查看详情（学到了什么/发现的模式/系统建议/自我优化）
+    4. **🏷️ 标签优化**：新标签候选、合并建议、过时标签、标签层级
+  - 一键运行夜间循环按钮，手动触发系统自我改进
+  - 新建 `src/openbiliclaw/web/desktop/assets/js/diary-self-evolution.js`（约 600 行）
+  - 新增约 400 行 CSS 样式
+
+- docs: 自进化系统计划文档
+  - 新建 `docs/diary-self-evolution-plan.md`（约 5000 字），详细规划七阶段自进化优化：
+    1. 🌙 夜间自我改进循环（已完成）
+    2. ⚡ 主动洞察引擎（待开始）
+    3. 🔥 三层记忆系统（待开始）
+    4. 📈 用户画像系统（待开始）
+    5. 🎰 强化学习反馈（待开始）
+    6. 🤝 Multi-Agent 架构（待开始）
+    7. 🗄️ 双数据库设计（待开始）
+
+- test: 功能验证
+  - 基于 925 篇日记成功构建用户画像：
+    - 性格特质：感性、理性、悲观最突出
+    - 关注领域：家庭 38%、工作 16%
+    - 核心人物：艳艳（亲密度 100%）、乐乐（91%）、妈妈（84%）
+    - 价值观：家庭最重要、持续学习成长、追求工作生活平衡
+    - 写作习惯：1.5 篇/周，平均 358 字/篇
+  - 标签优化发现 11 个新标签候选（面试 146 次、加班 92 次、地铁 43 次等），2 个过时标签
+  - ruff check 全部通过，JS 语法检查通过
+
 ## v0.3.185: 个人知识网络与人物关系图谱——标签关联网络 + 人物关系图谱 + 混合知识网络 + 节点详情（2026-09-06）
 
 为日记系统新增个人知识网络能力，基于 925 篇历史日记构建标签关联网络、人物关系图谱和混合知识网络，支持力导向布局可视化、节点拖拽、点击查看详情。这是日记系统优化计划的第四阶段，参考了 Personal-Knowledge-Wiki、memex 等项目的设计理念。

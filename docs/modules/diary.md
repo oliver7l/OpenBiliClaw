@@ -30,8 +30,18 @@
 | 纯文本导入 | ✅ | 按段落导入通用文本日记 |
 | Markdown 导入 | ✅ | 按一级标题分段导入 Markdown 日记 |
 | 导入幂等性 | ✅ | 重复导入同日期同来源日记不会产生重复 |
+| 多来源导入 | ✅ | 支持 MindBack、有道云、苹果备忘录、WPS、乐乐成长等 5 个来源 |
+| 跨来源去重 | ✅ | 自动识别并合并跨来源重复日记 |
 | 前端页面 | ✅ | 桌面端完整的日记浏览、编辑、分析界面 |
-| 单元测试 | ✅ | 19 个测试用例覆盖核心功能 |
+| 单元测试 | ✅ | 39 个测试用例覆盖核心功能（19 基础 + 20 知识图谱） |
+| **RAG 语义搜索** | ✅ | 基于 bge-m3 向量的语义搜索，支持自然语言查询 |
+| **日记对话** | ✅ | 基于 RAG 的日记问答，AI 基于你的日记回答问题 |
+| **碎片化快速记录** | ✅ | 随手记功能，支持类型/媒体/标签，AI 自动标注 |
+| **证据驱动日记生成** | ✅ | 从碎片记录自动生成日记，参考 echolog 设计 |
+| **月度/年度自动反思** | ✅ | 周报、月度反思、年度回顾、人生里程碑识别 |
+| **个人知识网络** | ✅ | 标签关联网络、人物关系图谱、混合知识网络、节点详情 |
+| **人物关系分析** | ✅ | 自动推断人物关系类型（家人/朋友/同事/伴侣） |
+| **接口性能优化** | ✅ | 统计类接口 30s TTL 内存缓存（写操作自动失效）；日记模块 JS 按需加载，首页不再加载 9 个日记脚本 |
 
 ## 数据模型
 
@@ -157,6 +167,33 @@ count, entries = importer.import_markdown_file("path/to/diary.md")
 | POST | `/api/diary/{id}/analyze?force=true` | 分析单篇日记 |
 | POST | `/api/diary/analyze-batch?limit=100&concurrency=3` | 批量分析 |
 | POST | `/api/diary/import` | 导入日记（body: {file_path, format, source}） |
+| **RAG 语义搜索** | | |
+| GET | `/api/diary/rag/stats` | RAG 统计（已生成 embedding 的日记数） |
+| POST | `/api/diary/rag/generate-embeddings` | 批量生成 embedding |
+| GET | `/api/diary/rag/search?q=查询&limit=10` | 语义搜索 |
+| GET | `/api/diary/rag/similar/{entry_id}?limit=10` | 相似日记推荐 |
+| POST | `/api/diary/rag/ask` | 日记对话（body: {question, limit}） |
+| **碎片化记录** | | |
+| GET | `/api/diary/fragments` | 列出碎片记录 |
+| POST | `/api/diary/fragments` | 创建碎片记录 |
+| POST | `/api/diary/fragments/{id}/auto-tag` | AI 自动标注碎片 |
+| POST | `/api/diary/fragments/auto-tag-batch` | 批量自动标注 |
+| POST | `/api/diary/fragments/generate-diary` | 从碎片生成日记 |
+| **反思回顾** | | |
+| GET | `/api/diary/reflection/weekly-stats?date=YYYY-MM-DD` | 周报统计 |
+| POST | `/api/diary/reflection/weekly-report` | AI 生成周报 |
+| GET | `/api/diary/reflection/monthly-stats?year=2026&month=9` | 月度统计 |
+| POST | `/api/diary/reflection/monthly-reflection` | AI 生成月度反思 |
+| GET | `/api/diary/reflection/yearly-stats?year=2026` | 年度统计 |
+| POST | `/api/diary/reflection/yearly-review` | AI 生成年度回顾 |
+| GET | `/api/diary/reflection/milestones` | 人生里程碑列表 |
+| **知识网络** | | |
+| GET | `/api/diary/knowledge-graph/tag-network` | 标签关联网络 |
+| GET | `/api/diary/knowledge-graph/person-network` | 人物关系图谱 |
+| GET | `/api/diary/knowledge-graph/mixed` | 混合知识网络 |
+| GET | `/api/diary/knowledge-graph/stats` | 网络统计 |
+| GET | `/api/diary/knowledge-graph/node/{node_id}` | 知识节点详情 |
+| GET | `/api/diary/knowledge-graph/person/{name}/relations` | 人物关系分析 |
 
 ## 数据库表
 
@@ -202,6 +239,103 @@ CREATE TABLE diary_analyses (
 CREATE INDEX idx_diary_analyses_diary ON diary_analyses(diary_id);
 ```
 
+### diary_fragments（碎片记录）
+
+```sql
+CREATE TABLE diary_fragments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fragment_date TEXT NOT NULL,
+    content TEXT NOT NULL,
+    fragment_type TEXT DEFAULT 'text',  -- text/thought/mood/quote/photo/link
+    mood TEXT DEFAULT 'unknown',
+    tags TEXT DEFAULT '[]',
+    media_path TEXT DEFAULT '',
+    media_description TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_diary_fragments_date ON diary_fragments(fragment_date);
+```
+
+### diary_embeddings（向量嵌入）
+
+```sql
+CREATE TABLE diary_embeddings (
+    entry_id INTEGER PRIMARY KEY,
+    vector BLOB NOT NULL,           -- 1024 维 float32 向量
+    model TEXT DEFAULT 'bge-m3',
+    dimension INTEGER DEFAULT 1024,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (entry_id) REFERENCES diary_entries(id) ON DELETE CASCADE
+);
+```
+
+### diary_tags（标签表）
+
+```sql
+CREATE TABLE diary_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT DEFAULT 'other',      -- emotion/topic/event/location/work/family/health/finance/other
+    count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_diary_tags_name ON diary_tags(name);
+```
+
+### diary_entry_tags（日记-标签关联）
+
+```sql
+CREATE TABLE diary_entry_tags (
+    entry_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    confidence REAL DEFAULT 1.0,
+    PRIMARY KEY (entry_id, tag_id),
+    FOREIGN KEY (entry_id) REFERENCES diary_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES diary_tags(id) ON DELETE CASCADE
+);
+```
+
+### diary_persons（人物表）
+
+```sql
+CREATE TABLE diary_persons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    relation TEXT DEFAULT '',        -- family/friend/colleague/partner/other
+    count INTEGER DEFAULT 0,
+    first_appeared TEXT DEFAULT '',
+    last_appeared TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_diary_persons_name ON diary_persons(name);
+```
+
+### diary_entry_persons（日记-人物关联）
+
+```sql
+CREATE TABLE diary_entry_persons (
+    entry_id INTEGER NOT NULL,
+    person_id INTEGER NOT NULL,
+    context TEXT DEFAULT '',         -- 人物出现的上下文片段
+    PRIMARY KEY (entry_id, person_id),
+    FOREIGN KEY (entry_id) REFERENCES diary_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (person_id) REFERENCES diary_persons(id) ON DELETE CASCADE
+);
+```
+
+### diary_fts（全文搜索虚拟表）
+
+```sql
+CREATE VIRTUAL TABLE diary_fts USING fts5(
+    title,
+    content,
+    content='diary_entries',
+    content_rowid='id'
+);
+```
+
 ## 配置项
 
 日记系统当前无需额外配置项，复用项目主数据库和 LLM 服务。
@@ -240,8 +374,9 @@ AI 分析会同时输出这两个维度，用户也可以手动设置。
 
 ## 前端页面
 
-桌面端日记页面（`/web/diary`）提供：
+桌面端日记页面（`/web/diary`）提供以下功能视图：
 
+### 基础功能
 - **统计概览**：日记总数、总字数、平均字数、已分析数、时间跨度
 - **筛选搜索**：关键词搜索、情绪筛选、来源筛选、重置
 - **日记列表**：左侧时间序列列表，显示日期、预览、情绪、来源、字数
@@ -250,14 +385,58 @@ AI 分析会同时输出这两个维度，用户也可以手动设置。
 - **AI 分析**：单篇分析和批量分析按钮
 - **导入功能**：支持本地文件路径导入
 
+### 数据洞察
+- **情绪趋势图**：按月/年展示情绪分值变化
+- **字数统计**：按月/年展示字数分布
+- **写作连续天数**：连续写作天数统计
+- **热门标签**：标签云展示
+- **人物统计**：人物出现频次排行
+
+### 人物与标签
+- **标签管理**：所有标签列表，支持按类型筛选
+- **人物管理**：所有人物列表，显示关系类型和出现次数
+- **人物详情**：点击人物查看相关日记和时间线
+
+### 随手记（碎片化记录）
+- **快速记录**：一键创建碎片记录，支持类型选择
+- **类型分类**：text/thought/mood/quote/photo/link
+- **媒体支持**：图片路径和描述
+- **AI 自动标注**：自动识别情绪和标签
+- **证据驱动日记生成**：从一天的碎片自动生成完整日记
+
+### 反思回顾
+- **周报**：一周的统计概览 + AI 生成的周报
+- **月度反思**：月度统计 + AI 生成的深度反思
+- **年度回顾**：年度统计 + AI 生成的年度总结
+- **人生里程碑**：自动识别职业、感情、健康、财务、家庭、旅行、学习等重大事件
+
+### 知识网络
+- **混合网络**：标签 + 人物 + 标签-人物关联的完整知识图谱
+- **标签网络**：标签之间的共现关系
+- **人物网络**：人物之间的共现关系
+- **网络统计**：节点数、边数、热门标签、热门人物
+- **力导向布局**：Canvas 实现的物理模拟，支持拖拽、缩放、高亮
+- **节点详情**：点击节点查看出现次数、关联节点、相关日记、时间线
+
+### RAG 语义搜索
+- **语义搜索**：用自然语言描述你想找的内容，AI 理解语义后匹配
+- **相似日记推荐**：基于向量相似度推荐相关日记
+- **日记对话**：基于 RAG 的问答系统，AI 基于你的日记回答问题
+
 ## 测试
 
-单元测试位于 `tests/test_diary.py`，覆盖：
+单元测试覆盖：
 
+### `tests/test_diary.py`（19 个基础测试）
 - 数据模型测试（2 个）
 - 存储层测试（10 个）：CRUD、筛选、统计、分析、未分析查询
 - 业务层测试（4 个）：列表、统计、搜索、时间线
 - 导入器测试（5 个）：乐乐格式、通用文本、Markdown、幂等性、文件不存在
+
+### `tests/test_diary_knowledge_graph.py`（20 个知识图谱测试）
+- 数据结构测试（4 个）：GraphNode、GraphEdge、KnowledgeGraph、PersonRelation
+- 服务功能测试（13 个）：标签网络、人物网络、混合网络、关系分析、节点详情、网络统计、日期筛选、空数据库
+- 边界情况测试（3 个）：最大节点数限制、节点大小缩放、关系类型推断
 
 运行测试：
 ```bash
