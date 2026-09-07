@@ -10,6 +10,12 @@
 - 推荐池 `content_cache` 的可换 / raw / pending 计数口径。
 - discovery 待评估池 `discovery_candidates` 的生命周期管理。
 
+> **v0.3.192 数据拆分**：推荐流 4 表（`content_cache` / `recommendations` /
+> `user_feedback` / `xhs_observed_urls`）已从主库 `data/openbiliclaw.db` 迁出，
+> 独立存放于子库 `data/pool.db`（总库+子库）。`Database` 所有连接自动
+> `ATTACH pool.db`，推荐流方法中的无前缀 SQL 自然落到子库，与主库其余
+> 表（events / diary / saved 等）锁域隔离。迁移与回滚见 `scripts/migrate_pool_db.py`。
+
 ## 已实现功能
 
 | 功能 | 状态 | 说明 |

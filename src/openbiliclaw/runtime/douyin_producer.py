@@ -57,6 +57,19 @@ from openbiliclaw.sources.douyin_plugin_search import (
     DouyinBudgetExhausted as _DouyinBudgetExhausted,
 )
 
+
+def _obc_connect(db_path):
+    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
+    import sqlite3 as _sqlite3
+    from pathlib import Path as _Path
+    _conn = _sqlite3.connect(db_path)
+    try:
+        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
+    except _sqlite3.OperationalError:
+        pass
+    return _conn
+
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1388,7 +1401,7 @@ def _run_once(
     if _DRY_RUN:
         return {"ok": True, "dry_run": True, "fetched": len(videos), "valid": len(rows)}
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

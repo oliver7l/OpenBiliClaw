@@ -4,6 +4,16 @@
 
 ---
 
+## v0.3.192: 推荐流数据拆分独立子库 pool.db（总库+子库）（2026-09-07）
+
+- **推荐流 4 表（`content_cache` / `recommendations` / `user_feedback` / `xhs_observed_urls`）从主库 `data/openbiliclaw.db` 迁移到独立子库 `data/pool.db`**，推荐流读写与主库（日记/阅读库/事件等）彻底隔离锁域，采集器与补货写库不再拖慢推荐流读、主库其他模块写也不再影响推荐流。
+- `Database` 所有连接（主连接 / 线程懒建连接 / 独立读连接）自动 `ATTACH pool.db`，推荐流方法里无前缀 SQL 自然落到子库；模块级与各 `_ensure_*` 的建表 / 建索引语句加 `pool.` 前缀（`CREATE INDEX` 用 `pool.<index>` 形式，因 SQLite 不支持 `ON pool.<table>`）。
+- 采集器（xhs / bilibili / zhihu / youtube / v2ex / douyin / toutiao / hupu / xiaoyuzhou / x）统一经 `_obc_connect()` 连接（连接主库并 ATTACH 子库），无前缀 `content_cache` 写入落到 pool.db。
+- 新增迁移脚本 `scripts/migrate_pool_db.py`：备份主库 → 复制 4 表（结构+数据+索引）到 pool.db → 校验行数 → 从主库 DROP 4 表；幂等可重复执行。迁移后主库 4 表已删除（content_cache 75383 / recommendations 134637 / user_feedback 2 / xhs_observed_urls 4698 行）。
+- 实测：`/api/pool/all?source=xhs-feed` 缓存命中 0.01~0.03s，换一批 0/40 重叠；xhs-feed 页面内容渲染与换一批交互正常；采集器补货写入 pool.db。
+
+---
+
 ## v0.3.191: 修复推荐流 tab 换一批无效与加载慢（2026-09-07）
 
 修复小红书推荐流（/web/xhs-feed）"换一换"不生效与首屏加载慢的问题。

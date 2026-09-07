@@ -16,6 +16,20 @@ import time
 from datetime import datetime
 from typing import Any
 
+
+def _obc_connect(db_path):
+    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
+    import sqlite3 as _sqlite3
+    from pathlib import Path as _Path
+
+    _conn = _sqlite3.connect(db_path)
+    try:
+        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
+    except _sqlite3.OperationalError:
+        pass
+    return _conn
+
+
 logger = logging.getLogger(__name__)
 
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliclaw/data/openbiliclaw.db"
@@ -201,7 +215,7 @@ def _run_once() -> dict[str, Any]:
             "inserted": 0,
         }
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

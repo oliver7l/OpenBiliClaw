@@ -14,6 +14,11 @@
 
 > **HTTP 端点宿主（v0.3.190+）**：推荐流相关 13 个 HTTP 端点已从 `api/app.py` 抽取到 `api/recommendation_routes.py`，由 `build_recommendation_router(ctx, config, fire_and_forget_tasks, init_active_now, pick_best_xhs_url, serialize_recommendation_items, load_interest_keywords, request_runtime_replenishment)` 工厂构建，`create_app` 以 `include_router` 挂载。端点路径、参数与行为不变；`_request_runtime_replenishment` 因被非推荐流端点共享，保留在 `app.py` 并经注入复用。
 
+> **数据存放（v0.3.192）**：推荐流 4 表（`content_cache` / `recommendations` /
+> `user_feedback` / `xhs_observed_urls`）已从主库拆到独立子库 `data/pool.db`。
+> 采集器与 `Database` 均经 ATTACH 读写子库，推荐流与主库零锁交集；
+> 换一批 / 池子计数等接口实测毫秒级响应。
+
 ## 已实现功能
 
 | 任务 | 状态 | 说明 |

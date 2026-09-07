@@ -58,6 +58,20 @@ from typing import Any, cast
 
 import feedparser
 
+
+def _obc_connect(db_path):
+    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
+    import sqlite3 as _sqlite3
+    from pathlib import Path as _Path
+
+    _conn = _sqlite3.connect(db_path)
+    try:
+        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
+    except _sqlite3.OperationalError:
+        pass
+    return _conn
+
+
 logger = logging.getLogger(__name__)
 
 # --- Shared -----------------------------------------------------------------
@@ -447,7 +461,7 @@ def _browser_run_once(limit: int, enrich: bool, proxy: str | None) -> dict[str, 
             "with_body": with_body,
         }
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         cache_ins, cache_skip, art_ins = _browser_insert_rows(conn, topics)
         conn.commit()
@@ -828,7 +842,7 @@ def _cli_run_once(limit: int, discover_only: bool) -> dict[str, Any]:
             "would_have_body": enriched,
         }
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         cache_ins, cache_skip, art_ins = _cli_insert_rows(conn, rows)
         conn.commit()
@@ -1012,7 +1026,7 @@ def _api_run_once() -> dict[str, Any]:
             "would_insert": len(deduped),
         }
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         inserted = _api_insert_rows(conn, deduped)
         conn.commit()
@@ -1187,7 +1201,7 @@ def _rss_run_once() -> dict[str, Any]:
         if _DRY_RUN:
             total_inserted += len(rows)
             continue
-        conn = sqlite3.connect(DB_PATH)
+        conn = _obc_connect(DB_PATH)
         try:
             inserted, skipped = _rss_insert_rows(conn, rows)
             conn.commit()

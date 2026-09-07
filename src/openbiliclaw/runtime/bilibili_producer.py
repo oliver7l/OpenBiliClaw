@@ -29,6 +29,20 @@ from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
 from openbiliclaw.llm.prompts import build_search_queries_prompt
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BILIBILI
 
+
+def _obc_connect(db_path):
+    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
+    import sqlite3 as _sqlite3
+    from pathlib import Path as _Path
+
+    _conn = _sqlite3.connect(db_path)
+    try:
+        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
+    except _sqlite3.OperationalError:
+        pass
+    return _conn
+
+
 if TYPE_CHECKING:
     from openbiliclaw.llm.service import LLMService
     from openbiliclaw.soul.profile import SoulProfile
@@ -218,7 +232,7 @@ def _run_feed_once() -> dict[str, Any]:
     if not rows:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _obc_connect(DB_PATH)
     try:
         inserted = _insert_feed_rows(conn, rows)
         conn.commit()

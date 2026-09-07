@@ -203,7 +203,8 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 -- Content cache (discovered/evaluated content)
-CREATE TABLE IF NOT EXISTS content_cache (
+-- 推荐流子库 schema：pool.db（总库连接 ATTACH 后使用 pool. 前缀）
+CREATE TABLE IF NOT EXISTS pool.content_cache (
     bvid        TEXT PRIMARY KEY,
     title       TEXT,
     up_name     TEXT,
@@ -308,7 +309,7 @@ CREATE INDEX IF NOT EXISTS idx_discovery_candidates_content_id
     ON discovery_candidates(source_platform, content_id);
 
 -- Recommendation history
-CREATE TABLE IF NOT EXISTS recommendations (
+CREATE TABLE IF NOT EXISTS pool.recommendations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     bvid        TEXT NOT NULL,
     expression  TEXT,                -- Friend-style recommendation text
@@ -370,6 +371,37 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_llm_usage_provider ON llm_usage(provider, model);
+"""
+
+
+# 推荐流子库（pool.db）专用 DDL：xhs_observed_urls / user_feedback 两表定义。
+# 主连接 ATTACH pool.db 后以 pool. 前缀建到子库；_ensure_pool_database 兜底
+# 建空子库时提取此处定义并去掉 pool. 前缀执行。
+_XHS_OBSERVED_URLS_DDL = """
+    CREATE TABLE IF NOT EXISTS pool.xhs_observed_urls (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        url         TEXT NOT NULL,
+        page_type   TEXT NOT NULL DEFAULT 'other',
+        observed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        enriched    INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS pool.idx_xhs_observed_urls_url ON xhs_observed_urls (url);
+"""
+
+_USER_FEEDBACK_DDL = """
+    CREATE TABLE IF NOT EXISTS pool.user_feedback (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        bvid        TEXT NOT NULL,
+        action      TEXT NOT NULL CHECK(action IN ('like', 'dislike')),
+        source_platform TEXT DEFAULT '',
+        title       TEXT DEFAULT '',
+        topic_group TEXT DEFAULT '',
+        body_text   TEXT DEFAULT '',
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS pool.idx_user_feedback_bvid ON user_feedback(bvid);
+    CREATE INDEX IF NOT EXISTS pool.idx_user_feedback_action ON user_feedback(action);
+    CREATE UNIQUE INDEX IF NOT EXISTS pool.idx_user_feedback_bvid_action ON user_feedback(bvid, action);
 """
 
 
@@ -475,6 +507,10 @@ class Database:
 
     def __init__(self, db_path: str | Path) -> None:
         self._db_path = Path(db_path)
+        # 推荐流子库：content_cache/recommendations/user_feedback/xhs_observed_urls
+        # 独立存放于 pool.db（总库+子库）。所有 Database 连接 ATTACH 该子库，
+        # 无前缀 SQL 自动落到 pool schema（主库已不含这些表）。
+        self._pool_db_path = self._db_path.with_name("pool.db")
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -486,15 +522,83 @@ class Database:
         # reads/writes stay consistent without sharing a connection object.
         self._thread_local = threading.local()
         self._admission_min_score = _DEFAULT_ADMISSION_MIN_SCORE
-        # count_pool_readiness 短期缓存（60秒）：该函数做 4 次查询 + 逐行处理，
-        # 冷算约 2~3s；available/raw/pending 是库存概览数，60 秒新鲜度足够，
-        # 此前 5 秒 TTL 导致用户每次浏览/换一批（间隔常 >5s）都触发重算拖慢接口。
+        # count_pool_readiness 短期缓存（300秒）：该函数做 4~5 次查询 +
+        # events 表 2000 行 JSON 解析，冷算约 2~4s；available/raw/pending 是
+        # 库存概览数，5 分钟新鲜度足够。配合 allow_stale 后接口永不阻塞冷算。
         self._pool_readiness_cache: tuple[float, dict[str, int]] | None = None
-        self._pool_readiness_cache_ttl = 60.0
+        self._pool_readiness_cache_ttl = 300.0
+        self._pool_readiness_refreshing = False
 
     def set_admission_min_score(self, value: object) -> None:
         """Set the unified recommendation-pool admission floor."""
         self._admission_min_score = _normalize_admission_min_score(value)
+
+    # ── 推荐流子库（pool.db）──────────────────────────────────────────
+    # 主库连接 ATTACH pool.db；content_cache/recommendations/user_feedback/
+    # xhs_observed_urls 只存在于子库，无前缀 SQL 自动解析到 pool schema，
+    # 与主库（events/日记/阅读库等）完全隔离锁域。
+
+    @staticmethod
+    def _extract_create_table_sql(script: str, table_name: str) -> str:
+        """Extract ``CREATE TABLE IF NOT EXISTS <table_name> (...)`` from a SQL script."""
+        import re
+
+        m = re.search(
+            rf"CREATE TABLE IF NOT EXISTS {re.escape(table_name)} \([^;]*\);",
+            script,
+            re.DOTALL,
+        )
+        return m.group(0) if m else ""
+
+    def _ensure_pool_database(self) -> None:
+        """Ensure the recommendation sub-database (pool.db) exists.
+
+        Normal path: migration already created pool.db (total+sub DB split).
+        Fallback: pool.db missing — copy the four pool tables from the main
+        DB if they still exist there, otherwise create minimal empty tables
+        so the system boots instead of crashing.
+        """
+        if self._pool_db_path.exists():
+            return
+        import sqlite3 as _sqlite3
+
+        pool_conn = _sqlite3.connect(str(self._pool_db_path), timeout=30.0)
+        try:
+            # 从主库完整 schema 提取 4 张推荐流表的 DDL（与生产结构一致），
+            # 保证测试/全新环境后续 ALTER/UPDATE 不缺列。
+            pool_conn.executescript(
+                "\n".join(
+                    ddl
+                    for ddl in (
+                        self._extract_create_table_sql(_SCHEMA_SQL, "content_cache"),
+                        self._extract_create_table_sql(_SCHEMA_SQL, "recommendations"),
+                        self._extract_create_table_sql(
+                            _XHS_OBSERVED_URLS_DDL, "xhs_observed_urls"
+                        ),
+                        self._extract_create_table_sql(
+                            _USER_FEEDBACK_DDL, "user_feedback"
+                        ),
+                    )
+                    if ddl
+                ).replace("pool.", "")
+            )
+            pool_conn.commit()
+            self._logger().warning(
+                "pool.db 不存在，已按完整 schema 创建空推荐流子库。"
+                "若主库存在旧 content_cache，请先执行 scripts/migrate_pool_db.py。"
+            )
+        finally:
+            pool_conn.close()
+
+    def _attach_pool(self, conn: sqlite3.Connection) -> None:
+        """ATTACH the recommendation sub-database to a connection (idempotent)."""
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS pool", (str(self._pool_db_path),))
+
+    def _logger(self):
+        import logging
+
+        return logging.getLogger(__name__)
 
     def initialize(self) -> None:
         """Initialize the database and run migrations if needed."""
@@ -507,6 +611,9 @@ class Database:
         self._conn.execute("PRAGMA cache_size = -65536")
         # 提升 WAL 检查点阈值，减少频繁检查点
         self._conn.execute("PRAGMA wal_autocheckpoint = 1000")
+        # 推荐流子库：确保 pool.db 存在后 ATTACH，使无前缀 SQL 落到 pool schema
+        self._ensure_pool_database()
+        self._attach_pool(self._conn)
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn
@@ -1135,6 +1242,7 @@ class Database:
             local_conn.execute("PRAGMA busy_timeout = 30000")
             # 增加页面缓存到 64MB，减少磁盘 IO
             local_conn.execute("PRAGMA cache_size = -65536")
+            self._attach_pool(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -1178,6 +1286,7 @@ class Database:
         conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
+        self._attach_pool(conn)
         return conn
 
     def _ensure_fresh_read(self) -> None:
@@ -3006,14 +3115,18 @@ class Database:
             counts[source_family] += int(row["count"])
         return dict(counts)
 
-    def count_pool_readiness(self, *, xhs_self_nickname: str = "") -> dict[str, int]:
+    def count_pool_readiness(
+        self, *, xhs_self_nickname: str = "", allow_stale: bool = False
+    ) -> dict[str, int]:
         """Return pool inventory split by immediately servable and pending rows.
 
         ``available`` is the public "可换" count. ``raw`` is broad fresh
         material before readiness gates. ``pending`` is counted independently:
         recently viewed rows are unavailable, but they are not pending.
 
-        结果缓存 5 秒，避免频繁重复计算（该函数做 4 次查询 + 逐行处理，开销较大）。
+        结果缓存 300 秒，避免频繁重复计算（该函数做 4~5 次查询 + 逐行处理，
+        开销较大）。``allow_stale=True`` 时缓存过期仍先返回旧值，并在后台
+        线程重算（stale-while-revalidate），让读接口永不阻塞在冷算上。
         """
         import time as _time
 
@@ -3021,6 +3134,22 @@ class Database:
         if self._pool_readiness_cache is not None:
             cached_at, cached_result = self._pool_readiness_cache
             if _time.time() - cached_at < self._pool_readiness_cache_ttl:
+                return dict(cached_result)
+            if allow_stale:
+                # 过期但允许旧值：先返回，后台线程重算（防抖，避免并发刷爆）
+                if not self._pool_readiness_refreshing:
+                    self._pool_readiness_refreshing = True
+                    import threading
+
+                    def _recalc() -> None:
+                        try:
+                            self.count_pool_readiness(xhs_self_nickname=xhs_self_nickname)
+                        except Exception:
+                            pass
+                        finally:
+                            self._pool_readiness_refreshing = False
+
+                    threading.Thread(target=_recalc, daemon=True).start()
                 return dict(cached_result)
 
         self._ensure_fresh_read()
@@ -5182,9 +5311,9 @@ class Database:
         }
         if "clicked_at" in existing_columns:
             return
-        self.conn.execute("ALTER TABLE recommendations ADD COLUMN clicked_at TIMESTAMP")
+        self.conn.execute("ALTER TABLE pool.recommendations ADD COLUMN clicked_at TIMESTAMP")
         self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_recommendations_clicked ON recommendations(clicked_at)"
+            "CREATE INDEX IF NOT EXISTS pool.idx_recommendations_clicked ON recommendations(clicked_at)"
         )
 
     def _ensure_content_cache_runtime_columns(self) -> None:
@@ -5237,7 +5366,7 @@ class Database:
             self.conn.execute("ALTER TABLE content_cache ADD COLUMN style_key TEXT DEFAULT ''")
         if "franchise_key" not in existing_columns:
             # v0.3.18: LLM-tagged IP / franchise / series. Empty string for
-            # general-interest content; non-empty rows let the curator
+            # general-interest content non-empty rows let the curator
             # propagate dislikes within an IP and let
             # /api/recommendations cap how many same-franchise items
             # appear in a single response window — without relying on
@@ -5390,12 +5519,9 @@ class Database:
         # Measured on the live DB: pool query 131ms -> 8.5ms (platform-filtered
         # 85ms -> 6.6ms).
         self.conn.executescript("""
-            CREATE INDEX IF NOT EXISTS idx_recommendations_created_id
-                ON recommendations (created_at DESC, id DESC);
-            CREATE INDEX IF NOT EXISTS idx_recommendations_bvid
-                ON recommendations (bvid);
-            CREATE INDEX IF NOT EXISTS idx_content_cache_content_id
-                ON content_cache (content_id);
+            CREATE INDEX IF NOT EXISTS pool.idx_recommendations_created_id ON recommendations (created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS pool.idx_recommendations_bvid ON recommendations (bvid);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_content_id ON content_cache (content_id);
         """)
 
     def _ensure_event_read_indexes(self) -> None:
@@ -5465,20 +5591,14 @@ class Database:
         just the observability page.
         """
         self.conn.executescript("""
-            CREATE INDEX IF NOT EXISTS idx_content_cache_pool_status
-                ON content_cache (pool_status);
-            CREATE INDEX IF NOT EXISTS idx_content_cache_source_platform
-                ON content_cache (source_platform, pool_status);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_pool_status ON content_cache (pool_status);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_source_platform ON content_cache (source_platform, pool_status);
             -- v0.3.19x: pool 浏览（/api/pool/all?source=…）按 source 过滤时
             -- 之前全表 SCAN 75244 行取 rowid，1.4s；此索引后走索引查找毫秒级。
-            CREATE INDEX IF NOT EXISTS idx_content_cache_source
-                ON content_cache (source);
-            CREATE INDEX IF NOT EXISTS idx_content_cache_topic_group
-                ON content_cache (topic_group);
-            CREATE INDEX IF NOT EXISTS idx_content_cache_feedback_type
-                ON content_cache (feedback_type);
-            CREATE INDEX IF NOT EXISTS idx_content_cache_style_key
-                ON content_cache (style_key);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_source ON content_cache (source);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_topic_group ON content_cache (topic_group);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_feedback_type ON content_cache (feedback_type);
+            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_style_key ON content_cache (style_key);
         """)
 
     def _ensure_source_recipes_table(self) -> None:
@@ -5500,17 +5620,7 @@ class Database:
 
     def _ensure_xhs_observed_urls_table(self) -> None:
         """Create the xhs_observed_urls table if it does not exist."""
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS xhs_observed_urls (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                url         TEXT NOT NULL,
-                page_type   TEXT NOT NULL DEFAULT 'other',
-                observed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                enriched    INTEGER DEFAULT 0
-            );
-            CREATE INDEX IF NOT EXISTS idx_xhs_observed_urls_url
-                ON xhs_observed_urls (url);
-        """)
+        self.conn.executescript(_XHS_OBSERVED_URLS_DDL)
 
     def _ensure_chat_turns_table(self) -> None:
         """Create durable popup chat-turn storage for existing databases."""
@@ -8101,24 +8211,7 @@ class Database:
     # ── user feedback (like / dislike) ─────────────────────────────────
 
     def _ensure_user_feedback_table(self) -> None:
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS user_feedback (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                bvid        TEXT NOT NULL,
-                action      TEXT NOT NULL CHECK(action IN ('like', 'dislike')),
-                source_platform TEXT DEFAULT '',
-                title       TEXT DEFAULT '',
-                topic_group TEXT DEFAULT '',
-                body_text   TEXT DEFAULT '',
-                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_user_feedback_bvid
-                ON user_feedback(bvid);
-            CREATE INDEX IF NOT EXISTS idx_user_feedback_action
-                ON user_feedback(action);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_user_feedback_bvid_action
-                ON user_feedback(bvid, action);
-        """)
+        self.conn.executescript(_USER_FEEDBACK_DDL)
 
     def insert_user_feedback(
         self,

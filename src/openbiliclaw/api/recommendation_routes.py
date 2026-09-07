@@ -642,7 +642,11 @@ def build_recommendation_router(
             return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
         try:
             loop = asyncio.get_running_loop()
-            pool_counts = await loop.run_in_executor(None, db.count_pool_readiness)
+            # allow_stale：缓存过期时先返回旧库存数并在后台线程重算，
+            # 避免 pool 浏览/换一批请求被 count_pool_readiness 冷算（2~4s）阻塞。
+            pool_counts = await loop.run_in_executor(
+                None, lambda: db.count_pool_readiness(allow_stale=True)
+            )
             available = int(pool_counts.get("available", 0))
             raw = int(pool_counts.get("raw", 0))
             pending = int(pool_counts.get("pending", 0))
