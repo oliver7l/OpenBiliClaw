@@ -81,13 +81,18 @@
         <button class="tab-btn" id="libraryBtn" type="button">阅读库</button>
         <button class="tab-btn" id="readArchiveBtn" type="button">已读库</button>
         <button class="tab-btn" id="delightTabBtn" type="button">惊喜</button>
-        <button class="tab-btn" id="watchLaterBtn" type="button">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
-        <button class="tab-btn" id="favoritesBtn" type="button">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
+        <div class="filter-dropdown" id="mineDropdown">
+          <button class="tab-btn filter-dropdown-trigger" id="mineDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">我的 ▾</button>
+          <div class="filter-dropdown-menu" id="mineDropdownMenu" role="menu" hidden>
+            <button class="filter-dropdown-item" id="watchLaterBtn" type="button" role="menuitem">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
+            <button class="filter-dropdown-item" id="favoritesBtn" type="button" role="menuitem">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
+            <button class="filter-dropdown-item" id="profileBtn" type="button" role="menuitem">我的画像</button>
+            <button class="filter-dropdown-item" id="chatBtn" type="button" role="menuitem">聊聊口味</button>
+          </div>
+        </div>
         <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
         <button class="tab-btn" id="cloneBtn" type="button">🌐 克隆站</button>
-        <button class="tab-btn" id="profileBtn" type="button">我的画像</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
-        <button class="tab-btn" id="chatBtn" type="button">聊聊口味</button>
         <button class="tab-btn" id="settingsBtn" type="button">设置</button>
       </div>
       <div class="tabbar-tools" aria-label="推荐筛选与操作">

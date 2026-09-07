@@ -1260,6 +1260,10 @@
       const isPoolPage = pageId === "poolAllPage" || pageId === "poolExplorePage";
       const poolTrigger = document.getElementById("poolDropdownTrigger");
       if (poolTrigger) poolTrigger.classList.toggle("is-active", isPoolPage);
+      // 我的下拉菜单：当前在收藏/稍后再看/画像/聊聊口味页面时高亮触发按钮
+      const isMinePage = pageId === "savedPage" || pageId === "watchLaterPage" || pageId === "profilePage" || pageId === "chatPage";
+      const mineTrigger = document.getElementById("mineDropdownTrigger");
+      if (mineTrigger) mineTrigger.classList.toggle("is-active", isMinePage);
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
@@ -2649,6 +2653,7 @@
       } else {
         closeFilterDropdown();
         closeFeedDropdown();
+        closeMineDropdown();
         const rect = trigger.getBoundingClientRect();
         menu.style.top = `${rect.bottom + 4}px`;
         menu.style.left = `${rect.left}px`;
@@ -2659,6 +2664,32 @@
     function closePoolDropdown() {
       const menu = document.getElementById("poolDropdownMenu");
       const trigger = document.getElementById("poolDropdownTrigger");
+      if (menu) menu.hidden = true;
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleMineDropdown() {
+      const menu = document.getElementById("mineDropdownMenu");
+      const trigger = document.getElementById("mineDropdownTrigger");
+      if (!menu || !trigger) return;
+      const isOpen = !menu.hidden;
+      if (isOpen) {
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      } else {
+        closeFilterDropdown();
+        closeFeedDropdown();
+        closePoolDropdown();
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+      }
+    }
+    function closeMineDropdown() {
+      const menu = document.getElementById("mineDropdownMenu");
+      const trigger = document.getElementById("mineDropdownTrigger");
       if (menu) menu.hidden = true;
       if (trigger) trigger.setAttribute("aria-expanded", "false");
     }
@@ -8101,7 +8132,7 @@
       button.addEventListener("click", returnToMobileMenu);
     });
 
-    safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
+    safeBind("#profileBtn", "click", () => { closeMineDropdown(); navigateTo("/web/profile"); });
     safeBind("#diaryBtn", "click", () => navigateTo("/web/diary"));
     safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
@@ -8112,6 +8143,7 @@
       e.stopPropagation();
       closePoolDropdown();
       closeFeedDropdown();
+      closeMineDropdown();
       toggleFilterDropdown();
     });
     document.addEventListener("click", (e) => {
@@ -8123,6 +8155,7 @@
       e.stopPropagation();
       closeFilterDropdown();
       closePoolDropdown();
+      closeMineDropdown();
       toggleFeedDropdown();
     });
     document.addEventListener("click", (e) => {
@@ -8138,10 +8171,19 @@
       const dropdown = document.getElementById("poolDropdown");
       if (dropdown && !dropdown.contains(e.target)) closePoolDropdown();
     });
+    // 我的下拉菜单：合并稍后再看 + 我的收藏 + 我的画像 + 聊聊口味
+    safeBind("#mineDropdownTrigger", "click", (e) => {
+      e.stopPropagation();
+      toggleMineDropdown();
+    });
+    document.addEventListener("click", (e) => {
+      const dropdown = document.getElementById("mineDropdown");
+      if (dropdown && !dropdown.contains(e.target)) closeMineDropdown();
+    });
     safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
     safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);
-    safeBind("#chatBtn", "click", () => navigateTo("/web/chat"));
+    safeBind("#chatBtn", "click", () => { closeMineDropdown(); navigateTo("/web/chat"); });
     safeBind("#libraryBtn", "click", () => navigateTo("/web/library"));
     safeBind("#readArchiveBtn", "click", () => navigateTo("/web/read-archive"));
     safeBind("#libraryPage", "click", (event) => {
@@ -9132,7 +9174,7 @@
       const empty = document.getElementById("cloneEmpty");
       const loading = document.getElementById("cloneLoading");
       if (!grid) return;
-      loading.hidden = false;
+      if (loading) loading.hidden = false;
       grid.innerHTML = "";
       try {
         const [sitesRes, statsRes] = await Promise.all([
@@ -9141,11 +9183,28 @@
         ]);
         _cloneData.sites = sitesRes.ok ? sitesRes.items : [];
         _cloneData.stats = statsRes.ok ? statsRes.stats : null;
+        // 如果站点为空，自动扫描导入已有站点
+        if (!_cloneData.sites.length && !_cloneData._autoImported) {
+          _cloneData._autoImported = true;
+          try {
+            const impRes = await fetch("/api/clone/import", { method: "POST" });
+            const impData = await impRes.json();
+            if (impData.ok && impData.count > 0) {
+              // 重新加载
+              const [sitesRes2, statsRes2] = await Promise.all([
+                fetch("/api/clone/sites?limit=200").then(r => r.json()),
+                fetch("/api/clone/stats").then(r => r.json()),
+              ]);
+              _cloneData.sites = sitesRes2.ok ? sitesRes2.items : [];
+              _cloneData.stats = statsRes2.ok ? statsRes2.stats : null;
+            }
+          } catch (_) { /* 静默失败，用户可手动导入 */ }
+        }
         renderCloneSites();
       } catch (e) {
         grid.innerHTML = `<div class="clone-empty"><p>加载失败: ${e.message}</p></div>`;
       } finally {
-        loading.hidden = true;
+        if (loading) loading.hidden = true;
       }
     }
 
@@ -9155,17 +9214,18 @@
       const stats = _cloneData.stats;
       if (stats) {
         const el = (id) => document.getElementById(id);
-        el("cloneTotalCount").textContent = stats.total_sites || 0;
-        el("cloneTotalSize").textContent = formatBytes(stats.total_size_bytes || 0);
-        el("cloneTotalFiles").textContent = (stats.total_files || 0).toLocaleString();
+        const setText = (id, val) => { const e = el(id); if (e) e.textContent = val; };
+        setText("cloneTotalCount", stats.total_sites || 0);
+        setText("cloneTotalSize", formatBytes(stats.total_size_bytes || 0));
+        setText("cloneTotalFiles", (stats.total_files || 0).toLocaleString());
       }
       if (!_cloneData.sites.length) {
-        grid.innerHTML = "";
-        empty.hidden = false;
+        if (grid) grid.innerHTML = "";
+        if (empty) empty.hidden = false;
         return;
       }
-      empty.hidden = true;
-      grid.innerHTML = _cloneData.sites.map(site => renderCloneCard(site)).join("");
+      if (empty) empty.hidden = true;
+      if (grid) grid.innerHTML = _cloneData.sites.map(site => renderCloneCard(site)).join("");
     }
 
     function renderCloneCard(site) {
