@@ -4,6 +4,13 @@
 
 ---
 
+## v0.3.195: 惊喜页改 6 卡网格 + 换一换；轮询写库移出事件循环（2026-09-07）
+
+- **惊喜推荐页改造**：单条大卡（‹ › 翻页）改为「一页 6 张卡片网格 + 换一换」；卡片含平台徽标、标题、惊喜理由与 喜欢/忽略/稍后再看/收藏 操作；忽略即时换位、喜欢卡片高亮。
+- **惊喜页打开提速**：打开页面即单独拉取 `pending-batch`（50ms 级），不再等 hydrate 主链（runtime/chat/notification 等 9 个请求）全部完成——实测干净环境 0.8s 出 6 卡，换一换 0.1s。
+- **采集轮询写库移出事件循环**：`rss_tasks` / `xiaoyuzhou_tasks` / `wechat_tasks` 入库（每源几十条同步 sqlite 写）改走独立写库线程池（串行 1 线程）——此前一次轮询占住事件循环数秒，期间页面所有 HTTP 请求排队。
+- **修复 savedStatus 双前缀**：前端 `ENDPOINTS.savedStatus` 误带 `/api` 前缀导致请求打到 `/api/api/saved-status`（404），改为相对路径。
+- 惊喜页操作按钮支持网格卡片上下文（`el.closest("[data-action]")`），`respondDelight` 不再依赖全局单条按钮。
 ## v0.3.194: 推荐流独立服务（8421），页面秒开秒换（2026-09-07）
 
 - **推荐流浏览独立进程**：新增 `start-pool-feed.sh`（pm2 `pool-feed-api`，:8421），只读推荐流子库 `pool.db`（`mode=ro`，零锁交集），仅暴露 `GET /api/pool/feed`。桌面 Web 6 个 feed tab 的前端直连 8421，主 API 进程内的采集轮询 / LLM / 冷算不再影响推荐流。

@@ -37,7 +37,7 @@
       subscriptionsStats: "/subscriptions/stats",
       poolAll: "/pool/all",
       poolFeed: "http://127.0.0.1:8421/api/pool/feed",
-      savedStatus: "/api/saved-status",
+      savedStatus: "/saved-status",
     };
     ENDPOINTS.userFeedback = "/api/user-feedback";
     ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
@@ -1427,7 +1427,10 @@
       closeMobileMenu();
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("delightPage");
-      if (state.delights.length) setActiveDelight(state.delightIndex);
+      renderDelightGrid();
+      // 队列还没就绪时立即单独拉取（pending-batch 本身 50ms 级），
+      // 不等 hydrate 主链（runtime/notification/chat 等）全部完成再出卡。
+      if (!state.delights.length) void fetchDelightQueue();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -6092,7 +6095,7 @@
       if (response === "chat") { openDelightComposer(); return; }
       if (response === "cancel-comment") { closeDelightComposer(); return; }
       if (response === "watch-later") {
-        const btn = document.querySelector('[data-delight="watch-later"]');
+        const btn = el?.closest("[data-action]") || document.querySelector('[data-delight="watch-later"]');
         if (!btn || btn.disabled) return;
         btn.disabled = true;
         const wasSaved = btn.getAttribute("aria-pressed") === "true";
@@ -6111,7 +6114,7 @@
         return;
       }
       if (response === "favorite") {
-        const btn = document.querySelector('[data-delight="favorite"]');
+        const btn = el?.closest("[data-action]") || document.querySelector('[data-delight="favorite"]');
         if (!btn || btn.disabled) return;
         btn.disabled = true;
         const wasSaved = btn.getAttribute("aria-pressed") === "true";
@@ -6184,11 +6187,12 @@
       });
       if (response === "like") {
         updateDelightState(delight.bvid, { response_message: "好，这类多来点。" });
+        if (el) el.closest(".video-card")?.classList.add("is-liked");
       }
       if (response === "dislike" || response === "dismiss") {
         state.delights = state.delights.filter((item) => item.bvid !== delight.bvid);
-        setActiveDelight(Math.min(state.delightIndex, state.delights.length - 1));
-        if (el) el.remove();
+        state.delightPage = null;
+        renderDelightGrid();
       }
       if (!toastImmediately) showToast(feedbackToast);
     }
@@ -7101,55 +7105,94 @@
       thumb.append(image);
     }
 
-    function setActiveDelight(index = state.delightIndex) {
-      const controls = Array.from(document.querySelectorAll("[data-delight]"));
-      if (!state.delights.length) {
-        state.delight = null;
-        closeDelightComposer();
-        renderDelightCover(null);
-        renderDelightTurns(null);
-        $("#delightTitle").textContent = "暂无惊喜队列";
-        $("#delightReason").textContent = "后端产生新的高惊喜候选后会通过实时流出现在这里。";
-        if ($("#delightStatus")) $("#delightStatus").textContent = "";
-        if ($("#delightCount")) $("#delightCount").textContent = "0/0";
-        controls.forEach((btn) => { btn.disabled = true; });
+    // 惊喜页：一页 6 张卡片网格 + 换一换。展示层从 state.delights 取一页，
+    // 换一换只在展示层打乱取页，不破坏实时流合并的队列本身。
+    const DELIGHT_PAGE_SIZE = 6;
+
+    function delightCardHtml(item) {
+      const title = escapeHtml(item.title || "无标题");
+      const reason = escapeHtml(item.reason || item.delight_reason || "");
+      const platform = String(item.source_platform || "bilibili");
+      const url = escapeHtml(item.content_url || "");
+      const liked = item.state === "liked" ? " is-liked" : "";
+      return `
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml(platform)}</div>
+        </div>
+        <div class="video-card-body">
+          <p class="video-card-title">${title}</p>
+          <div class="video-card-meta">
+            <span class="video-card-author">${reason.slice(0, 48)}</span>
+            <span class="video-card-platform">${platformLabelHtml(platform)}</span>
+          </div>
+          <div class="video-card-footer${liked}">
+            <button class="feedback-icon-btn" data-action="like" type="button" aria-label="喜欢" title="喜欢">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 10v10"/><path d="M15 5.2 14 10h5.4a1.8 1.8 0 0 1 1.7 2.2l-1.5 6A2.4 2.4 0 0 1 17.3 20H7"/><path d="M7 10l4.5-5.3A2 2 0 0 1 15 6v4"/></svg>
+            </button>
+            <button class="feedback-icon-btn" data-action="dismiss" type="button" aria-label="忽略" title="忽略">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M9.84 9.91A3 3 0 0 0 12 15c.82 0 1.57-.33 2.11-.87M6.5 6.65A10.45 10.45 0 0 0 2.46 12C3.73 16.06 7.52 19 12 19c1.99 0 3.84-.58 5.4-1.58M11 5.05c.33-.03.66-.05 1-.05 4.48 0 8.27 2.94 9.54 7a10.5 10.5 0 0 1-1.19 2.5"/></svg>
+            </button>
+            <button class="feedback-icon-btn watch-later-btn" data-action="watch-later" type="button" aria-label="稍后再看" title="稍后再看">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 1.9"/></svg>
+            </button>
+            <button class="feedback-icon-btn favorite-btn" data-action="favorite" type="button" aria-label="收藏" title="收藏">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.1l-5.31 2.8 1.01-5.9L3.41 9.83l5.93-.86z"/></svg>
+            </button>
+          </div>
+        </div>
+        <a class="video-card-link" href="${url}" target="_blank" rel="noopener" title="在浏览器中打开">↗</a>
+      `;
+    }
+
+    function renderDelightGrid() {
+      const grid = $("#delightGrid");
+      if (!grid) return;
+      const all = state.delights || [];
+      const count = $("#delightCount");
+      if (count) count.textContent = `${all.length} 条候选`;
+      if (!all.length) {
+        grid.innerHTML = `
+          <div class="obs-section">
+            <div class="empty-state">
+              <p>暂无惊喜候选，后端产生新的高惊喜候选后会出现在这里。</p>
+            </div>
+          </div>`;
         scheduleActivityRailHeightSync();
         return;
       }
-      state.delightIndex = Math.max(0, Math.min(index, state.delights.length - 1));
-      state.delight = state.delights[state.delightIndex];
-      closeDelightComposer();
-      renderDelightCover(state.delight);
-      renderDelightTurns(state.delight);
-      $("#delightTitle").textContent = state.delight.title;
-      $("#delightReason").textContent = state.delight.reason;
-      if ($("#delightStatus")) $("#delightStatus").textContent = state.delight.response_message || "";
-      if ($("#delightCount")) $("#delightCount").textContent = `${state.delightIndex + 1}/${state.delights.length}`;
-      // Sync ☆ / ♥ pressed state for the current delight.
-      const delightBvid = state.delight.bvid;
-      const wlBtn = document.querySelector('[data-delight="watch-later"]');
-      if (wlBtn && delightBvid) {
-        wlBtn.setAttribute("aria-pressed", "false");
-        watchLaterStatus(delightBvid).then((res) => {
-          if (state.delight?.bvid === delightBvid && res?.saved) {
-            wlBtn.setAttribute("aria-pressed", "true");
-          }
-        }).catch(() => {});
-      }
-      const favBtn = document.querySelector('[data-delight="favorite"]');
-      if (favBtn && delightBvid) {
-        favBtn.setAttribute("aria-pressed", "false");
-        favoriteStatus(delightBvid).then((res) => {
-          if (state.delight?.bvid === delightBvid && res?.saved) {
-            favBtn.setAttribute("aria-pressed", "true");
-          }
-        }).catch(() => {});
-      }
-      controls.forEach((btn) => {
-        const action = btn.dataset.delight;
-        btn.disabled = (action === "prev" && state.delightIndex === 0) || (action === "next" && state.delightIndex === state.delights.length - 1);
-      });
+      const page = Array.isArray(state.delightPage) && state.delightPage.length
+        ? state.delightPage
+        : all.slice(0, DELIGHT_PAGE_SIZE);
+      grid.replaceChildren(
+        ...page.map((item) => {
+          const card = document.createElement("div");
+          card.className = "video-card is-minimal";
+          card.innerHTML = delightCardHtml(item);
+          card.addEventListener("click", (e) => {
+            if (e.target.closest("[data-action]")) return;
+            respondDelight(item, "view");
+          });
+          card.querySelectorAll("[data-action]").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              respondDelight(item, btn.dataset.action, btn);
+            });
+          });
+          return card;
+        })
+      );
       scheduleActivityRailHeightSync();
+    }
+
+    function shuffleDelights() {
+      const all = (state.delights || []).slice();
+      if (!all.length) return;
+      for (let i = all.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [all[i], all[j]] = [all[j], all[i]];
+      }
+      state.delightPage = all.slice(0, DELIGHT_PAGE_SIZE);
+      renderDelightGrid();
     }
 
     function applyDelights(payload) {
@@ -7157,7 +7200,6 @@
       if (!hasQueuePayload) return;
       const items = Array.isArray(payload?.items) ? payload.items : payload.item ? [payload.item] : [];
       const normalized = items.map(normalizeDelight).filter(Boolean);
-      const previousActiveBvid = String(state.delight?.bvid || "");
       const existingByBvid = new Map(state.delights.map((item) => [String(item.bvid || ""), item]));
       state.delights = [];
       for (const item of normalized) {
@@ -7168,10 +7210,8 @@
         if (existingIndex >= 0) state.delights[existingIndex] = merged;
         else state.delights.push(merged);
       }
-      const nextIndex = previousActiveBvid
-        ? Math.max(0, state.delights.findIndex((item) => String(item.bvid || "") === previousActiveBvid))
-        : 0;
-      setActiveDelight(nextIndex);
+      state.delightPage = null;
+      renderDelightGrid();
     }
 
     function mergeMessages(items) {
@@ -7222,11 +7262,11 @@
           const existingIndex = state.delights.findIndex((item) => String(item.bvid || "") === key);
           if (existingIndex >= 0) {
             state.delights[existingIndex] = mergeDelightItem(state.delights[existingIndex], delight);
-            if (state.delight && String(state.delight.bvid || "") === key) setActiveDelight(existingIndex);
           } else {
             state.delights.push(delight);
-            setActiveDelight(state.delights.length - 1);
           }
+          state.delightPage = null;
+          renderDelightGrid();
         }
       }
       if (
@@ -8143,12 +8183,7 @@
     safeBind("#poolFilterBtn", "click", () => navigateTo("/web/pool-filter"));
     safeBind("#poolAllRefreshBtn", "click", loadPoolAllItems);
     safeBind("#poolFilterRefreshBtn", "click", loadPoolFilterItems);
-    safeBind("#delightThumb", "click", () => respondDelight(state.delight, "view"));
-    safeBind("#delightThumb", "keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      respondDelight(state.delight, "view");
-    });
+    safeBind("#delightRefreshBtn", "click", () => shuffleDelights());
     function setCoverVisible(show) {
       document.body.classList.toggle("no-cover", !show);
       localStorage.setItem("openbiliclaw.hideCover", show ? "0" : "1");
@@ -8302,13 +8337,6 @@
       }
     });
     safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
-    safeBind("#delightCommentInput", "keydown", (event) => {
-      if (event.key === "Enter") respondDelight(state.delight, "send-comment");
-      if (event.key === "Escape") closeDelightComposer();
-    });
-    safeBind("#delightCommentInput", "blur", (event) => {
-      autoCollapseComposer(document.querySelector(".delight-main-actions"), event, closeDelightComposer);
-    });
     safeBind("#resetFiltersBtn", "click", () => { state.query = ""; state.filter = "全部"; const input = $("#searchInput"); if (input) input.value = ""; reshuffle(); });
     safeBind("#searchInput", "input", (event) => { state.query = event.target.value || ""; renderAll(); });
     safeBind("#searchForm", "submit", (event) => { event.preventDefault(); state.query = $("#searchInput")?.value || ""; renderAll(); });
@@ -8477,13 +8505,6 @@
         }
       }
     });
-    document.querySelectorAll("[data-delight]").forEach((btn) => btn.addEventListener("click", async () => {
-      const response = btn.dataset.delight;
-      if (response === "prev") { setActiveDelight(state.delightIndex - 1); return; }
-      if (response === "next") { setActiveDelight(state.delightIndex + 1); return; }
-      await respondDelight(state.delight, response);
-    }));
-
     routeFromPath();
     restoreBackendEndpoint();
     restoreFrontendSettings();
