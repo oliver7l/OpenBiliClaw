@@ -8,25 +8,123 @@
   const API_BASE = "/api/diary/insights";
   const FRAGMENTS_KEY = "diary_fragments";
 
+  // ─── 主视图容器映射 ───
+  const VIEW_MAP = {
+    "list": "diaryListView",
+    "insights": "diaryInsightsView",
+    "people": "diaryPeopleView",
+    "memory": "diaryMemoryView",
+    "search": "diarySearchView",
+  };
+
   // ─── 初始化（由日记页面动态加载后手动调用）───
   window.__initDiaryInsights = init;
 
   function init() {
     initSubtabs();
+    initInnerTabs();
     initInsightsControls();
     initFragments();
+  }
+
+  // ═══════════════════════════════════════════
+  // 内层 Tab 切换（merged view 内部子 Tab）
+  // ═══════════════════════════════════════════
+  function initInnerTabs() {
+    document.querySelectorAll(".diary-inner-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const container = tab.closest(".diary-view-container");
+        if (!container) return;
+
+        // 更新 tab 状态
+        container.querySelectorAll(".diary-inner-tab").forEach((t) => {
+          t.classList.remove("active");
+        });
+        tab.classList.add("active");
+
+        // 切换内层 section
+        const view = tab.dataset.innerView;
+        container.querySelectorAll(".diary-inner-section").forEach((section) => {
+          section.hidden = section.id !== "inner" + view.charAt(0).toUpperCase() + view.slice(1).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        });
+
+        // 触发内层初次加载
+        triggerInnerViewLoad(view);
+      });
+    });
+  }
+
+  function triggerInnerViewLoad(view) {
+    switch (view) {
+      case "emotion":
+        if (window.DiaryEnhancedCenter?.EmotionCenter) window.DiaryEnhancedCenter.EmotionCenter.loadAll();
+        break;
+      case "timeline":
+        if (window.DiaryEnhancedCenter?.Timeline) window.DiaryEnhancedCenter.Timeline.loadAll();
+        break;
+      case "reflection":
+        if (typeof window.initDiaryReflection === "function") window.initDiaryReflection();
+        break;
+      case "insights-center":
+        if (typeof window.initDiaryInsights === "function") window.initDiaryInsights();
+        break;
+      case "memory-center":
+        if (typeof window.initDiaryMemory === "function") window.initDiaryMemory();
+        break;
+      case "advanced-memory":
+        if (window.DiaryEnhancedCenter?.AdvancedMemory) window.DiaryEnhancedCenter.AdvancedMemory.loadAll();
+        break;
+      case "self-evolution":
+        if (typeof window.initDiarySelfEvolution === "function") window.initDiarySelfEvolution();
+        break;
+      case "fragments":
+        renderFragments();
+        break;
+      case "chat":
+        // chat is already initialized
+        break;
+    }
   }
 
   // ═══════════════════════════════════════════
   // 子 Tab 切换
   // ═══════════════════════════════════════════
   function initSubtabs() {
-    const tabs = document.querySelectorAll(".diary-subtab");
+    // 普通 tab 点击
+    const tabs = document.querySelectorAll(".diary-subtab:not(.diary-subtab-dropdown-trigger)");
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
         const view = tab.dataset.view;
         switchDiaryView(view);
       });
+    });
+    // dropdown trigger 点击切换
+    document.querySelectorAll(".diary-subtab-dropdown-trigger").forEach((trigger) => {
+      trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = trigger.parentElement.querySelector(".diary-subtab-dropdown-menu");
+        const isOpen = menu.classList.contains("show");
+        // 关闭所有其他 dropdown
+        document.querySelectorAll(".diary-subtab-dropdown-menu.show").forEach((m) => {
+          if (m !== menu) m.classList.remove("show");
+        });
+        menu.classList.toggle("show");
+      });
+    });
+    // dropdown 子项点击
+    document.querySelectorAll(".diary-subtab-dropdown-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const view = item.dataset.view;
+        switchDiaryView(view);
+      });
+    });
+    // 点击外部关闭 dropdown
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".diary-subtab-dropdown")) {
+        document.querySelectorAll(".diary-subtab-dropdown-menu.show").forEach((m) => {
+          m.classList.remove("show");
+        });
+      }
     });
   }
 
@@ -35,99 +133,99 @@
     document.querySelectorAll(".diary-subtab").forEach((t) => {
       t.classList.toggle("active", t.dataset.view === view);
     });
-    // 切换视图
-    document.getElementById("diaryListView").hidden = view !== "list";
-    document.getElementById("diaryInsightsView").hidden = view !== "insights";
-    document.getElementById("diaryPeopleView").hidden = view !== "people";
-    document.getElementById("diaryFragmentsView").hidden = view !== "fragments";
-    // 反思回顾视图
-    const reflectionView = document.getElementById("diaryReflectionView");
-    if (reflectionView) reflectionView.hidden = view !== "reflection";
-    // 知识网络视图
-    const knowledgeView = document.getElementById("diaryKnowledgeView");
-    if (knowledgeView) knowledgeView.hidden = view !== "knowledge";
-    // 自进化中心视图
-    const seView = document.getElementById("diarySelfEvolutionView");
-    if (seView) seView.hidden = view !== "self-evolution";
-    // 洞察中心视图
-    const insightsView = document.getElementById("diaryInsightsView");
-    if (insightsView) insightsView.hidden = view !== "insights";
-    // 记忆中心视图
-    const memoryView = document.getElementById("diaryMemoryView");
-    if (memoryView) memoryView.hidden = view !== "memory";
-    // 情绪中心视图
-    const emotionView = document.getElementById("diaryEmotionView");
-    if (emotionView) emotionView.hidden = view !== "emotion";
-    // 高级记忆视图
-    const advancedMemoryView = document.getElementById("diaryAdvancedMemoryView");
-    if (advancedMemoryView) advancedMemoryView.hidden = view !== "advanced-memory";
-    // 时间线视图
-    const timelineView = document.getElementById("diaryTimelineView");
-    if (timelineView) timelineView.hidden = view !== "timeline";
-    // 语义搜索和日记对话视图
-    const semanticView = document.getElementById("diarySemanticView");
-    const chatView = document.getElementById("diaryChatView");
-    if (semanticView) semanticView.hidden = view !== "semantic";
-    if (chatView) chatView.hidden = view !== "chat";
 
-    // 触发自定义事件，让其他模块（如 diary-people.js）能监听到
+    // 隐藏所有主视图容器
+    Object.values(VIEW_MAP).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+
+    // 显示当前视图
+    const targetId = VIEW_MAP[view];
+    if (targetId) {
+      const target = document.getElementById(targetId);
+      if (target) target.hidden = false;
+    }
+
+    // 触发自定义事件
     document.dispatchEvent(new CustomEvent("diary-view-change", { detail: { view } }));
+
+    // 首次访问提示
+    showFirstVisitHint(view);
 
     // 进入洞察视图时加载数据
     if (view === "insights") {
       loadAllInsights();
     }
-    // 进入随手记视图时加载碎片
-    if (view === "fragments") {
+    // 进入人物视图时加载
+    if (view === "people") {
+      loadPeopleData();
       renderFragments();
     }
-    // 进入反思回顾视图时初始化
-    if (view === "reflection") {
-      if (typeof window.initDiaryReflection === "function") {
-        window.initDiaryReflection();
-      }
-    }
-    // 进入知识网络视图时初始化
-    if (view === "knowledge") {
-      if (typeof window.initDiaryKnowledge === "function") {
-        window.initDiaryKnowledge();
-      }
-    }
-    // 进入自进化中心视图时初始化
-    if (view === "self-evolution") {
-      if (typeof window.initDiarySelfEvolution === "function") {
-        window.initDiarySelfEvolution();
-      }
-    }
-    // 进入洞察中心视图时初始化
-    if (view === "insights") {
-      if (typeof window.initDiaryInsights === "function") {
-        window.initDiaryInsights();
-      }
-    }
-    // 进入记忆中心视图时初始化
+    // 进入记忆视图时加载
     if (view === "memory") {
-      if (typeof window.initDiaryMemory === "function") {
-        window.initDiaryMemory();
-      }
+      if (typeof window.initDiaryKnowledge === "function") window.initDiaryKnowledge();
+      if (typeof window.initDiaryMemory === "function") window.initDiaryMemory();
+      initSelfEvolution();
     }
-    // 进入情绪中心视图时初始化
-    if (view === "emotion") {
-      if (window.DiaryEnhancedCenter?.EmotionCenter) {
-        window.DiaryEnhancedCenter.EmotionCenter.loadAll();
-      }
+    // 进入搜索视图时加载
+    if (view === "search") {
+      // 语义搜索和日记对话已通过独立脚本初始化
     }
-    // 进入高级记忆视图时初始化
-    if (view === "advanced-memory") {
-      if (window.DiaryEnhancedCenter?.AdvancedMemory) {
-        window.DiaryEnhancedCenter.AdvancedMemory.loadAll();
-      }
-    }
-    // 进入时间线视图时初始化
-    if (view === "timeline") {
-      if (window.DiaryEnhancedCenter?.Timeline) {
-        window.DiaryEnhancedCenter.Timeline.loadAll();
-      }
+  }
+
+  // ─── 首次访问提示（localStorage 记忆，仅第一次显示）───
+  function showFirstVisitHint(view) {
+    const KEY_PREFIX = "diary_hint_";
+    if (localStorage.getItem(KEY_PREFIX + view)) return;
+
+    const container = document.getElementById(VIEW_MAP[view]);
+    if (!container) return;
+
+    const hints = {
+      "list": "💡 左侧列表选择日记，右侧查看详情。点击「写日记」开始记录。",
+      "insights": "📊 通过图表和报告了解你的写作习惯与情绪变化。",
+      "people": "👥 AI 自动提取日记中的人物与标签，帮你梳理社交关系。",
+      "memory": "🧠 知识网络、记忆分层、自进化 —— 深入探索你的记忆结构。",
+      "search": "🔍 用自然语言搜索日记内容，或直接与日记助手对话。",
+    };
+
+    const text = hints[view];
+    if (!text) return;
+
+    const hint = document.createElement("div");
+    hint.className = "diary-first-visit-hint";
+    hint.innerHTML = `<span>${text}</span><button class="hint-close" type="button">✕</button>`;
+    hint.querySelector(".hint-close").addEventListener("click", () => {
+      hint.remove();
+      localStorage.setItem(KEY_PREFIX + view, "1");
+    });
+    container.insertBefore(hint, container.firstChild);
+    localStorage.setItem(KEY_PREFIX + view, "1");
+  }
+
+  // 辅助函数：加载人物数据
+  function loadPeopleData() {
+    const el = document.getElementById("diaryPeopleStats");
+    if (!el) return;
+    fetch("/api/diary/people")
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          const elId = (id) => document.getElementById(id);
+          const setText = (id, v) => { const e = elId(id); if (e) e.textContent = v; };
+          setText("statTotalPersons", data.persons?.length || 0);
+          setText("statTotalTags", data.tags?.length || 0);
+          setText("statExtractedEntries", data.processed || 0);
+        }
+      })
+      .catch(() => {});
+  }
+
+  // 辅助函数：初始化自进化模块
+  function initSelfEvolution() {
+    if (typeof window.initDiarySelfEvolution === "function") {
+      window.initDiarySelfEvolution();
     }
   }
 
