@@ -1140,6 +1140,12 @@ class ContinuousRefreshController:
                 _COVER_PREFETCH_INTERVAL_SECONDS,
                 self._loop_cover_prefetch(),
             ),
+            self._spawn_loop(
+                "self_evolution",
+                "自进化",
+                3600,
+                self._loop_self_evolution(),
+            ),
         ]
         try:
             await asyncio.gather(*tasks)
@@ -1805,6 +1811,79 @@ class ContinuousRefreshController:
         if not callable(tick_fn):
             return
         await tick_fn()
+
+    async def _loop_self_evolution(self) -> None:
+        """Self-evolution — incremental, filtered automatic data exploration.
+
+        **Design based on multi-feed continuous data collection:**
+
+        1. **Incremental processing**: Only processes *new* articles added since
+           the last run, never re-scans the entire database.
+
+        2. **Multi-level filtering**: Rules (length, already processed) first,
+           then quality prioritization (favorited > liked > viewed > unviewed),
+           so only high-signal content reaches LLM processing.
+
+        3. **Batch accumulation**: Accumulates new articles until there are
+           enough (default 20) or 24h have passed, whichever comes first.
+           This reduces LLM cold starts and groups work efficiently.
+
+        4. **Sliding window statistics**: Maintains pre-computed 7d/30d/90d
+           topic/platform distributions so drift detection is efficient.
+
+        5. **Persistent state**: All control state is stored in the database
+           so it survives API restarts.
+
+        Uses ``asyncio.to_thread`` for sync module calls so the async
+        loop is never blocked by long LLM calls.
+        """
+        _BASE = 3600  # 1-hour base tick
+
+        # Resolve db_path from the database object
+        _db_path: str | None = None
+        raw = getattr(self.database, "_db_path", None)
+        if raw is not None:
+            _db_path = str(raw)
+        if not _db_path:
+            _db_path = "data/openbiliclaw.db"
+
+        # Get llm_service from soul_engine
+        llm = getattr(self.soul_engine, "llm_service", None)
+
+        # Import the loop engine (lazy to avoid circular import)
+        from openbiliclaw.self_evolution.loop_engine import SelfEvolutionLoopEngine
+
+        engine = SelfEvolutionLoopEngine(
+            _db_path,
+            llm_service=llm,
+            batch_threshold=20,
+            batch_max_hours=24,
+        )
+
+        while True:
+            if not self._llm_work_allowed():
+                await asyncio.sleep(_BASE)
+                continue
+
+            try:
+                results = await engine.run_tick()
+                # Log summary for observability
+                batched = results.get("batched", False)
+                if batched:
+                    stats = [
+                        f"{k}={v}" for k, v in results.items()
+                        if isinstance(v, (int, float)) and v > 0
+                    ]
+                    if stats:
+                        logger.info(
+                            "self_evolution: completed tick: %s",
+                            ", ".join(stats),
+                        )
+
+            except Exception:
+                logger.debug("self_evolution: loop tick failed", exc_info=True)
+
+            await asyncio.sleep(_BASE)
 
     def _pending_signal_events_count(self, state: dict[str, object]) -> int:
         return len(
