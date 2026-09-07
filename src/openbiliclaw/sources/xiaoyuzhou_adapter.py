@@ -7,6 +7,7 @@ Fetches podcast RSS feeds via RSSHub, extracts episode metadata
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,15 @@ if TYPE_CHECKING:
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
+
+# 同 rss_adapter：feedparser 同步网络抓取走独立线程池，避免占用
+# FastAPI 默认 executor（HTTP DB 查询同池）导致轮询期页面请求排队。
+_FEED_PARSE_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = (
+    concurrent.futures.ThreadPoolExecutor(
+        max_workers=4,
+        thread_name_prefix="feedparse",
+    )
+)
 
 
 class XiaoyuzhouAdapter:
@@ -41,7 +51,9 @@ class XiaoyuzhouAdapter:
 
         import asyncio
 
-        feed = await asyncio.to_thread(feedparser.parse, feed_url)
+        feed = await asyncio.get_running_loop().run_in_executor(
+            _FEED_PARSE_EXECUTOR, feedparser.parse, feed_url
+        )
 
         if feed.bozo and not feed.entries:
             logger.warning(

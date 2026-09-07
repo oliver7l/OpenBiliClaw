@@ -6,6 +6,7 @@ for the recommendation pipeline.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,17 @@ if TYPE_CHECKING:
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
+
+# feedparser.parse 是同步网络抓取（每源 1~10s）。用独立线程池执行，
+# 避免占用 FastAPI 默认 ThreadPoolExecutor（HTTP 端点的 DB 查询同池）——
+# 否则一次轮询串行抓几十个源时，HTTP 请求会在线程池排队 30~50s
+# （页面打开 / 换一批被饿死）。独立池固定 4 线程，与请求路径物理隔离。
+_FEED_PARSE_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = (
+    concurrent.futures.ThreadPoolExecutor(
+        max_workers=4,
+        thread_name_prefix="feedparse",
+    )
+)
 
 
 class RssAdapter:
@@ -40,7 +52,9 @@ class RssAdapter:
 
         import asyncio
 
-        feed = await asyncio.to_thread(feedparser.parse, feed_url)
+        feed = await asyncio.get_running_loop().run_in_executor(
+            _FEED_PARSE_EXECUTOR, feedparser.parse, feed_url
+        )
 
         if feed.bozo and not feed.entries:
             logger.warning("RssAdapter: failed to parse %s: %s", feed_url, feed.bozo_exception)

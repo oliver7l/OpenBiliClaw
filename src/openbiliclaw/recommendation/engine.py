@@ -333,7 +333,10 @@ class RecommendationEngine:
         readiness_fn = getattr(self._database, "count_pool_readiness", None)
         if callable(readiness_fn):
             try:
-                counts = readiness_fn(xhs_self_nickname=nickname)
+                # allow_stale：缓存过期时先返回旧值并在后台线程重算，
+                # 避免 serve(/pool) 触发同步冷算（0.8~3.8s）阻塞 FastAPI
+                # 事件循环，拖垮同进程的所有请求（页面秒开秒换依赖此改动）。
+                counts = readiness_fn(xhs_self_nickname=nickname, allow_stale=True)
                 available = int(counts.get("available", 0))
                 return {
                     "available": max(0, available),
@@ -342,7 +345,13 @@ class RecommendationEngine:
                 }
             except Exception:
                 logger.exception("Failed to load pool readiness counts")
-        available = int(self._database.count_pool_candidates(xhs_self_nickname=nickname))
+        available = 0
+        count_candidates = getattr(self._database, "count_pool_candidates", None)
+        if callable(count_candidates):
+            try:
+                available = int(count_candidates(xhs_self_nickname=nickname))
+            except Exception:
+                logger.exception("Failed to load pool candidate counts")
         return {"available": max(0, available), "raw": max(0, available), "pending": 0}
 
     @staticmethod

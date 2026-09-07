@@ -434,7 +434,11 @@ class ContinuousRefreshController:
         """Return normalized pool readiness counts for status payloads."""
         nickname = self._xhs_self_nickname()
         try:
-            readiness = self.database.count_pool_readiness(xhs_self_nickname=nickname)
+            # allow_stale：缓存过期先返回旧值、后台重算，避免后台刷新循环
+            # 触发同步冷算（0.8~3.8s）阻塞 api 事件循环。
+            readiness = self.database.count_pool_readiness(
+                xhs_self_nickname=nickname, allow_stale=True
+            )
             available = int(readiness.get("available", 0))
             return {
                 "available": max(0, available),

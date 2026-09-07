@@ -1054,11 +1054,23 @@ def _image_cache_response(url: str) -> FileResponse | None:
 # ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
 from openbiliclaw.api.utils import (
     article_tags_for_context as _article_tags_for_context,
+)
+from openbiliclaw.api.utils import (
     coerce_e2e_event_rows as _coerce_e2e_event_rows,
+)
+from openbiliclaw.api.utils import (
     event_row_id as _event_row_id,
+)
+from openbiliclaw.api.utils import (
     event_row_metadata as _event_row_metadata,
+)
+from openbiliclaw.api.utils import (
     infer_source_platform_from_url as _infer_source_platform_from_url,
+)
+from openbiliclaw.api.utils import (
     normalize_source_platform as _normalize_source_platform,
+)
+from openbiliclaw.api.utils import (
     select_init_platforms as _select_init_platforms,
 )
 from openbiliclaw.storage.cache import get_cache as _get_cache
@@ -3612,6 +3624,38 @@ def create_app(
     @app.get("/api/favorites/{bvid}", response_model=FavoriteStateResponse)
     async def favorite_status(bvid: str) -> FavoriteStateResponse:
         return _favorite_state(bvid.strip())
+
+    @app.get("/api/saved-status")
+    async def saved_status_bulk(bvids: str = Query(...)) -> dict[str, dict[str, bool]]:
+        """批量查询收藏 / 稍后看状态（v0.3.193）。
+
+        一次往返返回多个 bvid 的 ``{saved, watch_later}``，替代前端
+        逐条 ``/api/favorites/{bvid}`` + ``/api/watch-later/{bvid}``
+        （列表 200+ 条时可达 400+ 请求，打爆请求处理）。上限 500 条。
+        """
+        raw = [b.strip() for b in bvids.split(",") if b.strip()]
+        raw = list(dict.fromkeys(raw))[:500]
+        if not raw:
+            return {}
+        fav_set: set[str] = set()
+        wl_set: set[str] = set()
+        placeholders = ",".join("?" * len(raw))
+        with suppress(Exception):
+            for r in ctx.database.conn.execute(
+                f"SELECT bvid FROM favorites WHERE bvid IN ({placeholders})",
+                raw,
+            ).fetchall():
+                fav_set.add(str(r["bvid"]))
+        with suppress(Exception):
+            for r in ctx.database.conn.execute(
+                f"SELECT bvid FROM watch_later WHERE bvid IN ({placeholders})",
+                raw,
+            ).fetchall():
+                wl_set.add(str(r["bvid"]))
+        return {
+            b: {"saved": b in fav_set, "watch_later": b in wl_set}
+            for b in raw
+        }
 
     @app.get("/api/favorites", response_model=FavoriteListResponse)
     async def favorite_list(

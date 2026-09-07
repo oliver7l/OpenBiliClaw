@@ -36,7 +36,8 @@
       subscriptions: "/subscriptions",
       subscriptionsStats: "/subscriptions/stats",
       poolAll: "/pool/all",
-      poolFeed: "/pool/feed",
+      poolFeed: "http://127.0.0.1:8421/api/pool/feed",
+      savedStatus: "/api/saved-status",
     };
     ENDPOINTS.userFeedback = "/api/user-feedback";
     ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
@@ -791,7 +792,10 @@
       const controller = signal ? null : new AbortController();
       const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
       try {
-        const response = await fetch(`${base}${path}`, { ...fetchOptions, signal: signal || controller?.signal });
+        // 绝对 URL（http(s)://…，如独立推荐流服务 127.0.0.1:8421）不再
+        // 叠加 API base，避免拼出 "http://host:port/apihttp://…" 的坏地址。
+        const url = /^https?:\/\//i.test(path) ? path : `${base}${path}`;
+        const response = await fetch(url, { ...fetchOptions, signal: signal || controller?.signal });
         const contentType = response.headers.get("content-type") || "";
         const details = contentType.includes("application/json") ? await response.json().catch(() => null) : await response.text().catch(() => "");
         if (!response.ok) {
@@ -2811,10 +2815,11 @@
       g.classList.add("is-minimal");
       // Bulk query saved states to avoid N round trips
       const bvids = items.map((item) => item.bvid || item.id).filter(Boolean);
-      const [wlPromise, favPromise] = [
-        Promise.all(bvids.map(watchLaterStatus)).catch(() => bvids.map(() => null)),
-        Promise.all(bvids.map(favoriteStatus)).catch(() => bvids.map(() => null)),
-      ];
+      // 一次批量查询替代 N×2 个请求（收藏 + 稍后看各一条），
+      // 列表 200+ 条时原实现发 400+ 请求，页面打开被请求洪水拖到 10s+。
+      const savedStatusPromise = bvids.length
+        ? requestJson(`${ENDPOINTS.savedStatus}?bvids=${encodeURIComponent(bvids.join(","))}`, { timeoutMs: 10000 }).catch(() => ({}))
+        : Promise.resolve({});
       g.replaceChildren(...items.map((item, i) => {
         const card = document.createElement("article");
         card.className = "video-card is-minimal";
@@ -2848,17 +2853,14 @@
           if (url) { openRecommendation(item, card); }
         });
         card.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", () => handleCardAction(btn.dataset.action, item, card)));
-        // Update saved state after bulk promise resolves
+        // Update saved state after bulk status promise resolves
         const bvid = item.bvid || item.id;
         const wlBtn = card.querySelector('[data-action="watch-later"]');
         const favBtn = card.querySelector('[data-action="favorite"]');
-        wlPromise.then(results => {
-          const res = results[i];
-          if (wlBtn && res && res.saved) { wlBtn.setAttribute("aria-pressed", "true"); wlBtn.title = "取消稍后再看"; }
-        });
-        favPromise.then(results => {
-          const res = results[i];
-          if (favBtn && res && res.saved) { favBtn.setAttribute("aria-pressed", "true"); favBtn.title = "取消收藏"; }
+        savedStatusPromise.then((statusMap) => {
+          const st = (statusMap && statusMap[bvid]) || {};
+          if (wlBtn && st.watch_later) { wlBtn.setAttribute("aria-pressed", "true"); wlBtn.title = "取消稍后再看"; }
+          if (favBtn && st.saved) { favBtn.setAttribute("aria-pressed", "true"); favBtn.title = "取消收藏"; }
         });
         return card;
       }));
@@ -3725,15 +3727,13 @@
       const title = escapeHtml(item.title || "无标题");
       const author = escapeHtml(item.up_name || item.author_name || "");
       const url = escapeHtml(item.content_url || "");
-      const cover = escapeHtml(item.cover_url || "");
       const status = item.pool_status || "";
       const score = item.quality_score || 0;
       const topic = escapeHtml(item.topic_group || "");
-      const hasCover = cover && !cover.includes("placeholder");
 
       return `
-        <div class="video-card-cover${hasCover ? "" : " is-empty"}">
-          ${hasCover ? `<img src="${cover}" alt="" loading="lazy">` : `<div class="video-card-cover-ph">${platformLabelHtml("xiaohongshu")}</div>`}
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("xiaohongshu")}</div>
         </div>
         <div class="video-card-body">
           <p class="video-card-title">${title}</p>
@@ -3904,16 +3904,14 @@
       const status = item.pool_status || "";
       const score = item.quality_score || 0;
       const topic = escapeHtml(item.topic_group || "");
-      const cover = item.cover_url || "";
       const viewCount = item.view_count || 0;
       const duration = item.duration || 0;
       const durStr = duration ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}` : "";
       const viewStr = viewCount >= 10000 ? `${(viewCount / 10000).toFixed(1)}万` : String(viewCount);
 
       return `
-        <div class="video-card-cover${cover ? "" : " is-empty"}">
-          ${cover ? `<img src="${cover}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('is-empty')">` : ""}
-          <div class="video-card-cover-ph${cover ? " is-hidden" : ""}">${platformLabelHtml("bilibili")}</div>
+        <div class="video-card-cover is-empty">
+          <div class="video-card-cover-ph">${platformLabelHtml("bilibili")}</div>
           ${durStr ? `<span class="video-card-duration">${durStr}</span>` : ""}
         </div>
         <div class="video-card-body">

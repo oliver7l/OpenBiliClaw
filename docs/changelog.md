@@ -4,6 +4,17 @@
 
 ---
 
+## v0.3.194: 推荐流独立服务（8421），页面秒开秒换（2026-09-07）
+
+- **推荐流浏览独立进程**：新增 `start-pool-feed.sh`（pm2 `pool-feed-api`，:8421），只读推荐流子库 `pool.db`（`mode=ro`，零锁交集），仅暴露 `GET /api/pool/feed`。桌面 Web 6 个 feed tab 的前端直连 8421，主 API 进程内的采集轮询 / LLM / 冷算不再影响推荐流。
+- **页面打开从 9~43s 降到 ~0.5s、换一批 0.06s**，修复链路：
+  1. 独立服务绑定 0.0.0.0 + 前端显式 127.0.0.1（`--host ::` 只绑 IPv6，Chrome 经 localhost 解析失败导致 ERR_CONNECTION_REFUSED）；
+  2. `requestJson` 对绝对 URL 不再叠加 API base（此前拼出 `http://host:port/apihttp://127.0.0.1:8421/...` 坏地址）；
+  3. 新增批量状态端点 `GET /api/saved-status?bvids=...`，首页列表渲染的一次 400+ 个收藏/稍后看请求合并为 1 个；
+  4. feed 卡片去掉封面图（`cover_url` 来自小红书图床防盗链，30 张全部破图还白等），统一平台占位；
+  5. `rss_adapter` / `xiaoyuzhou_adapter` 的 feedparser 抓取改走独立线程池（4 线程），不再占满默认 ThreadPoolExecutor——此前采集轮询一次 40~50s，HTTP 的 DB 查询同池排队被饿死；
+  6. `engine.serve` / `runtime.refresh` 的 `count_pool_readiness` 全部改 `allow_stale=True`（过期先回旧值、后台重算），消除 serve(/pool) 触发同步冷算阻塞事件循环。
+- 保留 `/api/pool/all` 供池子总览 / 池子探索；独立服务仅读 pool.db，与主 API 无共享连接。
 ## v0.3.193: 推荐流极简 feed 直读，秒开秒换（2026-09-07）
 
 - 新增 `GET /api/pool/feed` 端点：推荐流浏览直读子库 `content_cache`，只按 source 过滤 + 随机抽样，不经过 `count_pool_readiness` / serve 引擎 / LLM 等环节，请求耗时由原 `/api/pool/all` 冷算 3.8s 降至 15~60ms（页面内实测 42~197ms）。
