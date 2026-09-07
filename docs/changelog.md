@@ -4,6 +4,9 @@
 
 ---
 
+## v0.3.200: 修复自进化页面永久空白（MAIN_PAGE_IDS 遗漏）（2026-09-07）
+
+- 修复 `/web/self-evolution` 页面始终空白：`showMainPage()` 只切换 `MAIN_PAGE_IDS` 列表内页面的显隐，但 `selfEvolutionPage` 未被列入，导致页面元素永久保持 `hidden`。已将 `selfEvolutionPage` 加入 `MAIN_PAGE_IDS`。
 ## v0.3.199: 修复自进化页面直接打开时空白（TDZ）（2026-09-07）
 
 - 修复 `/web/self-evolution` 直接打开（刷新/书签）时页面空白：`SELF_EVO_API` 常量定义在 `routeFromPath()` 初始化调用之后，触发 `ReferenceError: Cannot access 'SELF_EVO_API' before initialization`，导致状态加载失败。将 `SELF_EVO_API` 移至顶部常量区（ENDPOINTS 之后），路由初始化时已可用。
