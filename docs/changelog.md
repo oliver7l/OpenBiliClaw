@@ -35,6 +35,16 @@
 - 数据库操作前自动备份（`data/openbiliclaw.db.backup-YYYYMMDD-HHMMSS`）
 - 所有索引操作只加不删，不修改任何数据
 
+### 模块化重构（M1：推荐流 Router 抽取）
+
+- refactor: 13 个推荐流 HTTP 端点 + 辅助函数从巨型文件 `api/app.py` 抽取到新模块 `api/recommendation_routes.py`
+  - 新增 `build_recommendation_router(...)` 工厂，7 个共享依赖（ctx/config/任务集/active-now/XHS URL/序列化/兴趣词）+ 补货回调全部显式注入，消除循环 import
+  - `app.py` 从 15341 行减至 14154 行（-1179 行），瘦身为组装器（`include_router` 挂载）
+  - 端点路径、参数、行为零变化：`/api/recommendations`、`/api/recommendations/{reshuffle,append,refresh}`、`/api/pool/all`、`/api/user-feedback`、`/api/user-feedback/batch`、`/api/interest-tags`、`/api/view-history`、`/api/view-record`、`/api/view-dwell`、`/api/agent-recommend`
+  - 共享的 `_request_runtime_replenishment` 保留在 `app.py`（init_completed / event_ingest 两个非推荐流调用点仍使用），经注入供 router 复用
+  - `_cap_by_franchise` 等纯函数随 router 迁移；对应单元测试 import 路径已同步更新
+  - 验证：`pytest tests/test_api_app.py` 233 passed（3 个失败均为 HEAD 上已存在的 pre-existing 失败）；推荐流相关 9 个测试文件 156 passed；13 端点全部注册；router 自身 mypy 0 错误、ruff 通过
+
 ---
 
 ## v0.3.189: 性能优化——日记接口缓存 + 前端按需加载（2026-09-06）

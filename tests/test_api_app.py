@@ -1249,7 +1249,7 @@ class TestBackendAPI:
         Items with empty franchise_key (general-interest content) must
         always pass through — the cap only fires for tagged IPs.
         """
-        from openbiliclaw.api.app import _cap_by_franchise
+        from openbiliclaw.api.recommendation_routes import _cap_by_franchise
 
         rows = [
             {"id": 1, "title": "原神 4.0 须弥探索", "franchise_key": "原神"},
@@ -1269,7 +1269,7 @@ class TestBackendAPI:
     def test_cap_by_franchise_zero_disables_cap(self) -> None:
         """max_per_franchise=0 is the escape hatch for ops who want to
         debug without re-deploying. Returns input unchanged."""
-        from openbiliclaw.api.app import _cap_by_franchise
+        from openbiliclaw.api.recommendation_routes import _cap_by_franchise
 
         rows = [
             {"id": 1, "franchise_key": "原神"},

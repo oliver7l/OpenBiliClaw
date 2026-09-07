@@ -12,6 +12,8 @@
 - **Recommendation** — 单条推荐结果
 - **PersonalTopic** — 后续个性化主题分组的占位结构
 
+> **HTTP 端点宿主（v0.3.190+）**：推荐流相关 13 个 HTTP 端点已从 `api/app.py` 抽取到 `api/recommendation_routes.py`，由 `build_recommendation_router(ctx, config, fire_and_forget_tasks, init_active_now, pick_best_xhs_url, serialize_recommendation_items, load_interest_keywords, request_runtime_replenishment)` 工厂构建，`create_app` 以 `include_router` 挂载。端点路径、参数与行为不变；`_request_runtime_replenishment` 因被非推荐流端点共享，保留在 `app.py` 并经注入复用。
+
 ## 已实现功能
 
 | 任务 | 状态 | 说明 |

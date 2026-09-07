@@ -118,6 +118,7 @@ select = [
 "scripts/*.py" = ["E501"]  # Scripts contain long prompt strings
 # Large files pending refactor/split — E501 will be addressed during restructuring
 "src/openbiliclaw/api/app.py" = ["E501"]
+"src/openbiliclaw/api/recommendation_routes.py" = ["E501"]  # M1 extraction from app.py; formatting deferred
 "src/openbiliclaw/storage/database.py" = ["E501"]
 "src/openbiliclaw/runtime/refresh.py" = ["E501"]
 "src/openbiliclaw/cli.py" = ["E501"]
