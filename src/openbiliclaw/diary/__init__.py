@@ -37,12 +37,53 @@ from .models import (
     TagType,
 )
 from .rag import DiaryRAGService, RAGAnswer, SearchResult
+from .insight_engine import (
+    InsightEngineService,
+    InsightReport,
+    MemoryOnThisDay,
+    MorningBriefing,
+    OpenLoop,
+    PatternInsight,
+)
+from .memory_system import (
+    MemoryCompressionResult,
+    MemoryEntry,
+    MemoryStats,
+    MemorySystemService,
+)
 from .reflection import (
     Milestone,
     MonthlyReflection,
     ReflectionService,
     WeeklyReport,
     YearlyReview,
+)
+from .self_evolution import (
+    DriftEvent,
+    NightlyLog,
+    SelfEvolutionService,
+    TagOptimization,
+    UserProfile,
+)
+from .emotion import (
+    BurnoutAssessment,
+    EmotionAnalyzer,
+    EmotionForecast,
+    EmotionTrendPoint,
+    ValenceArousal,
+)
+from .advanced_memory import (
+    AdvancedMemoryService,
+    Belief,
+    BeliefConflict,
+    ConsolidationResult,
+    DreamStateReview,
+    MemoryLayer,
+)
+from .timeline import (
+    TimelineCard,
+    TimelineService,
+    TimelineStats,
 )
 from .service import DiaryService
 
@@ -60,6 +101,7 @@ __all__ = [
     "DiaryService",
     "DiaryStats",
     "DiaryTag",
+    "DriftEvent",
     "ExtractionResult",
     "GraphEdge",
     "GraphNode",
@@ -71,13 +113,34 @@ __all__ = [
     "MoodLevel",
     "MoodTrendPoint",
     "MonthlyReflection",
+    "NightlyLog",
     "PersonRelation",
     "RAGAnswer",
     "ReflectionService",
     "SearchResult",
+    "SelfEvolutionService",
+    "TagOptimization",
     "TagType",
     "WeeklyReport",
     "WritingStreak",
     "YearlyInsight",
     "YearlyReview",
+    "UserProfile",
+    # 情绪系统
+    "EmotionAnalyzer",
+    "ValenceArousal",
+    "EmotionTrendPoint",
+    "EmotionForecast",
+    "BurnoutAssessment",
+    # 高级记忆系统
+    "AdvancedMemoryService",
+    "MemoryLayer",
+    "Belief",
+    "BeliefConflict",
+    "ConsolidationResult",
+    "DreamStateReview",
+    # 智能时间线
+    "TimelineService",
+    "TimelineCard",
+    "TimelineStats",
 ]
