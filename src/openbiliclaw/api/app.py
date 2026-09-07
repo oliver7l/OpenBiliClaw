@@ -748,75 +748,6 @@ def _select_init_platforms(enabled: set[str], selected: set[str] | None) -> set[
     }
 
 
-def _normalize_init_source_key(source: object) -> str:
-    source_key = str(source or "").strip().lower()
-    if not source_key:
-        return ""
-    return _normalize_source_platform(source_key)
-
-
-def _normalize_source_platform(source: object) -> str:
-    source_key = str(source or "").strip().lower()
-    if source_key in {"x", "twitter"}:
-        return "twitter"
-    if source_key in {"xhs", "rednote"}:
-        return "xiaohongshu"
-    if source_key in {"yt", "youtube"}:
-        return "youtube"
-    if source_key in {"douyin", "tiktok"}:
-        return "douyin"
-    if source_key in {"zhihu", "知乎"}:
-        return "zhihu"
-    if source_key in {"bilibili", "bili", ""}:
-        return "bilibili"
-    return source_key
-
-
-def _article_tags_for_context(value: object, *, max_tags: int = 8) -> str:
-    """Render an article's tags JSON as a short comma-joined context suffix.
-
-    E2 (reading feedback loop): article tags were persisted in event
-    metadata but never reached the preference-analyzer LLM prompt (only
-    title/url/source are compacted). Folding the top-N tags into the
-    natural-language context gives the analyzer topic-level evidence for
-    both positive (finished) and negative (hidden) reading signals.
-    """
-    if isinstance(value, list):
-        tags = [str(t).strip() for t in value if str(t).strip()]
-    elif isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                tags = [str(t).strip() for t in parsed if str(t).strip()]
-            else:
-                tags = []
-        except json.JSONDecodeError:
-            tags = [t.strip() for t in value.replace("，", ",").split(",") if t.strip()]
-    else:
-        tags = []
-    if not tags:
-        return ""
-    return "标签:" + ",".join(tags[:max_tags])
-
-
-def _infer_source_platform_from_url(url: object) -> str:
-    text = str(url or "").strip().lower()
-    if "youtube.com" in text or "youtu.be" in text:
-        return "youtube"
-    host = (urlparse(text if "://" in text else f"https://{text}").hostname or "").lower()
-    if host in {"x.com", "twitter.com"} or host.endswith(".x.com") or host.endswith(".twitter.com"):
-        return "twitter"
-    if "xiaohongshu.com" in text or "xhslink.com" in text:
-        return "xiaohongshu"
-    if "douyin.com" in text:
-        return "douyin"
-    if "zhihu.com" in text:
-        return "zhihu"
-    if "bilibili.com" in text or "b23.tv" in text:
-        return "bilibili"
-    return ""
-
-
 def _extension_e2e_actions_for_request(
     payload: ExtensionE2ERunIn,
 ) -> dict[ExtensionE2EPlatform, list[ExtensionE2EAction]]:
@@ -1231,6 +1162,14 @@ def _image_cache_response(url: str) -> FileResponse | None:
 # 任何写操作自动清空缓存，保证数据一致性。
 # 使用统一缓存层 TwoLevelCache：内存 L1（微秒级）+ 磁盘 L2（diskcache，持久化，重启不失效）
 from openbiliclaw.storage.cache import get_cache as _get_cache
+
+# ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
+from openbiliclaw.api.utils import (
+    article_tags_for_context as _article_tags_for_context,
+    infer_source_platform_from_url as _infer_source_platform_from_url,
+    normalize_init_source_key as _normalize_init_source_key,
+    normalize_source_platform as _normalize_source_platform,
+)
 
 _api_cache = _get_cache()
 _DIARY_CACHE_TTL = 30.0
