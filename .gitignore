@@ -93,3 +93,6 @@ extension/dist-firefox/
 
 # Local test artifacts
 .pytest-tmp/
+
+# 克隆系统运行时生成的站点数据（勿提交）
+src/openbiliclaw/web/clone/sites/

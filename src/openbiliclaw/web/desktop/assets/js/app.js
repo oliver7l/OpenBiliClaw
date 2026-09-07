@@ -1222,7 +1222,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "libraryPage", "readArchivePage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "libraryPage", "readArchivePage", "settingsPage"];
 
     function showMainPage(pageId) {
       MAIN_PAGE_IDS.forEach((id) => {
@@ -1241,7 +1241,7 @@
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1256,6 +1256,10 @@
       const isFeedPage = feedPageIds.includes(pageId);
       const feedTrigger = document.getElementById("feedDropdownTrigger");
       if (feedTrigger) feedTrigger.classList.toggle("is-active", isFeedPage);
+      // 池子下拉菜单：当前在池子页面时高亮触发按钮
+      const isPoolPage = pageId === "poolAllPage" || pageId === "poolExplorePage";
+      const poolTrigger = document.getElementById("poolDropdownTrigger");
+      if (poolTrigger) poolTrigger.classList.toggle("is-active", isPoolPage);
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
@@ -1283,6 +1287,7 @@
       profile: () => openProfilePage(),
       chat: () => openChatPage(),
       diary: () => openDiaryPage(),
+      clone: () => openClonePage(),
       "self-evolution": () => openSelfEvolutionPage(),
       library: () => openLibraryPage(),
       "read-archive": () => openReadArchivePage(),
@@ -2629,6 +2634,31 @@
     function closeFeedDropdown() {
       const menu = document.getElementById("feedDropdownMenu");
       const trigger = document.getElementById("feedDropdownTrigger");
+      if (menu) menu.hidden = true;
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    }
+
+    function togglePoolDropdown() {
+      const menu = document.getElementById("poolDropdownMenu");
+      const trigger = document.getElementById("poolDropdownTrigger");
+      if (!menu || !trigger) return;
+      const isOpen = !menu.hidden;
+      if (isOpen) {
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      } else {
+        closeFilterDropdown();
+        closeFeedDropdown();
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+      }
+    }
+    function closePoolDropdown() {
+      const menu = document.getElementById("poolDropdownMenu");
+      const trigger = document.getElementById("poolDropdownTrigger");
       if (menu) menu.hidden = true;
       if (trigger) trigger.setAttribute("aria-expanded", "false");
     }
@@ -8073,12 +8103,15 @@
 
     safeBind("#profileBtn", "click", () => navigateTo("/web/profile"));
     safeBind("#diaryBtn", "click", () => navigateTo("/web/diary"));
+    safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });
     safeBind("#poolFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/pool-filter"); });
     // 筛选下拉菜单：合并自定义筛选 + 池子筛选
     safeBind("#filterDropdownTrigger", "click", (e) => {
       e.stopPropagation();
+      closePoolDropdown();
+      closeFeedDropdown();
       toggleFilterDropdown();
     });
     document.addEventListener("click", (e) => {
@@ -8088,11 +8121,22 @@
     // 推荐流下拉菜单：合并6个平台推荐流
     safeBind("#feedDropdownTrigger", "click", (e) => {
       e.stopPropagation();
+      closeFilterDropdown();
+      closePoolDropdown();
       toggleFeedDropdown();
     });
     document.addEventListener("click", (e) => {
       const dropdown = document.getElementById("feedDropdown");
       if (dropdown && !dropdown.contains(e.target)) closeFeedDropdown();
+    });
+    // 池子下拉菜单：合并池子总览 + 池子探索
+    safeBind("#poolDropdownTrigger", "click", (e) => {
+      e.stopPropagation();
+      togglePoolDropdown();
+    });
+    document.addEventListener("click", (e) => {
+      const dropdown = document.getElementById("poolDropdown");
+      if (dropdown && !dropdown.contains(e.target)) closePoolDropdown();
     });
     safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
     safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
@@ -8162,6 +8206,21 @@
     safeBind("#activityMoreBtn", "click", () => loadActivityPage());
     safeBind("#settingsBtn", "click", () => openSettingsPage("models"));
     safeBind("#openSettingsHero", "click", () => openSettingsPage("models"));
+    safeBind("#cloneImportBtn", "click", async () => {
+      try {
+        const res = await fetch("/api/clone/import", { method: "POST" });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`导入完成，共导入 ${data.count} 个站点`);
+          loadCloneSites();
+        } else {
+          alert("导入失败: " + (data.error || "未知错误"));
+        }
+      } catch (e) {
+        alert("导入失败: " + e.message);
+      }
+    });
+    safeBind("#cloneRefreshBtn", "click", () => loadCloneSites());
     bindStarButton();
     syncTopbarHeight();
     window.addEventListener("resize", syncTopbarHeight);
@@ -8179,7 +8238,7 @@
       resetCustomFilters();
       showToast("已重置全部筛选条件");
     });
-    safeBind("#poolAllBtn", "click", () => navigateTo("/web/pool-all"));
+    safeBind("#poolAllBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-all"); });
     safeBind("#poolFilterBtn", "click", () => navigateTo("/web/pool-filter"));
     safeBind("#poolAllRefreshBtn", "click", loadPoolAllItems);
     safeBind("#poolFilterRefreshBtn", "click", loadPoolFilterItems);
@@ -8237,7 +8296,7 @@
     safeBind("#observabilityBtn", "click", () => navigateTo("/web/observability"));
     const scheduleObservabilityRefresh = debounceAsync(() => loadObservabilityData(), 500);
     safeBind("#observabilityRefreshBtn", "click", () => scheduleObservabilityRefresh());
-    safeBind("#poolExploreBtn", "click", () => navigateTo("/web/pool-explore"));
+    safeBind("#poolExploreBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-explore"); });
     safeBind("#poolExploreRefreshBtn", "click", () => loadPoolExploreData());
     safeBind("#xhsFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/xhs-feed"); });
     eventDelegation("#xhsFeedBody", "#xhsFeedRefreshBtn", "click", () => loadXhsFeedData(true));
@@ -9056,6 +9115,98 @@
         bindDiaryEvents();
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openClonePage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("clonePage");
+      loadCloneSites();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    let _cloneData = { sites: [], stats: null };
+
+    async function loadCloneSites() {
+      const grid = document.getElementById("cloneGrid");
+      const empty = document.getElementById("cloneEmpty");
+      const loading = document.getElementById("cloneLoading");
+      if (!grid) return;
+      loading.hidden = false;
+      grid.innerHTML = "";
+      try {
+        const [sitesRes, statsRes] = await Promise.all([
+          fetch("/api/clone/sites?limit=200").then(r => r.json()),
+          fetch("/api/clone/stats").then(r => r.json()),
+        ]);
+        _cloneData.sites = sitesRes.ok ? sitesRes.items : [];
+        _cloneData.stats = statsRes.ok ? statsRes.stats : null;
+        renderCloneSites();
+      } catch (e) {
+        grid.innerHTML = `<div class="clone-empty"><p>加载失败: ${e.message}</p></div>`;
+      } finally {
+        loading.hidden = true;
+      }
+    }
+
+    function renderCloneSites() {
+      const grid = document.getElementById("cloneGrid");
+      const empty = document.getElementById("cloneEmpty");
+      const stats = _cloneData.stats;
+      if (stats) {
+        const el = (id) => document.getElementById(id);
+        el("cloneTotalCount").textContent = stats.total_sites || 0;
+        el("cloneTotalSize").textContent = formatBytes(stats.total_size_bytes || 0);
+        el("cloneTotalFiles").textContent = (stats.total_files || 0).toLocaleString();
+      }
+      if (!_cloneData.sites.length) {
+        grid.innerHTML = "";
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      grid.innerHTML = _cloneData.sites.map(site => renderCloneCard(site)).join("");
+    }
+
+    function renderCloneCard(site) {
+      const previewUrl = site.local_path ? `/clone/sites/${site.local_path}` : "#";
+      const size = formatBytes(site.size_bytes || 0);
+      const fileCount = (site.file_count || 0).toLocaleString();
+      const statusBadge = site.status === "cloned" ? "" : `<span class="clone-status-badge clone-status-${site.status}">${site.status}</span>`;
+      const tags = (site.tags || []).map(t => `<span class="clone-tag">${t}</span>`).join("");
+      return `
+        <a class="clone-card" href="${previewUrl}" target="_blank" rel="noopener">
+          <div class="clone-card-body">
+            <h3 class="clone-card-title">${escHtml(site.name)}</h3>
+            ${statusBadge}
+            ${site.description ? `<p class="clone-card-desc">${escHtml(site.description)}</p>` : ""}
+            <div class="clone-card-meta">
+              <span>${size}</span>
+              <span>${fileCount} 文件</span>
+            </div>
+            ${tags ? `<div class="clone-card-tags">${tags}</div>` : ""}
+          </div>
+          <div class="clone-card-footer">
+            <span class="clone-card-category">${site.category || "website"}</span>
+            <span class="clone-card-date">${site.created_at ? new Date(site.created_at).toLocaleDateString() : ""}</span>
+          </div>
+        </a>
+      `;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      let i = 0;
+      let size = bytes;
+      while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+      return size.toFixed(i > 0 ? 1 : 0) + " " + units[i];
+    }
+
+    function escHtml(str) {
+      const div = document.createElement("div");
+      div.appendChild(document.createTextNode(str || ""));
+      return div.innerHTML;
     }
 
     function loadDiaryScripts() {

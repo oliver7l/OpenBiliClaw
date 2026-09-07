@@ -3169,45 +3169,42 @@ class Database:
             (min_score, *guard_params),
         )
         raw_count = int(raw_cursor.fetchone()["count"])
+        # pending 计数：先把"缺池子字段 / 不可链接"的行用 SQL 过滤出来，
+        # 再对剩下的少量行做 viewed 判断——避免对全部 servable 行（数万行）
+        # 逐行 Python 判断导致冷算 2~7s 阻塞读接口。
         pending_cursor = self.conn.execute(
             f"""
-            SELECT
-                bvid,
-                content_id,
-                source,
-                source_platform,
-                content_url,
-                pool_expression,
-                pool_topic_label,
-                style_key,
-                topic_group
+            SELECT bvid, content_id, source, source_platform
             FROM content_cache
             WHERE {_POOL_SERVABLE_STATUS_SQL}
               AND COALESCE(feedback_type, '') != 'dislike'
               AND COALESCE(relevance_score, 0.0) >= ?
               {guard_sql}
               {_POOL_NOT_RECENTLY_RECOMMENDED_SQL}
+              AND (
+                  COALESCE(pool_expression, '') = ''
+                  OR COALESCE(pool_topic_label, '') = ''
+                  OR COALESCE(style_key, '') = ''
+                  OR COALESCE(topic_group, '') = ''
+                  OR (
+                      (
+                          LOWER(COALESCE(source_platform, '')) IN ('xiaohongshu', 'xhs')
+                          OR LOWER(COALESCE(source, '')) LIKE 'xhs-%'
+                          OR LOWER(COALESCE(source, '')) LIKE 'xhs\_%'
+                          OR LOWER(COALESCE(source, '')) LIKE 'xiaohongshu%'
+                      )
+                      AND COALESCE(content_url, '') NOT LIKE '%xsec_token=%'
+                  )
+              )
             """,
             (min_score, *guard_params),
         )
         viewed_content_keys = self.get_recent_viewed_content_keys()
         pending_count = 0
         for row in pending_cursor.fetchall():
-            item = dict(row)
-            if self._is_viewed_row(item, viewed_content_keys):
+            if self._is_viewed_row(dict(row), viewed_content_keys):
                 continue
-            if (
-                not str(item.get("pool_expression") or "").strip()
-                or not str(item.get("pool_topic_label") or "").strip()
-                or not str(item.get("style_key") or "").strip()
-                or not str(item.get("topic_group") or "").strip()
-                or not _is_linkable_pool_source(
-                    item.get("source"),
-                    item.get("source_platform"),
-                    item.get("content_url"),
-                )
-            ):
-                pending_count += 1
+            pending_count += 1
 
         status_counts = self.count_discovery_candidates_by_status()
         pending_eval_count = int(status_counts.get("pending_eval", 0)) + int(

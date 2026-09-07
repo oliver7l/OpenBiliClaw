@@ -59,9 +59,14 @@
             <button class="filter-dropdown-item" id="poolFilterBtn" type="button" role="menuitem">池子筛选</button>
           </div>
         </div>
-        <button class="tab-btn" id="poolAllBtn" type="button">池子总览</button>
+        <div class="filter-dropdown" id="poolDropdown">
+          <button class="tab-btn filter-dropdown-trigger" id="poolDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">池子 ▾</button>
+          <div class="filter-dropdown-menu" id="poolDropdownMenu" role="menu" hidden>
+            <button class="filter-dropdown-item" id="poolAllBtn" type="button" role="menuitem">池子总览</button>
+            <button class="filter-dropdown-item" id="poolExploreBtn" type="button" role="menuitem">池子探索</button>
+          </div>
+        </div>
         <button class="tab-btn" id="observabilityBtn" type="button">观测</button>
-        <button class="tab-btn" id="poolExploreBtn" type="button">池子探索</button>
         <div class="filter-dropdown" id="feedDropdown">
           <button class="tab-btn filter-dropdown-trigger" id="feedDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">推荐流 ▾</button>
           <div class="filter-dropdown-menu" id="feedDropdownMenu" role="menu" hidden>
@@ -79,6 +84,7 @@
         <button class="tab-btn" id="watchLaterBtn" type="button">稍后再看<span class="nav-count-badge" id="watchLaterCountBadge" hidden></span></button>
         <button class="tab-btn" id="favoritesBtn" type="button">我的收藏<span class="nav-count-badge" id="favoritesCountBadge" hidden></span></button>
         <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
+        <button class="tab-btn" id="cloneBtn" type="button">🌐 克隆站</button>
         <button class="tab-btn" id="profileBtn" type="button">我的画像</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="chatBtn" type="button">聊聊口味</button>
@@ -1025,6 +1031,37 @@
           </div>
         </div>
       </div>
+
+      <section class="clone-page content-page" id="clonePage" aria-label="克隆站点" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Clone Sites</p>
+            <h2>🌐 克隆站点</h2>
+            <p class="video-meta">管理和浏览你克隆的网站，一键启动本地预览。</p>
+          </div>
+          <div class="content-page-actions">
+            <button class="pill-btn" id="cloneImportBtn" type="button">扫描导入</button>
+            <button class="pill-btn primary" id="cloneRefreshBtn" type="button">刷新</button>
+          </div>
+        </div>
+        <div class="clone-stats-bar" id="cloneStatsBar">
+          <span class="clone-stat">共 <strong id="cloneTotalCount">0</strong> 个站点</span>
+          <span class="clone-stat">总大小 <strong id="cloneTotalSize">0</strong></span>
+          <span class="clone-stat">总文件 <strong id="cloneTotalFiles">0</strong></span>
+        </div>
+        <div class="clone-filter-bar">
+          <div class="clone-tags" id="cloneTags"></div>
+        </div>
+        <div class="clone-grid" id="cloneGrid">
+          <div class="clone-empty" id="cloneEmpty">
+            <p>还没有克隆站点。点击"扫描导入"从 clone/sites/ 目录导入已有站点，或点击"克隆新站点"添加。</p>
+          </div>
+        </div>
+        <div class="clone-loading" id="cloneLoading" hidden>
+          <div class="spinner"></div>
+          <p>正在加载克隆站点...</p>
+        </div>
+      </section>
 
       <section class="chat-page content-page" id="chatPage" aria-label="聊聊口味" hidden>
         <div class="content-page-head">
