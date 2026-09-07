@@ -4,6 +4,24 @@
 
 ---
 
+## v0.3.191: 修复推荐流 tab 换一批无效与加载慢（2026-09-07）
+
+修复小红书推荐流（/web/xhs-feed）"换一换"不生效与首屏加载慢的问题。
+
+### 换一批不生效
+- fix: `/api/pool/all?shuffle=true` 请求跳过 API 缓存中间件——此前缓存键含完整 query（含 shuffle），30 秒 TTL 内"换一批"命中缓存返回完全相同的 40 条
+- fix: 前端 6 个推荐流 tab（xhs/zhihu/bili/youtube/v2ex/xiaoyuzhou）换一批按钮附加时间戳参数 `_=Date.now()`，从请求层杜绝复用旧缓存
+
+### 加载慢（27.9s → 秒级）
+- perf: pool_all 小红书内容升级 token URL 改为批量预取——此前逐条调用 `_pick_best_xhs_url`（每条 2~3 次 SQL，含无索引 LIKE 全表扫描，40 条 = 80~120 次查询）；现一次 `bvid IN (...)` 查询取回本批全部带 xsec_token 的 URL
+- perf: 新增 `idx_content_cache_source` 索引——`WHERE source=?` 池过滤从全表 SCAN 75244 行（1.4s）降为索引查找（毫秒级）
+- perf: `count_pool_readiness` 结果缓存 TTL 5 秒 → 60 秒——冷算约 2~3s，5 秒 TTL 过短导致每次浏览/换一批都重算
+
+### 行为调整
+- revert: 推荐流抽样恢复全量随机（不受 fresh 限制，suppressed 内容同样可推），与产品预期一致
+
+---
+
 ## v0.3.190: 缓存升级——两级缓存 + 索引优化（2026-09-07）
 
 针对系统变大后的性能问题，升级缓存架构并优化数据库索引。

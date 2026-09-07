@@ -701,11 +701,9 @@ def build_recommendation_router(
 
             # 排序：随机或按状态+质量分
             if shuffle:
-                # 优化：先查所有满足条件的 rowid（只查小字段，不排序），
-                # 再在 Python 中随机采样，最后用 rowid IN (...) 查完整数据。
-                # 避免对 75000 行的大字段进行 ORDER BY RANDOM() 排序。
-                import random as _random
-
+                # 从全部满足条件的候选里随机抽样（fresh/suppressed 一视同仁，
+                # 池子浏览不按状态过滤）。先查 rowid 小字段避免对大字段
+                # ORDER BY RANDOM()，再在 Python 中采样，最后 rowid IN 查完整数据。
                 id_sql = f"""
                     SELECT rowid FROM content_cache
                     WHERE {" AND ".join(where_clauses)}
@@ -715,7 +713,7 @@ def build_recommendation_router(
                 )
                 all_rowids = [r["rowid"] for r in id_rows]
                 sample_size = min(limit, len(all_rowids))
-                selected_rowids = _random.sample(all_rowids, sample_size) if sample_size > 0 else []
+                selected_rowids = random.sample(all_rowids, sample_size) if sample_size > 0 else []
                 if selected_rowids:
                     placeholders = ",".join(["?"] * len(selected_rowids))
                     sql = f"""
@@ -758,13 +756,43 @@ def build_recommendation_router(
                     None, lambda: db.conn.execute(sql, params).fetchall()
                 )
             items = []
+            # xiaohongshu token 批量预取：一次 IN 查询拿到本批所有 note 的
+            # 带 xsec_token 的 content_url，避免逐条调用 pick_best_xhs_url
+            # （每条 2~3 次 SQL，含无索引 LIKE 全表扫描，40 条可拖到 20s+）。
+            xhs_token_by_bvid: dict[str, str] = {}
+            pending_xhs_ids: list[str] = []
+            for r in rows:
+                item_url = str(r["content_url"] or "")
+                item_platform = str(r["source_platform"] or "")
+                if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
+                    note_id = str(r["bvid"] or "")
+                    if note_id:
+                        pending_xhs_ids.append(note_id)
+            if pending_xhs_ids:
+                id_placeholders = ",".join(["?"] * len(pending_xhs_ids))
+                with suppress(Exception):
+                    token_rows = await loop.run_in_executor(
+                        None,
+                        lambda: db.conn.execute(
+                            f"SELECT bvid, content_url FROM content_cache "
+                            f"WHERE bvid IN ({id_placeholders})",
+                            pending_xhs_ids,
+                        ).fetchall(),
+                    )
+                    for t in token_rows:
+                        token_url = t["content_url"]
+                        if isinstance(token_url, str) and "xsec_token=" in token_url:
+                            xhs_token_by_bvid[str(t["bvid"])] = token_url
             for r in rows:
                 item_url = str(r["content_url"] or "")
                 item_platform = str(r["source_platform"] or "")
                 # xiaohongshu: try to upgrade bare URL with xsec_token
                 if item_platform == "xiaohongshu" and item_url and "xsec_token=" not in item_url:
                     note_id = str(r["bvid"] or "")
-                    if note_id:
+                    better = xhs_token_by_bvid.get(note_id or "")
+                    if better:
+                        item_url = better
+                    elif note_id:
                         with suppress(Exception):
                             item_url = pick_best_xhs_url(db, note_id, item_url)
                 items.append(

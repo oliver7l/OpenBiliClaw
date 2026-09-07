@@ -1568,6 +1568,10 @@ def create_app(
             return await call_next(request)
         # 缓存白名单内的 GET 请求
         if path in _DIARY_CACHEABLE_PATHS:
+            # 随机抽样的池子请求（shuffle=true）不缓存：相同 URL 命中缓存
+            # 会让前端"换一批"拿到完全相同的批次，看起来毫无反应。
+            if path == "/api/pool/all" and "shuffle=true" in request.url.query:
+                return await call_next(request)
             key = f"{path}?{request.url.query}"
             # 尝试从两级缓存获取
             cached_data = _api_cache.get(key, namespace=_API_CACHE_NAMESPACE)

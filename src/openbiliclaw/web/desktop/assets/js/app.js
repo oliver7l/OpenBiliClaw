@@ -3663,13 +3663,14 @@
 
     // ── 小红书推荐流 ──────────────────────────────────────────────────────
 
-    function loadXhsFeedData() {
+    function loadXhsFeedData(bust = false) {
       const body = $("#xhsFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "xhs-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "40");
 
@@ -3751,13 +3752,14 @@
 
     // ── 知乎推荐流 ──────────────────────────────────────────────────────
 
-    function loadZhihuFeedData() {
+    function loadZhihuFeedData(bust = false) {
       const body = $("#zhihuFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "zhihu-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "20");
 
@@ -3837,13 +3839,14 @@
       `;
     }
 
-    function loadBiliFeedData() {
+    function loadBiliFeedData(bust = false) {
       const body = $("#biliFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "bili-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "20");
 
@@ -3929,13 +3932,14 @@
       `;
     }
 
-    function loadYoutubeFeedData() {
+    function loadYoutubeFeedData(bust = false) {
       const body = $("#youtubeFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "youtube-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "20");
 
@@ -4016,13 +4020,14 @@
       `;
     }
 
-    function loadV2exFeedData() {
+    function loadV2exFeedData(bust = false) {
       const body = $("#v2exFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "v2ex-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "20");
 
@@ -4104,13 +4109,14 @@
       `;
     }
 
-    function loadXiaoyuzhouFeedData() {
+    function loadXiaoyuzhouFeedData(bust = false) {
       const body = $("#xiaoyuzhouFeedBody");
       if (!body) return;
       body.innerHTML = `<div class="observability-loading">正在加载…</div>`;
 
       const params = new URLSearchParams();
       params.set("source", "xiaoyuzhou-feed");
+      if (bust) params.set("_", String(Date.now()));
       params.set("shuffle", "true");
       params.set("limit", "20");
 
@@ -8200,17 +8206,17 @@
     safeBind("#poolExploreBtn", "click", () => navigateTo("/web/pool-explore"));
     safeBind("#poolExploreRefreshBtn", "click", () => loadPoolExploreData());
     safeBind("#xhsFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/xhs-feed"); });
-    eventDelegation("#xhsFeedBody", "#xhsFeedRefreshBtn", "click", () => loadXhsFeedData());
+    eventDelegation("#xhsFeedBody", "#xhsFeedRefreshBtn", "click", () => loadXhsFeedData(true));
     safeBind("#zhihuFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/zhihu-feed"); });
     safeBind("#biliFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/bili-feed"); });
-    eventDelegation("#zhihuFeedBody", "#zhihuFeedRefreshBtn", "click", () => loadZhihuFeedData());
-    eventDelegation("#biliFeedBody", "#biliFeedRefreshBtn", "click", () => loadBiliFeedData());
+    eventDelegation("#zhihuFeedBody", "#zhihuFeedRefreshBtn", "click", () => loadZhihuFeedData(true));
+    eventDelegation("#biliFeedBody", "#biliFeedRefreshBtn", "click", () => loadBiliFeedData(true));
     safeBind("#youtubeFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/youtube-feed"); });
-    eventDelegation("#youtubeFeedBody", "#youtubeFeedRefreshBtn", "click", () => loadYoutubeFeedData());
+    eventDelegation("#youtubeFeedBody", "#youtubeFeedRefreshBtn", "click", () => loadYoutubeFeedData(true));
     safeBind("#v2exFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/v2ex-feed"); });
-    eventDelegation("#v2exFeedBody", "#v2exFeedRefreshBtn", "click", () => loadV2exFeedData());
+    eventDelegation("#v2exFeedBody", "#v2exFeedRefreshBtn", "click", () => loadV2exFeedData(true));
     safeBind("#xiaoyuzhouFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/xiaoyuzhou-feed"); });
-    eventDelegation("#xiaoyuzhouFeedBody", "#xiaoyuzhouFeedRefreshBtn", "click", () => loadXiaoyuzhouFeedData());
+    eventDelegation("#xiaoyuzhouFeedBody", "#xiaoyuzhouFeedRefreshBtn", "click", () => loadXiaoyuzhouFeedData(true));
     safeBind("#agentRecommendBtn", "click", () => {
       navigateTo("/web/agent-recommend");
       setTimeout(() => loadInterestTags(), 200);

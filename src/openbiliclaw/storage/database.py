@@ -486,9 +486,11 @@ class Database:
         # reads/writes stay consistent without sharing a connection object.
         self._thread_local = threading.local()
         self._admission_min_score = _DEFAULT_ADMISSION_MIN_SCORE
-        # count_pool_readiness 短期缓存（5秒），避免频繁重复计算
+        # count_pool_readiness 短期缓存（60秒）：该函数做 4 次查询 + 逐行处理，
+        # 冷算约 2~3s；available/raw/pending 是库存概览数，60 秒新鲜度足够，
+        # 此前 5 秒 TTL 导致用户每次浏览/换一批（间隔常 >5s）都触发重算拖慢接口。
         self._pool_readiness_cache: tuple[float, dict[str, int]] | None = None
-        self._pool_readiness_cache_ttl = 5.0
+        self._pool_readiness_cache_ttl = 60.0
 
     def set_admission_min_score(self, value: object) -> None:
         """Set the unified recommendation-pool admission floor."""
@@ -5467,6 +5469,10 @@ class Database:
                 ON content_cache (pool_status);
             CREATE INDEX IF NOT EXISTS idx_content_cache_source_platform
                 ON content_cache (source_platform, pool_status);
+            -- v0.3.19x: pool 浏览（/api/pool/all?source=…）按 source 过滤时
+            -- 之前全表 SCAN 75244 行取 rowid，1.4s；此索引后走索引查找毫秒级。
+            CREATE INDEX IF NOT EXISTS idx_content_cache_source
+                ON content_cache (source);
             CREATE INDEX IF NOT EXISTS idx_content_cache_topic_group
                 ON content_cache (topic_group);
             CREATE INDEX IF NOT EXISTS idx_content_cache_feedback_type
