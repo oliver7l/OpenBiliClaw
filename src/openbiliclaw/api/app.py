@@ -724,30 +724,6 @@ def _count_events_by_source_platform(database: Any) -> dict[str, int]:
     return {source: counter.get(source, 0) for source in _SOURCE_SHARE_ORDER}
 
 
-def _select_init_platforms(enabled: set[str], selected: set[str] | None) -> set[str]:
-    """Effective platform sources for a guided-init run.
-
-    ``enabled`` is the config-enabled set; ``selected`` is the extension's
-    per-run checkbox choice (``None`` when no selection was sent — CLI / legacy
-    clients — meaning "use everything enabled"). A sent selection is an
-    explicit local opt-in for those sources, not just a filter over old config.
-    Bilibili flows through here like every other source (v0.3.118+): legacy
-    clients keep their config-enabled behaviour, but deselecting it skips the
-    B站 fetch.
-    """
-    if selected is None:
-        return {
-            normalized
-            for source in enabled
-            if (normalized := _normalize_init_source_key(source)) in _INIT_SOURCE_ORDER
-        }
-    return {
-        normalized
-        for source in selected
-        if (normalized := _normalize_init_source_key(source)) in _INIT_SOURCE_ORDER
-    }
-
-
 def _extension_e2e_actions_for_request(
     payload: ExtensionE2ERunIn,
 ) -> dict[ExtensionE2EPlatform, list[ExtensionE2EAction]]:
@@ -771,44 +747,6 @@ def _extension_e2e_actions_for_request(
             deduped.append(action)
         actions_by_platform[platform] = deduped
     return actions_by_platform
-
-
-def _event_row_id(row: dict[str, Any]) -> int | None:
-    try:
-        event_id = int(row.get("id", 0) or 0)
-    except (TypeError, ValueError):
-        return None
-    return event_id if event_id > 0 else None
-
-
-def _event_row_metadata(row: dict[str, Any]) -> dict[str, Any]:
-    metadata = row.get("metadata", {})
-    if isinstance(metadata, str):
-        try:
-            parsed = json.loads(metadata) if metadata else {}
-        except Exception:
-            parsed = {}
-        metadata = parsed
-    return metadata if isinstance(metadata, dict) else {}
-
-
-def _coerce_e2e_event_rows(rows: object, *, after_event_id: int = 0) -> list[dict[str, Any]]:
-    if not isinstance(rows, list | tuple):
-        return []
-    coerced: list[dict[str, Any]] = []
-    for row in rows:
-        if isinstance(row, dict):
-            item = dict(row)
-        else:
-            try:
-                item = dict(row)
-            except Exception:
-                continue
-        event_id = _event_row_id(item)
-        if event_id is not None and event_id <= after_event_id:
-            continue
-        coerced.append(item)
-    return sorted(coerced, key=lambda item: _event_row_id(item) or 0)
 
 
 def _latest_e2e_event_id(ctx: Any) -> int:
@@ -1166,9 +1104,13 @@ from openbiliclaw.storage.cache import get_cache as _get_cache
 # ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
 from openbiliclaw.api.utils import (
     article_tags_for_context as _article_tags_for_context,
+    coerce_e2e_event_rows as _coerce_e2e_event_rows,
+    event_row_id as _event_row_id,
+    event_row_metadata as _event_row_metadata,
     infer_source_platform_from_url as _infer_source_platform_from_url,
     normalize_init_source_key as _normalize_init_source_key,
     normalize_source_platform as _normalize_source_platform,
+    select_init_platforms as _select_init_platforms,
 )
 
 _api_cache = _get_cache()

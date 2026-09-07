@@ -20,6 +20,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 
+# 引导初始化的平台顺序（与 app.py 中 _INIT_SOURCE_ORDER 保持一致）
+INIT_SOURCE_ORDER: tuple[str, ...] = (
+    "bilibili",
+    "xiaohongshu",
+    "douyin",
+    "youtube",
+    "twitter",
+    "zhihu",
+)
+
+
 def normalize_source_platform(source: object) -> str:
     """Normalize a source/platform key to the canonical platform name."""
     source_key = str(source or "").strip().lower()
@@ -90,3 +101,77 @@ def infer_source_platform_from_url(url: object) -> str:
     if "bilibili.com" in text or "b23.tv" in text:
         return "bilibili"
     return ""
+
+
+def select_init_platforms(
+    enabled: set[str],
+    selected: set[str] | None,
+    *,
+    source_order: tuple[str, ...] = INIT_SOURCE_ORDER,
+) -> set[str]:
+    """Effective platform sources for a guided-init run.
+
+    ``enabled`` is the config-enabled set; ``selected`` is the extension's
+    per-run checkbox choice (``None`` when no selection was sent — CLI / legacy
+    clients — meaning "use everything enabled"). A sent selection is an
+    explicit local opt-in for those sources, not just a filter over old config.
+    Bilibili flows through here like every other source (v0.3.118+): legacy
+    clients keep their config-enabled behaviour, but deselecting it skips the
+    B站 fetch.
+    """
+    if selected is None:
+        return {
+            normalized
+            for source in enabled
+            if (normalized := normalize_init_source_key(source)) in source_order
+        }
+    return {
+        normalized
+        for source in selected
+        if (normalized := normalize_init_source_key(source)) in source_order
+    }
+
+
+def event_row_id(row: dict[str, Any]) -> int | None:
+    """Extract a positive integer event id from a row dict, else None."""
+    try:
+        event_id = int(row.get("id", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    return event_id if event_id > 0 else None
+
+
+def event_row_metadata(row: dict[str, Any]) -> dict[str, Any]:
+    """Extract and normalize the metadata dict from an event row."""
+    metadata = row.get("metadata", {})
+    if isinstance(metadata, str):
+        try:
+            parsed = json.loads(metadata) if metadata else {}
+        except Exception:
+            parsed = {}
+        metadata = parsed
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def coerce_e2e_event_rows(
+    rows: object,
+    *,
+    after_event_id: int = 0,
+) -> list[dict[str, Any]]:
+    """Coerce raw event rows into sorted dicts with fresh event ids."""
+    if not isinstance(rows, list | tuple):
+        return []
+    coerced: list[dict[str, Any]] = []
+    for row in rows:
+        if isinstance(row, dict):
+            item = dict(row)
+        else:
+            try:
+                item = dict(row)
+            except Exception:
+                continue
+        event_id = event_row_id(item)
+        if event_id is not None and event_id <= after_event_id:
+            continue
+        coerced.append(item)
+    return sorted(coerced, key=lambda item: event_row_id(item) or 0)
