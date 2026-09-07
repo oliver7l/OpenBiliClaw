@@ -4,6 +4,11 @@
 
 ---
 
+## v0.3.193: 推荐流极简 feed 直读，秒开秒换（2026-09-07）
+
+- 新增 `GET /api/pool/feed` 端点：推荐流浏览直读子库 `content_cache`，只按 source 过滤 + 随机抽样，不经过 `count_pool_readiness` / serve 引擎 / LLM 等环节，请求耗时由原 `/api/pool/all` 冷算 3.8s 降至 15~60ms（页面内实测 42~197ms）。
+- 桌面 Web 6 个 feed tab（xhs / zhihu / bili / youtube / v2ex / xiaoyuzhou）从 `/api/pool/all` 切换至 `/api/pool/feed`：页面打开内容 ~0.3s 出现，换一批请求毫秒级；`/api/pool/all` 保留给池子总览 / 池子探索 / 平台筛选。
+- 修复 SQLite NULL 序列化：`cover_url` / `quality_score` 等可空列经 pydantic 序列化时兜底为空串 / 0.0，避免 `PoolItemOut` ValidationError（500）。
 ## v0.3.192: 推荐流数据拆分独立子库 pool.db（总库+子库）（2026-09-07）
 
 - **推荐流 4 表（`content_cache` / `recommendations` / `user_feedback` / `xhs_observed_urls`）从主库 `data/openbiliclaw.db` 迁移到独立子库 `data/pool.db`**，推荐流读写与主库（日记/阅读库/事件等）彻底隔离锁域，采集器与补货写库不再拖慢推荐流读、主库其他模块写也不再影响推荐流。

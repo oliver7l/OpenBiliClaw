@@ -603,6 +603,64 @@ def build_recommendation_router(
             reason=str(result.get("reason", "")),
         )
 
+    @router.get("/api/pool/feed", response_model=PoolAllResponse)
+    async def pool_feed(
+        source: str = Query(..., description="Feed source, e.g. xhs-feed."),
+        limit: int = Query(default=40, ge=1, le=200, description="Max items to return."),
+        shuffle: bool = Query(default=True, description="Randomize the result order."),
+        status: str | None = Query(default=None, description="Filter by pool_status."),
+    ) -> PoolAllResponse:
+        """极简 feeds 直读（v0.3.192+）。
+
+        直接查推荐流子库 ``content_cache``，只按 source 过滤 + 随机抽样，
+        不经过 count_pool_readiness / serve 引擎 / LLM 等环节，毫秒级返回，
+        供桌面 Web 各平台 feed tab（xhs/zhihu/bili/youtube/v2ex/xiaoyuzhou）
+        秒开秒换使用。``available`` 复用 total（同源计数），保持响应结构
+        与 /api/pool/all 一致。
+        """
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+        loop = asyncio.get_running_loop()
+
+        where = ["source = ?"]
+        params: list[Any] = [source]
+        if status:
+            where.append("pool_status = ?")
+            params.append(status)
+        where_sql = " AND ".join(where)
+
+        def _query_total() -> int:
+            rows = db.conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM content_cache WHERE {where_sql}",
+                params,
+            ).fetchall()
+            return int(rows[0]["cnt"]) if rows else 0
+
+        def _query_rows() -> list[Any]:
+            order = "ORDER BY RANDOM()" if shuffle else "ORDER BY discovered_at DESC, bvid DESC"
+            sql = (
+                "SELECT bvid, title, up_name, source_platform, content_type, "
+                "cover_url, content_url, body_text, pool_status, quality_score, "
+                "quality_reason, topic_group, pool_expression "
+                f"FROM content_cache WHERE {where_sql} {order} LIMIT ?"
+            )
+            return db.conn.execute(sql, params + [limit]).fetchall()
+
+        total = await loop.run_in_executor(None, _query_total)
+        rows = await loop.run_in_executor(None, _query_rows)
+        # SQLite 可能返回 NULL（如 cover_url / quality_score），pydantic
+        # str/float 字段不接受 None：字符串兜底空串、数值兜底 0.0。
+        def _clean(row: Any) -> dict[str, Any]:
+            d = dict(row)
+            for k, v in d.items():
+                if v is None:
+                    d[k] = 0.0 if k == "quality_score" else ""
+            return d
+
+        items = [PoolItemOut(**_clean(r)) for r in rows]
+        return PoolAllResponse(items=items, total=total, available=total, raw=0, pending=0)
+
     @router.get("/api/pool/all", response_model=PoolAllResponse)
     async def pool_all(
         platform: str | None = Query(default=None, description="Filter by source_platform."),

@@ -36,6 +36,7 @@
       subscriptions: "/subscriptions",
       subscriptionsStats: "/subscriptions/stats",
       poolAll: "/pool/all",
+      poolFeed: "/pool/feed",
     };
     ENDPOINTS.userFeedback = "/api/user-feedback";
     ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
@@ -3674,7 +3675,7 @@
       params.set("shuffle", "true");
       params.set("limit", "40");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
@@ -3763,7 +3764,7 @@
       params.set("shuffle", "true");
       params.set("limit", "20");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
@@ -3850,7 +3851,7 @@
       params.set("shuffle", "true");
       params.set("limit", "20");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
@@ -3943,7 +3944,7 @@
       params.set("shuffle", "true");
       params.set("limit", "20");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
@@ -4031,7 +4032,7 @@
       params.set("shuffle", "true");
       params.set("limit", "20");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
@@ -4120,7 +4121,7 @@
       params.set("shuffle", "true");
       params.set("limit", "20");
 
-      requestJson(`${ENDPOINTS.poolAll}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
+      requestJson(`${ENDPOINTS.poolFeed}?${params.toString()}`, { timeoutMs: 30000 }).then((data) => {
         const items = data?.items || [];
         const total = data?.total || 0;
         if (!items.length) {
