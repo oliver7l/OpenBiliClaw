@@ -62,12 +62,17 @@
         <button class="tab-btn" id="poolAllBtn" type="button">池子总览</button>
         <button class="tab-btn" id="observabilityBtn" type="button">观测</button>
         <button class="tab-btn" id="poolExploreBtn" type="button">池子探索</button>
-        <button class="tab-btn" id="xhsFeedBtn" type="button">小红书推荐流</button>
-        <button class="tab-btn" id="zhihuFeedBtn" type="button">知乎推荐流</button>
-        <button class="tab-btn" id="biliFeedBtn" type="button">B站推荐流</button>
-        <button class="tab-btn" id="youtubeFeedBtn" type="button">YouTube推荐流</button>
-        <button class="tab-btn" id="v2exFeedBtn" type="button">V2EX推荐流</button>
-        <button class="tab-btn" id="xiaoyuzhouFeedBtn" type="button">小宇宙推荐流</button>
+        <div class="filter-dropdown" id="feedDropdown">
+          <button class="tab-btn filter-dropdown-trigger" id="feedDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">推荐流 ▾</button>
+          <div class="filter-dropdown-menu" id="feedDropdownMenu" role="menu" hidden>
+            <button class="filter-dropdown-item" id="xhsFeedBtn" type="button" role="menuitem">小红书推荐流</button>
+            <button class="filter-dropdown-item" id="zhihuFeedBtn" type="button" role="menuitem">知乎推荐流</button>
+            <button class="filter-dropdown-item" id="biliFeedBtn" type="button" role="menuitem">B站推荐流</button>
+            <button class="filter-dropdown-item" id="youtubeFeedBtn" type="button" role="menuitem">YouTube推荐流</button>
+            <button class="filter-dropdown-item" id="v2exFeedBtn" type="button" role="menuitem">V2EX推荐流</button>
+            <button class="filter-dropdown-item" id="xiaoyuzhouFeedBtn" type="button" role="menuitem">小宇宙推荐流</button>
+          </div>
+        </div>
         <button class="tab-btn" id="libraryBtn" type="button">阅读库</button>
         <button class="tab-btn" id="readArchiveBtn" type="button">已读库</button>
         <button class="tab-btn" id="delightTabBtn" type="button">惊喜</button>
@@ -310,6 +315,12 @@
           <button class="diary-subtab" data-view="fragments" type="button">✨ 随手记</button>
           <button class="diary-subtab" data-view="reflection" type="button">📈 反思回顾</button>
           <button class="diary-subtab" data-view="knowledge" type="button">🕸️ 知识网络</button>
+          <button class="diary-subtab" data-view="self-evolution" type="button">🧬 自进化中心</button>
+          <button class="diary-subtab" data-view="insights" type="button">💡 洞察中心</button>
+          <button class="diary-subtab" data-view="memory" type="button">🧠 记忆中心</button>
+          <button class="diary-subtab" data-view="emotion" type="button">💖 情绪中心</button>
+          <button class="diary-subtab" data-view="advanced-memory" type="button">🧬 高级记忆</button>
+          <button class="diary-subtab" data-view="timeline" type="button">📅 时间线</button>
           <button class="diary-subtab" data-view="semantic" type="button">🔍 语义搜索</button>
           <button class="diary-subtab" data-view="chat" type="button">💬 日记对话</button>
         </div>
@@ -679,6 +690,226 @@
 
           <!-- 网络统计内容 -->
           <div class="diary-knowledge-stats" id="kgStatsContent" hidden></div>
+        </div>
+
+        <!-- 自进化中心视图 -->
+        <div class="diary-self-evolution-view" id="diarySelfEvolutionView" hidden>
+          <div class="diary-se-intro">
+            <div class="diary-se-icon">🧬</div>
+            <h3>自进化中心 — 让日记系统主动学习和成长</h3>
+            <p>系统每天夜间自动分析你的日记，构建用户画像、检测行为变化、生成夜间日志。它会越来越懂你。</p>
+            <button class="diary-se-run-btn" id="seRunNightlyBtn" type="button">🌙 立即运行夜间循环</button>
+          </div>
+
+          <!-- 子 Tab -->
+          <div class="diary-se-subtabs">
+            <button class="diary-se-subtab active" data-se-view="profile" type="button">👤 用户画像</button>
+            <button class="diary-se-subtab" data-se-view="drifts" type="button">⚠️ 漂移检测</button>
+            <button class="diary-se-subtab" data-se-view="nightly" type="button">🌙 夜间日志</button>
+            <button class="diary-se-subtab" data-se-view="tags" type="button">🏷️ 标签优化</button>
+          </div>
+
+          <!-- 用户画像内容 -->
+          <div class="diary-se-content" id="seProfileContent">
+            <div class="diary-se-loading">加载中...</div>
+          </div>
+
+          <!-- 漂移检测内容 -->
+          <div class="diary-se-content" id="seDriftsContent" hidden>
+            <div class="diary-se-loading">加载中...</div>
+          </div>
+
+          <!-- 夜间日志内容 -->
+          <div class="diary-se-content" id="seNightlyContent" hidden>
+            <div class="diary-se-loading">加载中...</div>
+          </div>
+
+          <!-- 标签优化内容 -->
+          <div class="diary-se-content" id="seTagsContent" hidden>
+            <div class="diary-se-loading">加载中...</div>
+          </div>
+        </div>
+
+        <!-- 洞察中心视图 -->
+        <div class="diary-insights-view" id="diaryInsightsView" hidden>
+          <div class="diary-insights-intro">
+            <div class="diary-insights-icon">💡</div>
+            <h3>洞察中心 — 主动发现日记中的有趣模式</h3>
+            <p>系统自动分析历史日记，发现模式、生成晨间简报、追踪未完成事项。</p>
+          </div>
+
+          <div class="diary-insights-subtabs">
+            <button class="diary-insights-subtab active" data-insights-view="memory" type="button">📅 历史上的今天</button>
+            <button class="diary-insights-subtab" data-insights-view="patterns" type="button">🔍 模式发现</button>
+            <button class="diary-insights-subtab" data-insights-view="briefing" type="button">🌅 晨间简报</button>
+            <button class="diary-insights-subtab" data-insights-view="loops" type="button">🔄 开放循环</button>
+          </div>
+
+          <div class="diary-insights-content" id="insightsMemoryContent">
+            <div class="diary-insights-loading">加载中...</div>
+          </div>
+          <div class="diary-insights-content" id="insightsPatternsContent" hidden>
+            <div class="diary-insights-loading">加载中...</div>
+          </div>
+          <div class="diary-insights-content" id="insightsBriefingContent" hidden>
+            <div class="diary-insights-loading">加载中...</div>
+          </div>
+          <div class="diary-insights-content" id="insightsLoopsContent" hidden>
+            <div class="diary-insights-loading">加载中...</div>
+          </div>
+        </div>
+
+        <!-- 记忆中心视图 -->
+        <div class="diary-memory-view" id="diaryMemoryView" hidden>
+          <div class="diary-memory-intro">
+            <div class="diary-memory-icon">🧠</div>
+            <h3>记忆中心 — 三层记忆系统</h3>
+            <p>Hot（0-24h）/ Warm（1-7天）/ Cold（7+天）三层记忆，自动压缩、智能检索。</p>
+            <div class="diary-memory-actions">
+              <button class="diary-memory-btn" id="memoryUpdateTiersBtn" type="button">🔄 更新分层</button>
+              <button class="diary-memory-btn" id="memoryCompressBtn" type="button">🗜️ 压缩Cold记忆</button>
+              <button class="diary-memory-btn" id="memoryMaintenanceBtn" type="button">🛠️ 一键维护</button>
+            </div>
+          </div>
+
+          <div class="diary-memory-stats" id="memoryStatsContent">
+            <div class="diary-memory-loading">加载中...</div>
+          </div>
+
+          <div class="diary-memory-search">
+            <h4>🔎 记忆搜索</h4>
+            <div class="diary-memory-search-bar">
+              <input type="text" id="memorySearchInput" placeholder="输入关键词搜索记忆..." />
+              <select id="memoryTierSelect">
+                <option value="">全部层级</option>
+                <option value="hot">🔥 Hot</option>
+                <option value="warm">☀️ Warm</option>
+                <option value="cold">❄️ Cold</option>
+              </select>
+              <button id="memorySearchBtn" type="button">搜索</button>
+            </div>
+            <div class="diary-memory-search-results" id="memorySearchResults"></div>
+          </div>
+        </div>
+
+        <!-- 情绪中心视图 -->
+        <div class="diary-emotion-view" id="diaryEmotionView" hidden>
+          <div class="diary-emotion-intro">
+            <div class="diary-emotion-icon">💖</div>
+            <h3>情绪中心 — 效价/唤醒二维情绪模型</h3>
+            <p>用效价（愉悦度）+ 唤醒（活跃度）二维坐标分析情绪，避免标签崩溃。支持情绪趋势、预测和倦怠检测。</p>
+            <div class="diary-emotion-actions">
+              <button class="diary-emotion-btn" id="emotionAnalyzeAllBtn" type="button">🔄 分析全部日记</button>
+              <button class="diary-emotion-btn" id="emotionRefreshBtn" type="button">📊 刷新数据</button>
+            </div>
+          </div>
+
+          <div class="diary-emotion-stats" id="emotionStatsContent">
+            <div class="diary-emotion-loading">加载中...</div>
+          </div>
+
+          <div class="diary-emotion-trend">
+            <h4>📈 情绪趋势（近30天）</h4>
+            <div class="diary-emotion-trend-chart" id="emotionTrendChart"></div>
+          </div>
+
+          <div class="diary-emotion-forecast">
+            <h4>🔮 情绪预测（未来7天）</h4>
+            <div class="diary-emotion-forecast-list" id="emotionForecastList"></div>
+          </div>
+
+          <div class="diary-emotion-burnout">
+            <h4>🔥 倦怠评估</h4>
+            <div class="diary-emotion-burnout-content" id="emotionBurnoutContent"></div>
+          </div>
+        </div>
+
+        <!-- 高级记忆视图 -->
+        <div class="diary-advanced-memory-view" id="diaryAdvancedMemoryView" hidden>
+          <div class="diary-advanced-memory-intro">
+            <div class="diary-advanced-memory-icon">🧬</div>
+            <h3>高级记忆 — 6层记忆 + 信念系统 + 记忆巩固</h3>
+            <p>情景/语义自我/信念/关系/叙事状态/日记 6 层记忆，信念冲突检测，艾宾浩斯遗忘曲线，夜间梦境回顾。</p>
+            <div class="diary-advanced-memory-actions">
+              <button class="diary-advanced-memory-btn" id="advancedMemoryBuildBtn" type="button">🔨 构建6层记忆</button>
+              <button class="diary-advanced-memory-btn" id="advancedMemoryConsolidateBtn" type="button">🔄 记忆巩固</button>
+              <button class="diary-advanced-memory-btn" id="advancedMemoryDreamBtn" type="button">🌙 梦境回顾</button>
+            </div>
+          </div>
+
+          <div class="diary-advanced-memory-stats" id="advancedMemoryStatsContent">
+            <div class="diary-advanced-memory-loading">加载中...</div>
+          </div>
+
+          <div class="diary-advanced-memory-beliefs">
+            <h4>💡 核心信念</h4>
+            <div class="diary-advanced-memory-beliefs-list" id="advancedMemoryBeliefsList"></div>
+          </div>
+
+          <div class="diary-advanced-memory-search">
+            <h4>🔎 记忆搜索</h4>
+            <div class="diary-advanced-memory-search-bar">
+              <input type="text" id="advancedMemorySearchInput" placeholder="输入关键词搜索记忆..." />
+              <select id="advancedMemoryLayerSelect">
+                <option value="">全部层级</option>
+                <option value="episodic">情景记忆</option>
+                <option value="semantic_self">语义自我</option>
+                <option value="beliefs">信念</option>
+                <option value="relationships">关系</option>
+                <option value="narrative">叙事状态</option>
+                <option value="diary">日记摘要</option>
+              </select>
+              <button id="advancedMemorySearchBtn" type="button">搜索</button>
+            </div>
+            <div class="diary-advanced-memory-search-results" id="advancedMemorySearchResults"></div>
+          </div>
+        </div>
+
+        <!-- 时间线视图 -->
+        <div class="diary-timeline-view" id="diaryTimelineView" hidden>
+          <div class="diary-timeline-intro">
+            <div class="diary-timeline-icon">📅</div>
+            <h3>智能时间线 — 自动生成类型化卡片</h3>
+            <p>AI 自动将日记组织成事件/人物/地点/任务/指标/文章/情绪/里程碑 8 种类型卡片，按类型和实体筛选浏览。</p>
+            <div class="diary-timeline-actions">
+              <button class="diary-timeline-btn" id="timelineGenerateBtn" type="button">🔨 生成全部卡片</button>
+              <button class="diary-timeline-btn" id="timelineRefreshBtn" type="button">📊 刷新</button>
+            </div>
+          </div>
+
+          <div class="diary-timeline-stats" id="timelineStatsContent">
+            <div class="diary-timeline-loading">加载中...</div>
+          </div>
+
+          <div class="diary-timeline-filters">
+            <h4>🔍 筛选卡片</h4>
+            <div class="diary-timeline-filter-bar">
+              <select id="timelineTypeSelect">
+                <option value="">全部类型</option>
+                <option value="event">事件</option>
+                <option value="person">人物</option>
+                <option value="place">地点</option>
+                <option value="task">任务</option>
+                <option value="metric">指标</option>
+                <option value="article">文章</option>
+                <option value="emotion">情绪</option>
+                <option value="milestone">里程碑</option>
+              </select>
+              <input type="text" id="timelineEntityInput" placeholder="筛选实体（如：乐乐、艳艳、公司）..." />
+              <input type="number" id="timelineMinImportance" placeholder="最低重要性" min="0" max="1" step="0.1" />
+              <button id="timelineFilterBtn" type="button">筛选</button>
+            </div>
+          </div>
+
+          <div class="diary-timeline-milestones">
+            <h4>🎯 里程碑事件</h4>
+            <div class="diary-timeline-milestones-list" id="timelineMilestonesList"></div>
+          </div>
+
+          <div class="diary-timeline-cards">
+            <h4>📋 时间线卡片</h4>
+            <div class="diary-timeline-cards-list" id="timelineCardsList"></div>
+          </div>
         </div>
 
         <!-- 语义搜索视图 -->
@@ -1672,10 +1903,6 @@
 
   <div class="toast" id="toast" role="status"></div>
   <script src="/web/assets/js/app.js" defer></script>
-  <script src="/web/assets/js/diary-insights.js" defer></script>
-  <script src="/web/assets/js/diary-people.js" defer></script>
-  <script src="/web/assets/js/diary-semantic.js" defer></script>
-  <script src="/web/assets/js/diary-chat.js" defer></script>
-  <script src="/web/assets/js/diary-reflection.js" defer></script>
-  <script src="/web/assets/js/diary-knowledge.js" defer></script>
+  <!-- 日记模块脚本由 app.js 在进入日记页面时按需动态加载 -->
+
 </body></html>

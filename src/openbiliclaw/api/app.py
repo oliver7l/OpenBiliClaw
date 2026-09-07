@@ -17,7 +17,8 @@ import time
 import uuid
 from collections import defaultdict
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
@@ -152,6 +153,34 @@ from openbiliclaw.api.models import (
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
+from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService, MoodLevel
+from openbiliclaw.diary.importer import DiaryImporter
+from openbiliclaw.health import (
+    AllergyCreate,
+    AppointmentCreate,
+    AppointmentUpdate,
+    ConditionCreate,
+    ConditionUpdate,
+    DoctorCreate,
+    DoctorUpdate,
+    EncounterCreate,
+    EncounterUpdate,
+    HealthDocumentCreate,
+    HealthDocumentUpdate,
+    HealthInsightCreate,
+    HealthService,
+    ImmunizationCreate,
+    LabResultCreate,
+    LabResultUpdate,
+    MedicationCreate,
+    MedicationLogCreate,
+    MedicationUpdate,
+    PatientCreate,
+    PatientUpdate,
+    ProcedureCreate,
+    ProcedureUpdate,
+    VitalsCreate,
+)
 from openbiliclaw.recommendation.agents import IntentAgent, InterestSyncer, RankAgent
 from openbiliclaw.recommendation.quality_scorer import QualityScorer, SupportsQualityCandidate
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
@@ -174,34 +203,6 @@ from openbiliclaw.runtime.keyword_fetch import (
 from openbiliclaw.soul.dislike_writeback import (
     apply_new_dislikes,
     topics_for_confirmed_avoidance,
-)
-from openbiliclaw.diary import DiaryService, DiaryEntryCreate, DiaryEntryUpdate, MoodLevel
-from openbiliclaw.diary.importer import DiaryImporter
-from openbiliclaw.health import (
-    HealthService,
-    PatientCreate,
-    PatientUpdate,
-    EncounterCreate,
-    EncounterUpdate,
-    ConditionCreate,
-    ConditionUpdate,
-    MedicationCreate,
-    MedicationUpdate,
-    LabResultCreate,
-    LabResultUpdate,
-    ProcedureCreate,
-    ProcedureUpdate,
-    AllergyCreate,
-    VitalsCreate,
-    ImmunizationCreate,
-    DoctorCreate,
-    DoctorUpdate,
-    HealthDocumentCreate,
-    HealthDocumentUpdate,
-    HealthInsightCreate,
-    AppointmentCreate,
-    AppointmentUpdate,
-    MedicationLogCreate,
 )
 
 # Project root: src/openbiliclaw/api/app.py → ../../..
@@ -1225,6 +1226,47 @@ def _image_cache_response(url: str) -> FileResponse | None:
     )
 
 
+# ─── 日记统计接口两级缓存（内存 L1 + 磁盘 L2）────────────────
+# 统计类接口读多写少、计算密集（如关键词分词、时间线聚合），加短 TTL 缓存；
+# 任何写操作自动清空缓存，保证数据一致性。
+# 使用统一缓存层 TwoLevelCache：内存 L1（微秒级）+ 磁盘 L2（diskcache，持久化，重启不失效）
+from openbiliclaw.storage.cache import get_cache as _get_cache
+
+_api_cache = _get_cache()
+_DIARY_CACHE_TTL = 30.0
+# 缓存命名空间，用于批量失效
+_API_CACHE_NAMESPACE = "api_stats"
+_DIARY_CACHEABLE_PATHS = {
+    # 日记相关
+    "/api/diary/stats",
+    "/api/diary/tags",
+    "/api/diary/persons",
+    "/api/diary/extraction-stats",
+    "/api/diary/memory/stats",
+    "/api/diary/insights/keywords",
+    "/api/diary/emotion/stats",
+    "/api/diary/emotion/trend",
+    "/api/diary/emotion/forecast",
+    "/api/diary/emotion/burnout",
+    "/api/diary/advanced-memory/overview",
+    "/api/diary/advanced-memory/layers",
+    "/api/diary/advanced-memory/beliefs",
+    "/api/diary/advanced-memory/conflicts",
+    "/api/diary/timeline/stats",
+    "/api/diary/timeline/milestones",
+    "/api/diary/knowledge-graph/stats",
+    "/api/diary/knowledge-graph/mixed",
+    # 内容池与推荐（大表查询慢，加缓存）
+    "/api/pool/all",
+    "/api/pool/stats",
+    "/api/recommendations",
+    "/api/saved",
+    "/api/observability",
+    "/api/home/feed",
+    "/api/library",
+}
+
+
 def create_app(
     *,
     memory_manager: Any | None = None,
@@ -1685,6 +1727,42 @@ def create_app(
                     {"error": "init_running", "detail": "初始化进行中，请稍后再试"},
                     status_code=409,
                 )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def _diary_stats_cache(request: Request, call_next: Any) -> Any:
+        path = request.url.path
+        # 任何非 GET 请求都清空缓存（写操作后数据可能变化）
+        if request.method.upper() != "GET":
+            _api_cache.invalidate_namespace(_API_CACHE_NAMESPACE)
+            return await call_next(request)
+        # 缓存白名单内的 GET 请求
+        if path in _DIARY_CACHEABLE_PATHS:
+            key = f"{path}?{request.url.query}"
+            # 尝试从两级缓存获取
+            cached_data = _api_cache.get(key, namespace=_API_CACHE_NAMESPACE)
+            if cached_data is not None:
+                # cached_data 格式: (body_bytes, media_type, headers_dict)
+                body, media_type, headers = cached_data
+                return Response(body, media_type=media_type, headers=headers)
+            resp = await call_next(request)
+            if resp.status_code == 200:
+                # 兼容 JSONResponse 与 StreamingResponse（GZip 包装）
+                body = (
+                    await resp.body()
+                    if hasattr(resp, "body")
+                    else b"".join([chunk async for chunk in resp.body_iterator])
+                )
+                # 存储可序列化格式: (body_bytes, media_type, headers_dict)
+                cached_data = (body, resp.media_type, dict(resp.headers))
+                _api_cache.set(
+                    key,
+                    cached_data,
+                    ttl=_DIARY_CACHE_TTL,
+                    namespace=_API_CACHE_NAMESPACE,
+                )
+                return Response(body, media_type=resp.media_type, headers=dict(resp.headers))
+            return resp
         return await call_next(request)
 
     # Register AFTER the degraded guard so the auth gate is the outermost http
@@ -4363,10 +4441,37 @@ def create_app(
             total = int(total_row[0]["cnt"]) if total_row else 0
 
             # 排序：随机或按状态+质量分
-            order_clause = (
-                "ORDER BY RANDOM()"
-                if shuffle
-                else """
+            if shuffle:
+                # 优化：先查所有满足条件的 rowid（只查小字段，不排序），
+                # 再在 Python 中随机采样，最后用 rowid IN (...) 查完整数据。
+                # 避免对 75000 行的大字段进行 ORDER BY RANDOM() 排序。
+                import random as _random
+                id_sql = f"""
+                    SELECT rowid FROM content_cache
+                    WHERE {" AND ".join(where_clauses)}
+                """
+                id_rows = await loop.run_in_executor(
+                    None, lambda: db.conn.execute(id_sql, params).fetchall()
+                )
+                all_rowids = [r["rowid"] for r in id_rows]
+                sample_size = min(limit, len(all_rowids))
+                selected_rowids = _random.sample(all_rowids, sample_size) if sample_size > 0 else []
+                if selected_rowids:
+                    placeholders = ",".join(["?"] * len(selected_rowids))
+                    sql = f"""
+                        SELECT bvid, title, up_name, source_platform, content_type,
+                               cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
+                               topic_group, pool_expression
+                        FROM content_cache
+                        WHERE rowid IN ({placeholders})
+                    """
+                    rows = await loop.run_in_executor(
+                        None, lambda: db.conn.execute(sql, selected_rowids).fetchall()
+                    )
+                else:
+                    rows = []
+            else:
+                order_clause = """
                 ORDER BY
                   CASE pool_status
                     WHEN 'fresh' THEN 1
@@ -4379,18 +4484,17 @@ def create_app(
                   quality_score DESC,
                   bvid DESC
             """
-            )
-            sql = f"""
-                SELECT bvid, title, up_name, source_platform, content_type,
-                       cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
-                       topic_group, pool_expression
-                FROM content_cache
-                WHERE {" AND ".join(where_clauses)}
-                {order_clause}
-                LIMIT ?
-            """
-            params.append(limit)
-            rows = await loop.run_in_executor(None, lambda: db.conn.execute(sql, params).fetchall())
+                sql = f"""
+                    SELECT bvid, title, up_name, source_platform, content_type,
+                           cover_url, content_url, body_text, pool_status, quality_score, quality_reason,
+                           topic_group, pool_expression
+                    FROM content_cache
+                    WHERE {" AND ".join(where_clauses)}
+                    {order_clause}
+                    LIMIT ?
+                """
+                params.append(limit)
+                rows = await loop.run_in_executor(None, lambda: db.conn.execute(sql, params).fetchall())
             items = []
             for r in rows:
                 item_url = str(r["content_url"] or "")
@@ -11650,7 +11754,7 @@ Keep keywords focused and specific. Remove stop words."""
             }
         )
 
-    @app.get("/api/diary/{entry_id}")
+    @app.get("/api/diary/{entry_id:int}")
     def diary_get(entry_id: int) -> JSONResponse:
         """获取单篇日记详情（含分析结果）。"""
         svc = _get_diary_service()
@@ -12227,6 +12331,657 @@ Keep keywords focused and specific. Remove stop words."""
             "data": [r.__dict__ for r in relations],
             "total": len(relations),
         })
+
+    # ─── 自进化 API（夜间自我改进循环） ─────────────────────────────
+
+    @app.get("/api/diary/self-evolution/profile")
+    def diary_se_profile(
+        target_date: str | None = None,
+    ) -> JSONResponse:
+        """获取用户画像。
+
+        Query:
+        - target_date: 目标日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        profile = se.get_user_profile(target_date)
+        if profile is None:
+            return JSONResponse({"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404)
+        return JSONResponse({"ok": True, "data": profile.to_dict()})
+
+    @app.get("/api/diary/self-evolution/profile/history")
+    def diary_se_profile_history(
+        limit: int = 30,
+    ) -> JSONResponse:
+        """获取画像历史快照。
+
+        Query:
+        - limit: 返回数量上限，默认 30
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        history = se.get_profile_history(limit)
+        return JSONResponse({"ok": True, "data": history, "total": len(history)})
+
+    @app.get("/api/diary/self-evolution/drifts")
+    def diary_se_drifts(
+        drift_type: str | None = None,
+        severity: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> JSONResponse:
+        """获取漂移事件列表。
+
+        Query:
+        - drift_type: 按类型筛选（behavior/emotion/focus/relationship/writing）
+        - severity: 按严重程度筛选（info/warning/alert）
+        - status: 按状态筛选（new/acknowledged/dismissed）
+        - limit: 返回数量上限，默认 50
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        drifts = se.get_drifts(drift_type, severity, status, limit)
+        return JSONResponse({
+            "ok": True,
+            "data": [d.to_dict() for d in drifts],
+            "total": len(drifts),
+        })
+
+    @app.get("/api/diary/self-evolution/nightly-logs")
+    def diary_se_nightly_logs(
+        limit: int = 30,
+    ) -> JSONResponse:
+        """获取夜间日志列表。
+
+        Query:
+        - limit: 返回数量上限，默认 30
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        logs = se.get_nightly_logs(limit)
+        return JSONResponse({"ok": True, "data": logs, "total": len(logs)})
+
+    @app.get("/api/diary/self-evolution/nightly-logs/{log_date}")
+    def diary_se_nightly_log_detail(
+        log_date: str,
+    ) -> JSONResponse:
+        """获取指定日期的夜间日志详情。
+
+        Path:
+        - log_date: 日志日期（YYYY-MM-DD）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        log = se.get_nightly_log(log_date)
+        if log is None:
+            return JSONResponse({"ok": False, "error": "夜间日志不存在"}, status_code=404)
+        return JSONResponse({"ok": True, "data": log.to_dict()})
+
+    @app.post("/api/diary/self-evolution/run-nightly")
+    def diary_se_run_nightly(
+        target_date: str | None = None,
+    ) -> JSONResponse:
+        """手动触发夜间自我改进循环。
+
+        Query:
+        - target_date: 目标日期，默认昨天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        nightly_log = se.run_nightly_cycle(target_date)
+        return JSONResponse({
+            "ok": True,
+            "message": "夜间循环完成",
+            "data": nightly_log.to_dict(),
+        })
+
+    @app.get("/api/diary/self-evolution/tag-optimizations")
+    def diary_se_tag_optimizations(
+        target_date: str | None = None,
+    ) -> JSONResponse:
+        """获取标签优化建议。
+
+        Query:
+        - target_date: 目标日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from dataclasses import asdict
+
+        from openbiliclaw.diary import SelfEvolutionService
+
+        se = SelfEvolutionService(svc.store)
+        if target_date is None:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+        optimization = se.optimize_tags(target_date)
+        return JSONResponse({"ok": True, "data": asdict(optimization)})
+
+    # ─── 主动洞察引擎 API（第二阶段） ────────────────────────────────
+
+    @app.get("/api/diary/insights/memory-on-this-day")
+    def diary_insights_memory_on_this_day(
+        target_date: str | None = None,
+    ) -> JSONResponse:
+        """获取历史上的今天。
+
+        Query:
+        - target_date: 目标日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        memory = engine.get_memory_on_this_day(target_date)
+        return JSONResponse({"ok": True, "data": asdict(memory)})
+
+    @app.get("/api/diary/insights/patterns")
+    def diary_insights_patterns(
+        lookback_days: int = 90,
+    ) -> JSONResponse:
+        """发现日记中的模式。
+
+        Query:
+        - lookback_days: 回溯天数，默认 90
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        patterns = engine.discover_patterns(lookback_days)
+        return JSONResponse({
+            "ok": True,
+            "data": [asdict(p) for p in patterns],
+            "total": len(patterns),
+        })
+
+    @app.get("/api/diary/insights/morning-briefing")
+    def diary_insights_morning_briefing(
+        briefing_date: str | None = None,
+    ) -> JSONResponse:
+        """获取晨间简报。
+
+        Query:
+        - briefing_date: 简报日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        briefing = engine.get_morning_briefing(briefing_date)
+        if briefing is None:
+            # 如果不存在，生成一个
+            briefing = engine.generate_morning_briefing(briefing_date)
+        return JSONResponse({"ok": True, "data": briefing.to_dict()})
+
+    @app.post("/api/diary/insights/morning-briefing/generate")
+    def diary_insights_generate_morning_briefing(
+        briefing_date: str | None = None,
+    ) -> JSONResponse:
+        """生成晨间简报。
+
+        Query:
+        - briefing_date: 简报日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        briefing = engine.generate_morning_briefing(briefing_date)
+        return JSONResponse({"ok": True, "data": briefing.to_dict()})
+
+    @app.get("/api/diary/insights/open-loops")
+    def diary_insights_open_loops(
+        status: str | None = None,
+        loop_type: str | None = None,
+        priority: str | None = None,
+        limit: int = 50,
+    ) -> JSONResponse:
+        """获取开放循环列表。
+
+        Query:
+        - status: 状态筛选（open/in_progress/completed/abandoned）
+        - loop_type: 类型筛选（promise/goal/todo/question/idea）
+        - priority: 优先级筛选（high/medium/low）
+        - limit: 返回数量上限，默认 50
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        loops = engine.get_open_loops(status, loop_type, priority, limit)
+        return JSONResponse({
+            "ok": True,
+            "data": [l.to_dict() for l in loops],
+            "total": len(loops),
+        })
+
+    @app.post("/api/diary/insights/open-loops/scan")
+    def diary_insights_scan_open_loops(
+        lookback_days: int = 365,
+    ) -> JSONResponse:
+        """扫描日记中的开放循环。
+
+        Query:
+        - lookback_days: 回溯天数，默认 365
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        loops = engine.scan_open_loops(lookback_days)
+        return JSONResponse({
+            "ok": True,
+            "data": [l.to_dict() for l in loops],
+            "total": len(loops),
+            "message": f"扫描完成，发现 {len(loops)} 个开放循环",
+        })
+
+    @app.put("/api/diary/insights/open-loops/{loop_id}/status")
+    def diary_insights_update_open_loop_status(
+        loop_id: str,
+        status: str,
+    ) -> JSONResponse:
+        """更新开放循环状态。
+
+        Path:
+        - loop_id: 循环 ID
+
+        Query:
+        - status: 新状态（open/in_progress/completed/abandoned）
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        success = engine.update_open_loop_status(loop_id, status)
+        if success:
+            return JSONResponse({"ok": True, "message": "状态更新成功"})
+        return JSONResponse({"ok": False, "error": "状态更新失败"}, status_code=400)
+
+    @app.get("/api/diary/insights/report")
+    def diary_insights_report(
+        target_date: str | None = None,
+    ) -> JSONResponse:
+        """生成综合洞察报告。
+
+        Query:
+        - target_date: 目标日期，默认今天
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import InsightEngineService
+
+        engine = InsightEngineService(svc.store)
+        report = engine.generate_insight_report(target_date)
+        return JSONResponse({"ok": True, "data": report.to_dict()})
+
+    # ─── 三层记忆系统 API（第三阶段） ────────────────────────────────
+
+    @app.get("/api/diary/memory/stats")
+    def diary_memory_stats() -> JSONResponse:
+        """获取记忆系统统计。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        stats = memory.get_memory_stats()
+        return JSONResponse({"ok": True, "data": stats.to_dict()})
+
+    @app.post("/api/diary/memory/update-tiers")
+    def diary_memory_update_tiers() -> JSONResponse:
+        """更新所有日记的记忆层级。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        updated = memory.update_memory_tiers()
+        return JSONResponse({"ok": True, "updated": updated, "message": f"更新了 {updated} 个记忆条目的层级"})
+
+    @app.post("/api/diary/memory/compress-cold")
+    def diary_memory_compress_cold() -> JSONResponse:
+        """压缩所有 Cold 层记忆。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        result = memory.compress_all_cold_memories()
+        return JSONResponse({"ok": True, "data": result.to_dict()})
+
+    @app.post("/api/diary/memory/maintenance")
+    def diary_memory_maintenance() -> JSONResponse:
+        """运行记忆维护（分层更新 + 压缩 + 重要性重算）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        result = memory.run_memory_maintenance()
+        return JSONResponse({"ok": True, "data": result.to_dict()})
+
+    @app.get("/api/diary/memory/search")
+    def diary_memory_search(
+        query: str = "",
+        tier: str | None = None,
+        limit: int = 20,
+        min_importance: float = 0.0,
+    ) -> JSONResponse:
+        """搜索记忆。
+
+        Query:
+        - query: 搜索关键词
+        - tier: 记忆层级过滤（hot/warm/cold）
+        - limit: 返回数量上限，默认 20
+        - min_importance: 最低重要性评分，默认 0
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        results = memory.search_memories(query, tier, limit, min_importance)
+        return JSONResponse({
+            "ok": True,
+            "data": results,
+            "total": len(results),
+        })
+
+    @app.get("/api/diary/memory/{diary_id}")
+    def diary_memory_get_by_id(diary_id: int) -> JSONResponse:
+        """根据 ID 获取记忆条目。
+
+        Path:
+        - diary_id: 日记 ID
+        """
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import MemorySystemService
+
+        memory = MemorySystemService(svc.store)
+        entry = memory.get_memory_by_id(diary_id)
+        if entry is None:
+            return JSONResponse({"ok": False, "error": "记忆条目不存在"}, status_code=404)
+        return JSONResponse({"ok": True, "data": entry.to_dict()})
+
+    # ─── 情绪系统（效价/唤醒二维模型）API ────────────────────────────
+
+    @app.get("/api/diary/emotion/stats")
+    def diary_emotion_stats() -> JSONResponse:
+        """获取情绪统计概览。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import EmotionAnalyzer
+
+        analyzer = EmotionAnalyzer(svc.store)
+        stats = analyzer.get_emotion_stats()
+        return JSONResponse({"ok": True, "data": stats})
+
+    @app.get("/api/diary/emotion/trend")
+    def diary_emotion_trend(days: int = 30) -> JSONResponse:
+        """获取情绪趋势（按天聚合）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import EmotionAnalyzer
+
+        analyzer = EmotionAnalyzer(svc.store)
+        trend = analyzer.get_emotion_trend(days=days)
+        return JSONResponse({"ok": True, "data": [t.to_dict() for t in trend]})
+
+    @app.get("/api/diary/emotion/forecast")
+    def diary_emotion_forecast(days: int = 7) -> JSONResponse:
+        """预测未来 N 天的情绪。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import EmotionAnalyzer
+
+        analyzer = EmotionAnalyzer(svc.store)
+        forecasts = analyzer.forecast_emotion(days=days)
+        return JSONResponse({"ok": True, "data": [f.to_dict() for f in forecasts]})
+
+    @app.get("/api/diary/emotion/burnout")
+    def diary_emotion_burnout(days: int = 30) -> JSONResponse:
+        """倦怠评估。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import EmotionAnalyzer
+
+        analyzer = EmotionAnalyzer(svc.store)
+        assessment = analyzer.assess_burnout(days=days)
+        return JSONResponse({"ok": True, "data": assessment.to_dict()})
+
+    @app.post("/api/diary/emotion/analyze-all")
+    def diary_emotion_analyze_all() -> JSONResponse:
+        """分析所有日记的情绪。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import EmotionAnalyzer
+
+        analyzer = EmotionAnalyzer(svc.store)
+        count = analyzer.analyze_all_diaries()
+        return JSONResponse({"ok": True, "data": {"analyzed": count}})
+
+    # ─── 高级记忆系统（6层记忆 + 信念 + 巩固）API ───────────────────
+
+    @app.get("/api/diary/advanced-memory/overview")
+    def diary_advanced_memory_overview() -> JSONResponse:
+        """获取高级记忆系统概览。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        overview = am.get_overview()
+        return JSONResponse({"ok": True, "data": overview})
+
+    @app.get("/api/diary/advanced-memory/layers")
+    def diary_advanced_memory_layers() -> JSONResponse:
+        """获取各记忆层统计。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        stats = am.get_memory_layer_stats()
+        return JSONResponse({"ok": True, "data": [s.to_dict() for s in stats]})
+
+    @app.get("/api/diary/advanced-memory/beliefs")
+    def diary_advanced_memory_beliefs(category: str | None = None) -> JSONResponse:
+        """获取信念列表。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        beliefs = am.get_beliefs(category=category)
+        return JSONResponse({"ok": True, "data": [b.to_dict() for b in beliefs]})
+
+    @app.get("/api/diary/advanced-memory/conflicts")
+    def diary_advanced_memory_conflicts() -> JSONResponse:
+        """检测并获取信念冲突。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        conflicts = am.detect_belief_conflicts()
+        return JSONResponse({"ok": True, "data": [c.to_dict() for c in conflicts]})
+
+    @app.post("/api/diary/advanced-memory/build")
+    def diary_advanced_memory_build() -> JSONResponse:
+        """从日记构建 6 层记忆。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        result = am.build_memory_layers()
+        return JSONResponse({"ok": True, "data": result})
+
+    @app.post("/api/diary/advanced-memory/consolidate")
+    def diary_advanced_memory_consolidate() -> JSONResponse:
+        """运行记忆巩固（遗忘曲线 + 提升/降级/遗忘）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        result = am.consolidate_memories()
+        return JSONResponse({"ok": True, "data": result.to_dict()})
+
+    @app.post("/api/diary/advanced-memory/dream-review")
+    def diary_advanced_memory_dream_review() -> JSONResponse:
+        """运行夜间梦境状态回顾（验证教训）。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        result = am.dream_state_review()
+        return JSONResponse({"ok": True, "data": result.to_dict()})
+
+    @app.get("/api/diary/advanced-memory/search")
+    def diary_advanced_memory_search(
+        query: str = "",
+        layer: str | None = None,
+        min_importance: float = 0.0,
+        limit: int = 20,
+    ) -> JSONResponse:
+        """搜索记忆。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import AdvancedMemoryService
+
+        am = AdvancedMemoryService(svc.store)
+        results = am.search_memories(query=query, layer=layer, min_importance=min_importance, limit=limit)
+        return JSONResponse({"ok": True, "data": results})
+
+    # ─── 智能时间线卡片 API ───────────────────────────────────────────
+
+    @app.get("/api/diary/timeline/cards")
+    def diary_timeline_cards(
+        card_type: str | None = None,
+        entity: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        min_importance: float = 0.0,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> JSONResponse:
+        """查询时间线卡片。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import TimelineService
+
+        tl = TimelineService(svc.store)
+        cards = tl.get_cards(
+            card_type=card_type,
+            entity=entity,
+            start_date=start_date,
+            end_date=end_date,
+            min_importance=min_importance,
+            limit=limit,
+            offset=offset,
+        )
+        return JSONResponse({"ok": True, "data": [c.to_dict() for c in cards]})
+
+    @app.get("/api/diary/timeline/stats")
+    def diary_timeline_stats() -> JSONResponse:
+        """获取时间线统计。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import TimelineService
+
+        tl = TimelineService(svc.store)
+        stats = tl.get_stats()
+        return JSONResponse({"ok": True, "data": stats.to_dict()})
+
+    @app.get("/api/diary/timeline/milestones")
+    def diary_timeline_milestones(limit: int = 20) -> JSONResponse:
+        """获取里程碑卡片。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import TimelineService
+
+        tl = TimelineService(svc.store)
+        milestones = tl.get_milestones(limit=limit)
+        return JSONResponse({"ok": True, "data": [m.to_dict() for m in milestones]})
+
+    @app.post("/api/diary/timeline/generate-all")
+    def diary_timeline_generate_all() -> JSONResponse:
+        """为所有日记生成时间线卡片。"""
+        svc = _get_diary_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        from openbiliclaw.diary import TimelineService
+
+        tl = TimelineService(svc.store)
+        total = tl.generate_all_cards()
+        return JSONResponse({"ok": True, "data": {"total_cards": total}})
 
     # ─── 碎片（随手记）API ───────────────────────────────────────────
 
@@ -13776,14 +14531,26 @@ Keep keywords focused and specific. Remove stop words."""
             import hashlib
 
             digest = hashlib.sha256()
-            for relative in ("assets/css/app.css", "assets/js/app.js"):
-                path = _desktop_dir / relative
-                if not path.is_file():
-                    continue
-                stat = path.stat()
-                digest.update(relative.encode("utf-8"))
-                digest.update(str(stat.st_mtime_ns).encode("ascii"))
-                digest.update(str(stat.st_size).encode("ascii"))
+            # 扫描整个 assets 目录（含日记模块 JS），任何前端文件变更都会刷新版本号，
+            # 保证浏览器不会命中旧缓存
+            assets_dir = _desktop_dir / "assets"
+            if assets_dir.is_dir():
+                for path in sorted(assets_dir.rglob("*")):
+                    if path.is_file():
+                        rel = path.relative_to(_desktop_dir).as_posix()
+                        stat = path.stat()
+                        digest.update(rel.encode("utf-8"))
+                        digest.update(str(stat.st_mtime_ns).encode("ascii"))
+                        digest.update(str(stat.st_size).encode("ascii"))
+            else:
+                for relative in ("assets/css/app.css", "assets/js/app.js"):
+                    path = _desktop_dir / relative
+                    if not path.is_file():
+                        continue
+                    stat = path.stat()
+                    digest.update(relative.encode("utf-8"))
+                    digest.update(str(stat.st_mtime_ns).encode("ascii"))
+                    digest.update(str(stat.st_size).encode("ascii"))
             return digest.hexdigest()[:12]
 
         def _desktop_index_response() -> Response:
@@ -13798,6 +14565,11 @@ Keep keywords focused and specific. Remove stop words."""
             html = html.replace(
                 'src="/web/assets/js/app.js"',
                 f'src="/web/assets/js/app.js?v={version}"',
+            )
+            # 注入版本号全局变量，供动态加载的日记模块脚本做缓存控制
+            html = html.replace(
+                "</head>",
+                f'<script>window.__ASSET_VERSION="{version}";</script></head>',
             )
             return Response(
                 html,
@@ -13837,6 +14609,7 @@ Keep keywords focused and specific. Remove stop words."""
             "v2ex-feed",
             "xiaoyuzhou-feed",
             "agent-recommend",
+            "self-evolution",
         }
 
         @app.get("/web/{page}", include_in_schema=False)
@@ -13917,7 +14690,7 @@ Keep keywords focused and specific. Remove stop words."""
     @app.get("/api/url/processors")
     async def list_url_processors():
         """List all registered URL content processors."""
-        from openbiliclaw.sources.url_processors import list_processors, get_all_source_types
+        from openbiliclaw.sources.url_processors import get_all_source_types, list_processors
         processors = list_processors()
         return {
             "processors": processors,
@@ -13988,8 +14761,6 @@ Keep keywords focused and specific. Remove stop words."""
             The inserted article ID, or None if insertion failed.
         """
         import sqlite3
-        import json
-        from datetime import datetime, timezone
 
         # Get database path from config
         db_path = "data/openbiliclaw.db"
@@ -14170,11 +14941,11 @@ Keep keywords focused and specific. Remove stop words."""
     from openbiliclaw.self_evolution import (
         InsightReportGenerator,
         InterestDriftDetector,
-        TopicMiner,
         KnowledgeCardGenerator,
         KnowledgeGraphBuilder,
         ProactivePushEngine,
         PushConfig,
+        TopicMiner,
     )
 
     _self_evo_db = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
@@ -14580,5 +15351,110 @@ Keep keywords focused and specific. Remove stop words."""
                 stats[table] = 0
         conn.close()
         return {"status": "running", "stats": stats}
+
+    # ─── Auto Topic Generator (自动专题生成引擎) ─────────────────────
+
+    @app.get("/api/self-evolution/auto-topic/candidates")
+    async def auto_topic_candidates(min_mentions: int = 50, limit: int = 10):
+        """Discover candidate topics from knowledge graph.
+
+        Args:
+            min_mentions: Minimum entity mention count.
+            limit: Maximum number of candidates to return.
+        """
+        from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
+        generator = AutoTopicGenerator(_self_evo_db)
+        candidates = generator.discover_candidates(min_mentions=min_mentions, limit=limit)
+        return {
+            "candidates": [
+                {
+                    "name": c.name,
+                    "slug": c.slug,
+                    "description": c.description,
+                    "keywords": c.keywords,
+                    "entity_mention_count": c.entity_mention_count,
+                    "article_count": c.article_count,
+                    "platforms": c.platforms,
+                    "quality_score": c.quality_score,
+                    "related_entities": c.related_entities,
+                }
+                for c in candidates
+            ],
+            "count": len(candidates),
+        }
+
+    @app.post("/api/self-evolution/auto-topic/generate")
+    async def auto_topic_generate(payload: dict[str, Any] | None = None):
+        """Generate a topic from a candidate.
+
+        Request body:
+        - name: Topic name (required if no candidate)
+        - slug: Topic slug (optional)
+        - keywords: List of search keywords (required if no candidate)
+        - description: Topic description (optional)
+        - max_articles: Maximum articles to include (default 50)
+        - use_llm: Whether to use LLM for summary generation (default true)
+        """
+        from openbiliclaw.self_evolution.auto_topic_generator import (
+            AutoTopicGenerator,
+            TopicCandidate,
+        )
+        payload = payload or {}
+
+        # 从候选主题生成，或从请求参数创建
+        if "name" in payload and "keywords" in payload:
+            candidate = TopicCandidate(
+                name=payload["name"],
+                slug=payload.get("slug") or payload["name"].lower().replace(" ", "-"),
+                description=payload.get("description", f"关于{payload['name']}的跨平台综合专题"),
+                keywords=payload["keywords"],
+                entity_mention_count=payload.get("entity_mention_count", 0),
+            )
+        else:
+            return JSONResponse({"error": "name and keywords are required"}, status_code=400)
+
+        max_articles = int(payload.get("max_articles", 50))
+        use_llm = bool(payload.get("use_llm", True))
+        llm_service = getattr(ctx, "llm_service", None) if use_llm else None
+
+        generator = AutoTopicGenerator(_self_evo_db, llm_service=llm_service)
+        topic = generator.generate_topic(candidate, max_articles=max_articles, use_llm=use_llm)
+
+        if topic is None:
+            return JSONResponse({"error": "Failed to generate topic (no articles found)"}, status_code=404)
+
+        return topic.to_dict()
+
+    @app.post("/api/self-evolution/auto-topic/auto-generate")
+    async def auto_topic_auto_generate(payload: dict[str, Any] | None = None):
+        """Automatically discover and generate topics.
+
+        Request body (optional):
+        - min_mentions: Minimum entity mention count (default 50)
+        - max_topics: Maximum topics to generate (default 3)
+        - max_articles_per_topic: Maximum articles per topic (default 50)
+        - use_llm: Whether to use LLM for summary (default true)
+        """
+        from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
+        payload = payload or {}
+
+        min_mentions = int(payload.get("min_mentions", 50))
+        max_topics = int(payload.get("max_topics", 3))
+        max_articles_per_topic = int(payload.get("max_articles_per_topic", 50))
+        use_llm = bool(payload.get("use_llm", True))
+        llm_service = getattr(ctx, "llm_service", None) if use_llm else None
+
+        generator = AutoTopicGenerator(_self_evo_db, llm_service=llm_service)
+        topics = generator.auto_generate(
+            min_mentions=min_mentions,
+            max_topics=max_topics,
+            max_articles_per_topic=max_articles_per_topic,
+            use_llm=use_llm,
+        )
+
+        return {
+            "generated": [t.to_dict() for t in topics],
+            "count": len(topics),
+        }
 
     return app

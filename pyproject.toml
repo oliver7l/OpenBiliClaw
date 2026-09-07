@@ -121,6 +121,9 @@ select = [
 "src/openbiliclaw/storage/database.py" = ["E501"]
 "src/openbiliclaw/runtime/refresh.py" = ["E501"]
 "src/openbiliclaw/cli.py" = ["E501"]
+"src/openbiliclaw/diary/advanced_memory.py" = ["E501"]
+"src/openbiliclaw/diary/emotion.py" = ["E501"]
+"src/openbiliclaw/diary/timeline.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

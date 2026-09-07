@@ -12,10 +12,15 @@
 (function () {
   "use strict";
 
+  let _initialized = false;
+
   // ═══════════════════════════════════════════
-  // 初始化
+  // 初始化（幂等：只执行一次，避免重复绑定事件和重复加载）
   // ═══════════════════════════════════════════
   function init() {
+    if (_initialized) return;
+    _initialized = true;
+
     // 批量提取按钮
     const extractBtn = document.getElementById("extractBatchBtn");
     if (extractBtn) {
@@ -288,10 +293,6 @@
     alert(`按标签「${tagName}」筛选功能开发中...`);
   };
 
-  // DOM 加载完成后初始化
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  // 由日记页面动态加载后手动初始化
+  window.__initDiaryPeople = init;
 })();

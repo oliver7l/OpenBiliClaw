@@ -1217,7 +1217,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "libraryPage", "readArchivePage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "libraryPage", "readArchivePage", "settingsPage"];
 
     function showMainPage(pageId) {
       MAIN_PAGE_IDS.forEach((id) => {
@@ -1246,6 +1246,11 @@
       document.querySelectorAll(".filter-dropdown-item").forEach((item) => {
         item.classList.toggle("is-active", item === activeTab);
       });
+      // 推荐流下拉菜单：当前在推荐流页面时高亮触发按钮和对应菜单项
+      const feedPageIds = ["xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage"];
+      const isFeedPage = feedPageIds.includes(pageId);
+      const feedTrigger = document.getElementById("feedDropdownTrigger");
+      if (feedTrigger) feedTrigger.classList.toggle("is-active", isFeedPage);
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
@@ -1470,6 +1475,55 @@
       wechat: "公众号", reddit: "Reddit", other: "其他",
     };
     const VIDEO_SOURCE_TYPES = new Set(["youtube", "bilibili", "douyin"]);
+
+    // ── 日记模块按需加载脚本清单（提前声明：顶层 routeFromPath() 会在
+    //    app.js 解析早期调用 openDiaryPage，变量必须在其之前初始化）──
+    var _diaryScriptsPromise = null;
+    var DIARY_SCRIPTS = [
+      "diary-insights.js",
+      "diary-people.js",
+      "diary-semantic.js",
+      "diary-chat.js",
+      "diary-reflection.js",
+      "diary-knowledge.js",
+      "diary-self-evolution.js",
+      "diary-insights-center.js",
+      "diary-enhanced-center.js",
+    ];
+
+    // ── 日记系统 Diary state（提前声明，避免 routeFromPath 初始化时访问未初始化变量）──
+    const diaryState = {
+      entries: [],
+      total: 0,
+      offset: 0,
+      limit: 50,
+      selectedId: null,
+      editingId: null,
+      search: "",
+      moodFilter: "",
+      sourceFilter: "",
+      loading: false,
+    };
+
+    const MOOD_LABELS = {
+      very_happy: "非常开心",
+      happy: "开心",
+      neutral: "平静",
+      sad: "低落",
+      very_sad: "非常低落",
+      angry: "生气",
+      anxious: "焦虑",
+      unknown: "未标注",
+    };
+
+    const DIARY_SOURCE_LABELS = {
+      manual: "手动",
+      import_lele: "乐乐日记",
+      import_text: "文本导入",
+      import_markdown: "Markdown",
+      api: "API",
+    };
+    let diaryEventsBound = false;
 
     // Render the source-type filter chips from the live article distribution so
     // newly synced platforms (bilibili/youtube/douyin/zhihu/...) appear without
@@ -2544,6 +2598,29 @@
     function closeFilterDropdown() {
       const menu = document.getElementById("filterDropdownMenu");
       const trigger = document.getElementById("filterDropdownTrigger");
+      if (menu) menu.hidden = true;
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleFeedDropdown() {
+      const menu = document.getElementById("feedDropdownMenu");
+      const trigger = document.getElementById("feedDropdownTrigger");
+      if (!menu || !trigger) return;
+      const isOpen = !menu.hidden;
+      if (isOpen) {
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      } else {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.left = `${rect.left}px`;
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+      }
+    }
+    function closeFeedDropdown() {
+      const menu = document.getElementById("feedDropdownMenu");
+      const trigger = document.getElementById("feedDropdownTrigger");
       if (menu) menu.hidden = true;
       if (trigger) trigger.setAttribute("aria-expanded", "false");
     }
@@ -7963,6 +8040,15 @@
       const dropdown = document.getElementById("filterDropdown");
       if (dropdown && !dropdown.contains(e.target)) closeFilterDropdown();
     });
+    // 推荐流下拉菜单：合并6个平台推荐流
+    safeBind("#feedDropdownTrigger", "click", (e) => {
+      e.stopPropagation();
+      toggleFeedDropdown();
+    });
+    document.addEventListener("click", (e) => {
+      const dropdown = document.getElementById("feedDropdown");
+      if (dropdown && !dropdown.contains(e.target)) closeFeedDropdown();
+    });
     safeBind("#watchLaterBtn", "click", () => navigateTo("/web/watchLater"));
     safeBind("#favoritesBtn", "click", () => navigateTo("/web/saved"));
     safeBind("#profileMemoryMoreBtn", "click", loadMoreProfileMemory);
@@ -8113,17 +8199,17 @@
     safeBind("#observabilityRefreshBtn", "click", () => scheduleObservabilityRefresh());
     safeBind("#poolExploreBtn", "click", () => navigateTo("/web/pool-explore"));
     safeBind("#poolExploreRefreshBtn", "click", () => loadPoolExploreData());
-    safeBind("#xhsFeedBtn", "click", () => navigateTo("/web/xhs-feed"));
+    safeBind("#xhsFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/xhs-feed"); });
     eventDelegation("#xhsFeedBody", "#xhsFeedRefreshBtn", "click", () => loadXhsFeedData());
-    safeBind("#zhihuFeedBtn", "click", () => navigateTo("/web/zhihu-feed"));
-    safeBind("#biliFeedBtn", "click", () => navigateTo("/web/bili-feed"));
+    safeBind("#zhihuFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/zhihu-feed"); });
+    safeBind("#biliFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/bili-feed"); });
     eventDelegation("#zhihuFeedBody", "#zhihuFeedRefreshBtn", "click", () => loadZhihuFeedData());
     eventDelegation("#biliFeedBody", "#biliFeedRefreshBtn", "click", () => loadBiliFeedData());
-    safeBind("#youtubeFeedBtn", "click", () => navigateTo("/web/youtube-feed"));
+    safeBind("#youtubeFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/youtube-feed"); });
     eventDelegation("#youtubeFeedBody", "#youtubeFeedRefreshBtn", "click", () => loadYoutubeFeedData());
-    safeBind("#v2exFeedBtn", "click", () => navigateTo("/web/v2ex-feed"));
+    safeBind("#v2exFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/v2ex-feed"); });
     eventDelegation("#v2exFeedBody", "#v2exFeedRefreshBtn", "click", () => loadV2exFeedData());
-    safeBind("#xiaoyuzhouFeedBtn", "click", () => navigateTo("/web/xiaoyuzhou-feed"));
+    safeBind("#xiaoyuzhouFeedBtn", "click", () => { closeFeedDropdown(); navigateTo("/web/xiaoyuzhou-feed"); });
     eventDelegation("#xiaoyuzhouFeedBody", "#xiaoyuzhouFeedRefreshBtn", "click", () => loadXiaoyuzhouFeedData());
     safeBind("#agentRecommendBtn", "click", () => {
       navigateTo("/web/agent-recommend");
@@ -8930,39 +9016,7 @@
       document.getElementById("selfEvoDetail").hidden = true;
     });
 
-    // ── 日记系统 Diary ──────────────────────────────────────────
-
-    const diaryState = {
-      entries: [],
-      total: 0,
-      offset: 0,
-      limit: 50,
-      selectedId: null,
-      editingId: null,
-      search: "",
-      moodFilter: "",
-      sourceFilter: "",
-      loading: false,
-    };
-
-    const MOOD_LABELS = {
-      very_happy: "非常开心",
-      happy: "开心",
-      neutral: "平静",
-      sad: "低落",
-      very_sad: "非常低落",
-      angry: "生气",
-      anxious: "焦虑",
-      unknown: "未标注",
-    };
-
-    const SOURCE_LABELS = {
-      manual: "手动",
-      import_lele: "乐乐日记",
-      import_text: "文本导入",
-      import_markdown: "Markdown",
-      api: "API",
-    };
+    // ── 日记系统 Diary 函数 ──────────────────────────────────────────
 
     function openDiaryPage() {
       closeMobileMenu();
@@ -8970,13 +9024,40 @@
       showMainPage("diaryPage");
       diaryState.offset = 0;
       diaryState.selectedId = null;
-      loadDiaryStats();
-      loadDiaryList();
-      bindDiaryEvents();
+      loadDiaryScripts().then(() => {
+        loadDiaryStats();
+        loadDiaryList();
+        bindDiaryEvents();
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    let diaryEventsBound = false;
+    function loadDiaryScripts() {
+      if (_diaryScriptsPromise) return _diaryScriptsPromise;
+      _diaryScriptsPromise = (async () => {
+        for (const name of DIARY_SCRIPTS) {
+          if (document.querySelector(`script[data-diary-script="${name}"]`)) continue;
+          await new Promise((resolve, reject) => {
+            const el = document.createElement("script");
+            const ver = window.__ASSET_VERSION || "";
+            el.src = `/web/assets/js/${name}${ver ? `?v=${ver}` : ""}`;
+            el.dataset.diaryScript = name;
+            el.onload = resolve;
+            el.onerror = reject;
+            document.head.appendChild(el);
+          });
+        }
+        // 动态加载的脚本不会触发 DOMContentLoaded，手动执行各自 init
+        if (typeof window.__initDiaryInsights === "function") window.__initDiaryInsights();
+        if (typeof window.__initDiaryPeople === "function") window.__initDiaryPeople();
+        if (typeof window.__initDiarySemantic === "function") window.__initDiarySemantic();
+        if (typeof window.__initDiaryChat === "function") window.__initDiaryChat();
+        if (typeof window.__initDiaryEnhancedCenter === "function") window.__initDiaryEnhancedCenter();
+        // 其余模块（反思/知识/自进化/洞察/记忆中心）在切换子 Tab 时按需初始化
+      })();
+      return _diaryScriptsPromise;
+    }
+
     function bindDiaryEvents() {
       if (diaryEventsBound) return;
       diaryEventsBound = true;
@@ -9109,7 +9190,7 @@
         const isActive = entry.id === diaryState.selectedId;
         const preview = entry.content.replace(/\n/g, " ").substring(0, 80);
         const moodLabel = MOOD_LABELS[entry.mood] || entry.mood;
-        const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
+        const sourceLabel = DIARY_SOURCE_LABELS[entry.source] || entry.source;
         return `
           <div class="diary-list-item ${isActive ? "active" : ""}" data-id="${entry.id}">
             <div class="diary-list-item-date">${entry.entry_date}${entry.title ? " · " + escapeHtml(entry.title) : ""}</div>
@@ -9150,7 +9231,7 @@
 
           document.getElementById("diaryDetailDate").textContent = entry.entry_date;
           document.getElementById("diaryDetailMood").textContent = MOOD_LABELS[entry.mood] || entry.mood;
-          document.getElementById("diaryDetailSource").textContent = SOURCE_LABELS[entry.source] || entry.source;
+          document.getElementById("diaryDetailSource").textContent = DIARY_SOURCE_LABELS[entry.source] || entry.source;
           document.getElementById("diaryDetailTitle").textContent = entry.title || "(无标题)";
           document.getElementById("diaryDetailBody").textContent = entry.content;
 

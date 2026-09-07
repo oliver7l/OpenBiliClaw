@@ -15,6 +15,7 @@
   let selectedNode = null;
   let draggingNode = null;
   let mousePos = { x: 0, y: 0 };
+  let _initialized = false;
 
   // 节点颜色
   const NODE_COLORS = {
@@ -23,8 +24,11 @@
     theme: "#10b981",
   };
 
-  // 初始化
+  // 初始化（幂等：只执行一次，避免重复绑定事件和重复加载）
   function init() {
+    if (_initialized) return;
+    _initialized = true;
+
     canvas = document.getElementById("diaryKnowledgeCanvas");
     if (!canvas) return;
     ctx = canvas.getContext("2d");

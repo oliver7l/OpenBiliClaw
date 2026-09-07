@@ -256,10 +256,6 @@
     return div.innerHTML;
   }
 
-  // 页面加载完成后初始化
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  // 由日记页面动态加载后手动初始化
+  window.__initDiaryChat = init;
 })();

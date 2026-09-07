@@ -9,9 +9,13 @@
   let currentReflectionView = "weekly";
   let currentWeekStart = null;
   let currentYearMonth = null;
+  let _initialized = false;
 
-  // 初始化
+  // 初始化（幂等：只执行一次，避免重复绑定事件和重复加载）
   function init() {
+    if (_initialized) return;
+    _initialized = true;
+
     initReflectionSubtabs();
     initWeeklyControls();
     initMonthlyControls();

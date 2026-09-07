@@ -486,6 +486,9 @@ class Database:
         # reads/writes stay consistent without sharing a connection object.
         self._thread_local = threading.local()
         self._admission_min_score = _DEFAULT_ADMISSION_MIN_SCORE
+        # count_pool_readiness 短期缓存（5秒），避免频繁重复计算
+        self._pool_readiness_cache: tuple[float, dict[str, int]] | None = None
+        self._pool_readiness_cache_ttl = 5.0
 
     def set_admission_min_score(self, value: object) -> None:
         """Set the unified recommendation-pool admission floor."""
@@ -498,6 +501,10 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout = 30000")
+        # 增加页面缓存到 64MB（负数表示 KB），减少磁盘 IO，提升查询性能
+        self._conn.execute("PRAGMA cache_size = -65536")
+        # 提升 WAL 检查点阈值，减少频繁检查点
+        self._conn.execute("PRAGMA wal_autocheckpoint = 1000")
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn
@@ -1124,6 +1131,8 @@ class Database:
             local_conn.row_factory = sqlite3.Row
             local_conn.execute("PRAGMA journal_mode=WAL")
             local_conn.execute("PRAGMA busy_timeout = 30000")
+            # 增加页面缓存到 64MB，减少磁盘 IO
+            local_conn.execute("PRAGMA cache_size = -65536")
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -1191,6 +1200,8 @@ class Database:
             try:
                 cursor = self.conn.execute(sql, params)
                 self.conn.commit()
+                # 写操作后失效 pool_readiness 缓存
+                self._pool_readiness_cache = None
                 return cursor
             except sqlite3.OperationalError as exc:
                 message = str(exc).lower()
@@ -2999,7 +3010,17 @@ class Database:
         ``available`` is the public "可换" count. ``raw`` is broad fresh
         material before readiness gates. ``pending`` is counted independently:
         recently viewed rows are unavailable, but they are not pending.
+
+        结果缓存 5 秒，避免频繁重复计算（该函数做 4 次查询 + 逐行处理，开销较大）。
         """
+        import time as _time
+
+        # 检查缓存
+        if self._pool_readiness_cache is not None:
+            cached_at, cached_result = self._pool_readiness_cache
+            if _time.time() - cached_at < self._pool_readiness_cache_ttl:
+                return dict(cached_result)
+
         self._ensure_fresh_read()
         min_score = self._pool_admission_min_score()
         guard_sql = _xhs_self_author_guard_sql()
@@ -3064,13 +3085,16 @@ class Database:
         evaluated_pending_count = int(status_counts.get("evaluated", 0))
         discovery_pending_count = pending_eval_count + evaluated_pending_count
 
-        return {
+        result = {
             "available": self.count_pool_candidates(xhs_self_nickname=xhs_self_nickname),
             "raw": raw_count + discovery_pending_count,
             "pending": pending_count + discovery_pending_count,
             "pending_eval": pending_eval_count,
             "evaluated_pending": evaluated_pending_count,
         }
+        # 保存缓存
+        self._pool_readiness_cache = (_time.time(), dict(result))
+        return result
 
     def count_pool_candidates_by_source(self) -> dict[str, int]:
         """Return fresh pool counts grouped by discovery source family."""

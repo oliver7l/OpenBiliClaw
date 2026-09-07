@@ -8,8 +8,8 @@
   const API_BASE = "/api/diary/insights";
   const FRAGMENTS_KEY = "diary_fragments";
 
-  // ─── 初始化 ───
-  document.addEventListener("DOMContentLoaded", init);
+  // ─── 初始化（由日记页面动态加载后手动调用）───
+  window.__initDiaryInsights = init;
 
   function init() {
     initSubtabs();
@@ -46,6 +46,24 @@
     // 知识网络视图
     const knowledgeView = document.getElementById("diaryKnowledgeView");
     if (knowledgeView) knowledgeView.hidden = view !== "knowledge";
+    // 自进化中心视图
+    const seView = document.getElementById("diarySelfEvolutionView");
+    if (seView) seView.hidden = view !== "self-evolution";
+    // 洞察中心视图
+    const insightsView = document.getElementById("diaryInsightsView");
+    if (insightsView) insightsView.hidden = view !== "insights";
+    // 记忆中心视图
+    const memoryView = document.getElementById("diaryMemoryView");
+    if (memoryView) memoryView.hidden = view !== "memory";
+    // 情绪中心视图
+    const emotionView = document.getElementById("diaryEmotionView");
+    if (emotionView) emotionView.hidden = view !== "emotion";
+    // 高级记忆视图
+    const advancedMemoryView = document.getElementById("diaryAdvancedMemoryView");
+    if (advancedMemoryView) advancedMemoryView.hidden = view !== "advanced-memory";
+    // 时间线视图
+    const timelineView = document.getElementById("diaryTimelineView");
+    if (timelineView) timelineView.hidden = view !== "timeline";
     // 语义搜索和日记对话视图
     const semanticView = document.getElementById("diarySemanticView");
     const chatView = document.getElementById("diaryChatView");
@@ -73,6 +91,42 @@
     if (view === "knowledge") {
       if (typeof window.initDiaryKnowledge === "function") {
         window.initDiaryKnowledge();
+      }
+    }
+    // 进入自进化中心视图时初始化
+    if (view === "self-evolution") {
+      if (typeof window.initDiarySelfEvolution === "function") {
+        window.initDiarySelfEvolution();
+      }
+    }
+    // 进入洞察中心视图时初始化
+    if (view === "insights") {
+      if (typeof window.initDiaryInsights === "function") {
+        window.initDiaryInsights();
+      }
+    }
+    // 进入记忆中心视图时初始化
+    if (view === "memory") {
+      if (typeof window.initDiaryMemory === "function") {
+        window.initDiaryMemory();
+      }
+    }
+    // 进入情绪中心视图时初始化
+    if (view === "emotion") {
+      if (window.DiaryEnhancedCenter?.EmotionCenter) {
+        window.DiaryEnhancedCenter.EmotionCenter.loadAll();
+      }
+    }
+    // 进入高级记忆视图时初始化
+    if (view === "advanced-memory") {
+      if (window.DiaryEnhancedCenter?.AdvancedMemory) {
+        window.DiaryEnhancedCenter.AdvancedMemory.loadAll();
+      }
+    }
+    // 进入时间线视图时初始化
+    if (view === "timeline") {
+      if (window.DiaryEnhancedCenter?.Timeline) {
+        window.DiaryEnhancedCenter.Timeline.loadAll();
       }
     }
   }
