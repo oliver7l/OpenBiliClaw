@@ -1223,7 +1223,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "agentRecommendPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "knowledgePage"];
 
     window.showMainPage = showMainPage;
     function showMainPage(pageId) {
@@ -1243,7 +1243,7 @@
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", knowledgePage: "knowledgeBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1294,6 +1294,7 @@
       chat: () => openChatPage(),
       diary: () => openDiaryPage(),
       clone: () => openClonePage(),
+      knowledge: () => openKnowledgePage(),
       "self-evolution": () => { if (window.openSelfEvolutionPage) window.openSelfEvolutionPage(); },
       library: () => openLibraryPage(),
       "read-archive": () => openReadArchivePage(),
@@ -8139,6 +8140,7 @@
     safeBind("#profileBtn", "click", () => { closeMineDropdown(); navigateTo("/web/profile"); });
     safeBind("#diaryBtn", "click", () => navigateTo("/web/diary"));
     safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
+safeBind("#knowledgeBtn", "click", () => navigateTo("/web/knowledge"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });
     safeBind("#poolFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/pool-filter"); });
@@ -9260,5 +9262,272 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    /* ═══ 概念知识库 ═══ */
+    const _knowledge = {
+      concepts: [],
+      total: 0,
+      searchTerm: "",
+      sourceFilter: "",
+      offset: 0,
+      limit: 50,
+      loading: false,
+      hasMore: true,
+    };
+
+    function openKnowledgePage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("knowledgePage");
+      loadKnowledgeStats();
+      loadKnowledgeConcepts(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    async function loadKnowledgeStats() {
+      try {
+        const res = await fetch("/api/knowledge/stats");
+        const data = await res.json();
+        if (!data.ok) return;
+        const conceptsEl = document.getElementById("knowledgeTotalConcepts");
+        const backlinksEl = document.getElementById("knowledgeTotalBacklinks");
+        if (conceptsEl) conceptsEl.textContent = formatNumber(data.total_concepts || 0);
+        if (backlinksEl) backlinksEl.textContent = formatNumber(data.total_backlinks || 0);
+      } catch (_) { /* ignore */ }
+    }
+
+    async function loadKnowledgeConcepts(reset) {
+      if (reset) {
+        _knowledge.offset = 0;
+        _knowledge.hasMore = true;
+        _knowledge.concepts = [];
+      }
+      if (_knowledge.loading || !_knowledge.hasMore) return;
+      _knowledge.loading = true;
+
+      const grid = document.getElementById("knowledgeConceptGrid");
+      const loading = document.getElementById("knowledgeLoading");
+      const empty = document.getElementById("knowledgeEmpty");
+      if (!grid) return;
+
+      if (reset) {
+        if (loading) loading.hidden = false;
+        if (empty) empty.hidden = true;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          limit: _knowledge.limit,
+          offset: _knowledge.offset,
+        });
+        if (_knowledge.searchTerm) params.set("q", _knowledge.searchTerm);
+        if (_knowledge.sourceFilter) params.set("source", _knowledge.sourceFilter);
+
+        const res = await fetch("/api/knowledge/concepts?" + params.toString());
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "请求失败");
+
+        _knowledge.concepts = reset ? (data.items || []) : _knowledge.concepts.concat(data.items || []);
+        _knowledge.total = data.total || 0;
+        _knowledge.offset += data.items ? data.items.length : 0;
+        _knowledge.hasMore = _knowledge.offset < _knowledge.total;
+
+        renderKnowledgeConcepts(grid, reset);
+      } catch (e) {
+        grid.innerHTML = `<div class="knowledge-empty"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+      } finally {
+        _knowledge.loading = false;
+        if (loading) loading.hidden = true;
+      }
+    }
+
+    function renderKnowledgeConcepts(grid, reset) {
+      if (reset) grid.innerHTML = "";
+
+      if (_knowledge.concepts.length === 0) {
+        const empty = document.getElementById("knowledgeEmpty");
+        if (empty) {
+          empty.hidden = false;
+          empty.innerHTML = _knowledge.searchTerm
+            ? `<p>未找到包含 "<strong>${escapeHtml(_knowledge.searchTerm)}</strong>" 的概念</p>`
+            : `<p>输入关键词搜索概念，或从顶部统计查看热门概念。</p>`;
+        }
+        return;
+      }
+
+      const empty = document.getElementById("knowledgeEmpty");
+      if (empty) empty.hidden = true;
+
+      let html = "";
+      _knowledge.concepts.forEach((c) => {
+        const sourceLabel = c.source === "learnbuffett" ? "巴菲特知识库"
+          : c.source === "mungermodels" ? "芒格思维模型"
+          : c.source === "aichainmap" ? "AI产业链地图"
+          : c.source || "未知";
+        html += `<div class="knowledge-card" data-concept="${escapeHtml(c.concept)}" data-source="${escapeHtml(c.source)}">
+          <div class="knowledge-card-header">
+            <span class="knowledge-card-name">${escapeHtml(c.concept)}</span>
+            <span class="knowledge-card-type">${escapeHtml(c.type || "概念")}</span>
+          </div>
+          <div class="knowledge-card-source">${escapeHtml(sourceLabel)}</div>
+          <div class="knowledge-card-ref">
+            <span class="knowledge-ref-count">${c.ref_count || 0} 篇引用</span>
+          </div>
+        </div>`;
+      });
+
+      if (reset) {
+        grid.innerHTML = html;
+      } else {
+        grid.insertAdjacentHTML("beforeend", html);
+      }
+
+      // 绑定卡片点击
+      grid.querySelectorAll(".knowledge-card").forEach((card) => {
+        card.addEventListener("click", () => {
+          const concept = card.dataset.concept;
+          const source = card.dataset.source;
+          openKnowledgeDetail(concept, source);
+        });
+      });
+
+      // 更多按钮
+      const loadMore = grid.querySelector(".knowledge-load-more");
+      if (loadMore) loadMore.remove();
+      if (_knowledge.hasMore) {
+        grid.insertAdjacentHTML("beforeend", `<div class="knowledge-load-more">
+          <button class="pill-btn" type="button" id="knowledgeLoadMoreBtn">加载更多</button>
+        </div>`);
+        const loadMoreBtn = document.getElementById("knowledgeLoadMoreBtn");
+        if (loadMoreBtn) loadMoreBtn.addEventListener("click", () => loadKnowledgeConcepts(false));
+      }
+    }
+
+    async function openKnowledgeDetail(concept, source) {
+      try {
+        const params = new URLSearchParams();
+        if (source) params.set("source", source);
+        const url = `/api/knowledge/concepts/${encodeURIComponent(concept)}` + (params.toString() ? "?" + params.toString() : "");
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "请求失败");
+
+        showKnowledgeDetailPanel(data, source);
+      } catch (e) {
+        alert("加载概念详情失败: " + e.message);
+      }
+    }
+
+    function showKnowledgeDetailPanel(data, sourceFilter) {
+      const existing = document.querySelector(".knowledge-detail-overlay");
+      if (existing) existing.remove();
+
+      const overlay = document.createElement("div");
+      overlay.className = "knowledge-detail-overlay";
+
+      const sourceLabel = sourceFilter === "learnbuffett" ? "巴菲特知识库"
+        : sourceFilter === "mungermodels" ? "芒格思维模型"
+        : sourceFilter === "aichainmap" ? "AI产业链地图"
+        : "所有来源";
+
+      let allArticlesHtml = "";
+      const bySource = data.by_source || {};
+      const sourceKeys = Object.keys(bySource);
+
+      if (sourceKeys.length > 0) {
+        let total = 0;
+        sourceKeys.forEach((site) => { total += bySource[site].length; });
+
+        allArticlesHtml = `<div class="knowledge-detail-section">
+          <h4>引用文章 (${total})</h4>`;
+
+        sourceKeys.forEach((site) => {
+          const siteLabel = site === "learnbuffett" ? "🧾 巴菲特知识库"
+            : site === "mungermodels" ? "🧠 芒格思维模型"
+            : site === "aichainmap" ? "🤖 AI产业链地图"
+            : site;
+          const articles = bySource[site] || [];
+          allArticlesHtml += `<div class="knowledge-source-tags" style="margin-top:12px">
+            <span class="knowledge-site-tag">${escapeHtml(siteLabel)}</span> <span style="font-size:12px;color:var(--muted)">(${articles.length} 篇)</span>
+          </div>
+          <table class="knowledge-detail-table">
+            <thead><tr><th>文章</th><th>标签</th></tr></thead>
+            <tbody>
+              ${articles.map((a) => `
+                <tr>
+                  <td><a class="knowledge-article-link" href="${escapeHtml(a.url || "#")}" target="_blank">${escapeHtml(a.title || "无标题")}</a></td>
+                  <td>${(a.tags || []).map((t) => `<span class="knowledge-site-tag">${escapeHtml(t)}</span>`).join(" ") || "<span style='color:var(--muted)'>-</span>"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>`;
+        });
+
+        allArticlesHtml += `</div>`;
+      }
+
+      overlay.innerHTML = `
+        <div class="knowledge-detail-panel" onclick="event.stopPropagation()">
+          <div class="knowledge-detail-header">
+            <div class="knowledge-detail-title">
+              <h3>${escapeHtml(data.concept)}</h3>
+              <span class="knowledge-detail-type-badge">${escapeHtml(sourceLabel)}</span>
+            </div>
+            <button class="knowledge-detail-close" type="button">×</button>
+          </div>
+          <div class="knowledge-detail-body">
+            <div class="knowledge-detail-section">
+              <h4>基本信息</h4>
+              <table class="knowledge-detail-table">
+                <tbody>
+                  <tr><td style="width:80px;font-weight:500">概念</td><td>${escapeHtml(data.concept)}</td></tr>
+                  <tr><td style="font-weight:500">来源</td><td>${escapeHtml(sourceLabel)}</td></tr>
+                  <tr><td style="font-weight:500">引用次数</td><td>${data.total || 0} 篇</td></tr>
+                </tbody>
+              </table>
+            </div>
+            ${allArticlesHtml}
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+      overlay.querySelector(".knowledge-detail-close").addEventListener("click", () => overlay.remove());
+      overlay.addEventListener("click", () => overlay.remove());
+    }
+
+    // 知识库搜索输入
+    document.addEventListener("DOMContentLoaded", () => {
+      const searchInput = document.getElementById("knowledgeSearchInput");
+      if (searchInput) {
+        let searchTimer;
+        searchInput.addEventListener("input", () => {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(() => {
+            _knowledge.searchTerm = searchInput.value.trim();
+            loadKnowledgeConcepts(true);
+          }, 300);
+        });
+      }
+
+      const refreshBtn = document.getElementById("knowledgeRefreshBtn");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", () => {
+          _knowledge.searchTerm = (document.getElementById("knowledgeSearchInput")?.value || "").trim();
+          loadKnowledgeStats();
+          loadKnowledgeConcepts(true);
+        });
+      }
+
+      // 来源筛选按钮
+      document.querySelectorAll(".knowledge-source-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".knowledge-source-btn").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          _knowledge.sourceFilter = btn.dataset.source || "";
+          loadKnowledgeConcepts(true);
+        });
+      });
+    });
 
     })();

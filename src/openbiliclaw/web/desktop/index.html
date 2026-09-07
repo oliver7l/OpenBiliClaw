@@ -92,6 +92,7 @@
           </div>
         </div>
         <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
+        <button class="tab-btn" id="knowledgeBtn" type="button">🧠 概念库</button>
         <button class="tab-btn" id="cloneBtn" type="button">🌐 克隆站</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
       </div>
@@ -988,6 +989,35 @@
         <div class="clone-loading" id="cloneLoading" hidden>
           <div class="spinner"></div>
           <p>正在加载克隆站点...</p>
+        </div>
+      </section>
+
+      <section class="knowledge-page content-page" id="knowledgePage" aria-label="概念知识库" hidden>
+        <div class="content-page-head">
+          <div>
+            <p class="eyebrow">Knowledge Graph</p>
+            <h2>🧠 概念知识库</h2>
+            <p class="video-meta">跨站概念反向索引，一键查看哪些文章提到了这个概念。</p>
+          </div>
+          <div class="content-page-actions">
+            <button class="pill-btn" id="knowledgeRefreshBtn" type="button">刷新</button>
+          </div>
+        </div>
+        <div class="knowledge-stats-bar" id="knowledgeStatsBar">
+          <span class="knowledge-stat">概念 <strong id="knowledgeTotalConcepts">0</strong></span>
+          <span class="knowledge-stat">链接 <strong id="knowledgeTotalBacklinks">0</strong></span>
+        </div>
+        <div class="knowledge-search-bar">
+          <input type="text" id="knowledgeSearchInput" class="knowledge-search" placeholder="搜索概念...（例如：内在价值、OpenAI、巴菲特）">
+        </div>
+        <div class="knowledge-concept-grid" id="knowledgeConceptGrid">
+          <div class="knowledge-empty" id="knowledgeEmpty" hidden>
+            <p>输入关键词搜索概念，或从顶部统计查看热门概念。</p>
+          </div>
+          <div class="knowledge-loading" id="knowledgeLoading" hidden>
+            <div class="spinner"></div>
+            <p>正在搜索...</p>
+          </div>
         </div>
       </section>
 

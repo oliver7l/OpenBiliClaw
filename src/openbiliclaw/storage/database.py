@@ -371,6 +371,46 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_llm_usage_provider ON llm_usage(provider, model);
+
+-- 知识库概念索引：记录每个概念出现在哪些文章中
+CREATE TABLE IF NOT EXISTS knowledge_concepts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    concept         TEXT NOT NULL,
+    concept_type    TEXT NOT NULL DEFAULT '',
+    source_site     TEXT NOT NULL DEFAULT '',
+    source_article_id  INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    source_article_url TEXT NOT NULL DEFAULT '',
+    context_snippet TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_concept
+    ON knowledge_concepts(concept);
+CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_type
+    ON knowledge_concepts(concept_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_source_article
+    ON knowledge_concepts(source_article_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_site
+    ON knowledge_concepts(source_site);
+
+-- 知识库反向链接：A 文章（source）引用了 B 文章（target）
+CREATE TABLE IF NOT EXISTS knowledge_backlinks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_article_id  INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    source_title    TEXT NOT NULL DEFAULT '',
+    source_url      TEXT NOT NULL DEFAULT '',
+    source_site     TEXT NOT NULL DEFAULT '',
+    target_concept  TEXT NOT NULL,
+    target_type     TEXT NOT NULL DEFAULT '',
+    target_url      TEXT NOT NULL DEFAULT '',
+    context_snippet TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_source
+    ON knowledge_backlinks(source_article_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_target
+    ON knowledge_backlinks(target_concept);
+CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_site
+    ON knowledge_backlinks(source_site);
 """
 
 

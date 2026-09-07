@@ -142,6 +142,7 @@ from openbiliclaw.api.models import (
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
+from openbiliclaw.clone import CloneService
 from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService, MoodLevel
 from openbiliclaw.diary.importer import DiaryImporter
 from openbiliclaw.health import (
@@ -10312,6 +10313,209 @@ def create_app(
         ]
         return JSONResponse({"ok": True, "stats": stats, "interest_shift": interest_shift})
 
+    # ── 知识库概念反向索引 API ─────────────────────────────────
+    @app.get("/api/knowledge/concepts")
+    def knowledge_concepts(
+        q: str = "",
+        source: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> JSONResponse:
+        """搜索概念反向索引。"""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            conn = database.conn
+            where = []
+            params: list = []
+            if q:
+                where.append("kc.concept LIKE ?")
+                params.append(f"%{q}%")
+            if source:
+                where.append("kc.source_site = ?")
+                params.append(source)
+            where_clause = " AND ".join(where) if where else "1=1"
+
+            # 统计
+            total = conn.execute(
+                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge_concepts kc WHERE {where_clause}",
+                params,
+            ).fetchone()[0]
+
+            # 分组查询
+            rows = conn.execute(
+                f"""SELECT kc.concept, kc.concept_type, kc.source_site,
+                           COUNT(*) as ref_count
+                    FROM knowledge_concepts kc
+                    WHERE {where_clause}
+                    GROUP BY kc.concept, kc.source_site
+                    ORDER BY ref_count DESC
+                    LIMIT ? OFFSET ?""",
+                params + [limit, offset],
+            ).fetchall()
+
+            items = [
+                {
+                    "concept": r[0],
+                    "type": r[1],
+                    "source": r[2],
+                    "ref_count": r[3],
+                }
+                for r in rows
+            ]
+
+            return JSONResponse({"ok": True, "items": items, "total": total})
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    @app.get("/api/knowledge/concepts/{concept_name}")
+    def knowledge_concept_detail(concept_name: str, source: str = "") -> JSONResponse:
+        """查看某个概念在哪些文章中被提及。"""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            conn = database.conn
+            where = ["kb.target_concept = ?"]
+            params: list = [concept_name]
+            if source:
+                where.append("kb.source_site = ?")
+                params.append(source)
+
+            where_clause = " AND ".join(where)
+
+            rows = conn.execute(
+                f"""SELECT kb.source_article_id, kb.source_title, kb.source_url,
+                           kb.source_site, kb.target_type, a.summary, a.tags
+                    FROM knowledge_backlinks kb
+                    LEFT JOIN articles a ON kb.source_article_id = a.id
+                    WHERE {where_clause}
+                    ORDER BY kb.source_site, kb.source_title""",
+                params,
+            ).fetchall()
+
+            # 获取概念类型从 knowledge_concepts
+            concept_type = "concept"
+            if source:
+                ct_row = conn.execute(
+                    "SELECT DISTINCT concept_type FROM knowledge_concepts WHERE concept = ? AND source_site = ? LIMIT 1",
+                    (concept_name, source),
+                ).fetchone()
+                if ct_row:
+                    concept_type = ct_row[0] or "concept"
+            else:
+                ct_row = conn.execute(
+                    "SELECT DISTINCT concept_type FROM knowledge_concepts WHERE concept = ? LIMIT 1",
+                    (concept_name,),
+                ).fetchone()
+                if ct_row:
+                    concept_type = ct_row[0] or "concept"
+
+            # 按来源站点分组
+            by_source: dict[str, list[dict]] = {}
+            for r in rows:
+                site = r[3] or "unknown"
+                if site not in by_source:
+                    by_source[site] = []
+                by_source[site].append({
+                    "article_id": r[0],
+                    "title": r[1],
+                    "url": r[2],
+                    "summary": r[5] or "",
+                    "tags": json.loads(r[6]) if r[6] else [],
+                })
+
+            return JSONResponse({
+                "ok": True,
+                "concept": concept_name,
+                "type": concept_type,
+                "total": len(rows),
+                "by_source": by_source,
+            })
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    @app.get("/api/knowledge/stats")
+    def knowledge_stats() -> JSONResponse:
+        """知识库统计数据。"""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            conn = database.conn
+            total_concepts = conn.execute(
+                "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
+            ).fetchone()[0]
+            total_backlinks = conn.execute(
+                "SELECT COUNT(*) FROM knowledge_backlinks"
+            ).fetchone()[0]
+
+            sources = conn.execute(
+                "SELECT source_site, COUNT(*) as cnt FROM knowledge_backlinks "
+                "GROUP BY source_site ORDER BY cnt DESC"
+            ).fetchall()
+            source_stats = {r[0]: r[1] for r in sources}
+
+            return JSONResponse({
+                "ok": True,
+                "total_concepts": total_concepts,
+                "total_backlinks": total_backlinks,
+                "sources": source_stats,
+            })
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    @app.get("/api/knowledge/graph")
+    def knowledge_graph(limit: int = 50) -> JSONResponse:
+        """知识图谱数据（节点 + 边），用于可视化。"""
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            conn = database.conn
+            # 取 TOP 概念作为节点
+            nodes_raw = conn.execute(
+                "SELECT concept, concept_type, source_site, COUNT(*) as w "
+                "FROM knowledge_concepts "
+                "GROUP BY concept "
+                "ORDER BY w DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            nodes = [
+                {"id": r[0], "type": r[1] or "concept", "source": r[2], "weight": r[3]}
+                for r in nodes_raw
+            ]
+
+            node_names = [n["id"] for n in nodes]
+
+            # 取边：同一篇文章中同时出现的概念对
+            if not node_names:
+                return JSONResponse({"ok": True, "nodes": [], "edges": []})
+
+            # 从 backlinks 构建边
+            edges_raw = conn.execute(
+                """SELECT kb1.target_concept as c1, kb2.target_concept as c2, COUNT(*) as w
+                FROM knowledge_backlinks kb1
+                JOIN knowledge_backlinks kb2 ON kb1.source_article_id = kb2.source_article_id
+                    AND kb1.target_concept < kb2.target_concept
+                WHERE kb1.target_concept IN ({}) AND kb2.target_concept IN ({})
+                GROUP BY c1, c2
+                ORDER BY w DESC
+                LIMIT 200""".format(
+                    ",".join("?" * len(node_names)), ",".join("?" * len(node_names))
+                ),
+                node_names + node_names,
+            ).fetchall()
+            edges = [
+                {"source": r[0], "target": r[1], "weight": r[2]}
+                for r in edges_raw
+            ]
+
+            return JSONResponse({"ok": True, "nodes": nodes, "edges": edges})
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
     @app.post("/api/reading/auto-tag")
     def reading_auto_tag(
         limit: int = 500,
@@ -13283,6 +13487,180 @@ def create_app(
         )
     )
 
+    # ── 克隆系统 API ─────────────────────────────────────────────
+
+    _clone_service: CloneService | None = None
+
+    def _get_clone_service() -> CloneService | None:
+        """获取或创建克隆服务实例（懒加载）。"""
+        nonlocal _clone_service
+        if _clone_service is not None:
+            return _clone_service
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return None
+        from openbiliclaw.clone import CloneService as _CloneService
+        from openbiliclaw.clone.store import CloneStore as _CloneStore
+
+        _web_dir = _Path(__file__).resolve().parent.parent / "web"
+        _sites_dir = _web_dir / "clone" / "sites"
+        store = _CloneStore(database=database)
+        _clone_service = _CloneService(store=store, sites_dir=_sites_dir)
+        return _clone_service
+
+    @app.get("/api/clone/sites")
+    def clone_list(
+        limit: int = 50,
+        offset: int = 0,
+        category: str | None = None,
+        status: str | None = None,
+        tag: str | None = None,
+        search: str | None = None,
+    ) -> JSONResponse:
+        """列出克隆站点，支持筛选和搜索。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        sites, total = svc.list_sites(
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
+            category=category,
+            status=status,
+            tag=tag,
+            search=search,
+        )
+        return JSONResponse({
+            "ok": True,
+            "items": [s.model_dump(mode="json") for s in sites],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        })
+
+    @app.get("/api/clone/stats")
+    def clone_stats() -> JSONResponse:
+        """获取克隆系统统计信息。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        stats = svc.get_stats()
+        return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
+
+    @app.get("/api/clone/sites/{site_id:int}")
+    def clone_get(site_id: int) -> JSONResponse:
+        """获取单个克隆站点详情。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        site = svc.get_site(site_id)
+        if site is None:
+            return JSONResponse({"ok": False, "error": "site not found"}, status_code=404)
+        return JSONResponse({"ok": True, "site": site.model_dump(mode="json")})
+
+    @app.post("/api/clone/sites")
+    def clone_create(payload: dict[str, Any]) -> JSONResponse:
+        """创建新克隆站点记录。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            from openbiliclaw.clone import CloneSiteCreate, CloneStatus
+            status = CloneStatus(payload.get("status", "cloned")) if payload.get("status") else CloneStatus.CLONED
+            data = CloneSiteCreate(
+                name=payload["name"],
+                slug=payload.get("slug", ""),
+                source_url=payload.get("source_url", ""),
+                local_path=payload.get("local_path", ""),
+                description=payload.get("description", ""),
+                category=payload.get("category", "other"),
+                status=status,
+                tags=payload.get("tags", []),
+            )
+            site = svc.create_site(data)
+            return JSONResponse({"ok": True, "site": site.model_dump(mode="json")}, status_code=201)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.put("/api/clone/sites/{site_id:int}")
+    def clone_update(site_id: int, payload: dict[str, Any]) -> JSONResponse:
+        """更新克隆站点信息。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            from openbiliclaw.clone import CloneSiteUpdate
+            data = CloneSiteUpdate(
+                name=payload.get("name"),
+                description=payload.get("description"),
+                category=payload.get("category"),
+                status=payload.get("status"),
+                tags=payload.get("tags"),
+            )
+            site = svc.update_site(site_id, data)
+            if site is None:
+                return JSONResponse({"ok": False, "error": "site not found"}, status_code=404)
+            return JSONResponse({"ok": True, "site": site.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.delete("/api/clone/sites/{site_id:int}")
+    def clone_delete(site_id: int) -> JSONResponse:
+        """删除克隆站点记录。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        ok = svc.delete_site(site_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": "site not found"}, status_code=404)
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/clone/import")
+    def clone_import() -> JSONResponse:
+        """扫描 clone/sites/ 目录，批量导入已有站点。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            _web_dir = _Path(__file__).resolve().parent.parent / "web"
+            sites_dir = _web_dir / "clone" / "sites"
+            imported = svc.import_existing_sites(sites_dir)
+            return JSONResponse({
+                "ok": True,
+                "imported": [s.model_dump(mode="json") for s in imported],
+                "count": len(imported),
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @app.post("/api/clone/clone")
+    def clone_new(payload: dict[str, Any]) -> JSONResponse:
+        """克隆新网站。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        try:
+            from openbiliclaw.clone import CloneRequest
+            request = CloneRequest(
+                url=payload["url"],
+                name=payload["name"],
+                category=payload.get("category", "website"),
+                tags=payload.get("tags", []),
+                depth=min(int(payload.get("depth", 1)), 3),
+            )
+            site = svc.clone_new_site(request)
+            return JSONResponse({"ok": True, "site": site.model_dump(mode="json")})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/api/clone/tags")
+    def clone_tags() -> JSONResponse:
+        """列出所有克隆站点标签。"""
+        svc = _get_clone_service()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        tags = svc.list_tags()
+        return JSONResponse({"ok": True, "tags": tags})
+
     # ── Mobile Web UI ───────────────────────────────────────────
     from pathlib import Path as _Path
 
@@ -13344,6 +13722,10 @@ def create_app(
                 'src="/web/assets/js/app.js"',
                 f'src="/web/assets/js/app.js?v={version}"',
             )
+            html = html.replace(
+                'src="/web/assets/js/self-evolution.js"',
+                f'src="/web/assets/js/self-evolution.js?v={version}"',
+            )
             # 注入版本号全局变量，供动态加载的日记模块脚本做缓存控制
             html = html.replace(
                 "</head>",
@@ -13370,6 +13752,7 @@ def create_app(
             "profile",
             "chat",
             "diary",
+            "clone",
             "library",
             "read-archive",
             "settings",
@@ -13442,6 +13825,17 @@ def create_app(
     if _reading_dir.is_dir():
         app.mount(
             "/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library"
+        )
+
+    # ── Clone Sites static mount ──────────────────────────────────
+    # Serves cloned sites under /clone/sites/{slug} so they can be
+    # previewed in the browser.
+    _clone_sites_dir = _web_dir / "clone" / "sites"
+    if _clone_sites_dir.is_dir():
+        app.mount(
+            "/clone/sites",
+            _StaticFiles(directory=_clone_sites_dir, html=True),
+            name="clone-sites",
         )
 
     # ── Standalone Health (健康档案) page ────────────────────────
@@ -13713,526 +14107,10 @@ def create_app(
             return JSONResponse({"error": str(e)}, status_code=500)
 
     # ── Self-Evolution (自进化) API endpoints ─────────────────────
-    # Auto-generated insights, interest drift detection, topic mining,
-    # knowledge cards, knowledge graph, and proactive push notifications.
+    # 已独立为 src/openbiliclaw/self_evolution/api.py，此处仅注册路由
+    from openbiliclaw.self_evolution.api import create_self_evolution_router
 
-    from openbiliclaw.self_evolution import (
-        InsightReportGenerator,
-        InterestDriftDetector,
-        KnowledgeCardGenerator,
-        KnowledgeGraphBuilder,
-        ProactivePushEngine,
-        PushConfig,
-        TopicMiner,
-    )
-
-    _self_evo_db = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
-    _self_evo_llm = getattr(ctx, "llm_service", None)
-
-    @app.get("/api/self-evolution/insight-reports")
-    async def list_insight_reports(limit: int = 20):
-        """List saved insight reports."""
-        gen = InsightReportGenerator(_self_evo_db)
-        return {"reports": gen.list_reports(limit=limit)}
-
-    @app.post("/api/self-evolution/insight-reports/generate")
-    async def generate_insight_report(window_days: int = 7, include_llm: bool = True):
-        """Generate a new insight report."""
-        llm_svc = _self_evo_llm if include_llm else None
-        gen = InsightReportGenerator(_self_evo_db, llm_service=llm_svc)
-        report = gen.generate_report(window_days=window_days, include_llm_summary=include_llm)
-        gen.save_report(report)
-        return report.to_dict()
-
-    @app.get("/api/self-evolution/insight-reports/{report_id}")
-    async def get_insight_report(report_id: str):
-        """Get a specific insight report."""
-        gen = InsightReportGenerator(_self_evo_db)
-        report = gen.get_report(report_id)
-        if not report:
-            return {"error": "Report not found"}
-        return report
-
-    @app.get("/api/self-evolution/drift")
-    async def get_interest_drift(current_window_days: int = 7, previous_window_days: int = 30):
-        """Get interest drift analysis."""
-        detector = InterestDriftDetector(_self_evo_db)
-        report = detector.detect(
-            current_window_days=current_window_days,
-            previous_window_days=previous_window_days,
-        )
-        detector.save_report(report)
-        return report.to_dict()
-
-    @app.get("/api/self-evolution/topics")
-    async def get_mined_topics(window_days: int = 14):
-        """Get auto-mined topic candidates."""
-        miner = TopicMiner(_self_evo_db)
-        report = miner.mine(window_days=window_days)
-        miner.save_report(report)
-        return report.to_dict()
-
-    @app.get("/api/self-evolution/knowledge-cards")
-    async def list_knowledge_cards(limit: int = 50, card_type: str = None):
-        """List knowledge cards."""
-        gen = KnowledgeCardGenerator(_self_evo_db)
-        cards = gen.list_cards(limit=limit, card_type=card_type)
-        return {"cards": [c.to_dict() for c in cards], "total": len(cards)}
-
-    @app.post("/api/self-evolution/knowledge-cards/generate")
-    async def generate_knowledge_cards(article_id: int = None, limit: int = 20, max_per_article: int = 3):
-        """Generate knowledge cards from articles."""
-        gen = KnowledgeCardGenerator(_self_evo_db, llm_service=_self_evo_llm)
-        if article_id:
-            cards = gen.generate_cards_from_article(article_id, max_cards=max_per_article)
-        else:
-            cards = gen.generate_cards_batch(limit=limit, max_cards_per_article=max_per_article)
-        return {"cards": [c.to_dict() for c in cards], "generated": len(cards)}
-
-    @app.get("/api/self-evolution/knowledge-cards/due")
-    async def get_due_cards(limit: int = 20):
-        """Get knowledge cards due for review."""
-        gen = KnowledgeCardGenerator(_self_evo_db)
-        session = gen.create_review_session(limit=limit)
-        return session.to_dict()
-
-    @app.post("/api/self-evolution/knowledge-cards/{card_id}/review")
-    async def review_card(card_id: str, quality: int = 4):
-        """Record a card review and update scheduling."""
-        gen = KnowledgeCardGenerator(_self_evo_db)
-        card = gen.record_review(card_id, quality)
-        if not card:
-            return {"error": "Card not found"}
-        return card.to_dict()
-
-    @app.get("/api/self-evolution/knowledge-graph")
-    async def get_knowledge_graph(limit: int = 500, min_mentions: int = 2):
-        """Build and return the personal knowledge graph."""
-        builder = KnowledgeGraphBuilder(_self_evo_db)
-        graph = builder.build(limit=limit, min_mentions=min_mentions)
-        builder.save_graph(graph)
-        return graph.to_dict()
-
-    @app.get("/api/self-evolution/knowledge-graph/entity/{entity_id}")
-    async def get_entity_subgraph(entity_id: str, depth: int = 2, max_nodes: int = 50):
-        """Get a subgraph around a specific entity."""
-        builder = KnowledgeGraphBuilder(_self_evo_db)
-        graph = builder.load_latest_graph()
-        if not graph:
-            graph = builder.build(limit=500, min_mentions=2)
-        return graph.get_subgraph(entity_id, depth=depth, max_nodes=max_nodes)
-
-    @app.get("/api/self-evolution/notifications")
-    async def list_notifications(limit: int = 20, unread_only: bool = False):
-        """List push notifications."""
-        engine = ProactivePushEngine(_self_evo_db)
-        notifs = engine.get_notifications(limit=limit, unread_only=unread_only)
-        return {"notifications": [n.to_dict() for n in notifs], "total": len(notifs)}
-
-    @app.post("/api/self-evolution/notifications/check")
-    async def check_and_push(dry_run: bool = False):
-        """Check for high-value content and push notifications."""
-        config = PushConfig(enabled=True)
-        engine = ProactivePushEngine(_self_evo_db, config=config)
-        notifs = engine.check_and_push(dry_run=dry_run)
-        return {"notifications": [n.to_dict() for n in notifs], "count": len(notifs)}
-
-    @app.post("/api/self-evolution/notifications/{notification_id}/read")
-    async def mark_notification_read(notification_id: str):
-        """Mark a notification as read."""
-        engine = ProactivePushEngine(_self_evo_db)
-        engine.mark_as_read(notification_id)
-        return {"status": "ok"}
-
-    @app.post("/api/self-evolution/notifications/{notification_id}/dismiss")
-    async def dismiss_notification(notification_id: str):
-        """Dismiss a notification."""
-        engine = ProactivePushEngine(_self_evo_db)
-        engine.dismiss(notification_id)
-        return {"status": "ok"}
-
-    # ─── Learning Paths ───────────────────────────────────────────────
-
-    @app.get("/api/self-evolution/learning-paths")
-    async def list_learning_paths(status: str | None = None, limit: int = 20):
-        """List all learning paths."""
-        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
-        paths = generator.list_paths(status=status, limit=limit)
-        return {"paths": [p.to_dict() for p in paths]}
-
-    @app.post("/api/self-evolution/learning-paths/generate")
-    async def generate_learning_path(payload: dict[str, Any]):
-        """Generate a learning path for a topic.
-
-        Request body:
-        - topic: 学习主题（必填）
-        - description: 学习目标/描述（可选）
-        - max_articles: 最多考虑多少篇文章（默认30）
-        """
-        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        topic = (payload or {}).get("topic", "").strip()
-        if not topic:
-            return JSONResponse({"error": "topic is required"}, status_code=400)
-        description = (payload or {}).get("description", "")
-        max_articles = int((payload or {}).get("max_articles", 30))
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
-        try:
-            path = generator.generate_path(
-                topic, description=description, max_articles=max_articles
-            )
-            return {"status": "ok", "path": path.to_dict()}
-        except ValueError as e:
-            return JSONResponse({"error": str(e)}, status_code=400)
-        except Exception as e:
-            logger.exception("学习路径生成失败")
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @app.get("/api/self-evolution/learning-paths/{path_id}")
-    async def get_learning_path(path_id: str):
-        """Get a learning path by ID."""
-        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
-        path = generator.get_path(path_id)
-        if path is None:
-            return JSONResponse({"error": "path not found"}, status_code=404)
-        return {"path": path.to_dict()}
-
-    @app.patch("/api/self-evolution/learning-paths/{path_id}/steps/{step_index}")
-    async def update_learning_step(
-        path_id: str, step_index: int, payload: dict[str, Any]
-    ):
-        """Update progress on a learning path step.
-
-        Request body:
-        - completed: 是否完成（布尔）
-        - notes: 学习笔记（可选）
-        """
-        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
-        completed = (payload or {}).get("completed")
-        notes = (payload or {}).get("notes")
-        path = generator.update_step_progress(
-            path_id, step_index, completed=completed, notes=notes
-        )
-        if path is None:
-            return JSONResponse({"error": "path or step not found"}, status_code=404)
-        return {"status": "ok", "path": path.to_dict()}
-
-    @app.delete("/api/self-evolution/learning-paths/{path_id}")
-    async def delete_learning_path(path_id: str):
-        """Delete a learning path."""
-        from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = LearningPathGenerator(_self_evo_db, llm_service=llm_service)
-        ok = generator.delete_path(path_id)
-        if not ok:
-            return JSONResponse({"error": "path not found"}, status_code=404)
-        return {"status": "ok"}
-
-    # ─── TL;DR (Too Long; Didn't Read) ────────────────────────────────
-
-    @app.get("/api/self-evolution/tldrs")
-    async def list_tldrs(limit: int = 50, source_type: str | None = None):
-        """List all cached TL;DR summaries."""
-        from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
-        tldrs = generator.list_tldrs(limit=limit, source_type=source_type)
-        return {"tldrs": [t.to_dict() for t in tldrs], "count": len(tldrs)}
-
-    @app.get("/api/self-evolution/tldrs/{article_id}")
-    async def get_tldr(article_id: int):
-        """Get a TL;DR for a specific article (generates if not cached)."""
-        from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
-        tldr = generator.generate_tldr(article_id)
-        if tldr is None:
-            return JSONResponse({"error": "article not found"}, status_code=404)
-        return {"tldr": tldr.to_dict()}
-
-    @app.post("/api/self-evolution/tldrs/{article_id}/regenerate")
-    async def regenerate_tldr(article_id: int):
-        """Force regenerate a TL;DR for an article."""
-        from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
-        tldr = generator.generate_tldr(article_id, force=True)
-        if tldr is None:
-            return JSONResponse({"error": "article not found"}, status_code=404)
-        return {"status": "ok", "tldr": tldr.to_dict()}
-
-    @app.post("/api/self-evolution/tldrs/batch-generate")
-    async def batch_generate_tldrs(payload: dict[str, Any] | None = None):
-        """Batch generate TL;DRs for favorited articles.
-
-        Request body (optional):
-        - only_favorited: only generate for favorited articles (default true)
-        - limit: maximum number to generate (default 20)
-        - force: regenerate even if exists (default false)
-        """
-        from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        payload = payload or {}
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
-        try:
-            results = generator.batch_generate(
-                only_favorited=payload.get("only_favorited", True),
-                limit=int(payload.get("limit", 20)),
-                force=payload.get("force", False),
-            )
-            return {"status": "ok", "generated": len(results), "tldrs": [t.to_dict() for t in results]}
-        except Exception as e:
-            logger.exception("批量生成 TL;DR 失败")
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @app.delete("/api/self-evolution/tldrs/{article_id}")
-    async def delete_tldr(article_id: int):
-        """Delete a cached TL;DR."""
-        from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = getattr(ctx, "llm_service", None)
-        generator = TLDRGenerator(_self_evo_db, llm_service=llm_service)
-        ok = generator.delete_tldr(article_id)
-        if not ok:
-            return JSONResponse({"error": "tldr not found"}, status_code=404)
-        return {"status": "ok"}
-
-    # ─── Content Insights (Knowledge Gaps + Cross-Platform) ───────────
-
-    @app.post("/api/self-evolution/insights/generate")
-    async def generate_insights(payload: dict[str, Any] | None = None):
-        """Generate content insights report (knowledge gaps + cross-platform insights).
-
-        Request body (optional):
-        - min_articles_per_topic: minimum articles per topic (default 3)
-        - max_gaps: maximum knowledge gaps (default 15)
-        - max_cross_platform: maximum cross-platform insights (default 10)
-        """
-        from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
-        payload = payload or {}
-        llm_service = getattr(ctx, "llm_service", None)
-        analyzer = ContentInsightsAnalyzer(_self_evo_db, llm_service=llm_service)
-        try:
-            report = analyzer.generate_report(
-                min_articles_per_topic=int(payload.get("min_articles_per_topic", 3)),
-                max_gaps=int(payload.get("max_gaps", 15)),
-                max_cross_platform=int(payload.get("max_cross_platform", 10)),
-            )
-            return {"status": "ok", "report": report.to_dict()}
-        except Exception as e:
-            logger.exception("生成内容洞察报告失败")
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @app.get("/api/self-evolution/insights/latest")
-    async def get_latest_insights():
-        """Get the latest content insights report."""
-        from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
-        llm_service = getattr(ctx, "llm_service", None)
-        analyzer = ContentInsightsAnalyzer(_self_evo_db, llm_service=llm_service)
-        report = analyzer.get_latest_report()
-        if report is None:
-            return JSONResponse({"error": "no report found, generate one first"}, status_code=404)
-        return {"report": report.to_dict()}
-
-    # ─── Reading Schedule (智能阅读调度) ─────────────────────────────
-
-    @app.get("/api/self-evolution/reading-schedule/stats")
-    async def reading_schedule_stats():
-        """Get reading schedule statistics."""
-        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
-        scheduler = ReadingScheduler(_self_evo_db)
-        return scheduler.get_stats()
-
-    @app.get("/api/self-evolution/reading-schedule/daily")
-    async def reading_schedule_daily(limit: int = 20, include_new: bool = True, new_count: int = 5):
-        """Get today's reading queue.
-
-        Args:
-            limit: Maximum number of articles in queue.
-            include_new: Whether to include new articles.
-            new_count: Maximum number of new articles.
-        """
-        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
-        scheduler = ReadingScheduler(_self_evo_db)
-        queue = scheduler.get_daily_queue(limit=limit, include_new=include_new, new_count=new_count)
-        return {"queue": [item.to_dict() for item in queue], "count": len(queue)}
-
-    @app.get("/api/self-evolution/reading-schedule/{article_id}")
-    async def reading_schedule_article(article_id: int):
-        """Get reading schedule for a specific article."""
-        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
-        scheduler = ReadingScheduler(_self_evo_db)
-        item = scheduler.get_article_schedule(article_id)
-        if item is None:
-            return JSONResponse({"error": "article not found in reading schedule"}, status_code=404)
-        return item.to_dict()
-
-    @app.post("/api/self-evolution/reading-schedule/{article_id}/review")
-    async def reading_schedule_review(article_id: int, payload: dict[str, Any] | None = None):
-        """Submit reading feedback for an article.
-
-        Request body:
-        - rating: Review rating (again/hard/good/easy)
-        - reading_percent: Reading progress percentage (0-100), optional
-        """
-        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler, ReviewRating
-        payload = payload or {}
-        rating_str = payload.get("rating", "good")
-        try:
-            rating = ReviewRating(rating_str)
-        except ValueError:
-            return JSONResponse({"error": f"invalid rating: {rating_str}, must be one of: again/hard/good/easy"}, status_code=400)
-
-        reading_percent = payload.get("reading_percent")
-        if reading_percent is not None:
-            reading_percent = float(reading_percent)
-
-        scheduler = ReadingScheduler(_self_evo_db)
-        item = scheduler.review_article(article_id, rating, reading_percent=reading_percent)
-        if item is None:
-            return JSONResponse({"error": "article not found in reading schedule"}, status_code=404)
-        return item.to_dict()
-
-    @app.post("/api/self-evolution/reading-schedule/batch-register")
-    async def reading_schedule_batch_register(payload: dict[str, Any] | None = None):
-        """Batch register articles into reading schedule.
-
-        Request body (optional):
-        - limit: Maximum number of articles to register (default 1000)
-        """
-        from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
-        payload = payload or {}
-        limit = int(payload.get("limit", 1000))
-        scheduler = ReadingScheduler(_self_evo_db)
-        count = scheduler.batch_register_from_articles(limit=limit)
-        return {"status": "ok", "registered": count}
-
-    @app.get("/api/self-evolution/status")
-    async def self_evolution_status():
-        """Get self-evolution module status and stats."""
-        import sqlite3
-        conn = sqlite3.connect(_self_evo_db)
-        stats = {}
-        for table in ["insight_reports", "drift_reports", "topic_mining_reports",
-                       "knowledge_cards", "knowledge_graph", "push_notifications",
-                       "learning_paths", "article_tldrs", "content_insights_reports",
-                       "reading_schedule", "article_snapshots"]:
-            try:
-                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                stats[table] = count
-            except Exception:
-                stats[table] = 0
-        conn.close()
-        return {"status": "running", "stats": stats}
-
-    # ─── Auto Topic Generator (自动专题生成引擎) ─────────────────────
-
-    @app.get("/api/self-evolution/auto-topic/candidates")
-    async def auto_topic_candidates(min_mentions: int = 50, limit: int = 10):
-        """Discover candidate topics from knowledge graph.
-
-        Args:
-            min_mentions: Minimum entity mention count.
-            limit: Maximum number of candidates to return.
-        """
-        from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
-        generator = AutoTopicGenerator(_self_evo_db)
-        candidates = generator.discover_candidates(min_mentions=min_mentions, limit=limit)
-        return {
-            "candidates": [
-                {
-                    "name": c.name,
-                    "slug": c.slug,
-                    "description": c.description,
-                    "keywords": c.keywords,
-                    "entity_mention_count": c.entity_mention_count,
-                    "article_count": c.article_count,
-                    "platforms": c.platforms,
-                    "quality_score": c.quality_score,
-                    "related_entities": c.related_entities,
-                }
-                for c in candidates
-            ],
-            "count": len(candidates),
-        }
-
-    @app.post("/api/self-evolution/auto-topic/generate")
-    async def auto_topic_generate(payload: dict[str, Any] | None = None):
-        """Generate a topic from a candidate.
-
-        Request body:
-        - name: Topic name (required if no candidate)
-        - slug: Topic slug (optional)
-        - keywords: List of search keywords (required if no candidate)
-        - description: Topic description (optional)
-        - max_articles: Maximum articles to include (default 50)
-        - use_llm: Whether to use LLM for summary generation (default true)
-        """
-        from openbiliclaw.self_evolution.auto_topic_generator import (
-            AutoTopicGenerator,
-            TopicCandidate,
-        )
-        payload = payload or {}
-
-        # 从候选主题生成，或从请求参数创建
-        if "name" in payload and "keywords" in payload:
-            candidate = TopicCandidate(
-                name=payload["name"],
-                slug=payload.get("slug") or payload["name"].lower().replace(" ", "-"),
-                description=payload.get("description", f"关于{payload['name']}的跨平台综合专题"),
-                keywords=payload["keywords"],
-                entity_mention_count=payload.get("entity_mention_count", 0),
-            )
-        else:
-            return JSONResponse({"error": "name and keywords are required"}, status_code=400)
-
-        max_articles = int(payload.get("max_articles", 50))
-        use_llm = bool(payload.get("use_llm", True))
-        llm_service = getattr(ctx, "llm_service", None) if use_llm else None
-
-        generator = AutoTopicGenerator(_self_evo_db, llm_service=llm_service)
-        topic = generator.generate_topic(candidate, max_articles=max_articles, use_llm=use_llm)
-
-        if topic is None:
-            return JSONResponse({"error": "Failed to generate topic (no articles found)"}, status_code=404)
-
-        return topic.to_dict()
-
-    @app.post("/api/self-evolution/auto-topic/auto-generate")
-    async def auto_topic_auto_generate(payload: dict[str, Any] | None = None):
-        """Automatically discover and generate topics.
-
-        Request body (optional):
-        - min_mentions: Minimum entity mention count (default 50)
-        - max_topics: Maximum topics to generate (default 3)
-        - max_articles_per_topic: Maximum articles per topic (default 50)
-        - use_llm: Whether to use LLM for summary (default true)
-        """
-        from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
-        payload = payload or {}
-
-        min_mentions = int(payload.get("min_mentions", 50))
-        max_topics = int(payload.get("max_topics", 3))
-        max_articles_per_topic = int(payload.get("max_articles_per_topic", 50))
-        use_llm = bool(payload.get("use_llm", True))
-        llm_service = getattr(ctx, "llm_service", None) if use_llm else None
-
-        generator = AutoTopicGenerator(_self_evo_db, llm_service=llm_service)
-        topics = generator.auto_generate(
-            min_mentions=min_mentions,
-            max_topics=max_topics,
-            max_articles_per_topic=max_articles_per_topic,
-            use_llm=use_llm,
-        )
-
-        return {
-            "generated": [t.to_dict() for t in topics],
-            "count": len(topics),
-        }
+    _self_evo_db_path = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
+    app.include_router(create_self_evolution_router(_self_evo_db_path, getattr(ctx, "llm_service", None)))
 
     return app
