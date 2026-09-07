@@ -4,6 +4,9 @@
 
 ---
 
+## v0.3.199: 修复自进化页面直接打开时空白（TDZ）（2026-09-07）
+
+- 修复 `/web/self-evolution` 直接打开（刷新/书签）时页面空白：`SELF_EVO_API` 常量定义在 `routeFromPath()` 初始化调用之后，触发 `ReferenceError: Cannot access 'SELF_EVO_API' before initialization`，导致状态加载失败。将 `SELF_EVO_API` 移至顶部常量区（ENDPOINTS 之后），路由初始化时已可用。
 ## v0.3.198: 设置收进「我的」下拉（2026-09-07）
 
 - 侧边栏「设置」按钮收进「我的 ▾」下拉（与稍后再看/我的收藏/我的画像/聊聊口味并列），当前在设置页时 trigger 高亮。

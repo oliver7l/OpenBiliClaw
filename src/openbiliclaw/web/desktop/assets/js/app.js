@@ -41,6 +41,24 @@
     };
     ENDPOINTS.userFeedback = "/api/user-feedback";
     ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
+
+    // Self-Evolution API（必须在 routeFromPath() 之前定义，避免直接打开 /web/self-evolution 时 TDZ）
+    const SELF_EVO_API = {
+      status: "/api/self-evolution/status",
+      insightReports: "/api/self-evolution/insight-reports",
+      generateInsight: "/api/self-evolution/insight-reports/generate",
+      drift: "/api/self-evolution/drift",
+      topics: "/api/self-evolution/topics",
+      knowledgeCards: "/api/self-evolution/knowledge-cards",
+      generateCards: "/api/self-evolution/knowledge-cards/generate",
+      dueCards: "/api/self-evolution/knowledge-cards/due",
+      reviewCard: (id) => `/api/self-evolution/knowledge-cards/${id}/review`,
+      knowledgeGraph: "/api/self-evolution/knowledge-graph",
+      entityGraph: (id) => `/api/self-evolution/knowledge-graph/entity/${id}`,
+      notifications: "/api/self-evolution/notifications",
+      checkPush: "/api/self-evolution/notifications/check",
+      readNotification: (id) => `/api/self-evolution/notifications/${id}/read`,
+    };
     ENDPOINTS.interestTags = "/api/interest-tags";
     ENDPOINTS.viewRecord = "/api/view-record";
     ENDPOINTS.viewDwell = "/api/view-dwell";
@@ -8248,21 +8266,38 @@
     safeBind("#activityMoreBtn", "click", () => loadActivityPage());
     safeBind("#settingsBtn", "click", () => openSettingsPage("models"));
     safeBind("#openSettingsHero", "click", () => openSettingsPage("models"));
+    function _cloneBtnLoading(btn, loading) {
+      if (!btn) return;
+      btn.disabled = loading;
+      btn.textContent = loading ? "处理中…" : btn.dataset.label || btn.textContent;
+    }
     safeBind("#cloneImportBtn", "click", async () => {
+      const btn = document.getElementById("cloneImportBtn");
+      if (btn?.disabled) return;
+      btn.dataset.label = "扫描导入";
+      _cloneBtnLoading(btn, true);
       try {
         const res = await fetch("/api/clone/import", { method: "POST" });
         const data = await res.json();
         if (data.ok) {
-          alert(`导入完成，共导入 ${data.count} 个站点`);
-          loadCloneSites();
+          await loadCloneSites();
         } else {
           alert("导入失败: " + (data.error || "未知错误"));
         }
       } catch (e) {
         alert("导入失败: " + e.message);
+      } finally {
+        _cloneBtnLoading(btn, false);
       }
     });
-    safeBind("#cloneRefreshBtn", "click", () => loadCloneSites());
+    safeBind("#cloneRefreshBtn", "click", async () => {
+      const btn = document.getElementById("cloneRefreshBtn");
+      if (btn?.disabled) return;
+      btn.dataset.label = "刷新";
+      _cloneBtnLoading(btn, true);
+      await loadCloneSites();
+      _cloneBtnLoading(btn, false);
+    });
     bindStarButton();
     syncTopbarHeight();
     window.addEventListener("resize", syncTopbarHeight);
@@ -8628,23 +8663,6 @@
         showToast("后端数据加载失败，页面已保留离线数据");
       });
     // ===== Self-Evolution (自进化) =====
-    const SELF_EVO_API = {
-      status: "/api/self-evolution/status",
-      insightReports: "/api/self-evolution/insight-reports",
-      generateInsight: "/api/self-evolution/insight-reports/generate",
-      drift: "/api/self-evolution/drift",
-      topics: "/api/self-evolution/topics",
-      knowledgeCards: "/api/self-evolution/knowledge-cards",
-      generateCards: "/api/self-evolution/knowledge-cards/generate",
-      dueCards: "/api/self-evolution/knowledge-cards/due",
-      reviewCard: (id) => `/api/self-evolution/knowledge-cards/${id}/review`,
-      knowledgeGraph: "/api/self-evolution/knowledge-graph",
-      entityGraph: (id) => `/api/self-evolution/knowledge-graph/entity/${id}`,
-      notifications: "/api/self-evolution/notifications",
-      checkPush: "/api/self-evolution/notifications/check",
-      readNotification: (id) => `/api/self-evolution/notifications/${id}/read`,
-    };
-
     let selfEvoState = {
       status: null,
       insightReport: null,
