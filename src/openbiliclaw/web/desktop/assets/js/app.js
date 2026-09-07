@@ -1261,7 +1261,7 @@
       const poolTrigger = document.getElementById("poolDropdownTrigger");
       if (poolTrigger) poolTrigger.classList.toggle("is-active", isPoolPage);
       // 我的下拉菜单：当前在收藏/稍后再看/画像/聊聊口味页面时高亮触发按钮
-      const isMinePage = pageId === "savedPage" || pageId === "watchLaterPage" || pageId === "profilePage" || pageId === "chatPage";
+      const isMinePage = pageId === "savedPage" || pageId === "watchLaterPage" || pageId === "profilePage" || pageId === "chatPage" || pageId === "settingsPage";
       const mineTrigger = document.getElementById("mineDropdownTrigger");
       if (mineTrigger) mineTrigger.classList.toggle("is-active", isMinePage);
     }
