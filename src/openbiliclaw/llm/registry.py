@@ -5,6 +5,11 @@
 直接 re-export。
 """
 
+from typing import Any
+
+from obc_llm._config import LLMConfig  # noqa: F401 — re-export 供调用方注解
+from obc_llm.base import LLMProvider, LLMRegistry  # noqa: F401 — 同上
+from obc_llm.embedding import SupportsEmbeddingService  # noqa: F401 — 同上
 from obc_llm.registry import *  # noqa: F401, F403
 from obc_llm.registry import (
     RegistryBuildError,  # noqa: F401 — 显式导出供静态检查与调用方
@@ -31,12 +36,12 @@ from obc_llm.registry import (
 from openbiliclaw.llm._compat import to_llm_config
 
 
-def build_llm_registry(  # noqa: F811 — 覆盖 import * 的同名导出
-    config,
+def build_llm_registry(  # type: ignore[no-redef]  # noqa: F811 — 覆盖 import * 的同名导出
+    config: Any,
     *,
-    provider_overrides=None,
-    fallback_order=None,
-):
+    provider_overrides: dict[str, LLMProvider] | None = None,
+    fallback_order: list[str] | None = None,
+) -> LLMRegistry:
     """适配入口：接受主项目 Config / Config.llm，映射为 obc_llm LLMConfig。"""
     return _build_llm_registry(
         to_llm_config(config),
@@ -45,21 +50,28 @@ def build_llm_registry(  # noqa: F811 — 覆盖 import * 的同名导出
     )
 
 
-def build_embedding_service(config, registry=None):  # noqa: F811
+def build_embedding_service(  # type: ignore[no-redef]  # noqa: F811 — 覆盖 import * 的同名导出
+    config: Any,
+    registry: LLMRegistry | None = None,
+) -> SupportsEmbeddingService | None:
     """适配入口：接受主项目 Config / Config.llm，映射为 obc_llm LLMConfig。"""
-    return _build_embedding_service(to_llm_config(config), registry)
+    # obc_llm 侧 registry 参数仅为兼容旧调用保留、实现不使用，允许传 None
+    return _build_embedding_service(to_llm_config(config), registry)  # type: ignore[arg-type]
 
 
-def _maybe_openai_compatible_provider(config, overrides):  # noqa: F811
+def _maybe_openai_compatible_provider(
+    config: Any,
+    overrides: dict[str, LLMProvider],
+) -> LLMProvider | None:
     """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
     return _maybe_openai_compatible_provider_impl(to_llm_config(config), overrides)
 
 
-def _ollama_is_chat_capable(config):  # noqa: F811
+def _ollama_is_chat_capable(config: Any) -> bool:
     """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
     return _ollama_is_chat_capable_impl(to_llm_config(config))
 
 
-def summarize_registry(config, registry):  # noqa: F811
+def summarize_registry(config: Any, registry: LLMRegistry) -> RegistrySummary:  # type: ignore[no-redef]
     """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
     return _summarize_registry_impl(to_llm_config(config), registry)
