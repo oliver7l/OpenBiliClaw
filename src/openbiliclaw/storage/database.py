@@ -24,6 +24,7 @@ from openbiliclaw.storage._chat_turn_mixin import ChatTurnMixin
 from openbiliclaw.storage._content_cache_mixin import ContentCacheMixin
 from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidatesMixin
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
+from openbiliclaw.storage._watch_later_mixin import WatchLaterMixin
 from openbiliclaw.storage._delight_mixin import DelightMixin
 from openbiliclaw.storage._source_recipe_mixin import SourceRecipeMixin
 from openbiliclaw.storage._cover_mixin import CoverMixin
@@ -552,7 +553,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -4582,63 +4583,6 @@ class Database(DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, Favori
         return int(cursor.rowcount or 0) > 0
 
     # ── Watch-later CRUD ─────────────────────────────────────────
-
-    def add_to_watch_later(self, bvid: str, note: str = "") -> bool:
-        """Bookmark a video. Returns True if newly inserted, False if updated."""
-        self._execute_write(
-            """
-            INSERT INTO watch_later (bvid, note)
-            VALUES (?, ?)
-            ON CONFLICT(bvid) DO UPDATE SET
-                added_at = CURRENT_TIMESTAMP,
-                note = excluded.note
-            """,
-            (bvid.strip(), note),
-        )
-        return self.conn.total_changes > 0
-
-    def remove_from_watch_later(self, bvid: str) -> bool:
-        """Remove a bookmark. Returns True if a row was deleted."""
-        self._execute_write(
-            "DELETE FROM watch_later WHERE bvid = ?",
-            (bvid.strip(),),
-        )
-        return self.conn.total_changes > 0
-
-    def is_in_watch_later(self, bvid: str) -> bool:
-        """Check whether a video is bookmarked."""
-        row = self.conn.execute(
-            "SELECT 1 FROM watch_later WHERE bvid = ?",
-            (bvid.strip(),),
-        ).fetchone()
-        return row is not None
-
-    def count_watch_later(self) -> int:
-        """Return total number of bookmarked videos."""
-        row = self.conn.execute("SELECT COUNT(*) FROM watch_later").fetchone()
-        return int(row[0]) if row else 0
-
-    def list_watch_later(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Return bookmarked videos with content_cache metadata, newest first."""
-        cursor = self.conn.execute(
-            """
-            SELECT
-                w.bvid,
-                w.added_at,
-                w.note,
-                COALESCE(c.title, '') AS title,
-                COALESCE(c.up_name, '') AS up_name,
-                COALESCE(c.cover_url, '') AS cover_url,
-                COALESCE(c.content_url, '') AS content_url,
-                COALESCE(c.source_platform, '') AS source_platform
-            FROM watch_later AS w
-            LEFT JOIN content_cache AS c ON c.bvid = w.bvid
-            ORDER BY w.added_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-        return [dict(row) for row in cursor.fetchall()]
 
     def _ensure_favorites_table(self) -> None:
         """Create the favorites (收藏夹) table for existing databases.
