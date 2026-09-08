@@ -43,6 +43,8 @@ class ChatSession(BaseModel):
     chat_type: ChatType | None = Field(default=None, description="聊天类型")
     file_path: str | None = Field(default=None, description="源文件路径")
     file_size: int | None = Field(default=None, description="源文件大小")
+    analyzed: bool = Field(default=False, description="是否已分析")
+    last_analyzed_at: str | None = Field(default=None, description="上次分析时间")
     created_at: datetime = Field(description="创建时间")
     updated_at: datetime = Field(description="更新时间")
 

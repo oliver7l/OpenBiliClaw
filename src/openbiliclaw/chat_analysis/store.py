@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     chat_type TEXT DEFAULT '',
     file_path TEXT DEFAULT '',
     file_size INTEGER DEFAULT 0,
+    analyzed INTEGER DEFAULT 0,
+    last_analyzed_at TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -206,6 +208,12 @@ class ChatAnalysisStore:
     def _initialize_tables(self, conn: sqlite3.Connection | None = None) -> None:
         c = conn or self.conn
         c.executescript(_SCHEMA_SQL)
+        # Migration: add analyzed columns if missing (existing databases)
+        for col in ("analyzed", "last_analyzed_at"):
+            try:
+                c.execute(f"ALTER TABLE chat_sessions ADD COLUMN {col} TEXT DEFAULT ''" if col == "last_analyzed_at" else f"ALTER TABLE chat_sessions ADD COLUMN {col} INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # column already exists
         c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
 
     # ── 会话 CRUD ──
@@ -263,6 +271,22 @@ class ChatAnalysisStore:
         ).fetchall()
         return [self._row_to_session(r) for r in rows]
 
+    def get_unanalyzed_sessions(self, limit: int = 30) -> list[ChatSession]:
+        """获取未分析过的会话，按消息数降序排列。"""
+        rows = self.conn.execute(
+            "SELECT * FROM chat_sessions WHERE analyzed = 0 ORDER BY message_count DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_session(r) for r in rows]
+
+    def mark_session_analyzed(self, session_id: int) -> None:
+        """标记会话为已分析。"""
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "UPDATE chat_sessions SET analyzed = 1, last_analyzed_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, session_id),
+        )
+
     def count_sessions(self, chat_type: str | None = None) -> int:
         where = "WHERE chat_type = ?" if chat_type else ""
         params: tuple = (chat_type,) if chat_type else ()
@@ -279,12 +303,16 @@ class ChatAnalysisStore:
             "export_time",
             "message_count",
             "chat_type",
+            "analyzed",
+            "last_analyzed_at",
         ):
             val = getattr(data, field, None)
             if val is not None:
                 updates.append(f"{field} = ?")
                 params.append(
-                    val.value if field == "chat_type" and isinstance(val, ChatType) else val
+                    val.value if field == "chat_type" and isinstance(val, ChatType) else
+                    int(val) if field == "analyzed" and isinstance(val, bool) else
+                    val
                 )
         if not updates:
             return self.get_session(session_id)

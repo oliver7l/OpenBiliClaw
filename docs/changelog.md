@@ -4,6 +4,13 @@
 
 ---
 
+## v0.3.206: 自进化循环统一调度（2026-09-08）
+
+- **日记分析收归自进化循环**：`_do_diary_analysis()` 每 1 小时增量分析未分析日记，最多 20 篇/次，通过 `diary_analyses` 表状态追踪已分析。
+- **聊天分析收归自进化循环**：`_do_chat_analysis()` 每 6 小时增量分析未分析会话，最多 10 个/次；给 `chat_sessions` 表新增 `analyzed` / `last_analyzed_at` 字段。
+- **自进化循环编号统一**：从 Step 1 → Step 13 完整对齐，日记分析（Step 5）、聊天分析（Step 6）插入后后续步骤编号顺延。
+- **修复 synthesis/store.py 数据库连接**：统一使用 `_connect()` / `_connect_chat_db()` 方法，设置 `row_factory = sqlite3.Row` 避免 `tuple` 无法调用 `.get()` 的运行时错误。
+
 ## v0.3.205: 跨模块迭代合成引擎（2026-09-08）
 
 - **新增 cross-module 迭代合成系统**：`src/openbiliclaw/synthesis/` 模块，综合日记分析 + 聊天洞察 + 聊天话题，通过 LLM 持续迭代优化个人认知画像。

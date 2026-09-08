@@ -514,7 +514,25 @@ class SelfEvolutionLoopEngine:
             # Update last processed ID to the highest in this batch
             self._state.last_processed_article_id = max(candidate_ids)
 
-        # ── Step 5: Interest drift (daily) ──────────────────────────────────
+        # ── Step 5: Diary analysis (every tick, incremental) ────────────────
+        if self._quota_ok():
+            await self._run_if_due(
+                "diary_analysis",
+                1,
+                results,
+                lambda: self._do_diary_analysis(),
+            )
+
+        # ── Step 6: Chat analysis (every 6 hours, incremental) ──────────────
+        if self._quota_ok():
+            await self._run_if_due(
+                "chat_analysis",
+                6,
+                results,
+                lambda: self._do_chat_analysis(),
+            )
+
+        # ── Step 7: Interest drift (daily) ──────────────────────────────────
         await self._run_if_due(
             "drift",
             24,
@@ -522,7 +540,7 @@ class SelfEvolutionLoopEngine:
             lambda: self._do_drift_detect(),
         )
 
-        # ── Step 6: Insight report (daily) ──────────────────────────────────
+        # ── Step 8: Insight report (daily) ──────────────────────────────────
         if self._quota_ok():
             await self._run_if_due(
                 "insight_report",
@@ -531,7 +549,7 @@ class SelfEvolutionLoopEngine:
                 lambda: self._do_insight_report(),
             )
 
-        # ── Step 7: Topic mining (every 3 days) ─────────────────────────────
+        # ── Step 9: Topic mining (every 3 days) ─────────────────────────────
         await self._run_if_due(
             "topic_miner",
             72,
@@ -539,7 +557,7 @@ class SelfEvolutionLoopEngine:
             lambda: self._do_topic_mining(),
         )
 
-        # ── Step 8: Knowledge graph (every 3 days, incremental) ─────────────
+        # ── Step 10: Knowledge graph (every 3 days, incremental) ─────────────
         await self._run_if_due(
             "knowledge_graph",
             72,
@@ -547,7 +565,7 @@ class SelfEvolutionLoopEngine:
             lambda: self._do_knowledge_graph(),
         )
 
-        # ── Step 9: Auto topic (weekly) ─────────────────────────────────────
+        # ── Step 11: Auto topic (weekly) ────────────────────────────────────
         if self._quota_ok():
             await self._run_if_due(
                 "auto_topic",
@@ -556,7 +574,7 @@ class SelfEvolutionLoopEngine:
                 lambda: self._do_auto_topic(),
             )
 
-        # ── Step 10: Content insights (weekly) ──────────────────────────────
+        # ── Step 12: Content insights (weekly) ──────────────────────────────
         if self._quota_ok():
             await self._run_if_due(
                 "content_insights",
@@ -565,7 +583,7 @@ class SelfEvolutionLoopEngine:
                 lambda: self._do_content_insights(),
             )
 
-        # ── Step 11: Cross-module synthesis (every 6 hours) ─────────────────
+        # ── Step 13: Cross-module synthesis (every 6 hours) ─────────────────
         if self._quota_ok():
             await self._run_if_due(
                 "synthesis",
@@ -715,6 +733,41 @@ class SelfEvolutionLoopEngine:
             "gaps": len(report.knowledge_gaps),
             "cross_platform": len(report.cross_platform_insights),
         }
+
+    async def _do_diary_analysis(self) -> dict[str, Any] | None:
+        """增量分析未分析的日记，每 tick 最多处理 20 篇。"""
+        try:
+            from openbiliclaw.diary.service import DiaryService
+            from openbiliclaw.diary.store import DiaryStore
+
+            store = DiaryStore(db_path=self._db_path)
+            store.initialize()
+            svc = DiaryService(
+                database=store._database,
+                db_path=self._db_path,
+                llm_service=self._llm_service,
+            )
+            result = await svc.analyze_unanalyzed(limit=20, concurrency=3)
+            if result:
+                logger.info("self_evolution: diary analysis done: %s", result)
+            return result
+        except Exception:
+            logger.debug("self_evolution: diary analysis failed", exc_info=True)
+            return None
+
+    async def _do_chat_analysis(self) -> dict[str, Any] | None:
+        """增量分析未分析的聊天会话，每 6 小时最多处理 10 个会话。"""
+        try:
+            from openbiliclaw.chat_analysis.service import ChatAnalysisService
+
+            svc = ChatAnalysisService(db_path="data/chat_analysis.db")
+            result = await svc.analyze_unanalyzed(limit=10, concurrency=2)
+            if result:
+                logger.info("self_evolution: chat analysis done: %s", result)
+            return result
+        except Exception:
+            logger.debug("self_evolution: chat analysis failed", exc_info=True)
+            return None
 
     async def _do_synthesis(self) -> dict[str, Any] | None:
         """执行跨模块迭代合成（日记+聊天+文章洞察）。"""

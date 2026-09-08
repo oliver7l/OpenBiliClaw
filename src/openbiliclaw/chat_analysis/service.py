@@ -495,6 +495,36 @@ class ChatAnalysisService:
 
         return result
 
+    async def analyze_unanalyzed(
+        self, limit: int = 20, concurrency: int = 3
+    ) -> dict[str, int]:
+        """批量分析未分析的会话，每个会话执行完整分析后标记为已分析。
+
+        增量设计：每次只处理 limit 个未分析会话，分析完成后标记 analyzed=1，
+        下次再跑时会跳过已分析的。
+        """
+        sessions = self.store.get_unanalyzed_sessions(limit=limit)
+        if not sessions:
+            return {"analyzed": 0, "total": 0}
+
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _analyze_one(session: ChatSession) -> bool:
+            async with sem:
+                try:
+                    logger.info("chat_analysis: analyzing session %d (%s)", session.id, session.title)
+                    await self.analyze_session(session.id)
+                    self.store.mark_session_analyzed(session.id)
+                    return True
+                except Exception as exc:
+                    logger.warning("chat_analysis: failed session %d: %s", session.id, exc)
+                    return False
+
+        results = await asyncio.gather(*[_analyze_one(s) for s in sessions])
+        success = sum(1 for r in results if r)
+        logger.info("chat_analysis: analyzed %d/%d unanalyzed sessions", success, len(sessions))
+        return {"analyzed": success, "total": len(sessions)}
+
     # ── 统计 ──
 
     def get_session_stats(self, session_id: int) -> dict[str, Any]:

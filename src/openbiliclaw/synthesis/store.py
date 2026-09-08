@@ -25,12 +25,24 @@ class SynthesisStore:
         self._db_path = db_path
         self._ensure_tables()
 
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
+    def _connect_chat_db(self) -> sqlite3.Connection:
+        conn = sqlite3.connect("data/chat_analysis.db")
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
     # ── 建表 ───────────────────────────────────────────────────────
 
     def _ensure_tables(self) -> None:
-        with sqlite3.connect(self._db_path) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=5000")
+        with self._connect() as conn:
 
             # 合成版本表
             conn.execute("""
@@ -91,7 +103,7 @@ class SynthesisStore:
     # ── 状态管理 ───────────────────────────────────────────────────
 
     def get_state(self) -> SynthesisState:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             rows = dict(conn.execute("SELECT key, value FROM synthesis_state").fetchall())
         return SynthesisState(
             last_diary_analysis_id=int(rows.get("last_diary_analysis_id", "0")),
@@ -103,7 +115,7 @@ class SynthesisStore:
         )
 
     def update_state(self, state: SynthesisState) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             updates = {
                 "last_diary_analysis_id": str(state.last_diary_analysis_id),
                 "last_chat_insight_id": str(state.last_chat_insight_id),
@@ -121,7 +133,7 @@ class SynthesisStore:
     # ── 版本管理 ───────────────────────────────────────────────────
 
     def save_version(self, v: SynthesisVersion) -> int:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             cur = conn.execute(
                 """INSERT INTO synthesis_versions
                    (version, parent_version, created_at,
@@ -155,7 +167,7 @@ class SynthesisStore:
             return cur.lastrowid or 0
 
     def get_latest_version(self) -> SynthesisVersion | None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM synthesis_versions ORDER BY version DESC LIMIT 1"
             ).fetchone()
@@ -164,7 +176,7 @@ class SynthesisStore:
         return self._row_to_version(row)
 
     def get_version(self, version: int) -> SynthesisVersion | None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM synthesis_versions WHERE version = ?", (version,)
             ).fetchone()
@@ -173,7 +185,7 @@ class SynthesisStore:
         return self._row_to_version(row)
 
     def list_versions(self, limit: int = 20) -> list[SynthesisVersion]:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM synthesis_versions ORDER BY version DESC LIMIT ?",
                 (limit,),
@@ -208,7 +220,7 @@ class SynthesisStore:
     # ── 日记增强回写 ───────────────────────────────────────────────
 
     def save_diary_enhancement(self, de: DiarySynthesisResult) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO synthesis_diary_enhancements
                    (diary_id, version, enhanced_tags, enhanced_insight, cross_refs, updated_at)
@@ -229,7 +241,7 @@ class SynthesisStore:
         self, since_id: int, limit: int = 50
     ) -> list[dict[str, Any]]:
         """获取上次合成以来的新增日记分析。"""
-        with sqlite3.connect(self._db_path) as conn:
+        with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """SELECT da.id, da.diary_id, de.entry_date, de.title,
@@ -249,8 +261,7 @@ class SynthesisStore:
     ) -> list[dict[str, Any]]:
         """获取上次合成以来的新增聊天洞察。"""
         try:
-            conn = sqlite3.connect(self._db_path)
-            conn.row_factory = sqlite3.Row
+            conn = self._connect()
             # Check if chat insights are in main db
             rows = conn.execute(
                 """SELECT id, session_id, insight_type, content, confidence, created_at
@@ -264,8 +275,7 @@ class SynthesisStore:
             # Chat insights might be in chat_analysis.db
             pass
         try:
-            conn = sqlite3.connect("data/chat_analysis.db")
-            conn.row_factory = sqlite3.Row
+            conn = self._connect_chat_db()
             rows = conn.execute(
                 """SELECT id, session_id, insight_type, content, confidence, created_at
                    FROM chat_insights WHERE id > ?
@@ -282,8 +292,7 @@ class SynthesisStore:
     ) -> list[dict[str, Any]]:
         """获取上次合成以来的新增聊天话题。"""
         try:
-            conn = sqlite3.connect(self._db_path)
-            conn.row_factory = sqlite3.Row
+            conn = self._connect()
             rows = conn.execute(
                 """SELECT id, session_id, topic_name AS topic, keywords, summary, created_at
                    FROM chat_topics WHERE id > ?
@@ -295,8 +304,7 @@ class SynthesisStore:
         except Exception:
             pass
         try:
-            conn = sqlite3.connect("data/chat_analysis.db")
-            conn.row_factory = sqlite3.Row
+            conn = self._connect_chat_db()
             rows = conn.execute(
                 """SELECT id, session_id, topic_name AS topic, keywords, summary, created_at
                    FROM chat_topics WHERE id > ?
