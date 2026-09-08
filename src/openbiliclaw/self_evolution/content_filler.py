@@ -423,13 +423,14 @@ class ContentFiller:
     ) -> dict[str, int]:
         """通过 getnote save 让平台自动抓取正文并生成摘要，再读回写入项目数据库。
 
-        频率：每 tick 最多处理 5 篇，间隔 2 秒，日上限 ~120 篇
-        （getnote write_note 日限 1000，远低于上限）。
+        优先级顺序：YouTube → B站 → 其他视频 → 小红书 → 普通网页
+
+        频率：每 tick 最多处理 40 篇，间隔 2 秒，日上限 ~960 篇
+        （getnote write_note 日限 1000，充分利用但不超限）。
         """
         conn = self._conn()
-        # 优先处理视频/多媒体类链接（YouTube、B站、小红书等），
+        # 优先级顺序：YouTube → B站 → 其他视频 → 小红书 → 普通网页
         # 这些来源本地处理难度大，得到大脑平台更容易抓取
-        _VIDEO_SOURCES = ("youtube", "yt", "bilibili", "bili", "xiaohongshu", "douyin", "kuaishou")
         rows = conn.execute(
             """SELECT id, url, title, source_type
                FROM articles
@@ -437,11 +438,17 @@ class ContentFiller:
                  AND url IS NOT NULL AND url != ''
                  AND body_fetch_attempts < ?
                ORDER BY
-                 CASE WHEN source_type IN (?,?,?,?,?,?,?) THEN 0 ELSE 1 END,
+                 CASE
+                   WHEN source_type IN ('youtube','yt') THEN 0
+                   WHEN source_type IN ('bilibili','bili') THEN 1
+                   WHEN source_type IN ('douyin','kuaishou') THEN 2
+                   WHEN source_type = 'xiaohongshu' THEN 3
+                   ELSE 4
+                 END,
                  body_fetch_attempts ASC,
                  id ASC
                LIMIT ?""",
-            (_MAX_BODY_RETRIES,) + _VIDEO_SOURCES + (limit,),
+            (_MAX_BODY_RETRIES, limit),
         ).fetchall()
         conn.close()
 
