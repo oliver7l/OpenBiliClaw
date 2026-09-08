@@ -6,7 +6,9 @@
 
 > **v0.3.221 重构**：
 > - **数据库连接统一**：新增 `runtime/_db.py`，提供 `connect_main_with_pool(db_path)`（主库+ATTACH pool.db）和 `connect_pool(db_path)`（直接连pool.db）两个公共函数。13 个 producer 文件删除本地重复的 `_obc_connect` 定义改为 import 公共函数，净减 42 行重复代码。
-> - **refresh.py 巨类拆分（进行中）**：`refresh.py` 从 ~3,500 行降至 **1,493 行（-57%）**，采用 mixin 模式拆出 6 个功能组：`_refresh_shared.py`（模块级常量与签名探测工具）、`_refresh_platform_loops_mixin.py`（平台生产者循环）、`_refresh_loop_supervision_mixin.py`（循环监督）、`_refresh_notify_delight_mixin.py`（通知/惊喜投递）、`_refresh_probe_publish_mixin.py`（探针推送）、`_refresh_source_budget_mixin.py`（补货来源配额与预算）。
+> - **refresh.py 巨类拆分（已完成）**：`ContinuousRefreshController`（3,245 行 / 147 方法）拆为核心 **698 行** + 7 个 mixin：`_refresh_platform_loops_mixin.py`（平台生产者循环 18 法）、`_refresh_loop_supervision_mixin.py`（循环监督 16 法）、`_refresh_notify_delight_mixin.py`（通知/惊喜投递 10 法）、`_refresh_probe_publish_mixin.py`（探针推送 4 法）、`_refresh_source_budget_mixin.py`（来源配额与预算 19 法）、`_refresh_plan_drain_mixin.py`（刷新计划与候选排水 9 法）、`_refresh_replenishment_mixin.py`（手动补货请求 7 法）。
+> - **共享词汇层 `_refresh_shared.py`**：模块级常量、`_call_accepts_*` 签名探测工具、5 个输入/输出 Protocol，以及 `RefreshControllerAttrs` 类型基座（非 dataclass，字段实体仍在核心类）——7 个 mixin 继承基座获得与拆分前一致的 mypy 视图；全部 mixin logger 沿用 `openbiliclaw.runtime.refresh` 名，日志行为零变化。
+> - **验证**：mypy strict 9 文件 0 错误（拆分前 1）；`tests/runtime/` 290/290。
 
 ## 已实现功能
 
