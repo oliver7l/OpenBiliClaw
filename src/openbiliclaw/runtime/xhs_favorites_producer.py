@@ -53,11 +53,7 @@ CLEAN_ENV = {
 # ---------------------------------------------------------------------------
 
 
-def _obc_connect(db_path: Path) -> sqlite3.Connection:
-    """Connect to pool.db directly (favorites live in the recommendation pool)."""
-    conn = sqlite3.connect(str(db_path))
-    return conn
-
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 # ---------------------------------------------------------------------------
 # Fetch

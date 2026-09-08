@@ -53,9 +53,7 @@ _EID_RE = re.compile(r"^[0-9a-f]{20,30}$")
 # ---------------------------------------------------------------------------
 
 
-def _obc_connect(db_path: Path) -> sqlite3.Connection:
-    """Connect to pool.db directly."""
-    return sqlite3.connect(str(db_path))
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 
 # ---------------------------------------------------------------------------

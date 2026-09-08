@@ -43,9 +43,7 @@ _TWEET_ID_RE = __import__("re").compile(r"^\d{10,25}$")
 # ---------------------------------------------------------------------------
 
 
-def _obc_connect(db_path: Path) -> sqlite3.Connection:
-    """Connect to pool.db directly."""
-    return sqlite3.connect(str(db_path))
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 
 # ---------------------------------------------------------------------------

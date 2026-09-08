@@ -57,9 +57,7 @@ _BVID_RE = re.compile(r"^BV[0-9A-Za-z]{10}$")
 # ---------------------------------------------------------------------------
 
 
-def _obc_connect(db_path: Path) -> sqlite3.Connection:
-    """Connect to pool.db directly."""
-    return sqlite3.connect(str(db_path))
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 
 # ---------------------------------------------------------------------------

@@ -45,15 +45,7 @@ from datetime import datetime
 from typing import Any
 
 
-def _obc_connect(db_path):
-    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
-    import sqlite3 as _sqlite3
-    from pathlib import Path as _Path
-
-    _conn = _sqlite3.connect(db_path)
-    with contextlib.suppress(_sqlite3.OperationalError):
-        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    return _conn
+from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
 
 
 logger = logging.getLogger(__name__)
