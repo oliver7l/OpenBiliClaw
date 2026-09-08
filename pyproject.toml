@@ -127,7 +127,7 @@ select = [
 "src/openbiliclaw/api/recommendation_routes.py" = ["E501"]  # M1 extraction from app.py; formatting deferred
 "src/openbiliclaw/storage/database.py" = ["E501"]
 "src/openbiliclaw/runtime/refresh.py" = ["E501"]
-"src/openbiliclaw/cli.py" = ["E501"]
+"src/openbiliclaw/cli/__init__.py" = ["E501"]  # 阶段2 cli/ 包化，E501 随分模块拆分逐步清零
 "src/openbiliclaw/diary/advanced_memory.py" = ["E501"]
 "src/openbiliclaw/diary/emotion.py" = ["E501"]
 "src/openbiliclaw/diary/timeline.py" = ["E501"]
@@ -135,6 +135,33 @@ select = [
 "src/openbiliclaw/notes/synthesis/prompts.py" = ["E501"]
 # Knowledge Forge：prompt 模板包含大段中文文本
 "src/openbiliclaw/knowledge_forge/prompts.py" = ["E501"]
+# SQL 语句、URL、长字符串导致的行长
+"src/openbiliclaw/api/chat_recommend_routes.py" = ["E501"]
+"src/openbiliclaw/api/source_routes.py" = ["E501"]
+"src/openbiliclaw/chat_analysis/service.py" = ["E501"]
+"src/openbiliclaw/diary/insights.py" = ["E501"]
+"src/openbiliclaw/diary/service.py" = ["E501"]
+"src/openbiliclaw/diary/store.py" = ["E501"]
+"src/openbiliclaw/health/store.py" = ["E501"]
+"src/openbiliclaw/notes/store.py" = ["E501"]
+"src/openbiliclaw/self_evolution/content_filler.py" = ["E501"]
+"src/openbiliclaw/self_evolution/insight_report.py" = ["E501"]
+"src/openbiliclaw/self_evolution/interest_drift.py" = ["E501"]
+"src/openbiliclaw/self_evolution/knowledge_graph.py" = ["E501"]
+"src/openbiliclaw/self_evolution/learning_path.py" = ["E501"]
+"src/openbiliclaw/storage/_recommendation_mixin.py" = ["E501"]
+"src/openbiliclaw/storage/_saved_memberships_mixin.py" = ["E501"]
+"src/openbiliclaw/storage/_schema_mixin.py" = ["E501"]
+"src/openbiliclaw/storage/_user_feedback_mixin.py" = ["E501"]
+"src/openbiliclaw/storage/_view_history_mixin.py" = ["E501"]
+"src/openbiliclaw/synthesis/models.py" = ["E501"]
+"src/openbiliclaw/chat_analysis/store.py" = ["E501"]
+"src/openbiliclaw/storage/_article_mixin.py" = ["E501"]
+"src/openbiliclaw/interview/review_store.py" = ["E501"]
+"src/openbiliclaw/self_evolution/proactive_push.py" = ["E501"]
+"src/openbiliclaw/self_evolution/auto_topic_generator.py" = ["E501"]
+"src/openbiliclaw/api/_llm_routes.py" = ["E501"]
+"src/openbiliclaw/self_evolution/insights.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

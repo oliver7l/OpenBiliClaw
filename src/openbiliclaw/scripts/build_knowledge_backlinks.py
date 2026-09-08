@@ -243,13 +243,13 @@ def _build_learnbuffett(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 context = ""
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url, context_snippet) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url, context_snippet) VALUES (?, ?, ?, ?, ?, ?)",  # noqa: E501
                     (concept, link_type, "learnbuffett", source_id, source_url, context),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",  # noqa: E501
                     (
                         source_id,
                         source_title,
@@ -324,13 +324,13 @@ def _build_mungermodels(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 link_href = link["href"].lstrip("./")
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",  # noqa: E501
                     (concept, link_type, "mungermodels", source_id, source_url),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",  # noqa: E501
                     (
                         source_id,
                         source_title,
@@ -416,13 +416,13 @@ def _build_aichainmap(conn: sqlite3.Connection, args: argparse.Namespace) -> tup
                 link_href = link["href"].lstrip("./")
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",  # noqa: E501
                     (concept, link_type, "aichainmap", source_id, source_url),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",  # noqa: E501
                     (
                         source_id,
                         source_title,

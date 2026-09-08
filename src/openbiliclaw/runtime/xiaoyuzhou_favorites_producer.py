@@ -369,7 +369,7 @@ def run_forever(
         modes.append("history")
     guard = RateLimitGuard("xiaoyuzhou-favorites", state_dir=PROJECT_ROOT / "data" / "rate_limit")
     logger.info(
-        "xiaoyuzhou personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",
+        "xiaoyuzhou personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",  # noqa: E501
         ",".join(modes),
         interval_hours,
     )

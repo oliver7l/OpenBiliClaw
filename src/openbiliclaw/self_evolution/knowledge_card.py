@@ -208,7 +208,7 @@ class KnowledgeCardGenerator:
         conn = self._get_conn()
         try:
             article = conn.execute(
-                "SELECT id, title, url, source_type, tags, content_text, ai_summary FROM articles WHERE id = ?",
+                "SELECT id, title, url, source_type, tags, content_text, ai_summary FROM articles WHERE id = ?",  # noqa: E501
                 (article_id,),
             ).fetchone()
 
@@ -623,7 +623,7 @@ class KnowledgeCardGenerator:
         try:
             if card_type:
                 rows = conn.execute(
-                    "SELECT * FROM knowledge_cards WHERE card_type = ? ORDER BY created_at DESC LIMIT ?",
+                    "SELECT * FROM knowledge_cards WHERE card_type = ? ORDER BY created_at DESC LIMIT ?",  # noqa: E501
                     (card_type, limit),
                 ).fetchall()
             else:

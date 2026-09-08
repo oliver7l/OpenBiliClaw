@@ -564,7 +564,7 @@ class DiaryInsightsService:
 - 总字数：{stats.get("total_words", 0)} 字
 - 平均每篇：{stats.get("avg_words", 0)} 字
 - 平均情绪分：{stats.get("avg_mood_score", 0)}（-1到1，正数偏积极）
-- 时间范围：{stats.get("date_range", {}).get("earliest", "?")} ~ {stats.get("date_range", {}).get("latest", "?")}
+- 时间范围：{stats.get("date_range", {}).get("earliest", "?")} ~ {stats.get("date_range", {}).get("latest", "?")}  # noqa: E501
 
 ## 月度分布
 {monthly_str}

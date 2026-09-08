@@ -120,7 +120,7 @@ class ContentFiller:
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
         conn.execute(
             """UPDATE articles
-               SET content_text = ?, content_hash = ?, body_fetch_attempts = body_fetch_attempts + 1,
+               SET content_text = ?, content_hash = ?, body_fetch_attempts = body_fetch_attempts + 1,  # noqa: E501
                    updated_at = ?
                WHERE id = ?""",
             (content, content_hash, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), article_id),
@@ -131,7 +131,7 @@ class ContentFiller:
     def _increment_attempts(self, article_id: int) -> None:
         conn = self._conn()
         conn.execute(
-            "UPDATE articles SET body_fetch_attempts = body_fetch_attempts + 1, updated_at = ? WHERE id = ?",
+            "UPDATE articles SET body_fetch_attempts = body_fetch_attempts + 1, updated_at = ? WHERE id = ?",  # noqa: E501
             (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), article_id),
         )
         conn.commit()

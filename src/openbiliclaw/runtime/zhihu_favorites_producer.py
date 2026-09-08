@@ -330,7 +330,7 @@ def run_forever(max_per_collection: int = 100, interval_hours: int = 24) -> None
     )
     guard = RateLimitGuard("zhihu-favorites", state_dir=PROJECT_ROOT / "data" / "rate_limit")
     logger.info(
-        "zhihu favorites producer started (interval=%dh, max_per_collection=%d, rate-limit guard enabled)",
+        "zhihu favorites producer started (interval=%dh, max_per_collection=%d, rate-limit guard enabled)",  # noqa: E501
         interval_hours,
         max_per_collection,
     )

@@ -1823,17 +1823,17 @@ def register_source_routes(
                   SUM(CASE WHEN pool_status = 'feedbacked' THEN 1 ELSE 0 END) AS feedbacked,
                   SUM(CASE WHEN pool_status = 'pending' THEN 1 ELSE 0 END) AS pending,
                   SUM(CASE WHEN COALESCE(pool_expression, '') != '' THEN 1 ELSE 0 END) AS with_expr,
-                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,
-                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,
+                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,  # noqa: E501
+                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,  # noqa: E501
                   SUM(CASE WHEN delight_score > 0.0 THEN 1 ELSE 0 END) AS delight_candidates,
                   SUM(CASE WHEN delight_notified = 1 THEN 1 ELSE 0 END) AS delight_notified,
-                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,
+                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,  # noqa: E501
                   SUM(CASE WHEN quality_score <= 0.0 THEN 1 ELSE 0 END) AS bucket_0,
-                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,
-                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,
-                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,
-                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,
-                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10
+                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,  # noqa: E501
+                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,  # noqa: E501
+                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,  # noqa: E501
+                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,  # noqa: E501
+                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10  # noqa: E501
                 FROM content_cache
             """).fetchone()
             m_total = int(master["total"]) if master else 0
@@ -1936,8 +1936,8 @@ def register_source_routes(
                        COALESCE(SUM(estimated_cost_cny), 0) AS cost_cny,
                        COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
                        COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,
-                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,  # noqa: E501
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost  # noqa: E501
                 FROM llm_usage
                 WHERE timestamp >= datetime('now', '-7 day', 'localtime')
                 GROUP BY caller ORDER BY cost_cny DESC LIMIT 20

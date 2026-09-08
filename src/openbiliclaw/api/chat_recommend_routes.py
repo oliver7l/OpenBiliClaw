@@ -34,7 +34,7 @@ def register_chat_recommend_routes(
         """Conversational recommendation: talk to the recommendation engine in natural language.
 
         Supports multi-turn context: "给我推荐几个广告算法视频" → "再来几个" → "讲讲第二个".
-        Session state is kept in memory (not persistent); pass session_id to continue a conversation.
+        Session state is kept in memory (not persistent); pass session_id to continue a conversation.  # noqa: E501
         """
         from openbiliclaw.recommendation.chat_recommender import ChatSession, chat_recommend
 

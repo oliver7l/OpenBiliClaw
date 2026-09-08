@@ -84,7 +84,7 @@ class DiarySynthesisResult(BaseModel):
     updated_at: str = ""
 
 
-_SYNTHESIS_SYSTEM_PROMPT = """你是一位个人成长分析师，负责综合日记和聊天记录的分析结果，持续迭代优化个人认知画像。
+_SYNTHESIS_SYSTEM_PROMPT = """你是一位个人成长分析师，负责综合日记和聊天记录的分析结果，持续迭代优化个人认知画像。  # noqa: E501
 
 ## 你的任务
 综合分析一段时期内的日记分析和聊天分析的结果，识别跨模块的模式、主题演化和个人成长趋势。

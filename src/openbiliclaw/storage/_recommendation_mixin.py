@@ -309,7 +309,7 @@ class RecommendationMixin:
             )
             WHERE (
                 COALESCE(c.source_platform, '') != 'xiaohongshu'
-                OR (COALESCE(c.content_url, '') LIKE '%xsec_token=%' AND c.discovered_at >= '2026-08-15')
+                OR (COALESCE(c.content_url, '') LIKE '%xsec_token=%' AND c.discovered_at >= '2026-08-15')  # noqa: E501
             )
             AND COALESCE(r.confidence, 0.0) >= ?
             {processed_clause}

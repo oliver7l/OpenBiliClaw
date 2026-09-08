@@ -1,4 +1,4 @@
-"""Self-evolution module: auto-generate insights, detect interest drift, mine topics, generate knowledge cards, build knowledge graph, and proactively push valuable content."""
+"""Self-evolution module: auto-generate insights, detect interest drift, mine topics, generate knowledge cards, build knowledge graph, and proactively push valuable content."""  # noqa: E501
 
 from openbiliclaw.self_evolution.insight_report import (
     DeepDiveCandidate,

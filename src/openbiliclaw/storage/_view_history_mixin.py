@@ -23,7 +23,7 @@ class ViewHistoryMixin:
         """Record a content view / click."""
         self.conn.execute(
             """INSERT INTO view_history
-               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds)
+               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds)  # noqa: E501
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(item.get("bvid", "")),
@@ -65,7 +65,7 @@ class ViewHistoryMixin:
                           SUM(MIN(dwell_seconds, 600)) AS dwell_sum,
                           COUNT(*) AS views,
                           SUM(CASE WHEN dwell_seconds >= 60 THEN 1 ELSE 0 END) AS deep_views,
-                          SUM(CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END) AS quick_exits
+                          SUM(CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END) AS quick_exits  # noqa: E501
                    FROM view_history
                    WHERE viewed_at >= ? AND COALESCE(topic_group, '') != ''
                    GROUP BY topic_group""",

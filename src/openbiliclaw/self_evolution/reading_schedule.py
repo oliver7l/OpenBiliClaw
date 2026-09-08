@@ -400,7 +400,7 @@ class ReadingScheduler:
                 by_state[row[0]] = row[1]
 
             due_today = conn.execute(
-                "SELECT COUNT(*) FROM reading_schedule WHERE next_review_at <= ? AND state != 'mastered'",
+                "SELECT COUNT(*) FROM reading_schedule WHERE next_review_at <= ? AND state != 'mastered'",  # noqa: E501
                 (now,),
             ).fetchone()[0]
 

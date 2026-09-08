@@ -183,7 +183,7 @@ class RateLimitGuard:
             remaining = cooldown_end - now
             hours_left = remaining.total_seconds() / 3600
             logger.info(
-                "[%s] rate-limit cooldown active — skipping (%.1f h remaining, %d consecutive failures)",
+                "[%s] rate-limit cooldown active — skipping (%.1f h remaining, %d consecutive failures)",  # noqa: E501
                 self.name,
                 hours_left,
                 self._state.consecutive_failures,
@@ -245,7 +245,7 @@ class RateLimitGuard:
 
         # Check circuit breaker
         circuit_just_opened = False
-        if self._state.consecutive_failures >= self.circuit_breaker_threshold and not self._state.circuit_open:
+        if self._state.consecutive_failures >= self.circuit_breaker_threshold and not self._state.circuit_open:  # noqa: E501
             self._state.circuit_open = True
             circuit_just_opened = True
             cooldown_hours = self.max_cooldown_hours

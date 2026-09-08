@@ -360,11 +360,11 @@ class RuntimeContext:
         """
         # 防御性补全：测试 fake_config（SimpleNamespace）可能缺 llm / recommendation
         # 段，后续 getattr(new_config.<seg>, ...) 会因段本身不存在而抛 AttributeError。
-        from types import SimpleNamespace as _sns
+        from types import SimpleNamespace
 
         for _seg in ("llm", "recommendation"):
             if not hasattr(new_config, _seg):
-                setattr(new_config, _seg, _sns())
+                setattr(new_config, _seg, SimpleNamespace())
         from openbiliclaw.bilibili.api import BilibiliAPIClient
         from openbiliclaw.bilibili.auth import resolve_runtime_cookie
         from openbiliclaw.discovery.engine import (

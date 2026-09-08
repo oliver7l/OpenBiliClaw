@@ -427,7 +427,7 @@ class KnowledgeGraphBuilder:
         try:
             rows = conn.execute(
                 """
-                SELECT id, title, url, source_type, tags, content_text, ai_summary, author, created_at
+                SELECT id, title, url, source_type, tags, content_text, ai_summary, author, created_at  # noqa: E501
                 FROM articles
                 WHERE content_text IS NOT NULL AND length(content_text) > 100
                 ORDER BY created_at DESC

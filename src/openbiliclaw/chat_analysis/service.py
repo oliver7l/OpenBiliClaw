@@ -91,7 +91,7 @@ class ChatAnalysisService:
     - llm_service: 可选的 LLM 服务，用于话题提取、摘要、洞察生成
     """
 
-    PROMPT_TOPIC_EXTRACT = """你是一个聊天记录分析专家。请分析以下群聊消息，提取出讨论的**主要话题**。
+    PROMPT_TOPIC_EXTRACT = """你是一个聊天记录分析专家。请分析以下群聊消息，提取出讨论的**主要话题**。  # noqa: E501
 
 每条消息格式为：`[发送者]: 消息内容`
 
@@ -104,7 +104,7 @@ class ChatAnalysisService:
 
 只返回 JSON 数组，不要其他内容。"""
 
-    PROMPT_INSIGHT_EXTRACT = """你是一个深度洞察分析专家。请分析以下聊天记录，提炼出有价值的**洞察**。
+    PROMPT_INSIGHT_EXTRACT = """你是一个深度洞察分析专家。请分析以下聊天记录，提炼出有价值的**洞察**。  # noqa: E501
 
 每条消息格式为：`[发送者]: 消息内容`
 
@@ -608,21 +608,21 @@ class ChatAnalysisService:
 
     def get_session_senders(self, session_id: int) -> list[str]:
         rows = self.store.conn.execute(
-            "SELECT DISTINCT sender FROM chat_messages WHERE session_id = ? AND sender != '' ORDER BY sender",
+            "SELECT DISTINCT sender FROM chat_messages WHERE session_id = ? AND sender != '' ORDER BY sender",  # noqa: E501
             (session_id,),
         ).fetchall()
         return [r[0] for r in rows]
 
     def get_session_message_types(self, session_id: int) -> dict[str, int]:
         rows = self.store.conn.execute(
-            "SELECT message_type, COUNT(*) FROM chat_messages WHERE session_id = ? GROUP BY message_type",
+            "SELECT message_type, COUNT(*) FROM chat_messages WHERE session_id = ? GROUP BY message_type",  # noqa: E501
             (session_id,),
         ).fetchall()
         return {r[0]: r[1] for r in rows}
 
     def get_session_time_range(self, session_id: int) -> tuple[str | None, str | None]:
         row = self.store.conn.execute(
-            "SELECT MIN(timestamp), MAX(timestamp) FROM chat_messages WHERE session_id = ? AND timestamp != ''",
+            "SELECT MIN(timestamp), MAX(timestamp) FROM chat_messages WHERE session_id = ? AND timestamp != ''",  # noqa: E501
             (session_id,),
         ).fetchone()
         return (row[0], row[1]) if row else (None, None)

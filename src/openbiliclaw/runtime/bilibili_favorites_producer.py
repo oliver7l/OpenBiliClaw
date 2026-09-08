@@ -408,7 +408,7 @@ def run_forever(
         modes.append("history")
     guard = RateLimitGuard("bilibili-favorites", state_dir=PROJECT_ROOT / "data" / "rate_limit")
     logger.info(
-        "bilibili personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",
+        "bilibili personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",  # noqa: E501
         ",".join(modes),
         interval_hours,
     )

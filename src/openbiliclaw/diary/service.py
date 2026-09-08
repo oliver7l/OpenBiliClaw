@@ -37,7 +37,7 @@ _rag_service = None
 _self_evolution_service = None
 
 
-_DIARY_ANALYSIS_PROMPT = """你是一位专业的日记分析师和成长陪伴者。请分析以下日记内容，输出结构化的 JSON 结果。
+_DIARY_ANALYSIS_PROMPT = """你是一位专业的日记分析师和成长陪伴者。请分析以下日记内容，输出结构化的 JSON 结果。  # noqa: E501
 
 日记日期：{entry_date}
 日记标题：{title}
@@ -63,7 +63,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 """
 
 
-_EXTRACTION_PROMPT = """你是一位专业的日记内容分析专家。请从以下日记中提取结构化的标签、人物、地点和事件信息。
+_EXTRACTION_PROMPT = """你是一位专业的日记内容分析专家。请从以下日记中提取结构化的标签、人物、地点和事件信息。  # noqa: E501
 
 日记日期：{entry_date}
 日记标题：{title}
@@ -75,10 +75,10 @@ _EXTRACTION_PROMPT = """你是一位专业的日记内容分析专家。请从�
 请严格输出以下 JSON 格式（不要输出任何其他文字，不要使用 markdown 代码块）：
 {{
   "tags": [
-    {{"name": "标签名称", "type": "emotion|topic|event|location|work|family|health|finance|other", "confidence": 0.9}}
+    {{"name": "标签名称", "type": "emotion|topic|event|location|work|family|health|finance|other", "confidence": 0.9}}  # noqa: E501
   ],
   "persons": [
-    {{"name": "人物名称", "relation": "与作者的关系（如：家人/朋友/同事/儿子/母亲/伴侣等）", "context": "人物在日记中出现的上下文片段，50字以内"}}
+    {{"name": "人物名称", "relation": "与作者的关系（如：家人/朋友/同事/儿子/母亲/伴侣等）", "context": "人物在日记中出现的上下文片段，50字以内"}}  # noqa: E501
   ],
   "locations": ["地点1", "地点2"],
   "events": ["事件1", "事件2"]
@@ -242,7 +242,7 @@ class DiaryService:
         try:
             resp = await self._llm_service.complete_structured_task(
                 system_instruction=_DIARY_ANALYSIS_PROMPT,
-                user_input=f"日期：{entry.entry_date}\n标题：{entry.title or '(无标题)'}\n\n{entry.content[:8000]}",
+                user_input=f"日期：{entry.entry_date}\n标题：{entry.title or '(无标题)'}\n\n{entry.content[:8000]}",  # noqa: E501
                 temperature=0.3,
                 max_tokens=4096,
                 caller="diary.analyze_entry",
@@ -893,7 +893,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         fragments_text = "\n\n".join(fragments_parts)
 
         # 构建 AI prompt（证据驱动，参考 echolog 的设计）
-        prompt = f"""你是一个安静的记录者，坐在用户这一天的记忆里，把零散的念头、情绪和画面整理成一篇属于他自己的日记。
+        prompt = f"""你是一个安静的记录者，坐在用户这一天的记忆里，把零散的念头、情绪和画面整理成一篇属于他自己的日记。  # noqa: E501
 
 今天的碎片记录（按时间顺序）：
 {fragments_text}

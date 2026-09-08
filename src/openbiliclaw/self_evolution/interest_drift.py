@@ -400,7 +400,7 @@ class InterestDriftDetector:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO drift_reports
-                (report_id, current_start, current_end, previous_start, previous_end, generated_at, report_json)
+                (report_id, current_start, current_end, previous_start, previous_end, generated_at, report_json)  # noqa: E501
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
