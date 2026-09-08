@@ -39,13 +39,15 @@
       poolFeed: "http://127.0.0.1:8421/api/pool/feed",
       savedStatus: "/saved-status",
     };
-    ENDPOINTS.userFeedback = "/api/user-feedback";
-    ENDPOINTS.userFeedbackBatch = "/api/user-feedback/batch";
+    // 注意：这些路径不带 /api 前缀——requestJson 会自动拼接 API base（默认 /api），
+    // 若带前缀会拼成 /api/api/... 导致 404（与其余 ENDPOINTS 条目保持一致）。
+    ENDPOINTS.userFeedback = "/user-feedback";
+    ENDPOINTS.userFeedbackBatch = "/user-feedback/batch";
 
-    ENDPOINTS.interestTags = "/api/interest-tags";
-    ENDPOINTS.viewRecord = "/api/view-record";
-    ENDPOINTS.viewDwell = "/api/view-dwell";
-    ENDPOINTS.viewHistory = "/api/view-history";
+    ENDPOINTS.interestTags = "/interest-tags";
+    ENDPOINTS.viewRecord = "/view-record";
+    ENDPOINTS.viewDwell = "/view-dwell";
+    ENDPOINTS.viewHistory = "/view-history";
 
     const state = {
       query: "",

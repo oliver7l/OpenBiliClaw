@@ -4,6 +4,14 @@
 
 ---
 
+## v0.3.219: 修复桌面 Web 反馈接口 404（2026-09-08）
+
+- **修复推荐流点赞/不喜欢无反应**：`web/desktop/assets/js/app.js` 中 `userFeedback` / `userFeedbackBatch` / `interestTags` / `viewRecord` / `viewDwell` / `viewHistory` 六个 ENDPOINTS 误带 `/api` 前缀，经 `requestJson` 拼接 API base（默认 `/api`）后请求 `/api/api/...` 返回 404，且前端静默吞错导致点击无任何反馈；已去掉前缀与其余条目保持一致。
+- **同步修正 beacon 调用**：`web/desktop/assets/js/pool-explore.js` 中 `sendBeacon` 裸 URL 不经过 base 拼接，显式补回 `/api` 前缀，避免停留时长上报随上述改动失效。
+- **验证**：`node --check` 通过；模拟修复后 `POST /api/user-feedback` 返回 200 `{"ok":true}`；静态资源版本号自动刷新，浏览器强刷即生效。
+
+---
+
 ## v0.3.218: 求职知识库整体并入 interview 模块（2026-09-08）
 
 - **知识库整体纳入版本控制**：三层求职知识库（02 方向 58 文件 / 03 岗位弹药 217 文件 / 系统引擎 14 文件 + 总索引）并入仓库；`01_原始资料库`（13G 工作资料等）按 .gitignore 保持本地不入库。原外部目录 `006-正式项目/8月27日-找工作` 已整体迁入项目内 `求职知识库/`，引擎脚本改为按脚本位置推导 root，可随项目整体迁移。

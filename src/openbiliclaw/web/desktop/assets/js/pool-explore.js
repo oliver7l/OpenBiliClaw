@@ -198,7 +198,8 @@ if (!OBC) { console.error("pool-explore.js: window.OBC not found — load app.js
       const payload = JSON.stringify({ bvid, dwell_seconds: Math.round(dwellSeconds) });
       if (useBeacon && navigator.sendBeacon) {
         try {
-          navigator.sendBeacon(OBC.ENDPOINTS.viewDwell, new Blob([payload], { type: "application/json" }));
+          // sendBeacon 不走 requestJson 的 base 拼接，这里显式补上 /api 前缀
+          navigator.sendBeacon("/api" + OBC.ENDPOINTS.viewDwell, new Blob([payload], { type: "application/json" }));
           return;
         } catch { /* fall through to fetch */ }
       }
