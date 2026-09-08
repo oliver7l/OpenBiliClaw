@@ -25,6 +25,15 @@
 
 ---
 
+## v0.3.221: 阶段2 runtime/refresh.py 四职责 mixin 拆分（2026-09-09）
+
+- **拆分结果**：`ContinuousRefreshController`（3,245 行 / 147 方法）拆为核心 807 行 + 7 个 mixin + `_refresh_shared.py`（常量/工具/Protocol/类型基座）：PlatformLoopsMixin（平台生产者循环 18 法）、LoopSupervisionMixin（循环监督 16 法）、NotifyDelightMixin（通知与惊喜 10 法）、ProbePublishMixin（探针推送 4 法）、SourceBudgetMixin（来源配额预算 19 法）、PlanDrainMixin（刷新计划与候选排水 9 法）、ReplenishmentMixin（手动补货请求 7 法）。
+- **做法**：纯机械搬迁，dataclass 字段全部留在核心类；模块级常量与 `_call_accepts_*` 工具、5 个 Protocol 迁入 `_refresh_shared.py` 消除 mixin 反向依赖；新增 `RefreshControllerAttrs` 类型基座（非 dataclass，不生成字段）让 mixin 获得与拆分前一致的 mypy 视图，跨 mixin 方法按真实签名标注；全部 mixin logger 沿用 `openbiliclaw.runtime.refresh` 名，日志行为零变化。
+- **过程中修复**：M5 首次抽取因脚本装饰器边界 bug 产生回归，已 revert 后修复重做（教训：`pytest | tail` 会吞退出码，坏提交混入一次，靠 revert 回滚）。
+- **验证**：mypy strict 9 文件 0 错误（拆分前 1）；tests/runtime/ 290/290；refresh 全量消费者（openclaw e2e 除外——其失败归因于并行 api 战场 WIP，与本拆分无关）。
+
+---
+
 ## v0.3.219: 修复桌面 Web 反馈接口 404（2026-09-08）
 
 - **修复推荐流点赞/不喜欢无反应**：`web/desktop/assets/js/app.js` 中 `userFeedback` / `userFeedbackBatch` / `interestTags` / `viewRecord` / `viewDwell` / `viewHistory` 六个 ENDPOINTS 误带 `/api` 前缀，经 `requestJson` 拼接 API base（默认 `/api`）后请求 `/api/api/...` 返回 404，且前端静默吞错导致点击无任何反馈；已去掉前缀与其余条目保持一致。
