@@ -210,7 +210,7 @@ class ChatAnalysisStore:
         c.executescript(_SCHEMA_SQL)
         # Migration: add analyzed columns if missing (existing databases)
         for col in ("analyzed", "last_analyzed_at"):
-            try:
+            try:  # noqa: SIM105
                 c.execute(
                     f"ALTER TABLE chat_sessions ADD COLUMN {col} TEXT DEFAULT ''"
                     if col == "last_analyzed_at"

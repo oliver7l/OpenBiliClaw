@@ -157,9 +157,8 @@ class DiaryRAGService:
             buffer = ""
             for p in paragraphs:
                 buffer += p
-                if p in ("。", "！", "？", "\n") or len(buffer) > 100:
-                    if buffer.strip():
-                        sentences.append(buffer.strip())
+                if p in ("。", "！", "？", "\n") or len(buffer) > 100 and buffer.strip():
+                    sentences.append(buffer.strip())
                     buffer = ""
             if buffer.strip():
                 sentences.append(buffer.strip())
@@ -765,9 +764,8 @@ class DiaryRAGService:
                 if len(vector) != len(target_vector):
                     continue
                 score = cosine_similarity(target_vector, vector)
-                if score >= min_score:
-                    if eid not in scored_entries or score > scored_entries[eid]:
-                        scored_entries[eid] = score
+                if score >= min_score and eid not in scored_entries or score > scored_entries[eid]:
+                    scored_entries[eid] = score
 
         # 4. 排序
         scored_list = sorted(scored_entries.items(), key=lambda x: x[1], reverse=True)

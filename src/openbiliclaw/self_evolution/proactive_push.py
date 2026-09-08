@@ -414,7 +414,7 @@ class ProactivePushEngine:
 
             # Count due knowledge cards
             due_cards = 0
-            try:
+            try:  # noqa: SIM105
                 due_cards = conn.execute(
                     "SELECT COUNT(*) as cnt FROM knowledge_cards WHERE next_review <= datetime('now')"
                 ).fetchone()["cnt"]

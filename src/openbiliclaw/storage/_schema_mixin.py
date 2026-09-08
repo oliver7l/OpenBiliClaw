@@ -280,7 +280,7 @@ class SchemaMixin:
         """)
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(events)").fetchall()}
         if "source_platform" not in cols:
-            try:
+            try:  # noqa: SIM105
                 self.conn.execute(
                     "ALTER TABLE events ADD COLUMN source_platform TEXT "
                     "GENERATED ALWAYS AS "
@@ -317,7 +317,7 @@ class SchemaMixin:
         for idx_name, cols in index_defs:
             if not all(c in pool_cols for c in cols):
                 continue
-            try:
+            try:  # noqa: SIM105
                 self.conn.execute(
                     f"CREATE INDEX IF NOT EXISTS {idx_name} ON pool.content_cache ({', '.join(cols)})"
                 )

@@ -340,9 +340,8 @@ class DiaryService:
                             if len(vec) != len(tvec):
                                 continue
                             score = cosine_similarity(tvec, vec)
-                            if score >= 0.5:
-                                if eid not in similar or score > similar[eid]:
-                                    similar[eid] = score
+                            if score >= 0.5 and eid not in similar or score > similar[eid]:
+                                similar[eid] = score
                     ranked = sorted(similar.items(), key=lambda x: x[1], reverse=True)[:5]
                     result["similar_entries"] = [
                         {"id": eid, "score": round(score, 4)} for eid, score in ranked
@@ -384,9 +383,8 @@ class DiaryService:
                 if len(vec) != len(tvec):
                     continue
                 score = cosine_similarity(tvec, vec)
-                if score >= min_score:
-                    if eid not in similar or score > similar[eid]:
-                        similar[eid] = score
+                if score >= min_score and eid not in similar or score > similar[eid]:
+                    similar[eid] = score
 
         ranked = sorted(similar.items(), key=lambda x: x[1], reverse=True)[:top_k]
         results = []

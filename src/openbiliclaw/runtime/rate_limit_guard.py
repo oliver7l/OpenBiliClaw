@@ -245,17 +245,16 @@ class RateLimitGuard:
 
         # Check circuit breaker
         circuit_just_opened = False
-        if self._state.consecutive_failures >= self.circuit_breaker_threshold:
-            if not self._state.circuit_open:
-                self._state.circuit_open = True
-                circuit_just_opened = True
-                cooldown_hours = self.max_cooldown_hours
-                logger.error(
-                    "[%s] CIRCUIT BREAKER OPEN — %d consecutive failures, pausing for %dh",
-                    self.name,
-                    self._state.consecutive_failures,
-                    cooldown_hours,
-                )
+        if self._state.consecutive_failures >= self.circuit_breaker_threshold and not self._state.circuit_open:
+            self._state.circuit_open = True
+            circuit_just_opened = True
+            cooldown_hours = self.max_cooldown_hours
+            logger.error(
+                "[%s] CIRCUIT BREAKER OPEN — %d consecutive failures, pausing for %dh",
+                self.name,
+                self._state.consecutive_failures,
+                cooldown_hours,
+            )
 
         # Set cooldown
         cooldown_end = datetime.now() + timedelta(hours=cooldown_hours)
@@ -315,10 +314,9 @@ class RateLimitGuard:
         if reason in ("http_403", "http_429", "rate_limited", "blocked", "captcha"):
             return True
         # Exit code patterns (non-zero + specific)
-        if exit_code is not None and exit_code not in (0, 1):
-            # CLI tools often use specific non-zero codes for auth failures
-            if exit_code in (403, 429, 77, 78):
-                return True
+        # CLI tools often use specific non-zero codes for auth failures
+        if exit_code is not None and exit_code not in (0, 1) and exit_code in (403, 429, 77, 78):
+            return True
         # Keyword scan in detail
         if detail:
             detail_lower = detail.lower()
