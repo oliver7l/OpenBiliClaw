@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -14,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from openbiliclaw.interview.engine import InterviewEngine, resolve_root
+from openbiliclaw.interview.review_service import InterviewReviewService
 
 interview_app = typer.Typer(help="求职面试备战命令（查/速记/岗位/数字/项目/日志/建档）")
 console = Console()
@@ -368,8 +370,6 @@ def interview_root() -> None:
 
 def _review_service() -> InterviewReviewService | None:
     """创建复盘服务（使用 data/openbiliclaw.db）。"""
-    from openbiliclaw.interview.review_service import InterviewReviewService
-
     project_root = Path(__file__).resolve().parents[3]
     db_path = project_root / "data" / "openbiliclaw.db"
     return InterviewReviewService(str(db_path))

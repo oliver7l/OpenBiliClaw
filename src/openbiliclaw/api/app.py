@@ -2900,26 +2900,6 @@ def create_app(
         return rag
 
     @app.get("/api/diary/rag/stats")
-
-    async def _complete_durable_chat_turn(turn_id: str) -> None:
-        if turn_id in running_chat_turn_tasks:
-            return
-        running_chat_turn_tasks.add(turn_id)
-        try:
-            row = _get_chat_turn_row(turn_id)
-            if row is None:
-                return
-            turn = _normalize_chat_turn(row)
-            if turn.status != "pending":
-                return
-            reply = await _generate_durable_chat_reply(turn)
-            _complete_chat_turn_row(turn_id, reply=reply)
-        except Exception as exc:
-            logger.exception("Failed to complete durable chat turn %s", turn_id)
-            _fail_chat_turn_row(turn_id, error=str(exc), reply="聊天出了点问题，稍后再试。")
-        finally:
-            running_chat_turn_tasks.discard(turn_id)
-
     def _serialize_recommendation_items(items: list[Any]) -> list[RecommendationOut]:
         return [
             RecommendationOut(
@@ -4373,16 +4353,6 @@ def create_app(
             limit=limit,
         )
         return ChatTurnListResponse(items=[_normalize_chat_turn(row) for row in rows])
-
-    @app.get("/api/chat/turns/{turn_id}", response_model=ChatTurnOut)
-    async def get_chat_turn(turn_id: str) -> ChatTurnOut:
-        row = _get_chat_turn_row(turn_id.strip())
-        if row is None:
-            raise HTTPException(status_code=404, detail="Chat turn not found.")
-        turn = _normalize_chat_turn(row)
-        if turn.status == "pending":
-            asyncio.create_task(_complete_durable_chat_turn(turn.turn_id))
-        return turn
 
     async def recommendation_click(
         payload: RecommendationClickIn,

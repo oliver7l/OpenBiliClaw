@@ -27,6 +27,7 @@ from starlette.responses import Response
 from openbiliclaw.api.models import (
     AutostartApplyIn,
     AutostartStatusOut,
+    DiscoveryCandidateStats,
     ExtensionE2EAction,
     ExtensionE2EActionReportOut,
     ExtensionE2EActionStatus,
@@ -37,6 +38,8 @@ from openbiliclaw.api.models import (
     ExtensionE2ERunIn,
     ExtensionE2ERunOut,
     ExtensionE2ERunStatus,
+    PlatformPoolStats,
+    ScoreDistribution,
     SourceCredentialItem,
     SourcesCredentialsResponse,
     LLMUsageSummary,
@@ -44,6 +47,7 @@ from openbiliclaw.api.models import (
     PoolPipelineStats,
     SourcesStatusResponse,
     SourceStatusItem,
+    TopicGroupStats,
     XStatusResponse,
 )
 from openbiliclaw.api.utils import (
