@@ -28,6 +28,8 @@ _YT_TRANSCRIPT_BATCH = 10
 _BILI_SUBTITLE_BATCH = 10
 _AI_SUMMARY_BATCH = 20
 _AI_SUMMARY_CONCURRENCY = 3
+_GETNOTE_BATCH = 40
+_GETNOTE_INTERVAL_SECONDS = 2.0
 
 # 最大失败重试次数
 _MAX_BODY_RETRIES = 3
@@ -411,3 +413,130 @@ class ContentFiller:
         )
         conn.commit()
         conn.close()
+
+    # ═══════════════════════════════════════════════════════════════
+    # 管线 5: 通过得到大脑填充正文+AI摘要
+    # ═══════════════════════════════════════════════════════════════
+
+    async def fetch_via_getnote(
+        self, limit: int = _GETNOTE_BATCH,
+    ) -> dict[str, int]:
+        """通过 getnote save 让平台自动抓取正文并生成摘要，再读回写入项目数据库。
+
+        频率：每 tick 最多处理 5 篇，间隔 2 秒，日上限 ~120 篇
+        （getnote write_note 日限 1000，远低于上限）。
+        """
+        conn = self._conn()
+        # 优先处理视频/多媒体类链接（YouTube、B站、小红书等），
+        # 这些来源本地处理难度大，得到大脑平台更容易抓取
+        _VIDEO_SOURCES = ("youtube", "yt", "bilibili", "bili", "xiaohongshu", "douyin", "kuaishou")
+        rows = conn.execute(
+            """SELECT id, url, title, source_type
+               FROM articles
+               WHERE (content_text IS NULL OR content_text = '')
+                 AND url IS NOT NULL AND url != ''
+                 AND body_fetch_attempts < ?
+               ORDER BY
+                 CASE WHEN source_type IN (?,?,?,?,?,?,?) THEN 0 ELSE 1 END,
+                 body_fetch_attempts ASC,
+                 id ASC
+               LIMIT ?""",
+            (_MAX_BODY_RETRIES,) + _VIDEO_SOURCES + (limit,),
+        ).fetchall()
+        conn.close()
+
+        if not rows:
+            return {"fetched": 0, "total": 0, "summarized": 0}
+
+        import asyncio
+        import json
+        import re
+        import subprocess
+
+        results = {"fetched": 0, "total": len(rows), "summarized": 0}
+
+        for row in rows:
+            article_id = row["id"]
+            url = row["url"]
+            title = row["title"] or ""
+
+            try:
+                # Step 1: getnote save <url>
+                save_cmd = [
+                    "getnote", "save", url,
+                    "--title", title[:200],
+                    "--tag", "AI摘要",
+                    "--tag", "自动填充",
+                ]
+                save_proc = subprocess.run(
+                    save_cmd, capture_output=True, text=True, timeout=60,
+                )
+                if save_proc.returncode != 0:
+                    logger.debug("getnote: save failed for article %d: %s", article_id, save_proc.stderr[:200])
+                    self._increment_attempts(article_id)
+                    results["fetched"] -= 1  # won't be negative since we start from 0
+                    continue
+
+                # Parse note ID from output: "  ID          | 1920762941604507584"
+                note_id = None
+                for line in (save_proc.stdout or "").splitlines():
+                    if "ID" in line and "|" in line:
+                        parts = line.split("|")
+                        if len(parts) >= 2:
+                            potential = parts[-1].strip()
+                            if potential.isdigit():
+                                note_id = potential
+                                break
+
+                if not note_id:
+                    logger.debug("getnote: could not parse note ID for article %d", article_id)
+                    self._increment_attempts(article_id)
+                    continue
+
+                # Step 2: getnote note <id> -o json
+                await asyncio.sleep(_GETNOTE_INTERVAL_SECONDS)  # rate limit
+
+                note_cmd = ["getnote", "note", note_id, "-o", "json"]
+                note_proc = subprocess.run(
+                    note_cmd, capture_output=True, text=True, timeout=30,
+                )
+                if note_proc.returncode != 0:
+                    logger.debug("getnote: note fetch failed for %s: %s", note_id, note_proc.stderr[:200])
+                    self._increment_attempts(article_id)
+                    continue
+
+                note_data = json.loads(note_proc.stdout)
+                note = note_data.get("data", {}).get("note", {})
+
+                # Extract content_text and ai_summary
+                web_content = (note.get("web_page") or {}).get("content", "")
+                ai_content = note.get("content", "")
+
+                if web_content and len(web_content) > 200:
+                    self._save_body(article_id, web_content)
+                    results["fetched"] += 1
+
+                    if ai_content:
+                        summary_json = json.dumps(
+                            {
+                                "core": "",
+                                "key_points": [],
+                                "explanation": ai_content[:5000],
+                                "source": "getnote",
+                            },
+                            ensure_ascii=False,
+                        )
+                        self._save_ai_summary(article_id, summary_json)
+                        results["summarized"] += 1
+                else:
+                    self._increment_attempts(article_id)
+
+            except Exception as exc:
+                logger.debug("getnote: article %d failed: %s", article_id, exc)
+                self._increment_attempts(article_id)
+
+        logger.info(
+            "content_filler: getnote %d/%d (summarized: %d)",
+            results["fetched"], results["total"], results["summarized"],
+        )
+        return results

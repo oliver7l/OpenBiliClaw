@@ -476,7 +476,7 @@ class SelfEvolutionLoopEngine:
                 # processed articles
                 self._update_last_id(conn)
 
-        # ── Step 3: Content filler (body, subtitle, ai_summary) ──────────
+        # ── Step 3: Content filler (body, subtitle, ai_summary, getnote) ──
         if self._quota_ok():
             # Body fetch: every tick, up to 30 articles
             await self._run_if_due(
@@ -508,6 +508,15 @@ class SelfEvolutionLoopEngine:
                     1,
                     results,
                     lambda: self._do_content_filler_ai(),
+                )
+            # Getnote fill: every tick, up to 5 articles (via getnote platform)
+            # 优先处理视频来源（YouTube/B站/小红书等），日上限 ~120
+            if self._quota_ok():
+                await self._run_if_due(
+                    "content_filler_getnote",
+                    1,
+                    results,
+                    lambda: self._do_content_filler_getnote(),
                 )
 
         # ── Step 4: TL;DR (batch) ───────────────────────────────────────────
@@ -822,6 +831,20 @@ class SelfEvolutionLoopEngine:
             return result
         except Exception:
             logger.debug("content_filler: ai_summary failed", exc_info=True)
+            return None
+
+    async def _do_content_filler_getnote(self) -> dict[str, int] | None:
+        """通过得到大脑平台填充正文+AI摘要，优先处理视频类链接。"""
+        try:
+            from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+            filler = ContentFiller(self._db_path)
+            result = await filler.fetch_via_getnote()
+            if result and result.get("fetched"):
+                logger.info("content_filler: getnote done: %s", result)
+            return result
+        except Exception:
+            logger.debug("content_filler: getnote failed", exc_info=True)
             return None
 
     async def _do_diary_analysis(self) -> dict[str, Any] | None:
