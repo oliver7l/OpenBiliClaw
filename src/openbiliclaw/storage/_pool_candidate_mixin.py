@@ -1130,3 +1130,76 @@ class PoolCandidateMixin:
             _EXPLORE_ADMISSION_MIN_SCORE,
             self._pool_admission_min_score(),
         )
+
+    # ── Pool content serving & low-score suppression ───────────────
+
+    def get_unrecommended_content(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Get cached content that has not been recommended yet."""
+        min_score = self._pool_admission_min_score()
+        cursor = self.conn.execute(
+            """
+            SELECT c.*
+            FROM content_cache AS c
+            WHERE COALESCE(c.relevance_score, 0.0) >= ?
+              AND NOT EXISTS (
+                SELECT 1
+                FROM recommendations AS r
+                WHERE r.bvid = c.bvid
+            )
+            ORDER BY
+                CASE c.candidate_tier WHEN 'primary' THEN 0 ELSE 1 END ASC,
+                c.relevance_score DESC,
+                c.last_scored_at DESC,
+                c.view_count DESC,
+                c.bvid ASC
+            LIMIT ?
+            """,
+            (min_score, max(limit * 5, 50)),
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        rows = self._exclude_viewed_rows(
+            rows,
+            self.get_recent_viewed_content_keys(),
+            limit=len(rows),
+        )
+        return self._balance_pool_rows(rows, limit=limit)
+
+    def suppress_low_score_pool_items(self, min_score: float | None = None) -> int:
+        """Suppress cached pool rows below the unified admission floor."""
+        from openbiliclaw.storage.database import _normalize_admission_min_score
+
+        threshold = (
+            self._pool_admission_min_score()
+            if min_score is None
+            else _normalize_admission_min_score(min_score)
+        )
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'suppressed'
+            WHERE COALESCE(relevance_score, 0.0) < ?
+              AND COALESCE(pool_status, 'fresh') IN ('fresh', 'shown', 'suppressed')
+            """,
+            (threshold,),
+        )
+        return int(cursor.rowcount or 0)
+
+    def suppress_low_confidence_recommendations(self, min_score: float | None = None) -> int:
+        """Mark old low-confidence recommendation rows as suppressed."""
+        from openbiliclaw.storage.database import _normalize_admission_min_score
+
+        threshold = (
+            self._pool_admission_min_score()
+            if min_score is None
+            else _normalize_admission_min_score(min_score)
+        )
+        cursor = self._execute_write(
+            """
+            UPDATE recommendations
+            SET feedback_type = 'suppressed_low_score'
+            WHERE COALESCE(confidence, 0.0) < ?
+              AND COALESCE(feedback_type, '') = ''
+            """,
+            (threshold,),
+        )
+        return int(cursor.rowcount or 0)
