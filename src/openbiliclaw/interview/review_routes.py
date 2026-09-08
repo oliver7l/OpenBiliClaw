@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
 
 from openbiliclaw.interview.review_models import (
     InterviewReview,

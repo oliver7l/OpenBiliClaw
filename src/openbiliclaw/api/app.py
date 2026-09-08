@@ -14,7 +14,6 @@ import socket
 import subprocess
 import time
 import uuid
-from collections import defaultdict
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass
@@ -25,43 +24,26 @@ from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 from openbiliclaw.api.models import (
-    ActivityFeedItemOut,
-    ActivityFeedResponse,
     ArticleNoteIn,
-    ArticleUpdateIn,
     AutostartApplyIn,
     AutostartConfigOut,
     AutostartStatusOut,
-    BackendUpdateStatusOut,
     BehaviorEventBatchIn,
     BilibiliConfigOut,
     BilibiliCookieIn,
     BilibiliCookieResponse,
     BilibiliSourceConfigOut,
     ChatIn,
-    ChatRecommendIn,
-    ChatRecommendResponse,
-    ChatTurnIn,
     ChatTurnListResponse,
     ChatTurnOut,
-    CognitionUpdateSeenIn,
-    CognitionUpdateSeenResponse,
     CognitionUpdateSummary,
     ConfigIssueOut,
     ConfigResponse,
-    ConfigServiceProbeIn,
     ConfigServiceProbeResponse,
-    ConfigUpdateIn,
-    ConfigUpdateResponse,
-    DelightAckIn,
-    DelightAckResponse,
-    DiscoveryCandidateStats,
     DiscoveryConfigOut,
-    DouyinCookieIn,
-    DouyinCookieResponse,
     DouyinSourceConfigOut,
     EmbeddingConfigOut,
     EventIngestResponse,
@@ -76,121 +58,40 @@ from openbiliclaw.api.models import (
     ExtensionE2ERunIn,
     ExtensionE2ERunOut,
     ExtensionE2ERunStatus,
-    FavoriteAddIn,
-    FavoriteItem,
-    FavoriteListResponse,
-    FavoriteStateResponse,
-    FeedbackIn,
-    FeedbackResponse,
     HealthResponse,
     InitPrerequisitesOut,
     InitStageOut,
     InitStatusOut,
-    InsightFeedbackIn,
-    InsightFeedbackResponse,
     LLMConfigOut,
     LLMProviderConfigOut,
-    LLMUsageSummary,
     LoggingConfigOut,
     ModuleLLMConfigOut,
-    NotificationAckIn,
-    NotificationAckResponse,
-    ObservabilityResponse,
-    PendingCognitionUpdateOut,
-    PendingCognitionUpdateResponse,
     PendingDelightOut,
     PendingDelightResponse,
-    PendingNotificationOut,
-    PendingNotificationResponse,
-    PlatformPoolStats,
-    PoolPipelineStats,
     ProfileEditIn,
     ProfileSummaryResponse,
     RecommendationClickIn,
     RecommendationClickResponse,
     RecommendationOut,
-    RuntimeStatusResponse,
     SchedulerConfigOut,
-    ScoreDistribution,
-    SourceCredentialItem,
     SourcesBrowserConfigOut,
     SourcesConfigOut,
-    SourcesCredentialsResponse,
     SourceShareSuggestionIn,
     SourceShareSuggestionResponse,
     SourcesStatusResponse,
-    SourceStatusItem,
     StorageConfigOut,
-    SubscriptionAddIn,
-    SubscriptionDeleteIn,
-    SubscriptionItemOut,
-    SubscriptionListOut,
-    SubscriptionStatsOut,
-    TopicCreateIn,
-    TopicGroupStats,
     TwitterSourceConfigOut,
-    UpdateApplyIn,
-    UpdateCheckIn,
-    UpdateStatusResponse,
-    WatchLaterAddIn,
-    WatchLaterItem,
-    WatchLaterListResponse,
-    WatchLaterStateResponse,
-    XCookieIn,
-    XCookieResponse,
     XiaohongshuSourceConfigOut,
-    XStatusResponse,
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
-from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService, MoodLevel
-from openbiliclaw.diary.importer import DiaryImporter
+from openbiliclaw.diary import DiaryService
 from openbiliclaw.health import (
-    AllergyCreate,
-    AppointmentCreate,
-    AppointmentUpdate,
-    ConditionCreate,
-    ConditionUpdate,
-    DoctorCreate,
-    DoctorUpdate,
-    EncounterCreate,
-    EncounterUpdate,
-    HealthDocumentCreate,
-    HealthDocumentUpdate,
-    HealthInsightCreate,
     HealthService,
-    ImmunizationCreate,
-    LabResultCreate,
-    LabResultUpdate,
-    MedicationCreate,
-    MedicationLogCreate,
-    MedicationUpdate,
-    PatientCreate,
-    PatientUpdate,
-    ProcedureCreate,
-    ProcedureUpdate,
-    VitalsCreate,
 )
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
 from openbiliclaw.runtime.image_cache import (
-    CoverFetchError,
     cleanup_image_cache,
-    fetch_cover_bytes,
-    save_image_bytes,
-)
-from openbiliclaw.runtime.image_cache import (
-    image_cache_dir as _image_cache_dir,
-)
-from openbiliclaw.runtime.image_cache import (
-    image_cache_key as _image_cache_key,
-)
-from openbiliclaw.runtime.keyword_fetch import (
-    mark_keyword_terminal_from_xhs_task,
-    source_keyword_id_from_xhs_task,
-)
-from openbiliclaw.soul.dislike_writeback import (
-    apply_new_dislikes,
-    topics_for_confirmed_avoidance,
 )
 
 # Project root: src/openbiliclaw/api/app.py → ../../..
@@ -200,7 +101,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from openbiliclaw.clone import CloneService
 
 logger = logging.getLogger(__name__)
 _CONFIG_SAVE_LOCK = asyncio.Lock()
@@ -463,9 +363,6 @@ def _apply_reading_exclusions(
 
 # Canonical home is openbiliclaw.sources.x_auth (mirrors douyin_auth);
 # re-exported here because callers historically imported from api.app.
-from openbiliclaw.sources.x_auth import (  # noqa: E402
-    X_REQUIRED_COOKIE_NAMES as _X_REQUIRED_COOKIE_NAMES,
-)
 from openbiliclaw.sources.x_auth import (  # noqa: E402, F401
     XCookieManager,
     resolve_x_cookie,
@@ -1027,9 +924,6 @@ def _normalize_cognition_update(item: dict[str, object]) -> CognitionUpdateSumma
 # 使用统一缓存层 TwoLevelCache：内存 L1（微秒级）+ 磁盘 L2（diskcache，持久化，重启不失效）
 # ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
 from openbiliclaw.api.utils import (
-    article_tags_for_context as _article_tags_for_context,
-)
-from openbiliclaw.api.utils import (
     coerce_e2e_event_rows as _coerce_e2e_event_rows,
 )
 from openbiliclaw.api.utils import (
@@ -1101,24 +995,14 @@ def create_app(
     # 测试多次 create_app 时若不清理，同 path 的 GET 会命中前一个 app 的缓存
     # （响应被旧 app 的注入组件数据污染，见 test_recommendations_endpoint_*）。
     _api_cache.invalidate_namespace(_API_CACHE_NAMESPACE)
-    from openbiliclaw.api.notes_routes import register_notes_routes
+    from openbiliclaw.api._route_registry import register_all_routes
+    from openbiliclaw.api._web_ui_routes import register_web_ui_routes
     from openbiliclaw.api.recommendation_routes import build_recommendation_router
     from openbiliclaw.api.runtime_context import (
         RuntimeContext,
         build_degraded_runtime_context,
         build_runtime_context,
     )
-    from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
-    from openbiliclaw.api._system_routes import register_system_routes
-    from openbiliclaw.api._image_proxy_routes import register_image_proxy_routes
-    from openbiliclaw.api._cookie_routes import register_cookie_routes
-    from openbiliclaw.api._llm_routes import register_llm_routes
-    from openbiliclaw.api._clone_routes import register_clone_routes
-    from openbiliclaw.api._web_ui_routes import register_web_ui_routes
-    from openbiliclaw.api._route_registry import register_all_routes
-    from openbiliclaw.api._activity_feed_routes import register_activity_feed_routes
-    from openbiliclaw.api._runtime_status_routes import register_runtime_status_routes
-    from openbiliclaw.api._delight_routes import register_delight_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -1777,9 +1661,7 @@ def create_app(
             fresh.append(item)
         return fresh, fresh_keys_by_index
 
-    chat_turn_lock = asyncio.Lock()
     fallback_chat_turns: dict[str, dict[str, Any]] = {}
-    running_chat_turn_tasks: set[str] = set()
     # RAG citations per chat turn, keyed by turn_id. Kept in memory: these are
     # ephemeral UI hints that don't need to survive a restart (the durable
     # turn row itself is the source of truth for the reply text).
@@ -4521,7 +4403,6 @@ def create_app(
 
     # ── XHS observed URL ingestion endpoint ─────────────────────────
 
-    xhs_max_urls_per_batch = 50
     xhs_url_prefix = "https://www.xiaohongshu.com/"
 
     def _discovery_candidate_pending_cap() -> int:
@@ -4818,7 +4699,6 @@ def create_app(
 
     from openbiliclaw.sources.bili_tasks import (
         BiliTaskQueue,
-        source_keyword_id_from_bili_task,
     )
 
     _bili_task_queue: BiliTaskQueue | None = None
@@ -4830,8 +4710,6 @@ def create_app(
     from openbiliclaw.sources.xhs_tasks import (
         XhsCreatorStore,
         XhsTaskQueue,
-        xhs_bootstrap_note_key,
-        xhs_bootstrap_notes_to_events,
     )
 
     # Guard: only initialise when ctx.database is a real Database (has .conn).
@@ -4853,7 +4731,7 @@ def create_app(
     # server-side via XCreatorStrategy. This block only owns the
     # x_creator_subscriptions table + CRUD (mirrors the XHS creators above).
 
-    from openbiliclaw.sources.x_tasks import XCreatorStore, normalize_handle
+    from openbiliclaw.sources.x_tasks import XCreatorStore
 
     _x_creator_store: XCreatorStore | None = None
     if hasattr(ctx.database, "conn"):
@@ -4906,8 +4784,6 @@ def create_app(
 
     from openbiliclaw.sources.dy_tasks import (
         DyTaskQueue,
-        dy_bootstrap_video_key,
-        dy_bootstrap_videos_to_events,
     )
 
     _dy_task_queue: DyTaskQueue | None = None
@@ -4941,13 +4817,9 @@ def create_app(
     # ── YouTube bootstrap endpoints ────────────────────────────────
     from openbiliclaw.sources.yt_tasks import (
         YtTaskQueue,
-        yt_bootstrap_item_key,
-        yt_bootstrap_items_to_events,
     )
     from openbiliclaw.sources.zhihu_tasks import (
         ZhihuTaskQueue,
-        zhihu_bootstrap_item_key,
-        zhihu_bootstrap_items_to_events,
     )
 
     _zhihu_task_queue: ZhihuTaskQueue | None = None
