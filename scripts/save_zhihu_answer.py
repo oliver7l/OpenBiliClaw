@@ -96,7 +96,7 @@ def main():
             if t not in merged:
                 merged.append(t)
         new_title = old_title or title
-        now_iso = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+        now_iso = _now_local()
         cur.execute(
             """UPDATE articles
                SET title=?, content_text=?, tags=?, summary=?, author=?, published_at=?, updated_at=?
@@ -109,7 +109,7 @@ def main():
         print(f"       作者: {author} | 赞: {voteup} | 发布: {published_at}")
         return
 
-    now_iso = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = _now_local()
     cur.execute(
         """INSERT INTO articles
            (source_type, source_name, title, url, author, summary, content_text,

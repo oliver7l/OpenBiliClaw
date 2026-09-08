@@ -211,6 +211,10 @@ def feed_profile_event(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=str(DB_PATH))
+    ap.add_argument(
+        "--force", action="store_true",
+        help="文件正文与库内不一致时强制覆盖（用于补写 AI 分析段后同步）",
+    )
     args = ap.parse_args()
 
     if not READLIB.is_dir():
@@ -234,7 +238,7 @@ def main() -> None:
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         article_id = 0
-        if row and len(row[1] or "") >= 50:
+        if row and len(row[1] or "") >= 50 and not (args.force and (row[1] or "").strip() != body):
             skipped += 1
             article_id = row[0]
         elif row:
