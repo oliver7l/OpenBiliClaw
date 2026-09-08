@@ -234,6 +234,22 @@ module = [
 ]
 disable_error_code = ["attr-defined"]
 
+# cli 模块：访问其他模块提供的属性，mypy 无法识别
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.cli.*",
+]
+disable_error_code = ["attr-defined"]
+
+# integrations/memory/recommendation 模块：访问其他模块提供的属性
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.integrations.*",
+    "openbiliclaw.memory.*",
+    "openbiliclaw.recommendation.*",
+]
+disable_error_code = ["attr-defined"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
