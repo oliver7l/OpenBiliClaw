@@ -263,6 +263,111 @@ class DouyinDirectClient:
         items = [item for item in raw_items if isinstance(item, dict)]
         return _dedupe_awemes(items)[:limit]
 
+    async def get_favorites(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Fetch the logged-in account's default favorites collection.
+
+        This is the account-level "收藏" feed (all favorited awemes not
+        organized into custom folders). Uses ``/aweme/v1/web/aweme/listcollection/``
+        with a form-encoded POST (count/cursor in the request body).
+        """
+        if limit <= 0:
+            return []
+
+        collected: list[dict[str, Any]] = []
+        cursor = 0
+        while len(collected) < limit:
+            count = min(20, limit - len(collected))
+            data = await self._post_form_json_with_referer(
+                "/aweme/v1/web/aweme/listcollection/",
+                {
+                    "publish_video_strategy_type": "2",
+                    "version_code": "170400",
+                    "version_name": "17.4.0",
+                },
+                form_data={"count": count, "cursor": cursor},
+                referer="https://www.douyin.com/user/self?showTab=favorite_collection",
+            )
+            page_items = data.get("aweme_list")
+            if not isinstance(page_items, list):
+                break
+            collected.extend(item for item in page_items if isinstance(item, dict))
+            if len(collected) >= limit or not _has_more(data):
+                break
+            next_cursor = _cursor_value(data)
+            if next_cursor == cursor or next_cursor == 0:
+                break
+            cursor = next_cursor
+        return _dedupe_awemes(collected)[:limit]
+
+    async def get_collects(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Fetch the logged-in account's custom favorites folders (收藏夹).
+
+        Uses ``/aweme/v1/web/collects/list/``. Returns folder metadata
+        including ``collects_id``, ``collects_name``, and cover info.
+        """
+        if limit <= 0:
+            return []
+
+        collected: list[dict[str, Any]] = []
+        max_cursor = 0
+        while len(collected) < limit:
+            count = min(20, limit - len(collected))
+            data = await self._request_json_with_referer(
+                "/aweme/v1/web/collects/list/",
+                {
+                    "max_cursor": max_cursor,
+                    "count": count,
+                },
+                referer="https://www.douyin.com/user/self?showTab=favorite_collection",
+            )
+            page_items = data.get("collects_list")
+            if not isinstance(page_items, list):
+                break
+            collected.extend(item for item in page_items if isinstance(item, dict))
+            if len(collected) >= limit or not _has_more(data):
+                break
+            next_cursor = _cursor_value(data)
+            if next_cursor == max_cursor or next_cursor == 0:
+                break
+            max_cursor = next_cursor
+        return collected[:limit]
+
+    async def get_collect_videos(
+        self, collects_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Fetch awemes inside a specific custom favorites folder.
+
+        Uses ``/aweme/v1/web/collects/video/list/`` with ``collects_id``.
+        """
+        collects_id = collects_id.strip()
+        if not collects_id or limit <= 0:
+            return []
+
+        collected: list[dict[str, Any]] = []
+        max_cursor = 0
+        while len(collected) < limit:
+            count = min(20, limit - len(collected))
+            data = await self._request_json_with_referer(
+                "/aweme/v1/web/collects/video/list/",
+                {
+                    "collects_id": collects_id,
+                    "max_cursor": max_cursor,
+                    "count": count,
+                },
+                referer="https://www.douyin.com/user/self?showTab=favorite_collection",
+            )
+            page_items = data.get("aweme_list")
+            if not isinstance(page_items, list):
+                break
+            collected.extend(item for item in page_items if isinstance(item, dict))
+            if len(collected) >= limit or not _has_more(data):
+                break
+            next_cursor = _cursor_value(data)
+            if next_cursor == max_cursor or next_cursor == 0:
+                break
+            max_cursor = next_cursor
+        return _dedupe_awemes(collected)[:limit]
+
     async def _request_json(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         query = {**self._default_query(), **params}
         unsigned = f"{self.BASE_URL}{path}?{urlencode(query)}"
@@ -292,6 +397,94 @@ class DouyinDirectClient:
             data = response.json()
         except ValueError:
             logger.info("douyin direct request returned non-JSON body for %s", path)
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    async def _request_json_with_referer(
+        self, path: str, params: dict[str, Any], *, referer: str
+    ) -> dict[str, Any]:
+        """Like ``_request_json`` but overrides the Referer header.
+
+        Some Douyin endpoints (notably favorites / collections) check the
+        Referer against the user-self favorites page and return empty
+        results when the default homepage Referer is used.
+        """
+        query = {**self._default_query(), **params}
+        unsigned = f"{self.BASE_URL}{path}?{urlencode(query)}"
+        try:
+            url = self._signer.sign(unsigned)
+        except Exception as exc:  # pragma: no cover - defensive seam for live signer drift
+            raise DouyinDirectSignatureError("Failed to sign Douyin request URL.") from exc
+
+        try:
+            response = await self._http.get(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                    "Cookie": self.cookie,
+                    "Referer": referer,
+                    "User-Agent": self._user_agent,
+                },
+            )
+        except httpx.HTTPError as exc:
+            logger.info("douyin direct request failed for %s: %s", path, exc)
+            return {}
+        if response.status_code != 200:
+            logger.info("douyin direct request returned HTTP %s for %s", response.status_code, path)
+            return {}
+        try:
+            data = response.json()
+        except ValueError:
+            logger.info("douyin direct request returned non-JSON body for %s", path)
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    async def _post_form_json_with_referer(
+        self,
+        path: str,
+        params: dict[str, Any],
+        *,
+        form_data: dict[str, Any],
+        referer: str,
+    ) -> dict[str, Any]:
+        """POST form-encoded data to a Douyin endpoint with a custom Referer.
+
+        Some Douyin endpoints (notably ``/aweme/v1/web/aweme/listcollection/``)
+        require a POST with ``count``/``cursor`` in the request body rather
+        than URL query parameters. GET requests return HTTP 403 from
+        ArgusSecurityPlugin.
+        """
+        query = {**self._default_query(), **params}
+        unsigned = f"{self.BASE_URL}{path}?{urlencode(query)}"
+        try:
+            url = self._signer.sign(unsigned)
+        except Exception as exc:  # pragma: no cover - defensive seam for live signer drift
+            raise DouyinDirectSignatureError("Failed to sign Douyin request URL.") from exc
+
+        try:
+            response = await self._http.post(
+                url,
+                data=form_data,
+                headers={
+                    "Accept": "application/json",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Cookie": self.cookie,
+                    "Referer": referer,
+                    "User-Agent": self._user_agent,
+                },
+            )
+        except httpx.HTTPError as exc:
+            logger.info("douyin direct POST failed for %s: %s", path, exc)
+            return {}
+        if response.status_code != 200:
+            logger.info("douyin direct POST returned HTTP %s for %s", response.status_code, path)
+            return {}
+        try:
+            data = response.json()
+        except ValueError:
+            logger.info("douyin direct POST returned non-JSON body for %s", path)
             return {}
         return data if isinstance(data, dict) else {}
 

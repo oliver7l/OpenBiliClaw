@@ -40,7 +40,7 @@ def _embedding_wants_ollama(config: Config) -> bool:
 
 def ollama_required(config: Config) -> bool:
     """Return whether chat or embedding routing may call Ollama."""
-    return _ollama_is_chat_capable(config) or _embedding_wants_ollama(config)
+    return _ollama_is_chat_capable(config.llm) or _embedding_wants_ollama(config)
 
 
 def _strip_openai_v1_suffix(url: str) -> str:
@@ -62,7 +62,7 @@ def effective_ollama_endpoint(config: Config) -> str:
     Chat and embedding providers use OpenAI-compatible ``/v1`` URLs in config, but
     Ollama's health API lives at daemon root ``/api/version``.
     """
-    if _ollama_is_chat_capable(config):
+    if _ollama_is_chat_capable(config.llm):
         base_url = config.llm.ollama.base_url.strip() or f"{_DEFAULT_OLLAMA_ENDPOINT}/v1"
     elif _embedding_wants_ollama(config):
         base_url = (

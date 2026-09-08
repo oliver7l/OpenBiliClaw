@@ -383,7 +383,7 @@ class RuntimeContext:
         from openbiliclaw.soul.engine import SoulEngine
 
         # 1. LLM layer (with usage ledger so ``openbiliclaw cost`` has data)
-        new_registry = build_llm_registry(new_config)
+        new_registry = build_llm_registry(new_config.llm)
         new_usage_recorder = UsageRecorder(sink=self.database)
         new_module_overrides = module_overrides_from_config(new_config)
         llm_concurrency = _llm_concurrency_from_config(new_config)
