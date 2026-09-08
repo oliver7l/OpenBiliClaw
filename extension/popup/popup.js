@@ -99,6 +99,7 @@ import {
   startChatTurn,
   submitFeedback,
   submitInsightFeedback,
+  submitUserFeedback,
   updateConfig,
   addToWatchLater,
   removeFromWatchLater,
@@ -4826,6 +4827,29 @@ function createCommentComposer(item, statusLine) {
   return { wrapper, input, resetComposerUi };
 }
 
+/**
+ * Dismiss a recommendation card: send dislike feedback, animate removal,
+ * then hide the card element.
+ */
+async function dismissRecommendationCard(card, item, feedbackStatus) {
+  if (card.classList.contains("is-dismissed")) return;
+  try {
+    setFeedbackStatusWithTone(
+      feedbackStatus,
+      "不感兴趣，记下了。",
+      "info",
+    );
+    // Best-effort: send dislike feedback (fire-and-forget to avoid blocking
+    // the animation if the backend is slow).
+    submitFeedback(buildFeedbackPayload(item.id, "dislike")).catch(() => {});
+    card.classList.add("is-dismissed");
+    await new Promise((r) => setTimeout(r, 320));
+    card.hidden = true;
+  } catch {
+    card.classList.remove("is-dismissed");
+  }
+}
+
 function renderRecommendations(items, { append = false } = {}) {
   if (!(elements.list instanceof HTMLElement)) {
     return;
@@ -4841,6 +4865,18 @@ function renderRecommendations(items, { append = false } = {}) {
   for (const item of items) {
     const card = document.createElement("article");
     card.className = "recommendation-card";
+
+    // ── Dismiss (✕) button — overlays the top-right corner of the card ──
+    const dismissBtn = document.createElement("button");
+    dismissBtn.className = "recommendation-card-dismiss";
+    dismissBtn.type = "button";
+    dismissBtn.setAttribute("aria-label", "不感兴趣");
+    dismissBtn.textContent = "✕";
+    dismissBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void dismissRecommendationCard(card, item, feedbackStatus);
+    });
+    card.append(dismissBtn);
 
     const preview = document.createElement("button");
     preview.className = "recommendation-preview";
@@ -5066,6 +5102,33 @@ function renderRecommendations(items, { append = false } = {}) {
         if (!composer.wrapper.hidden) {
           composer.resetComposerUi();
           composer.input.focus();
+        }
+      }),
+      createActionButton("屏蔽此UP", "action-button action-secondary", async () => {
+        try {
+          setFeedbackStatusWithTone(
+            feedbackStatus,
+            "正在屏蔽…",
+            "info",
+          );
+          await submitUserFeedback({
+            bvid: item.bvid,
+            action: "block_creator",
+            source_platform: item.source_platform || "",
+            title: item.title || "",
+            topic_group: item.topic_label || "",
+          });
+          setHint("已屏蔽此UP主，后续减少推荐。", "success");
+          card.classList.add("is-dismissed");
+          await new Promise((r) => setTimeout(r, 320));
+          card.hidden = true;
+        } catch {
+          setFeedbackStatusWithTone(
+            feedbackStatus,
+            "屏蔽失败了，稍后再试。",
+            "error",
+          );
+          setHint("屏蔽没成功，后端可能没在线。", "error");
         }
       }),
     );

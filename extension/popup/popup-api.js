@@ -650,6 +650,30 @@ export async function favoriteStatus(bvid) {
   return requestJson(`/favorites/${encodeURIComponent(bvid)}`);
 }
 
+/**
+ * Record a user feedback action (like/dislike/block_creator) for a content item.
+ * Routes to ``POST /api/user-feedback``.
+ *
+ * Reuses the existing backend endpoint and ``insert_user_feedback`` DB method
+ * which accepts arbitrary action strings — no server-side changes needed.
+ *
+ * @param {{
+ *   bvid: string,
+ *   action: string,
+ *   source_platform?: string,
+ *   title?: string,
+ *   topic_group?: string,
+ *   body_text?: string,
+ * }} payload
+ */
+export async function submitUserFeedback(payload) {
+  return requestJson("/user-feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchFavorites(limit = 50, offset = 0) {
   const payload = await requestJson(`/favorites?limit=${limit}&offset=${offset}`);
   return {

@@ -1181,15 +1181,70 @@
     }
 
     .recommendation-card {
+      position: relative;
       padding: 10px;
       transition:
         border-color 180ms ease,
-        box-shadow 180ms ease;
+        box-shadow 180ms ease,
+        opacity 300ms ease,
+        transform 300ms ease;
     }
 
     .recommendation-card:hover {
       border-color: var(--line-strong);
       box-shadow: 0 20px 36px rgba(251, 114, 153, 0.12);
+    }
+
+    .recommendation-card.is-dismissed {
+      opacity: 0;
+      transform: translateX(20px);
+      pointer-events: none;
+    }
+
+    .recommendation-card-dismiss {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 10;
+      width: 26px;
+      height: 26px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(18, 22, 32, 0.48);
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition:
+        opacity 180ms ease,
+        background 180ms ease,
+        transform 180ms ease;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    .recommendation-card:hover .recommendation-card-dismiss,
+    .recommendation-card-dismiss:focus-visible {
+      opacity: 1;
+    }
+
+    .recommendation-card-dismiss:hover {
+      background: rgba(239, 122, 134, 0.85);
+      color: #fff;
+      transform: scale(1.08);
+    }
+
+    .recommendation-card-dismiss:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .recommendation-card-dismiss:active {
+      transform: scale(0.92);
     }
 
     .recommendation-preview {
@@ -1472,6 +1527,16 @@
 
       .recommendation-card {
         padding: 6px;
+      }
+
+      .recommendation-card-dismiss {
+        top: 4px;
+        right: 4px;
+        width: 22px;
+        height: 22px;
+        font-size: 12px;
+        opacity: 1;
+        background: rgba(18, 22, 32, 0.4);
       }
 
       .recommendation-preview {
