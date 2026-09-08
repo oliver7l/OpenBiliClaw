@@ -1212,12 +1212,6 @@ class Database(ViewHistoryMixin, QualityMixin, PruneMixin, PoolCandidateMixin, T
             conn.close()
         self._ensure_fresh_read()
 
-    def count_favorites_legacy(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])
-
-    def count_watch_later_legacy(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM watch_later").fetchone()[0])
-
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:

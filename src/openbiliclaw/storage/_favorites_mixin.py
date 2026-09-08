@@ -71,3 +71,6 @@ class FavoritesMixin:
             (limit, offset),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def count_favorites_legacy(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])

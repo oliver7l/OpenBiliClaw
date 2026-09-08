@@ -71,3 +71,6 @@ class WatchLaterMixin:
             (limit, offset),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def count_watch_later_legacy(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM watch_later").fetchone()[0])
