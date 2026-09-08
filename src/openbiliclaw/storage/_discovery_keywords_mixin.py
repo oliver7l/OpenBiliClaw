@@ -411,3 +411,130 @@ class DiscoveryKeywordsMixin:
             logger.debug("keyword_yield_total failed for %s", platform, exc_info=True)
             return 0
         return int(row["total"]) if row is not None else 0
+
+    # ── Keyword stats & retirement ───────────────────────────────
+
+    def used_keyword_count(self, platform: str) -> int:
+        """Count ``used`` keywords for a platform (P3.2 dynamic-cap denominator)."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            self._ensure_fresh_read()
+            row = self.conn.execute(
+                "SELECT COUNT(*) AS n FROM discovery_keywords "
+                "WHERE platform = ? AND status = 'used'",
+                (platform.strip(),),
+            ).fetchone()
+        except Exception:
+            logger.debug("used_keyword_count failed for %s", platform, exc_info=True)
+            return 0
+        return int(row["n"]) if row is not None else 0
+
+    def retire_zero_yield_keywords(
+        self,
+        platform: str,
+        *,
+        min_age_minutes: float = 60.0,
+    ) -> int:
+        """Retire ``used`` words that have produced nothing, conservatively."""
+        from datetime import UTC, datetime, timedelta
+
+        cutoff = (datetime.now(UTC) - timedelta(minutes=max(0.0, min_age_minutes))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        cursor = self._execute_write(
+            """
+            UPDATE discovery_keywords
+            SET status = 'expired'
+            WHERE platform = ?
+              AND status = 'used'
+              AND yield_count = 0
+              AND used_at IS NOT NULL
+              AND used_at <= ?
+            """,
+            (platform.strip(), cutoff),
+        )
+        return int(cursor.rowcount or 0)
+
+    # ── Planner single-flight lock ───────────────────────────────
+
+    def acquire_planner_lock(self, owner: str, lease_seconds: float) -> bool:
+        """Try to acquire the planner single-flight lock via CAS."""
+        from datetime import UTC, datetime, timedelta
+
+        lock_name = "keyword_planner"
+        now = datetime.now(UTC)
+        now_text = now.strftime("%Y-%m-%d %H:%M:%S")
+        new_until = (now + timedelta(seconds=max(0.0, lease_seconds))).strftime("%Y-%m-%d %H:%M:%S")
+        conn = self.open_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT owner, locked_until FROM discovery_planner_lock WHERE lock_name = ?",
+                (lock_name,),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    """
+                    INSERT INTO discovery_planner_lock
+                        (lock_name, owner, locked_until, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (lock_name, owner, new_until),
+                )
+                conn.commit()
+                return True
+            held_by = str(row["owner"] or "")
+            locked_until = str(row["locked_until"] or "")
+            if held_by and held_by != owner and locked_until > now_text:
+                conn.commit()
+                return False
+            conn.execute(
+                """
+                UPDATE discovery_planner_lock
+                SET owner = ?, locked_until = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE lock_name = ?
+                """,
+                (owner, new_until, lock_name),
+            )
+            conn.commit()
+        except Exception:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return True
+
+    def renew_planner_lock(self, owner: str, lease_seconds: float) -> bool:
+        """Extend the planner lock lease if still owned by ``owner``."""
+        from datetime import UTC, datetime, timedelta
+
+        new_until = (datetime.now(UTC) + timedelta(seconds=max(0.0, lease_seconds))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        cursor = self._execute_write(
+            """
+            UPDATE discovery_planner_lock
+            SET locked_until = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE lock_name = 'keyword_planner' AND owner = ?
+            """,
+            (new_until, owner),
+        )
+        return int(cursor.rowcount or 0) > 0
+
+    def release_planner_lock(self, owner: str) -> bool:
+        """Release the planner lock if still owned by ``owner``."""
+        from datetime import UTC, datetime
+
+        now_text = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        cursor = self._execute_write(
+            """
+            UPDATE discovery_planner_lock
+            SET owner = '', locked_until = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE lock_name = 'keyword_planner' AND owner = ?
+            """,
+            (now_text, owner),
+        )
+        return int(cursor.rowcount or 0) > 0
