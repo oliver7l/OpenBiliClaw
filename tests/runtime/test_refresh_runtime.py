@@ -19,7 +19,7 @@ from openbiliclaw.runtime.presence import PresenceTracker
 from openbiliclaw.runtime.refresh import ContinuousRefreshController
 from openbiliclaw.storage.database import Database
 
-from .test_search_strategy import _build_profile
+from tests.discovery.test_search_strategy import _build_profile
 
 if TYPE_CHECKING:
     from pathlib import Path
