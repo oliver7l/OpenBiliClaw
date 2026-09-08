@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "obc-soul"
+version = "0.1.0"
+description = "OpenBiliClaw Soul Engine — user modeling, preference analysis, and dialogue system"
+requires-python = ">=3.10"
+dependencies = [
+    "obc-llm>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/openbiliclaw"
