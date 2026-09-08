@@ -652,6 +652,20 @@ class SoulConfig:
 
 
 @dataclass
+class TravelConfig:
+    """Travel budget module configuration.
+
+    Points at the directory containing the markdown budget doc and the
+    ctrip-ticket-crawler results JSON, so the travel tab can render live
+    prices without hard-coding absolute paths.
+    """
+
+    data_path: str = ""
+    budget_doc: str = "新疆旅行预算.md"
+    flights_json: str = "ctrip-ticket-crawler/our_routes_results.json"
+
+
+@dataclass
 class ApiAuthConfig:
     """Optional password gate for LAN / remote access (see
     ``docs/plans/2026-05-30-web-password-auth-design.md``).
@@ -745,6 +759,7 @@ class Config:
     # Top-level `[soul]` is distinct from `[llm.soul]` (per-module
     # provider override): this carries soul-engine behavior toggles.
     soul: SoulConfig = field(default_factory=SoulConfig)
+    travel: TravelConfig = field(default_factory=TravelConfig)
 
     @property
     def data_path(self) -> Path:
@@ -865,6 +880,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
         network_raw = {}
     store_raw = raw.get("storage", {})
     logging_raw = raw.get("logging", {})
+    travel_raw = raw.get("travel", {})
+    if not isinstance(travel_raw, dict):
+        travel_raw = {}
 
     embedding_raw = llm_raw.get("embedding", {})
     llm = LLMConfig(
@@ -1194,6 +1212,13 @@ def _build_config(raw: dict[str, Any]) -> Config:
         storage=StorageConfig(**store_raw),
         logging=LoggingConfig(**logging_raw),
         soul=soul,
+        travel=TravelConfig(
+            data_path=str(travel_raw.get("data_path", "") or ""),
+            budget_doc=str(travel_raw.get("budget_doc", "新疆旅行预算.md")),
+            flights_json=str(
+                travel_raw.get("flights_json", "ctrip-ticket-crawler/our_routes_results.json")
+            ),
+        ),
     )
 
 

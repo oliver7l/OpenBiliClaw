@@ -13487,6 +13487,18 @@ def create_app(
         )
     )
 
+    # ── 旅行预算 API ─────────────────────────────────────────────
+    from openbiliclaw.travel.routes import build_travel_router
+
+    _travel_cfg = getattr(config, "travel", None)
+    app.include_router(
+        build_travel_router(
+            data_path=getattr(_travel_cfg, "data_path", "") or "",
+            budget_doc=getattr(_travel_cfg, "budget_doc", "新疆旅行预算.md"),
+            flights_json=getattr(_travel_cfg, "flights_json", "ctrip-ticket-crawler/our_routes_results.json"),
+        )
+    )
+
     # ── 克隆系统 API ─────────────────────────────────────────────
 
     _clone_service: CloneService | None = None

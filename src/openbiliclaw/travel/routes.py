@@ -1,0 +1,228 @@
+"""Travel budget API routes — flight prices and budget document.
+
+Endpoints:
+- GET /api/travel/flights  — lowest tax-inclusive price per monitored route
+- GET /api/travel/doc      — raw budget markdown (for in-app rendering)
+- GET /api/travel/overview — structured summary (plans, totals, per-person)
+
+The data directory is configured via ``[travel] data_path`` in config.toml.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
+
+# Airport code → Chinese label
+CITY_LABELS: dict[str, str] = {
+    "TYN": "太原",
+    "SZX": "深圳",
+    "CKG": "重庆",
+    "URC": "乌鲁木齐",
+    "CAN": "广州",
+}
+
+# Baseline tax-inclusive adult prices (¥) for alert comparison
+BASELINES: dict[str, int] = {
+    "TYN-URC": 670,
+    "SZX-URC": 2030,
+    "CKG-URC": 790,
+    "URC-TYN": 975,
+    "URC-SZX": 1920,
+    "URC-CKG": 1070,
+}
+
+AIRPORT_FEE = 50
+FUEL_FEE = 70
+
+
+def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -> APIRouter:
+    """Create the travel router with resolved data paths."""
+    router = APIRouter(prefix="/api/travel", tags=["travel"])
+
+    base = Path(data_path).expanduser() if data_path else None
+
+    def _resolve(rel: str) -> Path | None:
+        if base is None:
+            return None
+        p = base / rel
+        return p if p.exists() else None
+
+    def _tax_inclusive(flight: dict[str, Any]) -> int:
+        """Compute adult tax-inclusive price from a flight record."""
+        price = int(flight.get("adult_price", 0) or 0)
+        if not flight.get("free_airport_fee"):
+            price += AIRPORT_FEE
+        if not flight.get("free_fuel_fee"):
+            price += FUEL_FEE
+        return price
+
+    @router.get("/flights")
+    def get_flights() -> dict[str, Any]:
+        """Return lowest tax-inclusive price for each monitored route."""
+        path = _resolve(flights_json) if base else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="旅行数据目录未配置或机票文件不存在")
+
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.exception("Failed to read flights JSON")
+            raise HTTPException(status_code=500, detail=f"读取机票数据失败: {exc}") from exc
+
+        routes: list[dict[str, Any]] = []
+        for item in raw:
+            dep = item.get("dep", "")
+            arr = item.get("arr", "")
+            date = item.get("date", "")
+            key = f"{dep}-{arr}"
+            success = item.get("success", False)
+            flights = item.get("flights", []) or []
+
+            route_info: dict[str, Any] = {
+                "route": key,
+                "dep": dep,
+                "arr": arr,
+                "dep_city": CITY_LABELS.get(dep, dep),
+                "arr_city": CITY_LABELS.get(arr, arr),
+                "date": date,
+                "success": success,
+                "baseline": BASELINES.get(key),
+                "flight_count": len(flights),
+            }
+
+            if success and flights:
+                # Pick lowest tax-inclusive adult price
+                best = min(flights, key=_tax_inclusive)
+                lowest = _tax_inclusive(best)
+                route_info.update(
+                    lowest_price=lowest,
+                    lowest_flight=best.get("itinerary_id", ""),
+                    lowest_departure=best.get("departure_time", ""),
+                    lowest_arrival=best.get("arrival_time", ""),
+                    lowest_airline=(best.get("segments") or [{}])[0].get("airline_name", ""),
+                    adult_fare=int(best.get("adult_price", 0) or 0),
+                    child_fare=float(best.get("child_price", 0) or 0),
+                    baggage_kg=best.get("baggage_kg", 0),
+                    seat_count=best.get("ticket_count", 0),
+                )
+                baseline = BASELINES.get(key)
+                if baseline:
+                    diff = baseline - lowest
+                    pct = round(diff / baseline * 100, 1) if baseline else 0
+                    route_info["vs_baseline"] = {
+                        "diff": diff,
+                        "pct": pct,
+                        "alert": diff >= 200 or pct >= 10,
+                    }
+                # Top 3 cheapest for reference
+                sorted_flights = sorted(flights, key=_tax_inclusive)[:3]
+                route_info["top3"] = [
+                    {
+                        "flight": f.get("itinerary_id", ""),
+                        "departure": f.get("departure_time", ""),
+                        "arrival": f.get("arrival_time", ""),
+                        "price_tax_inclusive": _tax_inclusive(f),
+                        "adult_fare": int(f.get("adult_price", 0) or 0),
+                        "airline": (f.get("segments") or [{}])[0].get("airline_name", ""),
+                    }
+                    for f in sorted_flights
+                ]
+            else:
+                route_info["error"] = item.get("error", "查询失败")
+
+            routes.append(route_info)
+
+        alerts = [r for r in routes if r.get("vs_baseline", {}).get("alert")]
+        return {
+            "updated_at": path.stat().st_mtime if path else None,
+            "source": str(path),
+            "routes": routes,
+            "alerts": alerts,
+            "fee_note": f"含税=票面+机建{AIRPORT_FEE}+燃油{FUEL_FEE}；儿童=票面5折+燃油半价",
+        }
+
+    @router.get("/doc")
+    def get_budget_doc() -> dict[str, Any]:
+        """Return the raw budget markdown document."""
+        path = _resolve(budget_doc) if base else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="旅行数据目录未配置或预算文档不存在")
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            logger.exception("Failed to read budget doc")
+            raise HTTPException(status_code=500, detail=f"读取预算文档失败: {exc}") from exc
+        return {
+            "title": path.stem,
+            "content": content,
+            "updated_at": path.stat().st_mtime,
+            "source": str(path),
+        }
+
+    @router.get("/overview")
+    def get_overview() -> dict[str, Any]:
+        """Structured budget summary extracted from the markdown doc."""
+        path = _resolve(budget_doc) if base else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="旅行数据目录未配置或预算文档不存在")
+
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"读取预算文档失败: {exc}") from exc
+
+        # Extract total budget table
+        totals: list[dict[str, str]] = []
+        in_total = False
+        for line in text.splitlines():
+            if "全款预算" in line or "总预算" in line:
+                in_total = True
+                continue
+            if in_total:
+                if line.startswith("|") and "---" not in line and "项目" not in line:
+                    cells = [c.strip() for c in line.strip("|").split("|")]
+                    if len(cells) >= 2 and cells[0]:
+                        note = cells[2] if len(cells) > 2 else ""
+                        totals.append({"item": cells[0], "amount": cells[1], "note": note})
+                elif (
+                    line.startswith("##")
+                    or line.startswith("---")
+                    or (line.startswith(">") and totals)
+                ):
+                    in_total = False
+
+        # Extract three-plan comparison
+        plans: list[dict[str, str]] = []
+        in_plans = False
+        for line in text.splitlines():
+            if "三方案汇总" in line:
+                in_plans = True
+                continue
+            if in_plans:
+                if line.startswith("|") and "---" not in line and "项目" not in line:
+                    cells = [c.strip() for c in line.strip("|").split("|")]
+                    if len(cells) >= 4 and cells[0]:
+                        plans.append({
+                            "item": cells[0],
+                            "plan_a": cells[1],
+                            "plan_b": cells[2],
+                            "plan_c": cells[3],
+                        })
+                elif line.startswith("##") or line.startswith("---"):
+                    in_plans = False
+
+        return {
+            "title": "新疆旅行预算概览",
+            "totals": totals,
+            "plans": plans,
+            "doc_updated_at": path.stat().st_mtime,
+        }
+
+    return router

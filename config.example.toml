@@ -526,3 +526,12 @@ unmanaged_max_age_days = 30
 # retained as disliked_topics evidence instead of being learned as a
 # positive interest.
 satisfaction_filter_enabled = true
+
+[travel]
+# 旅行预算模块：指向存放预算文档和机票爬虫结果的目录
+# 留空则旅行 tab 显示"未配置数据目录"
+data_path = ""
+# 预算文档文件名（相对 data_path）
+budget_doc = "新疆旅行预算.md"
+# 机票实时价格 JSON（相对 data_path）
+flights_json = "ctrip-ticket-crawler/our_routes_results.json"

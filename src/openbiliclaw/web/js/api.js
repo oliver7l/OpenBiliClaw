@@ -603,3 +603,16 @@ export async function fetchFavorites(limit = 50, offset = 0) {
 export async function fetchUserEvents(limit = 50) {
   return requestJson(`/user-events?limit=${limit}`);
 }
+
+// ── Travel (旅行预算) ──────────────────────────────────────────
+export async function fetchTravelFlights(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/flights", { timeoutMs });
+}
+
+export async function fetchTravelDoc(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/doc", { timeoutMs });
+}
+
+export async function fetchTravelOverview(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/overview", { timeoutMs });
+}

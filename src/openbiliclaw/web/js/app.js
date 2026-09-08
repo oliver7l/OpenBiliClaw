@@ -12,6 +12,7 @@ import { initProfileView, onStreamEvent as profileStreamEvent } from "./views/pr
 import { initChatView, onStreamEvent as chatStreamEvent, toggleMessages, loadNotifications } from "./views/chat.js";
 import { initWatchLaterView, initFavoritesView } from "./views/saved.js";
 import { initPreferencesView } from "./views/preferences.js";
+import { initTravelView } from "./views/travel.js";
 
 // ── DOM refs ─────────────────────────────────────────────────
 const $app = document.getElementById("app");
@@ -84,6 +85,7 @@ const TABS = [
   { id: "preferences", icon: "🧠", label: "偏好" },
   { id: "profile", icon: "\u{1F9E0}", label: "\u753B\u50CF" },
   { id: "chat", icon: "\u{1F4AC}", label: "\u5BF9\u8BDD" },
+  { id: "travel", icon: "\u2708\uFE0F", label: "\u65C5\u884C" },
 ];
 
 function renderTabBar() {
@@ -129,6 +131,7 @@ function initActiveView() {
   else if (id === "preferences") initPreferencesView(views.preferences);
   else if (id === "profile") initProfileView(views.profile);
   else if (id === "chat") initChatView(views.chat);
+  else if (id === "travel") initTravelView(views.travel);
 }
 
 /**

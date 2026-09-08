@@ -4,6 +4,29 @@
 
 ---
 
+## v0.3.202: 新增聊天记录分析系统模块（2026-09-08）
+
+- **新增聊天记录分析系统**：参考笔记模块架构，新增 `chat_analysis/` 模块，独立数据库 `data/chat_analysis.db`，支持会话/消息/分析片段的持久化、检索与统计。
+- **数据导入**：支持从 `chat_data_for_ai.db`（518MB, 796 会话）和 `chat_exports.db`（455MB, 1 会话）导入微信聊天记录，兼容两种导出结构；支持从 `deepseek-analysis/` 目录（15 个分组）导入 AI 分析结果；支持从主库已有 `chat-analysis` 文章（420 条）迁移。
+- **模块组件**：`models.py`（15 个 Pydantic 模型）、`store.py`（6 张 SQLite 表 + 索引）、`importer.py`（三源导入器）、`service.py`（业务逻辑封装）。
+- **API 端点**：13 个 RESTful 端点，覆盖全局统计、会话 CRUD、消息分页、发送者统计、全文搜索、分析片段管理、标签列表、导入控制。
+- **数据规模**：801 会话（274 群聊 + 526 私聊），3,614,760 条消息，832 个分析片段，~82MB 文本。
+- **兼容性修复**：`StrEnum` → `str, Enum`（Python 3.10 兼容）、`sqlite3.Row.get()` 改用 `key in row` 模式、`datetime` 移出 `TYPE_CHECKING` 块、独立数据库 `autocommit` 模式（`isolation_level=None`）。
+- **新增旅行预算模块**：`travel/` 模块提供实时机票价格、预算概览、完整攻略文档三个 API；移动端和桌面端导航栏均新增「✈️ 旅行」tab，支持三方案机票对比、6条航线实时价格监控、降价提醒（降幅≥¥200或≥10%高亮）；配置项 `[travel]` 指向外部预算数据目录。
+
+## v0.3.201: 笔记模块 P2 — 视频转笔记管线（2026-09-08）
+
+- **笔记模块 P2 视频转笔记管线**：新增 `notes/transcribe/`（cleaner/chunker/whisper/fetcher）和 `notes/synthesis/`（prompts/generator）子模块，以及 `notes/pipeline.py` 核心编排器，实现「字幕优先 → 音频兜底 → 非破坏性清洗 → LLM 校对与结构化生成 → 入库」的完整视频转笔记链路。
+- **字幕优先策略**：先尝试 B 站 CC 字幕（`BilibiliSubtitleFetcher`），有字幕直接跳过音频下载，最大程度规避风控。
+- **音频兜底链路**：`BilibiliAPIClient` 新增 `get_playurl()` / `get_audio_streams()`（WBI 签名），`AudioDownloader` 防盗链下载 + ffmpeg 转封装 m4a，`AudioChunker` FFmpeg stream copy 10 分钟均衡无损切片，`AudioTranscriber` faster-whisper 本地离线转录（可选依赖）。
+- **非破坏性文本清洗**：`TextCleaner` 保留成语/叠词/语法动词，仅折叠连续标点和多余空白，避免 mutilate 中文表达。
+- **结构化笔记生成**：4 套 Prompt 模板（精读长文 / 学习笔记 / 资讯速报 / 通用笔记），走主项目 `LLMService.complete()`，支持 ASR 字面级校对（只改字不改话）。
+- **临时文件管理**：音频/切片等中间产物走系统临时目录，管线结束自动清理；只有最终笔记正文持久化，符合项目隐私取向。
+- **CLI 新增 `note video` 命令**：支持 `--type`（study/news/general/article）、`--no-subtitle`、`--no-rectify`、`--no-save`、`--whisper-model` 等选项。
+- **API 新增 `POST /api/notes/from-video` 端点**：异步执行视频转笔记，返回各阶段状态与结果。
+- **修复 P1 Bug**：① `NoteTaskCreate` 缺少 `task_id` 字段导致 `create_task` 报错；② `models.py` 中 `datetime` 误放 `TYPE_CHECKING` 块导致 Pydantic 运行时无法解析；③ FTS 使用 `unicode61` 分词不支持中文，改为 `trigram`（与 `read_archive_fts` / `articles_fts` 一致）。
+- **代码来源说明**：`transcribe/` 和 `synthesis/prompts.py` 改编自 bili-video2book（MIT License），文件 docstring 中保留原版权声明；wandao（AGPL-3.0）只借鉴 checkpoint 设计思想，不复制代码。
+
 ## v0.3.200: 修复自进化页面永久空白（MAIN_PAGE_IDS 遗漏）（2026-09-07）
 
 - 修复 `/web/self-evolution` 页面始终空白：`showMainPage()` 只切换 `MAIN_PAGE_IDS` 列表内页面的显隐，但 `selfEvolutionPage` 未被列入，导致页面元素永久保持 `hidden`。已将 `selfEvolutionPage` 加入 `MAIN_PAGE_IDS`。

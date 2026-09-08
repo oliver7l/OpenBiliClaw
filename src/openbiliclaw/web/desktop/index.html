@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>古灵阁的大模型推荐系统</title>
   <link rel="stylesheet" href="/web/assets/css/app.css">
+  <link rel="stylesheet" href="/web/assets/css/diary.css">
+  <link rel="stylesheet" href="/web/assets/css/onboarding.css">
 </head>
 <body>
   <div class="app-shell">
@@ -14,8 +16,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
         </button>
         <a class="brand" href="/web" aria-label="古灵阁的大模型推荐系统 首页">
-          <span class="brand-mark">B</span>
-          <span class="brand-copy"><span class="brand-title">古灵阁的大模型推荐系统</span><span class="brand-sub">你的本地全网推荐入口</span></span>
+          <span class="brand-copy"><span class="brand-title">古灵阁的大模型推荐系统</span></span>
         </a>
       </div>
       <form class="search" id="searchForm" hidden>
@@ -40,6 +41,7 @@
           </svg>
           <span class="message-dot" id="messagesDot" hidden></span>
         </button>
+        <span class="feed-meta-count" id="feedMetaCount"></span>
       </div>
       <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="打开手机菜单">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
@@ -47,6 +49,8 @@
     </header>
 
     <div class="fatal-banner" id="fatalBanner" role="alert"></div>
+
+    <button class="fab-refresh-btn" id="fabRefreshBtn" type="button" hidden aria-label="换一批">↻</button>
 
     <nav class="tabbar" id="tabBar" aria-label="全局导航">
       <div class="tabbar-scroll" aria-label="全局导航">
@@ -92,9 +96,12 @@
           </div>
         </div>
         <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
+        <button class="tab-btn" id="topicsBtn" type="button">📚 专题</button>
         <button class="tab-btn" id="knowledgeBtn" type="button">🧠 概念库</button>
         <button class="tab-btn" id="cloneBtn" type="button">🌐 克隆站</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
+        <button class="tab-btn" id="healthBtn" type="button">🏥 健康档案</button>
+        <button class="tab-btn" id="travelBtn" type="button">✈️ 旅行</button>
       </div>
       <div class="tabbar-tools" aria-label="推荐筛选与操作">
         <div class="tabbar-actions" aria-label="推荐操作">
@@ -114,8 +121,7 @@
       <div class="side-drawer-scrim" id="sideDrawerScrim"></div>
     </aside>
 
-    <main class="layout" id="home">
-      <section class="main-col" id="homePage" aria-label="推荐首页" data-od-id="recommendation-home">
+    <section class="main-col" id="homePage" aria-label="推荐首页" data-od-id="recommendation-home">
         <section class="runtime-strip" id="runtimeStrip" aria-label="推荐池实时摘要">
           <div class="runtime-summary" id="runtimeSummary">连接后端后显示运行状态</div>
           <div class="runtime-item"><span>当前可换</span><strong id="poolAvailable">—</strong></div>
@@ -364,7 +370,6 @@
               </div>
             </div>
           </div>
-        </div>
         </div><!-- /diary-main-layout -->
         </div><!-- /diaryListView -->
 
@@ -1197,6 +1202,51 @@
         </div>
       </section>
 
+      <!-- 旅行预算：实时机票价格 + 预算概览 + 完整文档 -->
+      <section class="travel-page content-page" id="travelPage" aria-label="旅行预算" hidden>
+        <div class="travel-header">
+          <h2>✈️ 新疆旅行预算</h2>
+          <div class="travel-actions">
+            <button class="pill-btn dark" id="travelRefreshBtn" type="button">↻ 刷新</button>
+          </div>
+        </div>
+        <div class="travel-subtabs">
+          <button class="travel-subtab active" data-travel-view="flights" type="button">实时机票</button>
+          <button class="travel-subtab" data-travel-view="overview" type="button">预算概览</button>
+          <button class="travel-subtab" data-travel-view="doc" type="button">完整攻略</button>
+        </div>
+        <div class="travel-view" id="travelFlightsView">
+          <div class="travel-alerts" id="travelAlerts" hidden></div>
+          <div class="travel-grid" id="travelFlightsGrid"></div>
+          <div class="travel-loading" id="travelFlightsLoading">加载中...</div>
+        </div>
+        <div class="travel-view" id="travelOverviewView" hidden>
+          <div class="travel-section">
+            <h3>全款预算明细</h3>
+            <div class="travel-table-wrap">
+              <table class="travel-table" id="travelTotalsTable">
+                <thead><tr><th>项目</th><th>金额</th><th>说明</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="travel-section">
+            <h3>三方案机票对比</h3>
+            <div class="travel-table-wrap">
+              <table class="travel-table" id="travelPlansTable">
+                <thead><tr><th>分组</th><th>方案A (9/30)</th><th>方案B (10/1)</th><th>方案C (10/2)</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="travel-loading" id="travelOverviewLoading">加载中...</div>
+        </div>
+        <div class="travel-view" id="travelDocView" hidden>
+          <div class="travel-doc-content" id="travelDocContent"></div>
+          <div class="travel-loading" id="travelDocLoading">加载中...</div>
+        </div>
+      </section>
+
       <!-- 池子总览：所有池子内容，包括待处理、已过期、已抑制等 -->
       <section class="main-col" id="poolAllPage" aria-label="池子总览" data-od-id="recommendation-home" hidden>
         <div class="pool-all-header">
@@ -1283,81 +1333,6 @@
         </div>
         <div class="observability-body" id="poolExploreBody">
           <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="xhsFeedPage" aria-label="小红书推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="xhsFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="zhihuFeedPage" aria-label="知乎推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="zhihuFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="biliFeedPage" aria-label="B站推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="biliFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="youtubeFeedPage" aria-label="YouTube推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="youtubeFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="v2exFeedPage" aria-label="V2EX推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="v2exFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="xiaoyuzhouFeedPage" aria-label="小宇宙推荐流" data-od-id="recommendation-home" hidden>
-        <div class="observability-body" id="xiaoyuzhouFeedBody">
-          <div class="observability-loading">正在加载…</div>
-        </div>
-      </section>
-
-      <section class="main-col" id="agentRecommendPage" aria-label="Agent推荐" data-od-id="recommendation-home" hidden>
-        <div class="agent-recommend-container">
-          <div class="agent-recommend-search">
-            <div class="agent-recommend-input-wrapper">
-              <input type="text" id="agentRecommendInput" class="agent-recommend-input" placeholder="你想看什么？比如「AI 创业相关的播客」「B站好看的视频」「知乎上的科技文章」…" autocomplete="off">
-              <button class="pill-btn dark agent-clear-btn" id="agentRecommendClearBtn" type="button" title="清除搜索">×</button>
-              <button class="pill-btn dark" id="agentRecommendSearchBtn" type="button">搜索</button>
-            </div>
-            <div class="agent-recommend-hints-area">
-              <div class="agent-recommend-hints" id="agentRecentHints" style="display: none;">
-                <div class="agent-hints-label">最近搜索:</div>
-                <div class="agent-hints-tags" id="recentSearchTags"></div>
-              </div>
-              <div id="agentSessionContext" class="agent-session-context" style="display: none;">
-                <div class="agent-hints-label">当前语境:</div>
-                <span id="agentSessionContextText" class="agent-session-context-text"></span>
-                <button class="pill-btn dark agent-clear-btn" id="agentResetSessionBtn" type="button" title="重置筛选" style="padding: 2px 8px; font-size: 11px;">重置</button>
-              </div>
-              <div class="agent-recommend-hints">
-                <div class="agent-hints-label">快速搜索:</div>
-                <span class="agent-hint" data-hint="AI 创业">AI 创业</span>
-                <span class="agent-hint" data-hint="科技 播客">科技播客</span>
-                <span class="agent-hint" data-hint="B站 搞笑">B站搞笑</span>
-                <span class="agent-hint" data-hint="知乎 投资">知乎投资</span>
-                <span class="agent-hint" data-hint="小红书 美食">小红书美食</span>
-              </div>
-            </div>
-          </div>
-          <div class="observability-body" id="agentRecommendBody">
-            <div class="agent-recommend-interest-tags" id="agentInterestTags" style="display: none;"></div>
-            <div class="empty-state" style="padding: 60px 20px; text-align: center; color: var(--text-secondary);">
-              <p style="font-size: 18px; margin-bottom: 8px;">输入你想看的内容，我来帮你找</p>
-              <p style="font-size: 13px;">支持自然语言搜索，例如「AI 创业相关的播客」或「B站好看的视频」</p>
-              <p style="font-size: 12px; margin-top: 12px; color: var(--text-secondary);">快捷键：Enter = 搜索，Esc = 清空</p>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1764,8 +1739,82 @@
         <div class="drawer-actions" style="grid-column: 1 / -1"><button class="pill-btn primary" type="submit">保存配置</button></div>
       </form>
       </section>
-    </main>
-  </div>
+
+  <!-- 推荐流页面（独立于 #home，避免父元素隐藏影响显示） -->
+  <section class="main-col" id="xhsFeedPage" aria-label="小红书推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="xhsFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="zhihuFeedPage" aria-label="知乎推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="zhihuFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="biliFeedPage" aria-label="B站推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="biliFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="youtubeFeedPage" aria-label="YouTube推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="youtubeFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="v2exFeedPage" aria-label="V2EX推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="v2exFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="xiaoyuzhouFeedPage" aria-label="小宇宙推荐流" data-od-id="recommendation-home" hidden>
+    <div class="observability-body" id="xiaoyuzhouFeedBody">
+      <div class="observability-loading">正在加载…</div>
+    </div>
+  </section>
+
+  <section class="main-col" id="agentRecommendPage" aria-label="Agent推荐" data-od-id="recommendation-home" hidden>
+    <div class="agent-recommend-container">
+      <div class="agent-recommend-search">
+        <div class="agent-recommend-input-wrapper">
+          <input type="text" id="agentRecommendInput" class="agent-recommend-input" placeholder="你想看什么？比如「AI 创业相关的播客」「B站好看的视频」「知乎上的科技文章」…" autocomplete="off">
+          <button class="pill-btn dark agent-clear-btn" id="agentRecommendClearBtn" type="button" title="清除搜索">×</button>
+          <button class="pill-btn dark" id="agentRecommendSearchBtn" type="button">搜索</button>
+        </div>
+        <div class="agent-recommend-hints-area">
+          <div class="agent-recommend-hints" id="agentRecentHints" style="display: none;">
+            <div class="agent-hints-label">最近搜索:</div>
+            <div class="agent-hints-tags" id="recentSearchTags"></div>
+          </div>
+          <div id="agentSessionContext" class="agent-session-context" style="display: none;">
+            <div class="agent-hints-label">当前语境:</div>
+            <span id="agentSessionContextText" class="agent-session-context-text"></span>
+            <button class="pill-btn dark agent-clear-btn" id="agentResetSessionBtn" type="button" title="重置筛选" style="padding: 2px 8px; font-size: 11px;">重置</button>
+          </div>
+          <div class="agent-recommend-hints">
+            <div class="agent-hints-label">快速搜索:</div>
+            <span class="agent-hint" data-hint="AI 创业">AI 创业</span>
+            <span class="agent-hint" data-hint="科技 播客">科技播客</span>
+            <span class="agent-hint" data-hint="B站 搞笑">B站搞笑</span>
+            <span class="agent-hint" data-hint="知乎 投资">知乎投资</span>
+            <span class="agent-hint" data-hint="小红书 美食">小红书美食</span>
+          </div>
+        </div>
+      </div>
+      <div class="observability-body" id="agentRecommendBody">
+        <div class="agent-recommend-interest-tags" id="agentInterestTags" style="display: none;"></div>
+        <div class="empty-state" style="padding: 60px 20px; text-align: center; color: var(--text-secondary);">
+          <p style="font-size: 18px; margin-bottom: 8px;">输入你想看的内容，我来帮你找</p>
+          <p style="font-size: 13px;">支持自然语言搜索，例如「AI 创业相关的播客」或「B站好看的视频」</p>
+          <p style="font-size: 12px; margin-top: 12px; color: var(--text-secondary);">快捷键：Enter = 搜索，Esc = 清空</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section class="mobile-menu" id="mobileMenu" aria-label="手机菜单">
     <div class="mobile-menu-panel">
@@ -1855,8 +1904,12 @@
   </section>
 
   <div class="toast" id="toast" role="status"></div>
+  </div>
   <script src="/web/assets/js/self-evolution.js" defer></script>
   <script src="/web/assets/js/app.js" defer></script>
+  <script src="/web/assets/js/pool-explore.js" defer></script>
+  <script src="/web/assets/js/profile.js" defer></script>
+  <script src="/web/assets/js/feed-pages.js" defer></script>
   <!-- 日记模块脚本由 app.js 在进入日记页面时按需动态加载 -->
 
 </body></html>
