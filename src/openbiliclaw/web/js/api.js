@@ -616,3 +616,55 @@ export async function fetchTravelDoc(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
 export async function fetchTravelOverview(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
   return requestJson("/travel/overview", { timeoutMs });
 }
+
+// ── Interview (求职面试备战) ────────────────────────────────
+export async function fetchInterviewStatus(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/status", { timeoutMs });
+}
+
+export async function fetchInterviewJobs(keyword = "", timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const q = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+  return requestJson(`/api/interview/jobs${q}`, { timeoutMs });
+}
+
+export async function fetchInterviewSearch(q, limit = 40, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/search?q=${encodeURIComponent(q)}&limit=${limit}`, { timeoutMs });
+}
+
+export async function fetchInterviewNumbers(keyword = "", timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const q = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+  return requestJson(`/api/interview/numbers${q}`, { timeoutMs });
+}
+
+export async function fetchInterviewProjects(keyword = "", timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const q = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+  return requestJson(`/api/interview/projects${q}`, { timeoutMs });
+}
+
+export async function fetchInterviewCard(company, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/card/${encodeURIComponent(company)}`, { timeoutMs });
+}
+
+export async function fetchInterviewDirections(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/directions", { timeoutMs });
+}
+
+export async function fetchInterviewIndex(keyword = "", layer = "", timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const params = new URLSearchParams();
+  if (keyword) params.set("keyword", keyword);
+  if (layer) params.set("layer", layer);
+  const qs = params.toString();
+  return requestJson(`/api/interview/index${qs ? `?${qs}` : ""}`, { timeoutMs });
+}
+
+export async function fetchInterviewLogs(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/logs", { timeoutMs });
+}
+
+export async function postInterviewLog(payload, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/logs", { ...json(payload), timeoutMs });
+}
+
+export async function postInterviewScaffold(payload, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/scaffold", { ...json(payload), timeoutMs });
+}

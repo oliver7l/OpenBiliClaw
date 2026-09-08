@@ -65,6 +65,18 @@ openbiliclaw [--log-level DEBUG|INFO|WARNING|ERROR] <命令>
 | `note video <BV号>` | B 站视频转结构化笔记（字幕优先 + 音频兜底） | ✅ |
 | `note import-read-archive <dir>` | 从已读库目录批量导入笔记 | ✅ |
 | `note tasks` | 列出生成任务 | ✅ |
+| `interview status` | 求职知识库系统总览（岗位/项目/数字/方向/日志统计） | ✅ |
+| `interview search <关键词>` | 全文检索（02方向库/03岗位库/腾讯文档资料/解码文本） | ✅ |
+| `interview job <公司>` | 查看某公司/岗位登记信息 | ✅ |
+| `interview card <公司>` | 一键生成该公司面试速记卡（数字+项目+题库入口） | ✅ |
+| `interview numbers [关键词]` | 真实数字表（口径权威源，严禁编造） | ✅ |
+| `interview projects [关键词]` | 项目库 | ✅ |
+| `interview direction <方向>` | 列出某方向全部方法论文档（02_方向知识库） | ✅ |
+| `interview index [关键词] [--layer 01/02/03]` | 全库文件索引查询 | ✅ |
+| `interview logs` | 面试日志列表（最新在前） | ✅ |
+| `interview log <公司> <轮次> <要点>` | 追加一条面试日志（只追加） | ✅ |
+| `interview scaffold <公司> <岗位> [--yes]` | 按统一规范新建岗位备战包目录（01/02/03 三件套） | ✅ |
+| `interview root` | 显示当前求职知识库根目录（含解析来源） | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli next-avoidance-probe` | OpenClaw JSON bridge：拉取下一条不喜欢领域探针 | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli respond-avoidance-probe` | OpenClaw JSON bridge：确认 / 否认 / 多聊避雷探针 | ✅ |
 
@@ -516,6 +528,31 @@ $ openbiliclaw note tasks                       # 列出最近 20 个任务
 $ openbiliclaw note tasks --status running      # 按状态筛选
 $ openbiliclaw note tasks --limit 50
 ```
+
+### `openbiliclaw interview`（求职面试备战）
+
+`interview` 命令组把外部「三层求职知识库」（01_原始资料库 → 02_方向知识库 → 03_岗位弹药库，
+由 `_系统_知识库引擎` 的数据表 + knowledge.db 驱动）接入 CLI。数据源由 `[interview] root`
+配置，原始材料保留在原目录，模块只读检索；仅 `interview log`（追加日志）与
+`interview scaffold`（新建岗位目录）会写入引擎数据目录。
+
+```bash
+$ openbiliclaw interview status                       # 系统总览（岗位/项目/数字/方向/日志）
+$ openbiliclaw interview search oCPX                  # 全文检索 oCPX
+$ openbiliclaw interview job 大宇                     # 查看大宇无限岗位登记
+$ openbiliclaw interview card 大宇                    # 一键生成大宇面试速记卡
+$ openbiliclaw interview numbers ARPU                 # 查真实数字（口径权威源）
+$ openbiliclaw interview projects                     # 全部项目库
+$ openbiliclaw interview direction 推荐               # 推荐方向方法论文档
+$ openbiliclaw interview index --layer 02             # 按层查全库索引
+$ openbiliclaw interview log 大宇 "负责人面" "问了 RTB 出价"   # 追加面试日志
+$ openbiliclaw interview scaffold 新公司 "广告算法" --yes      # 新建岗位备战包目录
+$ openbiliclaw interview root                         # 显示当前知识库根目录
+```
+
+`interview log` 追加的行带当天日期、状态为「待复盘」，只追加不修改历史；
+`interview scaffold` 按统一规范创建 `01_岗位与公司信息 / 02_面试备战资料 / 03_速成包`
+三件套空目录，目录已存在时不会覆盖。
 
 ### `openbiliclaw init`
 

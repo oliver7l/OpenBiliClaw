@@ -4,6 +4,18 @@
 
 ---
 
+## v0.3.217: 求职面试备战模块 interview（2026-09-08）
+
+- **新模块 `interview`**：把外部「三层求职知识库」（01_原始资料库 → 02_方向知识库 → 03_岗位弹药库 + _系统_知识库引擎）接入 OpenBiliClaw——岗位总览、全文检索、真实数字、项目库、面试题索引、方向文档、全库索引、面试速记卡、面试日志、新岗位建档，CLI 与 API 双通道复用同一引擎。
+- **引擎**：`src/openbiliclaw/interview/engine.py`（`InterviewEngine`）规范化原 `kb.py` 检索逻辑，去掉硬编码路径；`resolve_root` 按 配置 → 环境变量 `OPENBILICLAW_INTERVIEW_ROOT` → 默认路径 三级解析；原始材料只读、日志只追加、建档幂等。
+- **CLI**：`openbiliclaw interview status/search/job/card/numbers/projects/direction/index/logs/log/scaffold/root` 命令组（Rich 表格/面板输出）。
+- **API**：`GET/POST /api/interview/*` 11 个路由（status/jobs/search/numbers/projects/card/directions/index/logs/log/scaffold），未配置返回 404 带引导提示。
+- **配置**：`config.py` 新增 `InterviewConfig`，`config.example.toml` / `config.toml` 新增 `[interview] root`。
+- **测试**：`tests/test_interview_engine.py`（14 用例）+ `tests/test_api_interview.py`（9 用例），用 tmp 临时知识库构造器覆盖引擎与 API 全链路；ruff/mypy 零错误。
+- **文档**：新增 `docs/modules/interview.md`；`docs/modules/cli.md` / `docs/modules/config.md` / `docs/index.md` / `docs/changelog.md` 同步。
+- **数据落地**：三层求职知识库整体移入项目内 `求职知识库/`（默认路径随项目解析，无需配置）；`_系统_知识库引擎` 三个脚本（kb.py / build_index.py / doctor.py）路径改为脚本位置推导，随库迁移可用；`求职知识库/` 加入 .gitignore（13G 本地数据不进版本控制）。
+- **数据融合**：参考项目（agent-interview-hub / my-interview）安置于项目根 `references/`（含嵌套 .git，单独 ignore）；interview 模块完全消化自有面试系统——全文检索扩展到 `01_原始资料库/工作资料_腾讯`、`工作资料_微视` 与 `_系统_知识库引擎/规范`；面试速记卡新增「岗位定制弹药」（自动读取各岗位 `03_速成包` 的面试前速记卡全文 + 预测题库/速成问答清单、`02_面试备战资料` 清单）；系统总览展示规范文档清单（岗位匹配评估/录入规范/新增岗位流程）。
+
 ## v0.3.217: Knowledge Forge 实体网络规模化回填（2026-09-08）
 
 - **生产库实体网络规模化**：对无实体关联的文章批量回填实体提取（`knowledge-forge entity-extract`，真实 LLM），本轮 200 篇——实体 31 → **774**（author 163 / topic 83 / concept 528），文章-实体关联 31 → **1,226 行**（其中 1,195 行带发布时间，实体时间线可用）。

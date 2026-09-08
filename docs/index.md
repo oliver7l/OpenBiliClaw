@@ -11,6 +11,7 @@
 - [Chrome Web Store 商店页文案](chrome-webstore-listing.md) — 可直接复制到商店后台的项目入口、安装使用说明和隐私引导
 - [v0.1 开发任务清单](v0.1-todolist.md) — 当前版本的开发主线
 - [技术债清单](technical-debt.md) — 已确认技术债、风险解析、建议治理方向和待确认 TODO 线索
+- [重构规划（2026-09）](refactor-plan-2026-09.md) — 基于现状基线的分阶段治理：止血 → 一份事实 → 拆巨文件 → 修分层 → 抽取收口 → 技术债
 - [架构设计](architecture.md) — 系统架构与模块关系
 - [记忆系统设计](memory-design.md) — 多层网状记忆架构详解
 - [变更日志](changelog.md) — 各里程碑交付记录
@@ -54,8 +55,10 @@
 | 集成适配层 | [modules/integrations.md](modules/integrations.md) | `src/openbiliclaw/integrations/` | ✅ OpenClaw adapter 已接入 |
 | 运行时服务 | [modules/runtime.md](modules/runtime.md) | `src/openbiliclaw/runtime/` | ✅ refresh / candidate pipeline / presence gate / autostart / Ollama preflight / degraded boot / runtime-stream / 扩展 E2E 控制事件 / backend tag auto-update |
 | 引导初始化 | [modules/init.md](modules/init.md) | `src/openbiliclaw/cli.py`（`run_guided_init`）+ `runtime/init_coordinator.py` + `runtime/init_prereqs.py` | ✅ v0.3.102 共享流水线 + `InitCoordinator` 状态机 + `/api/init*` + 写者门控 + 插件推荐 tab CTA |
+| 求职面试备战 | [modules/interview.md](modules/interview.md) | `src/openbiliclaw/interview/` | ✅ v0.3.217 接入外部三层求职知识库：CLI `interview` 命令组 + `/api/interview/*` |
 
 ## 开发指南
 
+- [系统开发文档](development.md) — 当前状态手册（as-is baseline）：代码地图与模块状态、开发工作流、测试基线、已知问题登记 K1-K11
 - [贡献指南](contributing.md) — 环境搭建、代码规范、文档更新要求
 - [AGENTS.md](../AGENTS.md) — AI 代理开发规则（含文档更新强制要求）

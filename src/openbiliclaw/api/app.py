@@ -13514,6 +13514,19 @@ def create_app(
         )
     )
 
+    # ── 求职面试备战 API ─────────────────────────────────────────
+    try:
+        from openbiliclaw.interview.routes import build_interview_router
+
+        _interview_cfg = getattr(config, "interview", None)
+        app.include_router(
+            build_interview_router(
+                root=str(getattr(_interview_cfg, "root", "") or "") or None,
+            )
+        )
+    except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
+        logger.exception("Interview routes registration failed")
+
     # ── 克隆系统 API ─────────────────────────────────────────────
 
     _clone_service: CloneService | None = None

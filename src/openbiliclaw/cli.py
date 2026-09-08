@@ -111,6 +111,14 @@ note_app = typer.Typer(help="笔记管理命令")
 app.add_typer(note_app, name="note")
 console = Console()
 _APP_CONTEXT: dict[str, Any] = {}
+
+# 求职面试备战（interview）命令组
+try:
+    from openbiliclaw.interview.cli import register as _register_interview
+
+    _register_interview(app)
+except Exception as _interview_import_exc:  # noqa: BLE001 — 可选模块导入失败不阻塞主 CLI
+    _APP_CONTEXT["interview_import_error"] = str(_interview_import_exc)
 _DISCOVER_STRATEGIES_OPTION = typer.Option(
     None,
     "--strategy",

@@ -543,6 +543,14 @@ X 源健康状态（`ok` / `missing_cookie` / `expired_cookie` / `rate_limited` 
 |----|------|--------|------|
 | `db_path` | string | `"data/openbiliclaw.db"` | SQLite 数据库路径 |
 
+### `[interview]`（v0.3.217+）
+
+求职面试备战模块（`openbiliclaw interview` / `/api/interview`）的数据源配置。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `root` | string | `""` | 外部「三层求职知识库」根目录（01_原始资料库 / 02_方向知识库 / 03_岗位弹药库 + _系统_知识库引擎）。留空时依次按环境变量 `OPENBILICLAW_INTERVIEW_ROOT`、内置默认路径（`openbiliclaw.interview.engine.DEFAULT_INTERVIEW_ROOT`）解析。原始材料始终保留在原目录，模块只读检索 |
+
 ### `[soul.preference]`
 
 | 键 | 类型 | 默认值 | 说明 |

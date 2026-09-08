@@ -2300,3 +2300,117 @@ body.auth-locked #tab-bar {
 .travel-footer-note {
   margin-top: 14px; font-size: 11px; color: #aaa; text-align: center;
 }
+
+/* ── Interview (求职面试备战) ──────────────────────────────── */
+.interview-view { padding: 0 0 20px; }
+.interview-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px 16px 12px;
+}
+.interview-head-icon { font-size: 22px; }
+.interview-head-title { font-size: 18px; font-weight: 700; flex: 1; }
+.interview-head-stat { font-size: 12px; color: #999; }
+.interview-refresh-btn {
+  background: none; border: 1px solid #e0e0e0; border-radius: 8px;
+  padding: 4px 10px; font-size: 14px; cursor: pointer; color: #666;
+}
+.interview-refresh-btn:active { background: #f0f0f0; }
+
+.interview-section-tabs {
+  display: flex; gap: 0; padding: 0 16px; margin-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+.interview-section-tab {
+  flex: 1; padding: 10px 4px; background: none; border: none;
+  font-size: 13px; color: #888; cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.interview-section-tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+.interview-content { padding: 0 16px; }
+.interview-empty { padding: 24px 16px; text-align: center; color: #999; font-size: 13px; }
+.interview-unconfigured {
+  margin: 20px 16px; padding: 24px 18px; border: 1px solid #f3d9c0;
+  background: #fff9f2; border-radius: 12px; color: #8a5a2a; font-size: 14px; line-height: 1.7;
+}
+.interview-unconfigured code {
+  background: #f0e6da; border-radius: 4px; padding: 1px 5px; font-size: 12px;
+}
+
+/* Job cards */
+.interview-jobs { display: flex; flex-direction: column; gap: 10px; }
+.interview-job-card {
+  background: #fff; border: 1px solid #eee; border-radius: 12px;
+  padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.interview-job-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.interview-job-company { font-size: 16px; font-weight: 700; color: #1f2937; }
+.interview-job-role { font-size: 13px; color: #2563eb; font-weight: 600; }
+.interview-job-status {
+  margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  background: #eef2ff; color: #4f46e5;
+}
+.interview-job-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #666; }
+.interview-job-note { margin-top: 8px; font-size: 12px; color: #8a5a2a; background: #fff9f2; border-radius: 8px; padding: 8px 10px; }
+.interview-card-btn {
+  margin-top: 10px; background: #2563eb; color: #fff; border: none;
+  border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+}
+.interview-card-btn:active { background: #1d4ed8; }
+
+/* Speed card */
+.interview-card {
+  margin-top: 14px; border: 1px solid #bfdbfe; background: #f5f9ff;
+  border-radius: 12px; padding: 14px;
+}
+.interview-card-title { font-size: 15px; font-weight: 700; color: #1e40af; }
+.interview-card-meta { font-size: 12px; color: #6b7280; font-weight: 400; margin-left: 8px; }
+.interview-card-sub { font-size: 12px; color: #6b7280; margin: 4px 0 10px; }
+.interview-card-block { margin-top: 10px; }
+.interview-card-block-title {
+  font-size: 12px; font-weight: 700; color: #1e40af;
+  border-left: 3px solid #2563eb; padding-left: 8px; margin-bottom: 6px;
+}
+.interview-num-row { font-size: 13px; padding: 2px 0; color: #333; }
+.interview-num-ke { color: #2563eb; }
+.interview-num-src { color: #999; font-size: 12px; }
+.interview-proj-row { font-size: 13px; padding: 2px 0; color: #333; }
+.interview-q-row { font-size: 12px; padding: 2px 0; color: #555; }
+
+/* Search */
+.interview-search-box { display: flex; gap: 8px; margin-bottom: 12px; }
+.interview-search-box input, .interview-numbers-filter input {
+  flex: 1; border: 1px solid #e0e0e0; border-radius: 8px; padding: 9px 12px; font-size: 13px;
+}
+.interview-search-box button, .interview-numbers-filter button, .interview-log-form button {
+  background: #2563eb; color: #fff; border: none; border-radius: 8px;
+  padding: 9px 16px; font-size: 13px; cursor: pointer;
+}
+.interview-search-box button:active, .interview-numbers-filter button:active, .interview-log-form button:active { background: #1d4ed8; }
+.interview-hit {
+  border: 1px solid #eee; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  background: #fff;
+}
+.interview-hit-path { font-size: 11px; color: #2563eb; font-family: monospace; margin-bottom: 3px; }
+.interview-hit-snippet { font-size: 13px; color: #333; }
+
+/* Numbers */
+.interview-numbers-filter { display: flex; gap: 8px; margin-bottom: 12px; }
+.interview-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  background: #fff; border-radius: 10px; overflow: hidden;
+}
+.interview-table th {
+  text-align: left; padding: 9px 10px; background: #f8fafc;
+  color: #475569; font-weight: 600; border-bottom: 1px solid #e2e8f0;
+}
+.interview-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+.interview-num-value { font-weight: 700; color: #2563eb; }
+.interview-footer-note { margin-top: 10px; font-size: 11px; color: #aaa; text-align: center; }
+
+/* Logs */
+.interview-log-form { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.interview-log-form input {
+  flex: 1; min-width: 110px; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px 10px; font-size: 12px;
+}
+.interview-log-msg { font-size: 12px; color: #16a34a; margin-bottom: 8px; }

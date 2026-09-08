@@ -672,6 +672,19 @@ class TravelConfig:
 
 
 @dataclass
+class InterviewConfig:
+    """求职面试备战模块（interview）配置。
+
+    指向外部「三层求职知识库」根目录（01_原始资料库 / 02_方向知识库 /
+    03_岗位弹药库 + _系统_知识库引擎）。留空时按环境变量
+    ``OPENBILICLAW_INTERVIEW_ROOT`` 或默认路径解析（见
+    ``openbiliclaw.interview.engine``）。
+    """
+
+    root: str = ""
+
+
+@dataclass
 class ApiAuthConfig:
     """Optional password gate for LAN / remote access (see
     ``docs/plans/2026-05-30-web-password-auth-design.md``).
@@ -766,6 +779,7 @@ class Config:
     # provider override): this carries soul-engine behavior toggles.
     soul: SoulConfig = field(default_factory=SoulConfig)
     travel: TravelConfig = field(default_factory=TravelConfig)
+    interview: InterviewConfig = field(default_factory=InterviewConfig)
 
     @property
     def data_path(self) -> Path:
@@ -897,6 +911,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
     travel_raw = raw.get("travel", {})
     if not isinstance(travel_raw, dict):
         travel_raw = {}
+    interview_raw = raw.get("interview", {})
+    if not isinstance(interview_raw, dict):
+        interview_raw = {}
 
     embedding_raw = llm_raw.get("embedding", {})
     data_dir_raw = general.get("data_dir", "data")
@@ -1238,6 +1255,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
             flights_json=str(
                 travel_raw.get("flights_json", "ctrip-ticket-crawler/our_routes_results.json")
             ),
+        ),
+        interview=InterviewConfig(
+            root=str(interview_raw.get("root", "") or ""),
         ),
     )
 
