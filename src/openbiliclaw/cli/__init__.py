@@ -477,7 +477,7 @@ def _initialize_logging(log_level_override: str | None = None) -> None:
 def _build_registry() -> Any:
     """Build the configured LLM registry."""
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm import build_llm_registry
+    from openbiliclaw.llm._compat_registry import build_llm_registry
 
     return build_llm_registry(load_config())
 
@@ -600,7 +600,7 @@ def _build_recommendation_engine() -> Any:
         module_overrides=module_overrides_from_config(cfg),
         concurrency=cfg.llm.concurrency,
     )
-    from openbiliclaw.llm.registry import build_embedding_service
+    from openbiliclaw.llm._compat_registry import build_embedding_service
 
     _emb = build_embedding_service(cfg, registry)
     embedding_service = cast("SupportsEmbeddingService | None", _emb)
@@ -719,7 +719,7 @@ def _build_discovery_engine() -> Any:
     )
 
     # Build embedding service from config (optional)
-    from openbiliclaw.llm.registry import build_embedding_service
+    from openbiliclaw.llm._compat_registry import build_embedding_service
 
     embedding_service = build_embedding_service(cfg, registry)
     discovery_cfg = getattr(cfg, "discovery", None)
@@ -4436,7 +4436,13 @@ def note_video(
 
         if config:
             overrides = module_overrides_from_config(config)
-            llm_service = LLMService(overrides=overrides)
+            from openbiliclaw.llm._compat_registry import build_llm_registry as _build_registry
+
+            llm_service = LLMService(
+                registry=_build_registry(config),
+                memory=None,
+                module_overrides=overrides,
+            )
     except Exception:
         pass
 
@@ -5026,7 +5032,7 @@ def _ask_network_binding() -> bool:
     console.print()
     console.print("[dim]后续可在 config.toml 的 [api].host 随时切换。[/dim]")
     console.print()
-    return cast("bool", typer.confirm("允许局域网设备访问（推荐）?", default=True))
+    return typer.confirm("允许局域网设备访问（推荐）?", default=True)
 
 
 def _persist_api_host_choice(*, allow_lan: bool) -> None:
@@ -6640,7 +6646,7 @@ def profile_consolidate(
     import asyncio as _asyncio
 
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm.registry import build_embedding_service
+    from openbiliclaw.llm._compat_registry import build_embedding_service
     from openbiliclaw.llm.service import LLMService, module_overrides_from_config
     from openbiliclaw.soul.consolidator import ProfileConsolidator
 
@@ -8568,7 +8574,8 @@ def probe() -> None:
 def config_show() -> None:
     """显示当前配置."""
     from openbiliclaw.config import load_config_with_diagnostics
-    from openbiliclaw.llm import RegistryBuildError, summarize_registry
+    from openbiliclaw.llm import RegistryBuildError
+    from openbiliclaw.llm._compat_registry import summarize_registry
 
     cfg, diagnostics = load_config_with_diagnostics()
     _print_page_title("当前配置概览", "运行时配置")

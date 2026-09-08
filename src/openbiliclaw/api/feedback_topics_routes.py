@@ -34,7 +34,9 @@ def _get_fallback_recommendation_click_url(
 ) -> str:
     from openbiliclaw.api.app import _fallback_recommendation_click_url
 
-    return _fallback_recommendation_click_url(source_platform, content_id, bvid)
+    return _fallback_recommendation_click_url(
+        source_platform=source_platform, content_id=content_id, bvid=bvid
+    )
 
 
 def _get_infer_source_platform_from_url(url: str) -> str:
@@ -119,15 +121,18 @@ def register_feedback_topics_routes(
                 },
             )
         )
-        buffer_domain, buffer_specifics = recommendation_buffer_domain(recommendation)
-        if feedback_type == "like":
+        buffer_domain: str = ""
+        buffer_specifics: list[str] = []
+        if recommendation_buffer_domain is not None:
+            buffer_domain, buffer_specifics = recommendation_buffer_domain(recommendation)
+        if feedback_type == "like" and record_exploration_buffer_event is not None:
             record_exploration_buffer_event(
                 domain=buffer_domain,
                 specifics=buffer_specifics,
                 source_event="card_like",
                 evidence_id=str(recommendation.get("bvid", "")),
             )
-        elif feedback_type == "dislike":
+        elif feedback_type == "dislike" and record_exploration_buffer_event is not None:
             record_exploration_buffer_event(
                 domain=buffer_domain,
                 specifics=buffer_specifics,
@@ -146,7 +151,8 @@ def register_feedback_topics_routes(
                     title=str(recommendation.get("title", "")),
                     note=note,
                 )
-        schedule_post_feedback_tasks()
+        if schedule_post_feedback_tasks is not None:
+            schedule_post_feedback_tasks()
         return FeedbackResponse(
             ok=True,
             recommendation_id=payload.recommendation_id,
@@ -258,14 +264,18 @@ def register_feedback_topics_routes(
                     metadata=click_metadata,
                 )
             )
-        buffer_domain, buffer_specifics = recommendation_buffer_domain(
-            {
-                "title": title,
-                "topic_label": topic_label,
-                "bvid": bvid,
-            }
-        )
-        record_exploration_buffer_event(
+        buffer_domain = ""
+        buffer_specifics: list[str] = []
+        if recommendation_buffer_domain is not None:
+            buffer_domain, buffer_specifics = recommendation_buffer_domain(
+                {
+                    "title": title,
+                    "topic_label": topic_label,
+                    "bvid": bvid,
+                }
+            )
+        if record_exploration_buffer_event is not None:
+            record_exploration_buffer_event(
             domain=buffer_domain,
             specifics=buffer_specifics,
             source_event="plain_click",
