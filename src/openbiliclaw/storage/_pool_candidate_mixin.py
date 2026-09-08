@@ -736,3 +736,128 @@ class PoolCandidateMixin:
             selected_bvids,
         )
         return len(selected_bvids)
+
+    # ── Pool helper methods ────────────────────────────────────────
+
+    @staticmethod
+    def _balance_pool_rows(rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+        """Round-robin sample from a relevance-ordered pool, balanced by content topic."""
+        if limit <= 0 or len(rows) <= 1:
+            return rows[:limit]
+
+        buckets: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        topic_order: list[str] = []
+        for row in rows:
+            key = str(row.get("topic_group", "") or "").strip().lower()
+            if not key:
+                key = str(row.get("topic_key", "") or "").strip().lower()
+            if not key:
+                key = "unknown"
+            if key not in buckets:
+                topic_order.append(key)
+            buckets[key].append(row)
+
+        balanced: list[dict[str, Any]] = []
+        while len(balanced) < limit:
+            progressed = False
+            for key in topic_order:
+                bucket = buckets[key]
+                if not bucket:
+                    continue
+                balanced.append(bucket.pop(0))
+                progressed = True
+                if len(balanced) >= limit:
+                    break
+            if not progressed:
+                break
+        return balanced[:limit]
+
+    def get_recent_viewed_bvids(self, limit: int = 2000) -> set[str]:
+        """Return recently viewed BVIDs from view events."""
+        cursor = self.conn.execute(
+            """
+            SELECT url, metadata
+            FROM events
+            WHERE event_type = 'view'
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        viewed_bvids: set[str] = set()
+        for row in cursor.fetchall():
+            bvid = self._extract_bvid_from_view_event(dict(row))
+            if bvid:
+                viewed_bvids.add(bvid)
+        return viewed_bvids
+
+    def get_recent_viewed_content_keys(self, limit: int = 2000) -> set[str]:
+        """Return recently viewed content identities across supported sources."""
+        cursor = self.conn.execute(
+            """
+            SELECT url, metadata
+            FROM events
+            WHERE event_type = 'view'
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        viewed_keys: set[str] = set()
+        for row in cursor.fetchall():
+            viewed_keys.update(self._extract_content_keys_from_view_event(dict(row)))
+        return viewed_keys
+
+    @staticmethod
+    def _explore_risk_cluster(row: dict[str, Any]) -> str:
+        import re
+
+        from openbiliclaw.storage.database import _EXPLORE_HIGH_RISK_CLUSTERS
+
+        haystack = " ".join(
+            [
+                str(row.get("topic_key", "") or ""),
+                str(row.get("title", "") or ""),
+            ]
+        ).lower()
+        if not haystack.strip():
+            return ""
+        compact = re.sub(r"\s+", "", haystack)
+        for cluster, keywords in _EXPLORE_HIGH_RISK_CLUSTERS:
+            if any(keyword in compact for keyword in keywords):
+                return cluster
+        return ""
+
+    @staticmethod
+    def _sort_timestamp_score(value: str) -> float:
+        if not value:
+            return 0.0
+        normalized = value.replace(" ", "T")
+        try:
+            from datetime import datetime
+
+            return datetime.fromisoformat(normalized).timestamp()
+        except ValueError:
+            return 0.0
+
+    def _pool_trim_keep_key(self, row: dict[str, Any]) -> tuple[int, int, float, float, int, str]:
+        """Sort fresh raw material from most worth keeping to least."""
+        from openbiliclaw.storage.database import _is_linkable_pool_source
+
+        linkable = _is_linkable_pool_source(
+            row.get("source"),
+            row.get("source_platform"),
+            row.get("content_url"),
+        )
+        ready = all(
+            str(row.get(field, "") or "").strip()
+            for field in ("pool_expression", "pool_topic_label", "style_key", "topic_group")
+        )
+        return (
+            0 if linkable else 1,
+            0 if ready else 1,
+            -float(row.get("relevance_score", 0.0) or 0.0),
+            -self._sort_timestamp_score(str(row.get("last_scored_at", ""))),
+            1 if str(row.get("source", "") or "") == "explore" else 0,
+            str(row.get("bvid", "")),
+        )
