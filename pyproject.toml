@@ -139,6 +139,10 @@ select = [
 "src/openbiliclaw/api/chat_recommend_routes.py" = ["E501"]
 "src/openbiliclaw/api/source_routes.py" = ["E501"]
 "src/openbiliclaw/chat_analysis/service.py" = ["E501"]
+# 测试：长 SQL 语句 / 中文断言 / 长签名
+"tests/diary/test_diary.py" = ["E501"]
+"tests/diary/test_diary_knowledge_graph.py" = ["E501"]
+"tests/knowledge/test_knowledge_forge.py" = ["E501"]
 "src/openbiliclaw/diary/insights.py" = ["E501"]
 "src/openbiliclaw/diary/service.py" = ["E501"]
 "src/openbiliclaw/diary/store.py" = ["E501"]
