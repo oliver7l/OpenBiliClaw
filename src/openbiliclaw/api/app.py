@@ -1021,34 +1021,6 @@ def _normalize_cognition_update(item: dict[str, object]) -> CognitionUpdateSumma
     )
 
 
-def _image_cache_lookup(url: str) -> tuple[Path, str] | None:
-    """Return (path, content_type) if a cached copy exists."""
-    key = _image_cache_key(url)
-    cache_dir = _image_cache_dir()
-    for candidate in cache_dir.glob(f"{key}.*"):
-        ext = candidate.suffix.lstrip(".")
-        content_type = f"image/{ext}" if ext else "image/jpeg"
-        if candidate.stat().st_size > 0:
-            return candidate, content_type
-    return None
-
-
-def _image_cache_response(url: str) -> FileResponse | None:
-    cached = _image_cache_lookup(url)
-    if not cached:
-        return None
-    cache_path, cache_ct = cached
-    return FileResponse(
-        cache_path,
-        media_type=cache_ct,
-        headers={
-            "Cache-Control": "public, max-age=86400",
-            "X-Content-Type-Options": "nosniff",
-            "X-Image-Cache": "hit",
-        },
-    )
-
-
 # ─── 日记统计接口两级缓存（内存 L1 + 磁盘 L2）────────────────
 # 统计类接口读多写少、计算密集（如关键词分词、时间线聚合），加短 TTL 缓存；
 # 任何写操作自动清空缓存，保证数据一致性。
@@ -1138,6 +1110,7 @@ def create_app(
     )
     from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
     from openbiliclaw.api._system_routes import register_system_routes
+    from openbiliclaw.api._image_proxy_routes import register_image_proxy_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -2459,47 +2432,6 @@ def create_app(
         if not cancelled:
             return JSONResponse({"error": "not_running"}, status_code=409)
         return JSONResponse({"cancelling": True, "run_id": run["run_id"]}, status_code=202)
-
-    @app.get("/api/image-proxy", response_model=None)
-    async def image_proxy(
-        url: str = Query(..., description="URL-encoded image URL to proxy"),
-    ) -> Response | FileResponse:
-        """Proxy whitelisted remote cover images through the local backend.
-
-        Cache-first: a cached copy IS the image for that URL (the URL identifies
-        it), so serve it immediately instead of paying a ~2s upstream round-trip
-        on every load. The old code re-fetched on the success path and only read
-        the cache when the upstream failed, so covers stayed slow even when
-        cached. On a miss, fetch via ``image_cache.fetch_cover_bytes`` (whitelist
-        / redirect / size validation), cache it, and serve. ``X-Image-Cache``
-        reports hit/miss; slow misses are logged for diagnosis.
-        """
-        if cached := _image_cache_response(url):
-            return cached
-
-        started = time.monotonic()
-        try:
-            data, content_type = await fetch_cover_bytes(url)
-        except CoverFetchError as exc:
-            # Validation failures (400/403/413) surface as-is; upstream / network
-            # failures (>=500) fall back to a cached copy when one appeared.
-            if exc.status_code >= 500 and (cached := _image_cache_response(url)):
-                return cached
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-
-        save_image_bytes(url, data, content_type)
-        elapsed_ms = int((time.monotonic() - started) * 1000)
-        if elapsed_ms > 800:
-            logger.debug("image-proxy MISS %dms %s", elapsed_ms, url[:100])
-        return Response(
-            content=data,
-            media_type=content_type,
-            headers={
-                "Cache-Control": "public, max-age=86400",
-                "X-Content-Type-Options": "nosniff",
-                "X-Image-Cache": "miss",
-            },
-        )
 
     @app.post("/api/bilibili/cookie", response_model=BilibiliCookieResponse)
     async def sync_bilibili_cookie(
@@ -13321,6 +13253,9 @@ def create_app(
 
     # ── System-level routes (update status, notifications, cognition) ──
     register_system_routes(app, ctx)
+
+    # ── Image proxy routes ───────────────────────────────────────
+    register_image_proxy_routes(app, ctx)
 
     # ── 拆分后未接线的路由注册（K3 孤儿路由修复）──────────────────
     for _mod_name, _fn_name in [
