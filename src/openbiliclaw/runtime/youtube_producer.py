@@ -337,8 +337,9 @@ class YoutubeDiscoveryProducer:
 DB_PATH = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
 INTERVAL_HOURS = 24
 CLEAN_ENV = os.environ.copy()
-CLEAN_ENV["PYTHONHOME"] = ""
-CLEAN_ENV["PYTHONPATH"] = ""
+CLEAN_ENV.pop("PYTHONHOME", None)
+CLEAN_ENV.pop("PYTHONPATH", None)
+CLEAN_ENV.pop("__PYVENV_LAUNCHER__", None)
 # 清掉代理环境变量：本机代理（Clash 类）经常重启/挂掉，挂掉时 yt-dlp 走代理会拿到
 # "Unable to connect to proxy ... 502 Bad Gateway"，表现为 "yt-dlp returned 0 items"
 # （退出码仍是 0，所以不会报错、只会被当成空 feed 跳过，很难发现）。
@@ -353,10 +354,11 @@ for _proxy_key in (
 ):
     CLEAN_ENV.pop(_proxy_key, None)
 
+YT_COOKIES_FILE = os.path.join(os.path.dirname(DB_PATH), "youtube_cookies.txt")
 YT_DLP_CMD = [
     "yt-dlp",
-    "--cookies-from-browser",
-    "chrome",
+    "--cookies",
+    YT_COOKIES_FILE,
     "--flat-playlist",
     "--print",
     "%(title)s|%(uploader)s|%(view_count)s|%(webpage_url)s",
@@ -369,13 +371,23 @@ _VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
 
 def _fetch_feed() -> list[dict[str, Any]]:
     """Call yt-dlp and return parsed items."""
-    result = subprocess.run(
-        YT_DLP_CMD,
-        capture_output=True,
-        text=True,
-        env=CLEAN_ENV,
-        timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            YT_DLP_CMD,
+            capture_output=True,
+            text=True,
+            env=CLEAN_ENV,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("yt-dlp timed out after 120s (cookies or network issue)")
+        return []
+    except FileNotFoundError:
+        logger.error("yt-dlp not found on PATH")
+        return []
+    except OSError as exc:
+        logger.error("yt-dlp subprocess error: %s", exc)
+        return []
     if result.returncode != 0:
         logger.error("yt-dlp failed (rc=%d): %s", result.returncode, result.stderr[:500])
         return []
