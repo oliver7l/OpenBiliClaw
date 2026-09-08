@@ -103,3 +103,68 @@ class UserFeedbackMixin:
             }
             for r in rows
         ]
+
+    def get_interest_tags(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Aggregate interest tags from liked content."""
+        import re
+
+        rows = self.conn.execute(
+            """
+            SELECT topic_group, source_platform, COUNT(*) as cnt
+            FROM user_feedback
+            WHERE action = 'like' AND topic_group != '' AND topic_group IS NOT NULL
+            GROUP BY topic_group, source_platform
+            ORDER BY cnt DESC
+            LIMIT ?
+        """,
+            (limit * 3,),
+        ).fetchall()
+
+        tags: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            tg = str(r["topic_group"]).strip()
+            if not tg:
+                continue
+            sp = str(r["source_platform"] or "")
+            if tg not in tags:
+                tags[tg] = {"tag": tg, "weight": 0, "source_platforms": [], "count": 0}
+            tags[tg]["count"] += int(r["cnt"])
+            tags[tg]["weight"] = tags[tg]["count"]
+            if sp and sp not in tags[tg]["source_platforms"]:
+                tags[tg]["source_platforms"].append(sp)
+
+        title_rows = self.conn.execute("""
+            SELECT title, source_platform FROM user_feedback
+            WHERE action = 'like' AND title != '' AND title IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 100
+        """).fetchall()
+
+        stop_words = {
+            "的", "了", "是", "在", "有", "和", "就", "不", "人", "都",
+            "一", "一个", "这个", "那个", "什么", "怎么", "如何", "为什么",
+            "可以", "没有", "不是", "就是", "还是", "我们", "他们", "你们",
+            "自己", "知道", "觉得", "看到", "可能", "已经", "这样", "通过",
+            "之后", "因为", "所以", "但是", "而且", "如果", "虽然", "然后",
+        }
+
+        word_counts: dict[str, int] = {}
+        for r in title_rows:
+            title = str(r["title"] or "")
+            words = re.findall(r"[\u4e00-\u9fff]{2,6}|[a-zA-Z][a-zA-Z0-9]{2,}", title)
+            for w in words:
+                wl = w.lower()
+                if wl in stop_words or len(w) < 2:
+                    continue
+                word_counts[wl] = word_counts.get(wl, 0) + 1
+
+        for w, c in sorted(word_counts.items(), key=lambda x: -x[1]):
+            if c < 2:
+                continue
+            if w not in tags:
+                tags[w] = {"tag": w, "weight": 0, "source_platforms": [], "count": 0}
+            tags[w]["weight"] += c
+            tags[w]["count"] += c
+
+        result = sorted(tags.values(), key=lambda x: -x["weight"])[:limit]
+        return result
