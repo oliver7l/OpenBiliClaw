@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from openbiliclaw.api.models import ActivityFeedItemOut, ActivityFeedResponse
-from openbiliclaw.api.runtime_context import RuntimeContext
+
+if TYPE_CHECKING:
+    from openbiliclaw.api.runtime_context import RuntimeContext
 
 
 def register_activity_feed_routes(app: Any, ctx: RuntimeContext) -> None:

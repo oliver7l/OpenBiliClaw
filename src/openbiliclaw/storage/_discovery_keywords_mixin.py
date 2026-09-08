@@ -7,8 +7,10 @@ schema creation, batch insert, atomic claim, and status transitions
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class DiscoveryKeywordsMixin:

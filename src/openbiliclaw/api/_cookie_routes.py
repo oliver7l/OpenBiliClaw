@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from openbiliclaw.api.models import DouyinCookieResponse, XCookieResponse
-from openbiliclaw.api.runtime_context import RuntimeContext
-from openbiliclaw.sources.x_auth import XCookieManager, X_REQUIRED_COOKIE_NAMES
+from openbiliclaw.sources.x_auth import X_REQUIRED_COOKIE_NAMES, XCookieManager
+
+if TYPE_CHECKING:
+    from openbiliclaw.api.runtime_context import RuntimeContext
 
 
 def register_cookie_routes(app: Any, ctx: RuntimeContext, *, config: Any) -> None:

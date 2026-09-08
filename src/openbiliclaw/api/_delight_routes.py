@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from fastapi import HTTPException
 
@@ -12,7 +12,9 @@ from openbiliclaw.api.models import (
     PendingDelightOut,
     PendingDelightResponse,
 )
-from openbiliclaw.api.runtime_context import RuntimeContext
+
+if TYPE_CHECKING:
+    from openbiliclaw.api.runtime_context import RuntimeContext
 
 
 def register_delight_routes(app: Any, ctx: RuntimeContext) -> None:

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from fastapi import HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
-from openbiliclaw.api.runtime_context import RuntimeContext
 from openbiliclaw.runtime.image_cache import (
     CoverFetchError,
     fetch_cover_bytes,
@@ -17,6 +15,10 @@ from openbiliclaw.runtime.image_cache import (
     image_cache_key,
     save_image_bytes,
 )
+
+if TYPE_CHECKING:
+    from openbiliclaw.api.runtime_context import RuntimeContext
+    from pathlib import Path
 
 
 def _image_cache_lookup(url: str) -> tuple[Path, str] | None:

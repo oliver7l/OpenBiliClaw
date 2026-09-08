@@ -11,7 +11,6 @@ import re
 import sqlite3
 import threading
 import time
-from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -42,6 +41,7 @@ from openbiliclaw.storage._view_history_mixin import ViewHistoryMixin
 from openbiliclaw.storage._watch_later_mixin import WatchLaterMixin
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     pass
 
 logger = logging.getLogger(__name__)

@@ -6,15 +6,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-from openbiliclaw.config import SchedulerConfig
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
-from openbiliclaw.runtime.presence import PresenceTracker
 
 if TYPE_CHECKING:
+    from openbiliclaw.config import SchedulerConfig
+    from openbiliclaw.runtime.presence import PresenceTracker
+    import asyncio
     from collections.abc import Callable, Coroutine
 
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
