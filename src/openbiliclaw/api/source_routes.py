@@ -2,7 +2,7 @@
 
 包含源配方管理、XHS/Bilibili/Twitter/Douyin/YouTube 扩展调度端点、
 E2E 测试系统、源健康检查、自动启动配置。
-通过 ``register_source_routes(app, ctx, _CONFIG_SAVE_LOCK)`` 注册。
+通过 ``register_source_routes(app, ctx, _config_save_lock)`` 注册。
 """
 
 from __future__ import annotations
@@ -342,7 +342,7 @@ def _build_extension_e2e_report(
 def register_source_routes(
     app: FastAPI,
     ctx: RuntimeContext,
-    _CONFIG_SAVE_LOCK: asyncio.Lock,
+    _config_save_lock: asyncio.Lock,
     *,
     get_auth_gate: Any,
     init_active_now: Any,
@@ -2912,7 +2912,7 @@ def register_source_routes(
             )
             return JSONResponse(status_code=409, content=body.model_dump(mode="json"))
 
-        async with _CONFIG_SAVE_LOCK:
+        async with _config_save_lock:
             config_path = _cfg_path()
             config_existed = config_path.exists()
             backup_path = _snapshot_config_file(config_path)

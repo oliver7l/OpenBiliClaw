@@ -778,7 +778,7 @@ class ChatAnalysisStore:
             v_norm = math.sqrt(sum(v * v for v in emb.vector))
             if v_norm == 0:
                 continue
-            dot = sum(a * b for a, b in zip(query_vector, emb.vector))
+            dot = sum(a * b for a, b in zip(query_vector, emb.vector, strict=False))
             sim = dot / (q_norm * v_norm)
             scored.append((emb.message_id, sim))
 
