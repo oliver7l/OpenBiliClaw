@@ -1115,6 +1115,7 @@ def create_app(
     from openbiliclaw.api._llm_routes import register_llm_routes
     from openbiliclaw.api._clone_routes import register_clone_routes
     from openbiliclaw.api._web_ui_routes import register_web_ui_routes
+    from openbiliclaw.api._route_registry import register_all_routes
     from openbiliclaw.api._activity_feed_routes import register_activity_feed_routes
     from openbiliclaw.api._runtime_status_routes import register_runtime_status_routes
     from openbiliclaw.api._delight_routes import register_delight_routes
@@ -7059,184 +7060,27 @@ def create_app(
 
     # ── AI 报告解读 ──
 
-    # ── Notes CRUD routes ──────────────────────────────────────
-    register_notes_routes(app, ctx)
-
-    # ── Saved-sync (reading library) routes ─────────────────────
-    register_saved_sync_routes(app, ctx)
-
-    # ── System-level routes (update status, notifications, cognition) ──
-    register_system_routes(app, ctx)
-
-    # ── Image proxy routes ───────────────────────────────────────
-    register_image_proxy_routes(app, ctx)
-
-    # ── Cookie management routes (douyin/x) ─────────────────────
-    register_cookie_routes(app, ctx, config=config)
-
-    # ── LLM quota monitoring routes ─────────────────────────────
-    register_llm_routes(app, ctx)
-
-    # ── Clone system routes ─────────────────────────────────────
-    register_clone_routes(app, ctx)
-
-    # ── Activity feed routes ────────────────────────────────────
-    register_activity_feed_routes(app, ctx)
-
-    # ── Runtime status routes ───────────────────────────────────
-    register_runtime_status_routes(app, ctx)
-
-    # ── 拆分后未接线的路由注册（K3 孤儿路由修复）──────────────────
-    for _mod_name, _fn_name in [
-        ("article_routes", "register_article_routes"),
-        ("diary_routes", "register_diary_routes"),
-        ("health_routes", "register_health_routes"),
-        ("knowledge_routes", "register_knowledge_routes"),
-        ("library_routes", "register_library_routes"),
-        ("reading_routes", "register_reading_routes"),
-    ]:
-        try:
-            _mod = __import__(f"openbiliclaw.api.{_mod_name}", fromlist=[_fn_name])
-            getattr(_mod, _fn_name)(app, ctx)
-        except Exception:  # noqa: BLE001
-            logger.exception("%s registration failed", _fn_name)
-
-    # ── 有额外依赖参数的路由注册 ────────────────────────────────
-    try:
-        from openbiliclaw.api.chat_probe_routes import register_chat_probe_routes
-
-        register_chat_probe_routes(
-            app,
-            ctx,
-            fire_and_forget_tasks=_fire_and_forget_tasks,
-            serialize_recommendation_items=_serialize_recommendation_items,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("chat_probe_routes registration failed")
-
-    try:
-        from openbiliclaw.api.chat_recommend_routes import register_chat_recommend_routes
-
-        register_chat_recommend_routes(
-            app,
-            ctx,
-            serialize_recommendation_items=_serialize_recommendation_items,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("chat_recommend_routes registration failed")
-
-    try:
-        from openbiliclaw.api.config_routes import register_config_routes
-
-        register_config_routes(
-            app,
-            ctx,
-            config_save_lock=_CONFIG_SAVE_LOCK,
-            init_active_now=_init_active_now,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("config_routes registration failed")
-
-    try:
-        from openbiliclaw.api.feedback_topics_routes import (
-            register_feedback_topics_routes,
-        )
-
-        register_feedback_topics_routes(
-            app,
-            ctx,
-            schedule_post_feedback_tasks=_schedule_post_feedback_tasks,
-            record_exploration_buffer_event=_record_exploration_buffer_event,
-            recommendation_buffer_domain=_recommendation_buffer_domain,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("feedback_topics_routes registration failed")
-
-    try:
-        from openbiliclaw.api.source_routes import register_source_routes
-
-        register_source_routes(
-            app,
-            ctx,
-            _CONFIG_SAVE_LOCK,
-            get_auth_gate=_get_auth_gate,
-            init_active_now=_init_active_now,
-            ingest_profile_update_events=_ingest_profile_update_events,
-            snapshot_config_file=_snapshot_config_file,
-            restore_config_snapshot=_restore_config_snapshot,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("source_routes registration failed")
-
-    try:
-        from openbiliclaw.api.subscription_routes import register_subscription_routes
-
-        register_subscription_routes(
-            app,
-            ctx,
-            config_save_lock=_CONFIG_SAVE_LOCK,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("subscription_routes registration failed")
-
-    # ── Knowledge Forge routes ─────────────────────────────────
-    try:
-        from openbiliclaw.api.knowledge_forge_routes import (
-            register_knowledge_forge_routes,
-        )
-
-        register_knowledge_forge_routes(app, ctx)
-    except Exception:  # noqa: BLE001
-        logger.exception("Knowledge Forge routes registration failed")
-
-    # ── Recommendation feed routes (M1 extraction from this file) ──
-    app.include_router(
-        build_recommendation_router(
-            ctx=ctx,
-            config=config,
-            fire_and_forget_tasks=_fire_and_forget_tasks,
-            init_active_now=_init_active_now,
-            pick_best_xhs_url=_pick_best_xhs_url,
-            serialize_recommendation_items=_serialize_recommendation_items,
-            load_interest_keywords=_load_interest_keywords,
-            request_runtime_replenishment=_request_runtime_replenishment,
-        )
+    # ── Route registration (集中到 _route_registry.py) ─────────
+    register_all_routes(
+        app,
+        ctx,
+        config,
+        fire_and_forget_tasks=_fire_and_forget_tasks,
+        serialize_recommendation_items=_serialize_recommendation_items,
+        config_save_lock=_CONFIG_SAVE_LOCK,
+        init_active_now=_init_active_now,
+        schedule_post_feedback_tasks=_schedule_post_feedback_tasks,
+        record_exploration_buffer_event=_record_exploration_buffer_event,
+        recommendation_buffer_domain=_recommendation_buffer_domain,
+        get_auth_gate=_get_auth_gate,
+        ingest_profile_update_events=_ingest_profile_update_events,
+        snapshot_config_file=_snapshot_config_file,
+        restore_config_snapshot=_restore_config_snapshot,
+        pick_best_xhs_url=_pick_best_xhs_url,
+        load_interest_keywords=_load_interest_keywords,
+        request_runtime_replenishment=_request_runtime_replenishment,
+        build_recommendation_router=build_recommendation_router,
     )
-
-    # ── 旅行预算 API ─────────────────────────────────────────────
-    from openbiliclaw.travel.routes import build_travel_router
-
-    _travel_cfg = getattr(config, "travel", None)
-    app.include_router(
-        build_travel_router(
-            data_path=getattr(_travel_cfg, "data_path", "") or "",
-            budget_doc=getattr(_travel_cfg, "budget_doc", "新疆旅行预算.md"),
-            flights_json=getattr(
-                _travel_cfg, "flights_json", "ctrip-ticket-crawler/our_routes_results.json"
-            ),
-        )
-    )
-
-    # ── 求职面试备战 API ─────────────────────────────────────────
-    try:
-        from openbiliclaw.interview.routes import build_interview_router
-
-        _interview_cfg = getattr(config, "interview", None)
-        app.include_router(
-            build_interview_router(
-                root=str(getattr(_interview_cfg, "root", "") or "") or None,
-            )
-        )
-    except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
-        logger.exception("Interview routes registration failed")
-
-    # ── 面试复盘记录 API ─────────────────────────────────────────
-    try:
-        from openbiliclaw.interview.review_routes import build_review_router
-
-        app.include_router(build_review_router())
-    except Exception:  # noqa: BLE001
-        logger.exception("Interview review routes registration failed")
 
     # ── Web UI routes and static mounts ───────────────────────
     register_web_ui_routes(app, ctx)
