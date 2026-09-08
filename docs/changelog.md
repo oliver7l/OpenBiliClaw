@@ -4,6 +4,100 @@
 
 ---
 
+## v0.3.217: Knowledge Forge 实体网络规模化回填（2026-09-08）
+
+- **生产库实体网络规模化**：对无实体关联的文章批量回填实体提取（`knowledge-forge entity-extract`，真实 LLM），本轮 200 篇——实体 31 → **774**（author 163 / topic 83 / concept 528），文章-实体关联 31 → **1,226 行**（其中 1,195 行带发布时间，实体时间线可用）。
+- **共现关系网络重建**：`entity-relations` 基于新关联重建，共现对 465 → **4,712**（最高 21 篇共现，如「知乎日报 × 科普」）。
+- **核心实体描述补写**：`entity-describe` 对 50 个最高频实体补 LLM 简介，42 成功 / 8 失败（单实体容错）。
+- **生产 API 验证**：实体详情/时间线/相关实体（持久化优先）全部可用；`knowledge-graph` 图谱数据随网络增长。
+- **遗留说明**：全量 87k 文章需分批增量回填（200 篇约 23 分钟，LLM 成本与速率受限）；`run-scheduled` 可挂 `entity-extract` 继续推进。
+
+## v0.3.216: Knowledge Forge §5 页面级交互增强（2026-09-08）
+
+- **实体时间线全量展示**：`/api/entities/{id}` 新增 `months` 查询参数（默认 8，`months=0` 返回全量），实体浏览器页面加"近 8 月 / 全部"切换。
+- **审计页处理建议**：`/audit` 表格新增"处理建议"列，直接展示 `fix_suggestion`（配合 v0.3.215 生成的 1 万+ 条建议）。
+- **矛盾标记处理**：`POST /api/contradictions/{relation_id}/resolve`（`action=confirmed|false_positive`，按 rowid 定位兼容新旧 schema，幂等补 `status/resolved_at` 列）；矛盾列表默认不再展示误报条目，confirmed 条目保留并显示状态；`/contradictions` 页面加"确认属实 / 标记误报"按钮。
+- **测试**：`tests/test_api_knowledge_forge.py` 扩至 20 用例（时间线全量/矛盾处理 2 用例）；ruff/mypy 零错误。
+- **文档**：`docs/modules/knowledge_forge.md`、`docs/knowledge-forge-design.md`（v1.10）同步。
+
+## v0.3.215: Knowledge Forge 待人工建议生成 + 定时任务完整闭环（2026-09-08）
+
+- **待人工类型建议生成（设计 3.5.2 补全）**：dead_link/too_short/low_quality/missing_author 不再只是"待人工"标记——`auto_fixer.py` 新增 `_SUGGEST_ONLY` 映射，运行 `knowledge-forge auto-fix` 时为这些 open 问题生成并写回 `fix_suggestion`（明确处理路径：重新抓取/人工审核/补作者），不修改任何数据，`--dry-run` 只统计不落库。
+- **定时任务完整闭环**：`run-scheduled` 组合升级为 质量审计 → 缺口分析 → **实体共现刷新**（entity_relations 随新文章保持同步）→（可选）死链检查 →（可选）自动补充闭环（`--include-gap-fill`，B站搜索有冷却默认关闭）。
+- **真实运行**：生产库对 10,520 条 open 问题（too_short 6,015 + missing_author 4,505）全部写入处理建议；`run-scheduled --dry-run` 三步组合（audit/gap/entity_relations）跑通，共现 465 对。
+- **测试**：`tests/test_knowledge_forge_pipeline.py` 扩至 24 用例（建议写库/dry-run/定时组合 5 用例）；ruff/mypy 对 knowledge_forge 全模块零错误。
+- **文档**：`docs/modules/knowledge_forge.md`、`docs/knowledge-forge-design.md`（v1.9）同步。
+
+## v0.3.214: Knowledge Forge 实体间关联持久化（2026-09-08）
+
+- **实体间关联持久化（设计 3.2 验收补全）**：新增 `entity_relation_builder.py`——从 `article_entities` 计算实体共现（同文章共现对）并写入 `entity_relations`（relation_type='co_occur'，含 `co_occur` 共现次数与归一化 confidence），幂等 upsert；CLI `knowledge-forge entity-relations`（--min-co-occur 过滤 / --dry-run）。
+- **API 优先读持久化**：`/api/entities/{id}` 的 related 优先查 `entity_relations`，无持久化数据时回退实时共现计算；`entity_relations` 表幂等补 `co_occur` 列（`Database.initialize()` 自动补齐旧库）。
+- **真实运行**：生产库 `Database.initialize()` 幂等补列成功；共现计算写入 465 对（31 实体同文章共现）。
+- **测试**：`tests/test_knowledge_forge_pipeline.py` 扩至 19 用例（共现计算/写入/阈值过滤 3 用例）；`tests/test_api_knowledge_forge.py` 扩至 18 用例（持久化优先）；ruff/mypy 对新增模块零错误。
+- **文档**：`docs/modules/knowledge_forge.md` 同步；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.213: Knowledge Forge 实体页增强 + §5 前端页面（2026-09-08）
+
+- **实体页增强（设计 3.2）**：`entity_detail` API 新增引用时间线（按月聚合最近 8 个月）+ 相关实体（同文章共现 top 8）；新增 `entity_description_updater.py`（LLM 基于关联文章自动生成/更新实体简介，幂等：仅处理描述为空或超期未更新的实体，单实体失败不阻断，`--dry-run` 支持试运行）；CLI `knowledge-forge entity-describe`；`EntityConfig.llm` fallback 修正为 openai（siliconflow 未注册）。
+- **§5 前端页面（除知识图谱外全部落地）**：作者/主题/概念通用实体浏览页（`/authors`、`/topics`、`/concepts`——列表按文章数排序/搜索、详情含简介/统计/主题分布/时间线/相关实体/文章列表，类型注入）；质量审计页（`/audit`，级别筛选 + 概要统计 + 分页）；缺口分析页（`/gap-analysis`，缺口卡片 + 重新分析触发）；矛盾报告页（`/contradictions`，文章对 + 置信度）。新增 `/api/audit/summary` 与 `/api/contradictions` 列表端点。
+- **真实 LLM 验证**：实体「搜推系统」「Agent」描述生成成功；「Agent」已落库（含 last_updated_at）；个别实体 JSON 解析失败不阻断（幂等可重跑）。
+- **测试**：`tests/test_api_knowledge_forge.py` 扩至 17 用例（实体详情增强/audit summary/contradictions 列表/7 页面挂载）；`tests/test_knowledge_forge_pipeline.py` 扩至 16 用例（描述更新器 3 用例）；回归 160 全过，ruff/mypy 对新增模块零错误。
+- **文档**：`docs/modules/knowledge_forge.md` 同步；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.212: Knowledge Forge 阶段三 知识图谱可视化 + 自动补充闭环（2026-09-08）
+
+- **知识图谱可视化（设计 3.1）**：新增独立页面 `/web/knowledge-graph`（挂载 `/knowledge-graph`）——ECharts 关系图（力导向布局）、作者/主题/概念类型筛选、节点点击查看详情（类型/文章数/关联文章列表）、数量上限调节；数据来自 `/api/knowledge-graph` + `/api/entities/{id}/articles`；与既有前端同一套设计 token。
+- **自动补充闭环（设计 3.3）**：新增 `gap_filler.py`——取高危主题覆盖缺口 → 解析主题名 → B 站搜索 → url_processors 提取 → `upsert_article` 入库（含正文清理钩子）→ 缺口标记 resolved；候选去重（已存在 URL 跳过）、尊重 B 站搜索冷却、单缺口最多补 N 篇、缺口级容错；CLI `knowledge-forge gap-fill`。
+- **真实闭环验证**：生产库冒烟（缺口「科学」）——B 站搜索 3 候选、1 篇提取入库（文章 264403「科普」）、缺口 3573 标记 resolved；提取失败（无字幕视频）不阻断。
+- **测试**：`tests/test_knowledge_forge_pipeline.py` 扩至 13 用例（GapFiller 4 用例：主题解析/缺口筛选/闭环 mock/冷却跳过）；ruff/mypy 对新增模块零错误。
+- **文档**：`docs/modules/knowledge_forge.md` 同步 gap_filler/知识图谱页/CLI；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.211: Knowledge Forge 阶段二收尾 + 阶段三批量/定时（2026-09-08）
+
+- **低质量内容检测（设计 2.5 收尾）**：新增 `low_quality_detector.py`，LLM 抽样判定广告/垃圾/无意义/正文与标题不符（优先抽样已有疑似问题文章，默认 5% 比例）；命中写 `audit_issues(low_quality)`；CLI `knowledge-forge low-quality`；真实 LLM 验证（fallback 自动生效，正确识别 1 篇"正文与标题严重不符"的抓取错位内容）。
+- **自动修复（设计 2.5 收尾 + 3.5.2 阶段四）**：新增 `auto_fixer.py`，按审计问题自动修复——污染重清理（调用 ContentCleaner）、补 content_hash、LLM 补标签、LLM 补三层摘要、重复标记；dead_link/too_short/low_quality 待人工不自动处理；默认关闭（`auto_fix_enabled=false`，CLI `--enable` 显式开启）；CLI `knowledge-forge auto-fix`。
+- **历史文章批量处理（设计 3.5）**：新增 `batch_processor.py`，分批补全 清理/摘要/标签/实体/质量分，高价值优先（已清理缺摘要的长文），步骤级容错（单步失败不丢弃整篇），进度落 `audit_tasks` 支持断点续跑；CLI `knowledge-forge backfill`。
+- **定时任务集成（设计 3.4）**：新增 `schedule.py`，组合任务 质量审计→缺口分析→（可选）死链检查，生成 Markdown 报告落库；CLI `knowledge-forge run-scheduled` + `schedule-show`（输出推荐 crontab）。
+- **配置**：新增 `[knowledge_forge.low_quality]` 段（sample_ratio/max_samples）。
+- **测试**：新增 `tests/test_knowledge_forge_pipeline.py`（9 用例）；KF 相关测试 50 用例全部通过，ruff/mypy 对新增模块零错误。
+- **修复**：batch 管线步骤级容错（原来单步失败丢弃整篇）、schedule 内嵌套 asyncio.run 问题、duplicate details JSON 解析、`_fetch_candidates` IN 占位符与参数不匹配。
+- **文档**：`docs/modules/knowledge_forge.md` 同步新管线/CLI/配置；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.210: Knowledge Forge 阶段一收尾 + 阶段二核心（2026-09-08）
+
+- **入库流程接入正文清理**：`Database.upsert_article` 插入/更新路径同步生成 `content_cleaned` 及质量/验证标记；清理失败降级不阻断入库（临时库三路径验证通过）。
+- **观点矛盾检测（设计 2.3）**：新增 `contradiction_detector.py`，LLM 判定同主题文章观点冲突（compact 摘要输入，confidence>0.7 标矛盾），增量跳过已检测对，矛盾报告生成；CLI `knowledge-forge contradiction`；真实 LLM 验证通过。
+- **死链检测（设计 2.5）**：新增 `dead_link_checker.py`，分批异步 HEAD 请求（平台差异延迟/UA、批次冷却），404/410 死链、超时待确认、7 天有效结果跳过防重复请求；CLI `knowledge-forge dead-link`；本地 mock HTTP 五状态验证通过。
+- **API 路由（设计 §4）**：新增 `api/knowledge_forge_routes.py` 并注册——摘要查询/生成、实体列表/详情/文章、相关文章/矛盾列表/知识图谱、缺口记录查询/解决、审计任务/问题/质量分；`/api/authors`、`/api/topics` 因既有端点占用统一走 `/api/entities?type=`；生产库冒烟通过。
+- **审计快照取代**：新一轮全量审计自动将上一轮 open 问题标记 `superseded`，防止重复堆积（验证连续运行 open 稳定在 201k）。
+- **测试**：新增 `tests/test_api_knowledge_forge.py`（13 用例）；`test_knowledge_forge.py` 扩至 28 用例；KF+API+storage 合计 140 用例全部通过；ruff/mypy 对新增模块零错误。
+- **配置**：新增 `[knowledge_forge.contradiction]` 段（min_shared_tags 默认 1、confidence_threshold 0.7）。
+- **文档**：`docs/modules/knowledge_forge.md` 同步新管线/API/配置；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.209: Knowledge Forge 阶段一实现（2026-09-08）
+
+- **六条核心管线全部落地**（`src/openbiliclaw/knowledge_forge/`）：正文清理（ContentCleaner）、分层摘要（SummaryEngine）、实体提取（EntityExtractor）、质量审计（QualityAuditor）、知识 Wiki（WikiBuilder）、缺口分析（GapAnalyst）。
+- **正文清理**：HTML 剥离、空白压缩、平台特异截断（知乎评论区/推荐位、小红书广告、B 站弹幕）、simhash 质量分 0-100、验证标记；CLI `knowledge-forge clean` 支持单篇/批量/试运行。
+- **分层摘要**：detailed（≤5000 字）/ compact（≤1000）/ ultra_compact（≤200）三层写入新列，带质量分与版本号；基于 content_cleaned 优先、回退 content_text。
+- **实体提取**：作者确定性提取；主题（tags 校验 + LLM 合并）、概念（LLM）写入 entities/article_entities；同名实体按 name 唯一复用。
+- **质量审计**：全量只读扫描（87,281 篇 7.5s）——基础统计、URL/hash 重复、逐行缺失/格式/污染检测，质量分写入 article_quality_scores，报告入 audit_tasks。
+- **知识 Wiki**：标签分组 + 组内两两，same_topic（确定性）与 similar（embedding ≥0.85）双阶段独立执行。
+- **缺口分析**：主题覆盖/概念覆盖/时间衰减/跨平台四维度，报告入 gap_records。
+- **LLM 降级**：KFLlmClient 实现主 provider → fallback → 熔断（5 次失败/300s 冷却），进程级单例。
+- **CLI 接入**：主 CLI 注册 `knowledge-forge` 命令组（summary/entities/audit/wiki/gap-analysis/clean）。
+- **修复**：`build_llm_registry` 需传 `config.llm`（传整个 Config 会 AttributeError）；`openbiliclaw/llm/registry.py` stub 显式导出 `build_embedding_service`。
+- **测试与静态检查**：新增 `tests/test_knowledge_forge.py`（23 个用例全部通过）；`ruff check` 与 `mypy --strict` 对 knowledge_forge 包零错误。
+- **文档**：新建 `docs/modules/knowledge_forge.md`；`docs/knowledge-forge-design.md` 状态更新。
+
+## v0.3.208: Knowledge Forge 数据库迁移（2026-09-08）
+
+- **新增 `migrations/001_knowledge_forge.py`**：独立可执行的知识锻造炉迁移脚本（幂等，可重复执行）。
+- **`articles` 表新增 11 个字段**：正文清理 5 个（`content_cleaned` / `content_clean_score` / `content_clean_log` / `content_verified` / `content_verify_result`）+ 分层摘要 6 个（`summary_detailed` / `summary_compact` / `summary_ultra_compact` / `summary_quality` / `summary_version` / `summary_generated_at`），全部向后兼容，旧字段旧数据保留。
+- **新增 10 张表**：实体体系（`entities` / `article_entities` / `entity_relations`）、文章关联（`article_relations`）、质量审计（`audit_tasks` / `audit_issues` / `article_quality_scores` / `audit_config`）、缺口分析（`gap_analysis_tasks` / `gap_records`），`audit_config` 预置 7 条默认阈值。
+- **`Database.initialize()` 接入**：新增 `_ensure_knowledge_forge_tables()`，每次启动幂等补齐 Knowledge Forge 表结构，无需单独执行迁移。
+- **文档同步**：`docs/modules/storage.md` 增加 Knowledge Forge 表结构小节；`docs/knowledge-forge-design.md` 迁移脚本从示例落地为真实可执行脚本。
+- **已在生产库执行**：`data/openbiliclaw.db`（87,269 篇文章）迁移完成并验证；迁移前已备份至 `data/backups/openbiliclaw_pre_knowledge_forge_20260908_154717.db`。
+
 ## v0.3.207: 离线内容填充管线（2026-09-08）
 
 - **新增 `content_filler.py` 模块**：四条离线内容处理管线，统一在自进化循环中调度。

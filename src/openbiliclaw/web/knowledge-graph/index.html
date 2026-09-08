@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>知识图谱 · 古灵阁</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff; --panel: #ffffff; --ink: #18181b; --muted: #71717a;
+      --faint: #a1a1aa; --line: #f2f2f3; --line-strong: #e4e4e7;
+      --accent: #b5715c; --accent-soft: #f6f6f7; --chip: #f6f6f7; --radius: 10px;
+      --content-max: 1280px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "HarmonyOS Sans SC", "PingFang SC",
+        "Microsoft YaHei UI", "Noto Sans CJK SC", system-ui, sans-serif;
+      font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+    }
+    button, select, option, input { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .kg-head {
+      flex: 0 0 auto; border-bottom: 1px solid var(--line);
+      padding: 10px 20px; background: rgba(255,255,255,.92);
+      backdrop-filter: saturate(160%) blur(8px); z-index: 10;
+    }
+    .kg-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: var(--content-max); margin: 0 auto; }
+    .kg-bar h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: .5px; white-space: nowrap; }
+    .kg-meta { color: var(--faint); font-size: 12px; white-space: nowrap; }
+    .kg-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: 999px;
+      background: var(--chip); color: var(--muted); font-size: 12px; cursor: pointer;
+      user-select: none; transition: all .12s ease;
+    }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .chip:hover { border-color: var(--accent); }
+    .kg-loading, .kg-error {
+      padding: 40px; text-align: center; color: var(--muted); font-size: 13px;
+    }
+    .kg-error { color: #c0392b; }
+    .kg-body { flex: 1 1 auto; display: flex; min-height: 0; max-width: var(--content-max); width: 100%; margin: 0 auto; }
+    #graph { flex: 1 1 auto; min-width: 0; height: 100%; }
+    .kg-side {
+      flex: 0 0 300px; border-left: 1px solid var(--line); overflow-y: auto;
+      padding: 14px 16px; background: #fcfcfc;
+    }
+    .kg-side h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+    .kg-side .empty { color: var(--faint); font-size: 12px; }
+    .detail-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+    .detail-type { display: inline-block; font-size: 11px; color: #fff; background: var(--accent);
+      border-radius: 4px; padding: 1px 8px; margin-bottom: 8px; }
+    .detail-stat { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+    .detail-list { list-style: none; margin: 0; padding: 0; }
+    .detail-list li { font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+    .detail-list li:last-child { border-bottom: none; }
+    .edge-detail { font-size: 12px; color: var(--muted); }
+    .tooltip-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <div class="kg-head">
+    <div class="kg-bar">
+      <h1>知识图谱</h1>
+      <span class="kg-meta" id="kg-meta">加载中…</span>
+      <div class="kg-filters" id="kg-filters">
+        <button class="chip active" data-type="">全部</button>
+        <button class="chip" data-type="author">作者</button>
+        <button class="chip" data-type="topic">主题</button>
+        <button class="chip" data-type="concept">概念</button>
+      </div>
+      <input id="kg-limit" type="number" min="10" max="500" value="100" style="width:70px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:var(--radius);font-size:12px;">
+    </div>
+  </div>
+  <div class="kg-body">
+    <div id="graph"></div>
+    <div class="kg-side">
+      <h2>节点详情</h2>
+      <div id="kg-detail"><div class="empty">点击图谱中的节点查看详情</div></div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var TYPE_LABEL = { author: '作者', topic: '主题', concept: '概念', organization: '机构', person: '人物', platform: '平台' };
+  var TYPE_COLOR = { author: '#b5715c', topic: '#5c8ab5', concept: '#6ba36b', organization: '#9b7bb5', person: '#c08a4d', platform: '#4d9b9b' };
+  var chart = null;
+  var currentData = null;
+
+  function el(id) { return document.getElementById(id); }
+
+  function init() {
+    chart = echarts.init(el('graph'));
+    window.addEventListener('resize', function () { chart && chart.resize(); });
+    el('kg-filters').addEventListener('click', function (e) {
+      var btn = e.target.closest('.chip');
+      if (!btn) return;
+      document.querySelectorAll('#kg-filters .chip').forEach(function (c) { c.classList.remove('active'); });
+      btn.classList.add('active');
+      load();
+    });
+    el('kg-limit').addEventListener('change', load);
+    load();
+  }
+
+  function load() {
+    var type = document.querySelector('#kg-filters .chip.active').dataset.type;
+    var limit = parseInt(el('kg-limit').value, 10) || 100;
+    fetch('/api/knowledge-graph?entity_type=' + encodeURIComponent(type) + '&limit=' + limit)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { render(data); })
+      .catch(function (err) {
+        el('kg-meta').textContent = '加载失败';
+        console.error('knowledge-graph load failed:', err);
+      });
+  }
+
+  function render(data) {
+    currentData = data;
+    var nodes = data.nodes || [];
+    var edges = data.edges || [];
+    el('kg-meta').textContent = nodes.length + ' 节点 · ' + edges.length + ' 关联';
+
+    var articleNodes = {};
+    edges.forEach(function (e) {
+      if (!articleNodes[e.article_id]) {
+        articleNodes[e.article_id] = {
+          id: 'a' + e.article_id,
+          name: String(e.title || '').slice(0, 24),
+          category: 'article', value: 1
+        };
+      }
+    });
+
+    var eNodes = nodes.map(function (n) {
+      return { id: 'e' + n.id, name: n.name, category: n.type, value: n.article_count || 1, raw: n };
+    });
+    var aNodes = Object.keys(articleNodes).map(function (k) { return articleNodes[k]; });
+    var eLinks = edges.map(function (e) {
+      return { source: 'e' + e.entity_id, target: 'a' + e.article_id, value: e.relevance || 0.5 };
+    });
+
+    chart.setOption({
+      tooltip: {
+        formatter: function (p) {
+          if (p.dataType === 'edge') return '<b>' + p.data.value + '</b> 关联度';
+          var c = p.data.category;
+          var label = TYPE_LABEL[c] || c;
+          return '<span class="tooltip-dot" style="background:' + (TYPE_COLOR[c] || '#888') + '"></span>'
+            + '<b>' + p.name + '</b><br>' + label + (c === 'article' ? '' : ' · ' + (p.data.value || 0) + ' 篇文章');
+        }
+      },
+      legend: {
+        data: Object.keys(TYPE_LABEL).filter(function (t) {
+          return eNodes.some(function (n) { return n.category === t; });
+        }).map(function (t) { return { name: t, icon: 'circle' }; }),
+        textStyle: { fontSize: 11, color: '#71717a' },
+        bottom: 8
+      },
+      series: [{
+        type: 'graph', layout: 'force', roam: true,
+        draggable: true, data: eNodes.concat(aNodes),
+        links: eLinks,
+        categories: Object.keys(TYPE_LABEL).map(function (t) {
+          return { name: t, itemStyle: { color: TYPE_COLOR[t] || '#888' } };
+        }),
+        force: { repulsion: 260, edgeLength: [40, 110], gravity: 0.08 },
+        label: { show: true, position: 'right', fontSize: 10, color: '#18181b' },
+        lineStyle: { color: '#c9c9ce', curveness: 0.2, opacity: 0.55, width: 1 },
+        emphasis: { focus: 'adjacency', lineStyle: { width: 2, color: '#b5715c' } },
+        itemStyle: { borderColor: '#fff', borderWidth: 1 },
+        scaleLimit: { min: 0.4, max: 4 }
+      }]
+    }, true);
+
+    chart.off('click');
+    chart.on('click', function (p) {
+      if (p.dataType === 'node' && p.data && p.data.raw) showEntityDetail(p.data.raw);
+    });
+  }
+
+  function showEntityDetail(entity) {
+    var label = TYPE_LABEL[entity.type] || entity.type;
+    var color = TYPE_COLOR[entity.type] || '#888';
+    var box = el('kg-detail');
+    box.innerHTML =
+      '<div class="detail-name">' + esc(entity.name) + '</div>' +
+      '<span class="detail-type" style="background:' + color + '">' + esc(label) + '</span>' +
+      '<div class="detail-stat">' + (entity.article_count || 0) + ' 篇文章</div>' +
+      '<div class="empty">加载关联文章…</div>';
+    fetch('/api/entities/' + entity.id + '/articles?size=8')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var items = (data.items || []).map(function (a) {
+          var link = a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(String(a.title || '').slice(0, 40)) + '</a>'
+                           : esc(String(a.title || '').slice(0, 40));
+          return '<li>' + link + (a.relevance ? ' <span style="color:var(--faint)">' + Math.round(a.relevance * 100) + '%</span>' : '') + '</li>';
+        }).join('');
+        box.innerHTML =
+          '<div class="detail-name">' + esc(entity.name) + '</div>' +
+          '<span class="detail-type" style="background:' + color + '">' + esc(label) + '</span>' +
+          '<div class="detail-stat">' + (entity.article_count || 0) + ' 篇文章</div>' +
+          (items ? '<ul class="detail-list">' + items + '</ul>' : '<div class="empty">暂无关联文章</div>');
+      })
+      .catch(function () { box.innerHTML = '<div class="empty">详情加载失败</div>'; });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  if (window.echarts) { init(); }
+  else {
+    el('graph').outerHTML = '<div class="kg-error">ECharts 加载失败：请联网访问（CDN 未加载）。</div>';
+  }
+})();
+</script>
+</body>
+</html>

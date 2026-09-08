@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>矛盾报告 · 古灵阁</title>
+  <style>
+    :root {
+      --bg: #fff; --ink: #18181b; --muted: #71717a; --faint: #a1a1aa;
+      --line: #f2f2f3; --line-strong: #e4e4e7; --accent: #b5715c; --chip: #f6f6f7;
+      --radius: 10px; --content-max: 1180px;
+    }
+    * { box-sizing: border-box; } html, body { margin: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont,
+      "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    button { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    .topbar { border-bottom: 1px solid var(--line); padding: 10px 20px; position: sticky; top: 0;
+      background: rgba(255,255,255,.92); backdrop-filter: saturate(160%) blur(8px); z-index: 10; }
+    .topbar-inner { max-width: var(--content-max); margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+    .topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+    .wrap { max-width: var(--content-max); margin: 0 auto; padding: 24px 20px 60px; }
+    .faint { color: var(--faint); } .muted { color: var(--muted); }
+    .pair { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; }
+    .pair-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .acts { margin-left: auto; display: inline-flex; gap: 6px; }
+    .act { padding: 3px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff;
+      color: var(--muted); font-size: 12px; cursor: pointer; }
+    .act:disabled { opacity: .45; cursor: default; }
+    .conf { font-size: 12px; font-weight: 600; color: var(--accent); }
+    .pair-body { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+    @media (max-width: 640px) { .pair-body { grid-template-columns: 1fr; } }
+    .side { font-size: 13px; }
+    .side b { display: block; margin-bottom: 4px; }
+    .side .src { font-size: 11px; color: var(--faint); }
+    .vs { color: var(--faint); font-size: 12px; }
+    .reason { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-strong);
+      font-size: 12px; color: var(--muted); }
+    .load-state { padding: 36px; text-align: center; color: var(--muted); }
+    .empty { color: var(--faint); padding: 30px; text-align: center; }
+    .pager { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+    .btn { padding: 6px 16px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff;
+      cursor: pointer; font-size: 13px; }
+    .btn:disabled { opacity: .4; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="topbar-inner"><h1>矛盾报告</h1>
+    <span class="faint" id="meta">加载中…</span></div></div>
+  <div class="wrap">
+    <div id="list-wrap"><div class="load-state">加载中…</div></div>
+    <div class="pager" id="pager">
+      <button class="btn" id="prev">上一页</button>
+      <span class="faint" id="page-info"></span>
+      <button class="btn" id="next">下一页</button>
+    </div>
+  </div>
+<script>
+(function () {
+  'use strict';
+  var page = 1, size = 20;
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function load() {
+    fetch('/api/contradictions?page=' + page + '&size=' + size)
+      .then(function (r) { return r.json(); }).then(function (data) {
+        var items = data.items || [];
+        var box = el('list-wrap');
+        if (!items.length) { box.innerHTML = '<div class="empty">暂未检测到观点矛盾的文章对</div>'; el('meta').textContent = '共 0 对'; return; }
+        box.innerHTML = items.map(function (p) {
+          var conf = Math.round((p.confidence || 0) * 100);
+          var actions = p.relation_id ? '<span class="acts">' +
+            '<button class="act" data-rid="' + p.relation_id + '" data-act="confirmed">确认属实</button>' +
+            '<button class="act" data-rid="' + p.relation_id + '" data-act="false_positive">标记误报</button></span>' : '';
+          return '<div class="pair"><div class="pair-head">' +
+            '<span class="conf">矛盾置信度 ' + conf + '%</span>' +
+            '<span class="faint">' + esc(p.status || '') + '</span>' + actions + '</div>' +
+            '<div class="pair-body">' +
+            '<div class="side"><b>' + (p.url_a ? '<a href="' + esc(p.url_a) + '" target="_blank" rel="noopener">' + esc(p.title_a || '(无标题)') + '</a>' : esc(p.title_a || '')) + '</b>' +
+            '<span class="src">' + esc(p.source_a || '') + '</span></div>' +
+            '<span class="vs">vs</span>' +
+            '<div class="side"><b>' + (p.url_b ? '<a href="' + esc(p.url_b) + '" target="_blank" rel="noopener">' + esc(p.title_b || '(无标题)') + '</a>' : esc(p.title_b || '')) + '</b>' +
+            '<span class="src">' + esc(p.source_b || '') + '</span></div>' +
+            '</div>' + (p.description ? '<div class="reason">' + esc(p.description) + '</div>' : '') +
+            '</div>';
+        }).join('');
+        el('meta').textContent = '共 ' + (data.total || 0) + ' 对';
+        var tp = Math.max(1, Math.ceil((data.total || 0) / size));
+        el('page-info').textContent = page + ' / ' + tp;
+        el('prev').disabled = page <= 1;
+        el('next').disabled = page >= tp;
+      }).catch(function () { box.innerHTML = '<div class="load-state">加载失败</div>'; });
+  }
+  el('prev').addEventListener('click', function () { if (page > 1) { page--; load(); } });
+  el('next').addEventListener('click', function () { page++; load(); });
+  el('list-wrap').addEventListener('click', function (e) {
+    var btn = e.target.closest('.act'); if (!btn) return;
+    var rid = parseInt(btn.dataset.rid, 10), act = btn.dataset.act;
+    btn.disabled = true;
+    fetch('/api/contradictions/' + rid + '/resolve?action=' + act, { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) { load(); }
+        else { btn.disabled = false; alert(d.error || '操作失败'); }
+      })
+      .catch(function () { btn.disabled = false; alert('网络错误'); });
+  });
+  load();
+})();
+</script>
+</body>
+</html>

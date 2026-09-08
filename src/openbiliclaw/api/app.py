@@ -15,6 +15,7 @@ import subprocess
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -13477,6 +13478,16 @@ def create_app(
     # ── Saved-sync (reading library) routes ─────────────────────
     register_saved_sync_routes(app, ctx)
 
+    # ── Knowledge Forge routes ─────────────────────────────────
+    try:
+        from openbiliclaw.api.knowledge_forge_routes import (
+            register_knowledge_forge_routes,
+        )
+
+        register_knowledge_forge_routes(app, ctx)
+    except Exception:  # noqa: BLE001
+        logger.exception("Knowledge Forge routes registration failed")
+
     # ── Recommendation feed routes (M1 extraction from this file) ──
     app.include_router(
         build_recommendation_router(
@@ -13842,6 +13853,68 @@ def create_app(
         app.mount(
             "/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library"
         )
+
+    # ── Knowledge Forge 知识图谱可视化（设计 3.1）─────────────────
+    # 独立可书签页面：实体-概念-文章关系网络（ECharts 关系图），
+    # 支持类型筛选与节点详情（关联文章列表）。数据来自 /api/knowledge-graph。
+    _kg_dir = _web_dir / "knowledge-graph"
+    if _kg_dir.is_dir():
+        app.mount(
+            "/knowledge-graph",
+            _StaticFiles(directory=_kg_dir, html=True),
+            name="knowledge-graph",
+        )
+
+    # ── Knowledge Forge 前端页面（设计 §5）───────────────────────
+    # 作者/主题/概念：通用实体浏览页（列表+详情双视图），按类型注入。
+    # 注意：/web 已被 desktop SPA mount 占用，KF 页面与 /knowledge-graph
+    # 一致采用顶级独立前缀，可书签直达。
+    _entity_dir = _web_dir / "entity-browser"
+    if _entity_dir.is_dir():
+        for _etype, _slug in (
+            ("author", "authors"),
+            ("topic", "topics"),
+            ("concept", "concepts"),
+        ):
+            _html = _entity_dir / "index.html"
+
+            def _make_entity_page(entity_type: str, html_path: Path) -> Callable[[], Response]:
+                def _page() -> Response:
+                    import re
+
+                    from fastapi.responses import Response
+
+                    try:
+                        html = html_path.read_text(encoding="utf-8")
+                    except Exception:
+                        return Response("page not found", status_code=500)
+                    safe = re.sub(r"[^a-zA-Z0-9_]", "", entity_type or "")
+                    injected = '<script>window.__ENTITY_TYPE__="' + safe + '";</script>'
+                    return Response(
+                        html.replace("</head>", injected + "</head>", 1),
+                        media_type="text/html",
+                    )
+
+                return _page
+
+            app.get("/" + _slug, include_in_schema=False)(
+                _make_entity_page(_etype, _html)
+            )
+        app.mount(
+            "/entities",
+            _StaticFiles(directory=_entity_dir, html=True),
+            name="entity-browser",
+        )
+
+    # 质量审计 / 缺口分析 / 矛盾报告：独立静态页
+    for _slug in ("audit", "gap-analysis", "contradictions"):
+        _dir = _web_dir / _slug
+        if _dir.is_dir():
+            app.mount(
+                "/" + _slug,
+                _StaticFiles(directory=_dir, html=True),
+                name="knowledge-forge-" + _slug,
+            )
 
     # ── Clone Sites static mount ──────────────────────────────────
     # Serves cloned sites under /clone/sites/{slug} so they can be

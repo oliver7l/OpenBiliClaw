@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>质量审计 · 古灵阁</title>
+  <style>
+    :root {
+      --bg: #fff; --ink: #18181b; --muted: #71717a; --faint: #a1a1aa;
+      --line: #f2f2f3; --line-strong: #e4e4e7; --accent: #b5715c; --chip: #f6f6f7;
+      --radius: 10px; --content-max: 1180px;
+    }
+    * { box-sizing: border-box; } html, body { margin: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont,
+      "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    button, select { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    .topbar { border-bottom: 1px solid var(--line); padding: 10px 20px; position: sticky; top: 0;
+      background: rgba(255,255,255,.92); backdrop-filter: saturate(160%) blur(8px); z-index: 10; }
+    .topbar-inner { max-width: var(--content-max); margin: 0 auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+    .wrap { max-width: var(--content-max); margin: 0 auto; padding: 24px 20px 60px; }
+    .muted { color: var(--muted); } .faint { color: var(--faint); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+    .stat b { font-size: 22px; font-weight: 650; display: block; }
+    .stat span { font-size: 11px; color: var(--faint); }
+    .filters { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+    .chip { padding: 4px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--chip);
+      color: var(--muted); font-size: 12px; cursor: pointer; }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: 11px; color: var(--faint); font-weight: 500; white-space: nowrap; }
+    .sev { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; color: #fff; white-space: nowrap; }
+    .sev-high { background: #c0392b; } .sev-medium { background: #d68910; } .sev-low { background: #7f8c8d; }
+    .detail { color: var(--muted); font-size: 12px; max-width: 420px; }
+    .load-state { padding: 36px; text-align: center; color: var(--muted); }
+    .pager { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+    .btn { padding: 6px 16px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff;
+      cursor: pointer; font-size: 13px; }
+    .btn:disabled { opacity: .4; cursor: default; }
+    .empty { color: var(--faint); padding: 30px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="topbar-inner"><h1>质量审计</h1>
+    <span class="faint" id="meta">加载中…</span></div></div>
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+    <div class="filters" id="filters">
+      <button class="chip active" data-sev="">全部</button>
+      <button class="chip" data-sev="high">高危</button>
+      <button class="chip" data-sev="medium">中危</button>
+      <button class="chip" data-sev="low">低危</button>
+    </div>
+    <div id="table-wrap"><div class="load-state">加载中…</div></div>
+    <div class="pager" id="pager">
+      <button class="btn" id="prev">上一页</button>
+      <span class="faint" id="page-info"></span>
+      <button class="btn" id="next">下一页</button>
+    </div>
+  </div>
+<script>
+(function () {
+  'use strict';
+  var sev = '', page = 1, size = 20;
+  var SEV = { high: '高危', medium: '中危', low: '低危' };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function load() {
+    fetch('/api/audit/issues?severity=' + sev + '&page=' + page + '&size=' + size)
+      .then(function (r) { return r.json(); }).then(function (data) {
+        var issues = data.items || [];
+        var box = el('table-wrap');
+        if (!issues.length) { box.innerHTML = '<div class="empty">暂无该级别审计问题</div>'; el('meta').textContent = '共 ' + data.total + ' 条'; return; }
+        var rows = issues.map(function (i) {
+          return '<tr><td><span class="sev sev-' + esc(i.severity) + '">' + (SEV[i.severity] || esc(i.severity)) + '</span></td>' +
+            '<td>' + esc(i.issue_type) + '</td>' +
+            '<td class="detail">' + esc((i.details || i.description || '').slice(0, 120)) + '</td>' +
+            '<td><span class="faint">#' + (i.article_id || '-') + '</span></td>' +
+            '<td class="detail">' + (i.fix_suggestion ? esc(i.fix_suggestion) : '<span class="faint">—</span>') + '</td></tr>';
+        }).join('');
+        box.innerHTML = '<table><thead><tr><th>级别</th><th>类型</th><th>详情</th><th>文章</th><th>处理建议</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        el('meta').textContent = '共 ' + data.total + ' 条';
+        var tp = Math.max(1, Math.ceil(data.total / size));
+        el('page-info').textContent = page + ' / ' + tp;
+        el('prev').disabled = page <= 1;
+        el('next').disabled = page >= tp;
+      }).catch(function () { el('table-wrap').innerHTML = '<div class="load-state">加载失败</div>'; });
+  }
+  el('filters').addEventListener('click', function (e) {
+    var c = e.target.closest('.chip'); if (!c) return;
+    document.querySelectorAll('#filters .chip').forEach(function (x) { x.classList.remove('active'); });
+    c.classList.add('active'); sev = c.dataset.sev; page = 1; load();
+  });
+  el('prev').addEventListener('click', function () { if (page > 1) { page--; load(); } });
+  el('next').addEventListener('click', function () { page++; load(); });
+  // 概要统计
+  fetch('/api/audit/summary').then(function (r) { return r.json(); }).then(function (d) {
+    var s = d.summary || {};
+    var box = el('stats');
+    box.innerHTML = ['high', 'medium', 'low', 'open'].map(function (k) {
+      return '<div class="stat"><b>' + (s[k] || 0) + '</b><span>' + ({ high: '高危', medium: '中危', low: '低危', open: '待处理' }[k]) + '</span></div>';
+    }).join('');
+  }).catch(function () {});
+  load();
+})();
+</script>
+</body>
+</html>

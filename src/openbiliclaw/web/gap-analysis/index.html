@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>缺口分析 · 古灵阁</title>
+  <style>
+    :root {
+      --bg: #fff; --ink: #18181b; --muted: #71717a; --faint: #a1a1aa;
+      --line: #f2f2f3; --line-strong: #e4e4e7; --accent: #b5715c; --chip: #f6f6f7;
+      --radius: 10px; --content-max: 1180px;
+    }
+    * { box-sizing: border-box; } html, body { margin: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont,
+      "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    button { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    .topbar { border-bottom: 1px solid var(--line); padding: 10px 20px; position: sticky; top: 0;
+      background: rgba(255,255,255,.92); backdrop-filter: saturate(160%) blur(8px); z-index: 10; }
+    .topbar-inner { max-width: var(--content-max); margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+    .topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+    .wrap { max-width: var(--content-max); margin: 0 auto; padding: 24px 20px 60px; }
+    .muted { color: var(--muted); } .faint { color: var(--faint); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+    .stat b { font-size: 22px; font-weight: 650; display: block; }
+    .stat span { font-size: 11px; color: var(--faint); }
+    .run-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .btn { padding: 7px 18px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff;
+      cursor: pointer; font-size: 13px; color: var(--ink); }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .chip { padding: 4px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--chip);
+      color: var(--muted); font-size: 12px; cursor: pointer; }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+    .card h3 { font-size: 13px; margin: 0 0 6px; font-weight: 600; }
+    .card p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+    .card-meta { display: flex; gap: 12px; font-size: 11px; color: var(--faint); align-items: center; }
+    .sev { padding: 1px 8px; border-radius: 4px; font-size: 11px; color: #fff; }
+    .sev-high { background: #c0392b; } .sev-medium { background: #d68910; } .sev-low { background: #7f8c8d; }
+    .gap-type { background: var(--chip); color: var(--muted); padding: 1px 8px; border-radius: 4px; font-size: 11px; }
+    .load-state { padding: 36px; text-align: center; color: var(--muted); }
+    .empty { color: var(--faint); padding: 30px; text-align: center; }
+    .pager { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="topbar-inner"><h1>缺口分析</h1>
+    <span class="faint" id="meta">加载中…</span></div></div>
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+    <div class="run-bar">
+      <button class="btn primary" id="run-btn">重新分析</button>
+      <span class="faint" id="run-state"></span>
+    </div>
+    <div class="filters" id="filters">
+      <button class="chip active" data-sev="">全部</button>
+      <button class="chip" data-sev="high">高危</button>
+      <button class="chip" data-sev="medium">中危</button>
+      <button class="chip" data-sev="low">低危</button>
+    </div>
+    <div id="list-wrap"><div class="load-state">加载中…</div></div>
+    <div class="pager" id="pager">
+      <button class="btn" id="prev">上一页</button>
+      <span class="faint" id="page-info"></span>
+      <button class="btn" id="next">下一页</button>
+    </div>
+  </div>
+<script>
+(function () {
+  'use strict';
+  var sev = '', page = 1, size = 24;
+  var SEV = { high: '高危', medium: '中危', low: '低危' };
+  var TYPE_LABEL = { topic_coverage: '主题覆盖', concept_coverage: '概念覆盖', time_decay: '时间衰减', platform_gap: '平台缺口' };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function load() {
+    fetch('/api/gap-records?severity=' + sev + '&status=open&page=' + page + '&size=' + size)
+      .then(function (r) { return r.json(); }).then(function (data) {
+        var items = data.items || [];
+        var box = el('list-wrap');
+        if (!items.length) { box.innerHTML = '<div class="empty">暂无缺口记录</div>'; el('meta').textContent = '共 ' + data.total + ' 条'; return; }
+        box.innerHTML = '<div class="cards">' + items.map(function (g) {
+          return '<div class="card"><div class="card-meta" style="margin-bottom:8px">' +
+            '<span class="sev sev-' + esc(g.severity) + '">' + (SEV[g.severity] || esc(g.severity)) + '</span>' +
+            '<span class="gap-type">' + esc(TYPE_LABEL[g.gap_type] || g.gap_type) + '</span>' +
+            '<span class="faint">#' + g.id + '</span></div>' +
+            '<h3>' + esc(g.description || g.suggestion || '') + '</h3>' +
+            '<p>' + esc(g.suggestion || '') + '</p>' +
+            '<div class="card-meta"><span>当前 ' + (g.current_count || 0) + '</span>' +
+            '<span>建议 ' + (g.suggested_count || '-') + '</span>' +
+            '<span>' + esc((g.created_at || '').slice(0, 10)) + '</span></div></div>';
+        }).join('') + '</div>';
+        el('meta').textContent = '共 ' + data.total + ' 条';
+        var tp = Math.max(1, Math.ceil(data.total / size));
+        el('page-info').textContent = page + ' / ' + tp;
+        el('prev').disabled = page <= 1;
+        el('next').disabled = page >= tp;
+      }).catch(function () { box.innerHTML = '<div class="load-state">加载失败</div>'; });
+  }
+  el('filters').addEventListener('click', function (e) {
+    var c = e.target.closest('.chip'); if (!c) return;
+    document.querySelectorAll('#filters .chip').forEach(function (x) { x.classList.remove('active'); });
+    c.classList.add('active'); sev = c.dataset.sev; page = 1; load();
+  });
+  el('prev').addEventListener('click', function () { if (page > 1) { page--; load(); } });
+  el('next').addEventListener('click', function () { page++; load(); });
+  el('run-btn').addEventListener('click', function () {
+    el('run-btn').disabled = true;
+    el('run-state').textContent = '分析运行中…';
+    fetch('/api/gap-analysis/run', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      el('run-state').textContent = '完成：' + (d.ok ? (d.result && d.result.message) || '已生成新缺口记录' : (d.error || '失败'));
+      el('run-btn').disabled = false; load();
+    }).catch(function () { el('run-state').textContent = '运行失败'; el('run-btn').disabled = false; });
+  });
+  // 各类型统计
+  fetch('/api/gap-records?status=open&size=1').then(function (r) { return r.json(); }).then(function (d) {
+    el('meta').textContent = '共 ' + (d.total || 0) + ' 条开放缺口';
+  }).catch(function () {});
+  load();
+})();
+</script>
+</body>
+</html>

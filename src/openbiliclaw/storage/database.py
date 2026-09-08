@@ -686,6 +686,7 @@ class Database:
         self._ensure_user_feedback_table()
         self._ensure_view_history_table()
         self._ensure_topic_tables()
+        self._ensure_knowledge_forge_tables()
         self.reset_stale_discovery_candidate_evaluations()
         self.suppress_low_score_pool_items()
         self.suppress_low_confidence_recommendations()
@@ -6943,6 +6944,33 @@ class Database:
         if not published_at:
             published_at = _dt.now(cn_tz).strftime("%Y-%m-%d %H:%M:%S")
 
+        # Knowledge Forge 任务 1.0：入库时同步调用正文清理器，
+        # 生成 content_cleaned 及清理质量/验证标记（规则清理，确定性且快速）。
+        # 清理失败不阻断入库，仅降级为新列留空，由批量清理管线后补。
+        content_cleaned: str | None = None
+        content_clean_score: float | None = None
+        content_clean_log: str | None = None
+        content_verified: int | None = None
+        content_verify_result: str | None = None
+        if content_text and content_text.strip():
+            try:
+                from openbiliclaw.knowledge_forge.content_cleaner import ContentCleaner
+
+                cr = ContentCleaner().clean(
+                    content_text, title=title, source_type=source_type
+                )
+                content_cleaned = cr.cleaned_text or None
+                content_clean_score = cr.clean_score
+                content_clean_log = _json.dumps(
+                    cr.operations, ensure_ascii=False, default=str
+                )
+                content_verified = 1 if cr.verified else 0
+                content_verify_result = _json.dumps(
+                    cr.verify_issues, ensure_ascii=False, default=str
+                )
+            except Exception:
+                logger.exception("Knowledge Forge clean failed for article: %s", title)
+
         tag_value = _json.dumps(
             tags if tags else ([source_name] if source_name else []),
             ensure_ascii=False,
@@ -6951,14 +6979,31 @@ class Database:
             cursor = self.conn.execute(
                 """INSERT INTO articles (source_type, source_name, title, url,
                     author, summary, content_text, published_at, tags,
+                    content_cleaned, content_clean_score, content_clean_log,
+                    content_verified, content_verify_result,
                     created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                            datetime('now','localtime'), datetime('now','localtime'))
                    ON CONFLICT(url) DO UPDATE SET
                     title=excluded.title, summary=excluded.summary,
                     content_text=CASE
                       WHEN excluded.content_text <> '' THEN excluded.content_text
                       ELSE articles.content_text END,
+                    content_cleaned=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_cleaned
+                      ELSE articles.content_cleaned END,
+                    content_clean_score=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_clean_score
+                      ELSE articles.content_clean_score END,
+                    content_clean_log=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_clean_log
+                      ELSE articles.content_clean_log END,
+                    content_verified=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_verified
+                      ELSE articles.content_verified END,
+                    content_verify_result=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_verify_result
+                      ELSE articles.content_verify_result END,
                     tags=CASE
                       WHEN articles.tags IS NULL OR articles.tags IN ('', '[]')
                         THEN excluded.tags ELSE articles.tags END,
@@ -6973,6 +7018,11 @@ class Database:
                     content_text,
                     published_at,
                     tag_value,
+                    content_cleaned,
+                    content_clean_score,
+                    content_clean_log,
+                    content_verified,
+                    content_verify_result,
                 ),
             )
             self.conn.commit()
@@ -8523,6 +8573,198 @@ class Database:
                 ON topic_items(topic_id, collected_at DESC);
             CREATE INDEX IF NOT EXISTS idx_topic_items_key
                 ON topic_items(content_key);
+        """)
+
+    def _ensure_knowledge_forge_tables(self) -> None:
+        """Create Knowledge Forge (知识锻造炉) columns and tables.
+
+        Docs: docs/knowledge-forge-design.md. 渐进式迁移：articles 表只加列
+        不删改，旧数据/旧字段完全保留；新表全部 CREATE IF NOT EXISTS，幂等。
+        本方法在 Database.initialize() 中调用，每次启动自动补齐缺失结构。
+        """
+        # 1. articles 表新增正文清理器字段（3.0.5）+ 分层摘要字段（3.1.3）
+        existing_columns = {
+            str(row["name"])
+            for row in self.conn.execute("PRAGMA table_info(articles)").fetchall()
+        }
+        required_columns = {
+            "content_cleaned": "TEXT",           # 清理后的正文
+            "content_clean_score": "REAL",       # 清理质量评分 0-100
+            "content_clean_log": "TEXT",         # 清理日志（JSON）
+            "content_verified": "INTEGER DEFAULT 0",  # 是否通过验证 0/1
+            "content_verify_result": "TEXT",     # 验证结果（JSON）
+            "summary_detailed": "TEXT",          # 详细版摘要
+            "summary_compact": "TEXT",           # 精简版摘要
+            "summary_ultra_compact": "TEXT",     # 超精简版摘要
+            "summary_quality": "REAL",           # 摘要质量评分（0-1）
+            "summary_version": "INTEGER DEFAULT 0",  # 摘要版本号
+            "summary_generated_at": "TEXT",      # 摘要生成时间
+        }
+        for column_name, column_type in required_columns.items():
+            if column_name in existing_columns:
+                continue
+            self.conn.execute(
+                f"ALTER TABLE articles ADD COLUMN {column_name} {column_type}"
+            )
+
+        # 2. 实体表（3.2.2）
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS entities (
+                id INTEGER PRIMARY KEY,
+                name TEXT UNIQUE,
+                type TEXT,
+                description TEXT,
+                article_count INTEGER DEFAULT 0,
+                first_seen_at TEXT,
+                last_updated_at TEXT,
+                metadata TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+            CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+            -- 文章-实体关联
+            CREATE TABLE IF NOT EXISTS article_entities (
+                article_id INTEGER,
+                entity_id INTEGER,
+                relevance REAL,
+                context TEXT,
+                PRIMARY KEY (article_id, entity_id),
+                FOREIGN KEY (article_id) REFERENCES articles(id),
+                FOREIGN KEY (entity_id) REFERENCES entities(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_article_entities_article ON article_entities(article_id);
+            CREATE INDEX IF NOT EXISTS idx_article_entities_entity ON article_entities(entity_id);
+
+            -- 实体间关联
+            CREATE TABLE IF NOT EXISTS entity_relations (
+                entity_id_a INTEGER,
+                entity_id_b INTEGER,
+                relation_type TEXT,
+                confidence REAL,
+                description TEXT,
+                co_occur INTEGER DEFAULT 1,
+                PRIMARY KEY (entity_id_a, entity_id_b, relation_type)
+            );
+        """)
+        # 兼容旧库：entity_relations 补 co_occur 列（幂等）
+        _er_columns = {
+            str(row["name"])
+            for row in self.conn.execute(
+                "PRAGMA table_info(entity_relations)"
+            ).fetchall()
+        }
+        if "co_occur" not in _er_columns:
+            self.conn.execute(
+                "ALTER TABLE entity_relations ADD COLUMN co_occur INTEGER DEFAULT 1"
+            )
+
+        # 3. 文章间关联（3.3.2）
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS article_relations (
+                article_id_a INTEGER,
+                article_id_b INTEGER,
+                relation_type TEXT,
+                confidence REAL,
+                description TEXT,
+                created_at TEXT,
+                PRIMARY KEY (article_id_a, article_id_b, relation_type),
+                FOREIGN KEY (article_id_a) REFERENCES articles(id),
+                FOREIGN KEY (article_id_b) REFERENCES articles(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_article_relations_a ON article_relations(article_id_a);
+            CREATE INDEX IF NOT EXISTS idx_article_relations_b ON article_relations(article_id_b);
+            CREATE INDEX IF NOT EXISTS idx_article_relations_type ON article_relations(relation_type);
+        """)
+
+        # 4. 质量审计表（3.5.3）
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS audit_tasks (
+                id INTEGER PRIMARY KEY,
+                task_type TEXT,
+                status TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                total_articles INTEGER,
+                issues_found INTEGER,
+                issues_fixed INTEGER,
+                report_path TEXT,
+                created_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_issues (
+                id INTEGER PRIMARY KEY,
+                article_id INTEGER,
+                issue_type TEXT,
+                severity TEXT,
+                description TEXT,
+                details TEXT,
+                status TEXT DEFAULT 'open',
+                fix_suggestion TEXT,
+                fixed_at TEXT,
+                created_at TEXT,
+                FOREIGN KEY (article_id) REFERENCES articles(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_issues_article ON audit_issues(article_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_issues_type ON audit_issues(issue_type);
+            CREATE INDEX IF NOT EXISTS idx_audit_issues_status ON audit_issues(status);
+
+            CREATE TABLE IF NOT EXISTS article_quality_scores (
+                article_id INTEGER PRIMARY KEY,
+                overall_score REAL,
+                completeness_score REAL,
+                content_score REAL,
+                link_score REAL,
+                uniqueness_score REAL,
+                last_audited_at TEXT,
+                FOREIGN KEY (article_id) REFERENCES articles(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_config (
+                id INTEGER PRIMARY KEY,
+                config_key TEXT UNIQUE,
+                config_value TEXT,
+                description TEXT
+            );
+        """)
+        self.conn.executescript("""
+            INSERT OR IGNORE INTO audit_config (config_key, config_value, description) VALUES
+            ('min_content_length', '200', '最小内容长度（低于此值标记为过短）'),
+            ('min_summary_length', '100', '最小摘要长度（低于此值标记为缺失）'),
+            ('simhash_threshold', '0.9', 'simhash相似度阈值（高于此值标记为重复）'),
+            ('dead_link_timeout', '10', '死链检测超时时间（秒）'),
+            ('batch_size', '500', '批处理大小'),
+            ('auto_fix_enabled', 'false', '是否启用自动修复'),
+            ('dead_link_concurrency', '5', '死链检测并发数');
+        """)
+
+        # 5. 知识缺口分析表（3.4.4）
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS gap_analysis_tasks (
+                id INTEGER PRIMARY KEY,
+                status TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                report_path TEXT,
+                total_topics INTEGER,
+                gaps_found INTEGER,
+                created_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS gap_records (
+                id INTEGER PRIMARY KEY,
+                task_id INTEGER,
+                gap_type TEXT,
+                entity_id INTEGER,
+                severity TEXT,
+                description TEXT,
+                current_count INTEGER,
+                suggested_count INTEGER,
+                suggestion TEXT,
+                status TEXT DEFAULT 'open',
+                created_at TEXT,
+                FOREIGN KEY (task_id) REFERENCES gap_analysis_tasks(id),
+                FOREIGN KEY (entity_id) REFERENCES entities(id)
+            );
         """)
 
     # ------------------------------------------------------------------ #
