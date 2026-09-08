@@ -861,3 +861,35 @@ class PoolCandidateMixin:
             1 if str(row.get("source", "") or "") == "explore" else 0,
             str(row.get("bvid", "")),
         )
+
+    def mark_pool_items_shown(self, bvids: list[str]) -> None:
+        """Mark discovery-pool items as already shown in recommendations."""
+        clean_bvids = [item for item in bvids if item]
+        if not clean_bvids:
+            return
+        placeholders = ", ".join("?" for _ in clean_bvids)
+        self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'shown',
+                recommended_at = CURRENT_TIMESTAMP
+            WHERE bvid IN ({placeholders})
+            """,
+            clean_bvids,
+        )
+
+    def evict_stale_pool_items(self, *, max_age_days: int = 90) -> int:
+        """Mark pool items older than *max_age_days* as stale."""
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'stale'
+            WHERE pool_status = 'fresh'
+              AND discovered_at < datetime('now', '-' || ? || ' days')
+              AND NOT EXISTS (
+                SELECT 1 FROM recommendations AS r WHERE r.bvid = content_cache.bvid
+              )
+            """,
+            (max_age_days,),
+        )
+        return cursor.rowcount
