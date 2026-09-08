@@ -893,3 +893,196 @@ class PoolCandidateMixin:
             (max_age_days,),
         )
         return cursor.rowcount
+
+    # ── Pool purge & suppression ───────────────────────────────────
+
+    def purge_pool_by_disliked_topics(self, topics: list[str]) -> int:
+        """Mark fresh pool candidates matching new dislikes as purged."""
+        clean = [t.strip() for t in topics if t and t.strip()]
+        if not clean:
+            return 0
+
+        exact_placeholders = ", ".join("?" for _ in clean)
+        like_conditions = " OR ".join("title LIKE ? OR pool_topic_label LIKE ?" for _ in clean)
+
+        params: list[Any] = []
+        params.extend(clean)
+        params.extend(clean)
+        params.extend(clean)
+        for topic in clean:
+            like = f"%{topic}%"
+            params.append(like)
+            params.append(like)
+
+        cursor = self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'purged_by_dislike'
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND NOT EXISTS (
+                SELECT 1 FROM recommendations AS r WHERE r.bvid = content_cache.bvid
+              )
+              AND (
+                topic_key IN ({exact_placeholders})
+                OR topic_group IN ({exact_placeholders})
+                OR pool_topic_label IN ({exact_placeholders})
+                OR {like_conditions}
+              )
+            """,
+            params,
+        )
+        return cursor.rowcount
+
+    def suppress_pool_rows_by_url(self, url: str) -> int:
+        """Suppress fresh pool candidates matching a blocked article's URL."""
+        clean = (url or "").strip()
+        if not clean:
+            return 0
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'suppressed'
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND content_url = ?
+            """,
+            (clean,),
+        )
+        return cursor.rowcount
+
+    def revive_suppressed_pool_rows_by_url(self, url: str) -> int:
+        """Un-block counterpart of :meth:`suppress_pool_rows_by_url`."""
+        clean = (url or "").strip()
+        if not clean:
+            return 0
+        cursor = self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_status = 'fresh'
+            WHERE COALESCE(pool_status, 'fresh') = 'suppressed'
+              AND content_url = ?
+            """,
+            (clean,),
+        )
+        return cursor.rowcount
+
+    def get_fresh_pool_candidates_for_purge_scan(
+        self,
+        *,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Return fresh, not-yet-recommended pool candidates for a semantic scan."""
+        cursor = self.conn.execute(
+            """
+            SELECT bvid, title, topic_key, topic_group, pool_topic_label
+            FROM content_cache
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND NOT EXISTS (
+                SELECT 1 FROM recommendations AS r WHERE r.bvid = content_cache.bvid
+              )
+            ORDER BY discovered_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def mark_pool_items_purged_by_dislike(self, bvids: list[str]) -> int:
+        """Mark specified bvids as purged_by_dislike (only if currently fresh)."""
+        clean = [b.strip() for b in bvids if b and b.strip()]
+        if not clean:
+            return 0
+        placeholders = ", ".join("?" for _ in clean)
+        cursor = self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'purged_by_dislike'
+            WHERE bvid IN ({placeholders})
+              AND COALESCE(pool_status, 'fresh') = 'fresh'
+            """,
+            clean,
+        )
+        return cursor.rowcount
+
+    def get_pool_candidates_needing_evaluation(
+        self, limit: int = 20, *, xhs_self_nickname: str = ""
+    ) -> list[dict[str, Any]]:
+        """Return fresh pool candidates that lack LLM content classification."""
+        from openbiliclaw.storage.database import _xhs_self_author_guard_sql, _xhs_self_author_guard_params
+
+        guard_sql = _xhs_self_author_guard_sql()
+        guard_params = _xhs_self_author_guard_params(xhs_self_nickname)
+        cursor = self.conn.execute(
+            f"""
+            SELECT *
+            FROM content_cache
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND COALESCE(feedback_type, '') != 'dislike'
+              AND COALESCE(style_key, '') = ''
+              AND COALESCE(topic_group, '') = ''
+              AND COALESCE(relevance_score, 0) = 0
+              {guard_sql}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM recommendations AS r
+                WHERE r.bvid = content_cache.bvid
+              )
+            ORDER BY
+                last_scored_at DESC,
+                bvid ASC
+            LIMIT ?
+            """,
+            (*guard_params, limit),
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        rows = self._exclude_viewed_rows(
+            rows,
+            self.get_recent_viewed_content_keys(),
+            limit=len(rows),
+        )
+        return rows[:limit]
+
+    def get_pool_candidates_needing_copy(
+        self, limit: int = 20, *, xhs_self_nickname: str = ""
+    ) -> list[dict[str, Any]]:
+        """Return fresh pool candidates missing precomputed popup copy."""
+        from openbiliclaw.storage.database import _xhs_self_author_guard_sql, _xhs_self_author_guard_params
+
+        min_score = self._pool_admission_min_score()
+        guard_sql = _xhs_self_author_guard_sql()
+        guard_params = _xhs_self_author_guard_params(xhs_self_nickname)
+        cursor = self.conn.execute(
+            f"""
+            SELECT *
+            FROM content_cache
+            WHERE COALESCE(pool_status, 'fresh') = 'fresh'
+              AND COALESCE(feedback_type, '') != 'dislike'
+              AND COALESCE(relevance_score, 0.0) >= ?
+              AND COALESCE(style_key, '') != ''
+              AND COALESCE(topic_group, '') != ''
+              AND (
+                COALESCE(pool_expression, '') = ''
+                OR COALESCE(pool_topic_label, '') = ''
+              )
+              {guard_sql}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM recommendations AS r
+                WHERE r.bvid = content_cache.bvid
+              )
+            ORDER BY
+                CASE candidate_tier WHEN 'primary' THEN 0 ELSE 1 END ASC,
+                relevance_score DESC,
+                last_scored_at DESC,
+                view_count DESC,
+                bvid ASC
+            LIMIT ?
+            """,
+            (min_score, *guard_params, limit),
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        rows = self._exclude_viewed_rows(
+            rows,
+            self.get_recent_viewed_content_keys(),
+            limit=len(rows),
+        )
+        return rows[:limit]
