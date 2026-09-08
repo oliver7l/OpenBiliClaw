@@ -102,3 +102,8 @@ src/openbiliclaw/web/clone/sites/
 # 参考项目（含嵌套 .git，本地保留，不进版本控制）
 references/agent-interview-hub/
 references/my-interview/
+
+# 全部参考项目（第三方代码/个人资料，本地保留，不进版本控制）
+references/
+# 个人面试转录等隐私材料
+transcript/
