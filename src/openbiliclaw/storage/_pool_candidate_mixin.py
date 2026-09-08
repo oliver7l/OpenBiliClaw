@@ -1086,3 +1086,21 @@ class PoolCandidateMixin:
             limit=len(rows),
         )
         return rows[:limit]
+
+    def update_pool_copy(
+        self,
+        bvid: str,
+        *,
+        expression: str,
+        topic_label: str,
+    ) -> None:
+        """Persist precomputed popup copy for one pooled candidate."""
+        self._execute_write(
+            """
+            UPDATE content_cache
+            SET pool_expression = ?,
+                pool_topic_label = ?
+            WHERE bvid = ?
+            """,
+            (expression, topic_label, bvid),
+        )

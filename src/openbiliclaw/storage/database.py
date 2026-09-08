@@ -1425,24 +1425,6 @@ class Database(PruneMixin, PoolCandidateMixin, TopicMixin, NativeSyncMixin, Watc
         )
         return int(cursor.rowcount or 0)
 
-    def update_pool_copy(
-        self,
-        bvid: str,
-        *,
-        expression: str,
-        topic_label: str,
-    ) -> None:
-        """Persist precomputed popup copy for one pooled candidate."""
-        self._execute_write(
-            """
-            UPDATE content_cache
-            SET pool_expression = ?,
-                pool_topic_label = ?
-            WHERE bvid = ?
-            """,
-            (expression, topic_label, bvid),
-        )
-
     def get_latest_event_id(self) -> int:
         """Return the latest event primary key."""
         cursor = self.conn.execute("SELECT COALESCE(MAX(id), 0) AS latest_id FROM events")
