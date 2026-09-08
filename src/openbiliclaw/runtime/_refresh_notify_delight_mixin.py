@@ -11,28 +11,13 @@ from datetime import timedelta
 from typing import Any
 
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
+from openbiliclaw.runtime._refresh_shared import RefreshControllerAttrs
 
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class NotifyDelightMixin:
+class NotifyDelightMixin(RefreshControllerAttrs):
     """通知与惊喜（delight）投递。"""
-
-    _is_initialized: Any  # 由 ContinuousRefreshController 提供
-    _last_published_pool_count: Any  # 由 ContinuousRefreshController 提供
-    _now: Any  # 由 ContinuousRefreshController 提供
-    _parse_iso_datetime: Any  # 由 ContinuousRefreshController 提供
-    _pool_count_payload: Any  # 由 ContinuousRefreshController 提供
-    _pool_readiness_counts: Any  # 由 ContinuousRefreshController 提供
-    _update_discovery_runtime_state: Any  # 由 ContinuousRefreshController 提供
-    database: Any  # 由 ContinuousRefreshController 提供
-    delight_cooldown_hours: Any  # 由 ContinuousRefreshController 提供
-    event_hub: Any  # 由 ContinuousRefreshController 提供
-    memory_manager: Any  # 由 ContinuousRefreshController 提供
-    notification_cooldown_hours: Any  # 由 ContinuousRefreshController 提供
-    pool_target_count: Any  # 由 ContinuousRefreshController 提供
-    recommendation_engine: Any  # 由 ContinuousRefreshController 提供
-    soul_engine: Any  # 由 ContinuousRefreshController 提供
 
     def get_pending_notification(self) -> dict[str, object] | None:
         """Return one recommendation candidate for browser notification."""

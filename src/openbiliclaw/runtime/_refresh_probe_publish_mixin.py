@@ -9,31 +9,25 @@ from __future__ import annotations
 import logging
 from contextlib import suppress
 from datetime import timedelta
-from typing import Any
 
-from openbiliclaw.runtime._refresh_shared import (
-    _PROBE_CHALLENGE_MODES,
-    _string_state_map,
-)
-from openbiliclaw.soul.avoidance_speculator import choose_next_avoidance_candidate
-from openbiliclaw.soul.speculator import (
+from obc_soul.avoidance_speculator import choose_next_avoidance_candidate
+from obc_soul.speculator import (
     _normalize_probe_mode,
     build_probe_axis,
     choose_next_probe_candidate,
 )
 
+from openbiliclaw.runtime._refresh_shared import (
+    _PROBE_CHALLENGE_MODES,
+    RefreshControllerAttrs,
+    _string_state_map,
+)
+
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class ProbePublishMixin:
+class ProbePublishMixin(RefreshControllerAttrs):
     """兴趣/回避探针生成与推送。"""
-
-    _PROBE_COOLDOWN_HOURS: Any  # 由 ContinuousRefreshController 提供
-    _now: Any  # 由 ContinuousRefreshController 提供
-    _publish_event: Any  # 由 ContinuousRefreshController 提供
-    _update_discovery_runtime_state: Any  # 由 ContinuousRefreshController 提供
-    memory_manager: Any  # 由 ContinuousRefreshController 提供
-    soul_engine: Any  # 由 ContinuousRefreshController 提供
 
     async def _publish_interest_probe_if_available(self) -> bool:
         """Push the top speculative-interest hypothesis via WebSocket.

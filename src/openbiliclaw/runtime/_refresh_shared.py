@@ -15,7 +15,7 @@ from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 from openbiliclaw.runtime.presence import PresenceTracker
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
 
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
 
@@ -132,7 +132,9 @@ class SupportsEventDatabase(Protocol):
     def count_recommendations(self) -> int: ...
     def count_unread_recommendations(self) -> int: ...
     def count_pool_candidates(self, *, xhs_self_nickname: str = "") -> int: ...
-    def count_pool_readiness(self, *, xhs_self_nickname: str = "") -> dict[str, int]: ...
+    def count_pool_readiness(
+        self, *, xhs_self_nickname: str = "", allow_stale: bool = False
+    ) -> dict[str, int]: ...
     def count_pool_candidates_by_source(self) -> dict[str, int]: ...
     def count_pool_available_candidates_by_source(
         self, *, max_per_topic_group: int = 0, xhs_self_nickname: str = ""
@@ -295,3 +297,61 @@ class RefreshControllerAttrs:
     _last_llm_gate_allowed: bool
     _loop_meta: dict[str, dict[str, object]]
     _signal_event_types: ClassVar[list[str]]
+
+    _PROBE_COOLDOWN_HOURS: Any
+    _build_source_replenishment_plan: Callable[..., list[tuple[list[str], int]]]
+    _candidate_eval_drain_batch_size: Any
+    _count_pool_available_candidates_by_source: Any
+    _count_pool_raw_material_by_source: Any
+    _dedupe_topics: Any
+    _drain_discovery_candidates_and_precompute: Any
+    _enforce_pool_cap: Any
+    _extract_topics: Any
+    _int_state_value: Any
+    _is_due: Any
+    _is_initialized: Any
+    _list_state_value: Any
+    _llm_work_allowed: Any
+    _loop_bilibili_producer: Any
+    _loop_cover_prefetch: Any
+    _loop_douyin_producer: Any
+    _loop_image_cache_cleanup: Any
+    _loop_rss_polling: Any
+    _loop_wechat_polling: Any
+    _loop_x_producer: Any
+    _loop_xhs_producer: Any
+    _loop_xiaoyuzhou_polling: Any
+    _loop_youtube_producer: Any
+    _loop_zhihu_producer: Any
+    _normalized_pool_source_shares: Any
+    _now: Any
+    _parse_iso_datetime: Any
+    _pending_signal_events_count: Callable[..., int]
+    _pool_count_payload: Any
+    _pool_readiness_counts: Any
+    _precompute_lock: Any
+    _publish_delight_if_available: Any
+    _publish_event: Any
+    _publish_precompute_replenishment_if_needed: Any
+    _publish_probe_if_available: Any
+    _queue_replenishment_reason: Callable[..., dict[str, object]]
+    _raw_source_target_counts: Any
+    _requested_refresh_limit: Any
+    _requested_strategy_limits: Any
+    _safe_count_delight_candidates: Any
+    _safe_precompute_pool_copy: Any
+    _safe_prewarm_pool_mmr_embeddings: Any
+    _safe_prewarm_supergroup_embeddings: Any
+    _source_deficit: Any
+    _source_requested_count: Any
+    _source_target_counts: Any
+    _strategy_message: Any
+    _track_task: Any
+    _update_discovery_runtime_state: Any
+    _warn_on_stranded_source_shares: Any
+    _xhs_self_nickname: Any
+    force_refresh: Callable[..., Coroutine[Any, Any, dict[str, object]]]
+    prepare_delight_candidates: Any
+    refresh_if_needed: Any
+    request_replenishment: Callable[..., Coroutine[Any, Any, dict[str, object]]]
+    trigger_manual_refresh: Callable[..., Coroutine[Any, Any, dict[str, object]]]

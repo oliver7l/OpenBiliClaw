@@ -16,51 +16,14 @@ from openbiliclaw.runtime._refresh_shared import (
     _COVER_PREFETCH_INTERVAL_SECONDS,
     _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS,
     _MAX_DISCOVERY_BACKFILL_PER_REFRESH,
+    RefreshControllerAttrs,
 )
 
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class LoopSupervisionMixin:
+class LoopSupervisionMixin(RefreshControllerAttrs):
     """后台循环监督与生命周期。"""
-
-    _drain_discovery_candidates_and_precompute: Any  # 由 ContinuousRefreshController 提供
-    _init_grace_consumed: Any  # 由 ContinuousRefreshController 提供
-    _int_state_value: Any  # 由 ContinuousRefreshController 提供
-    _is_initialized: Any  # 由 ContinuousRefreshController 提供
-    _last_published_pool_count: Any  # 由 ContinuousRefreshController 提供
-    _list_state_value: Any  # 由 ContinuousRefreshController 提供
-    _llm_work_allowed: Any  # 由 ContinuousRefreshController 提供
-    _loop_bilibili_producer: Any  # 由 ContinuousRefreshController 提供
-    _loop_cover_prefetch: Any  # 由 ContinuousRefreshController 提供
-    _loop_douyin_producer: Any  # 由 ContinuousRefreshController 提供
-    _loop_image_cache_cleanup: Any  # 由 ContinuousRefreshController 提供
-    _loop_meta: Any  # 由 ContinuousRefreshController 提供
-    _loop_rss_polling: Any  # 由 ContinuousRefreshController 提供
-    _loop_wechat_polling: Any  # 由 ContinuousRefreshController 提供
-    _loop_x_producer: Any  # 由 ContinuousRefreshController 提供
-    _loop_xhs_producer: Any  # 由 ContinuousRefreshController 提供
-    _loop_xiaoyuzhou_polling: Any  # 由 ContinuousRefreshController 提供
-    _loop_youtube_producer: Any  # 由 ContinuousRefreshController 提供
-    _loop_zhihu_producer: Any  # 由 ContinuousRefreshController 提供
-    _pool_count_payload: Any  # 由 ContinuousRefreshController 提供
-    _pool_readiness_counts: Any  # 由 ContinuousRefreshController 提供
-    _profile_ready_observed: Any  # 由 ContinuousRefreshController 提供
-    _publish_delight_if_available: Any  # 由 ContinuousRefreshController 提供
-    _publish_event: Any  # 由 ContinuousRefreshController 提供
-    _publish_probe_if_available: Any  # 由 ContinuousRefreshController 提供
-    _safe_count_delight_candidates: Any  # 由 ContinuousRefreshController 提供
-    _update_discovery_runtime_state: Any  # 由 ContinuousRefreshController 提供
-    _warn_on_stranded_source_shares: Any  # 由 ContinuousRefreshController 提供
-    _xhs_self_nickname: Any  # 由 ContinuousRefreshController 提供
-    check_interval_seconds: Any  # 由 ContinuousRefreshController 提供
-    database: Any  # 由 ContinuousRefreshController 提供
-    keyword_planner: Any  # 由 ContinuousRefreshController 提供
-    prepare_delight_candidates: Any  # 由 ContinuousRefreshController 提供
-    proactive_push_interval_seconds: Any  # 由 ContinuousRefreshController 提供
-    recommendation_engine: Any  # 由 ContinuousRefreshController 提供
-    refresh_if_needed: Any  # 由 ContinuousRefreshController 提供
-    soul_engine: Any  # 由 ContinuousRefreshController 提供
 
     async def run_forever(self) -> None:
         """Launch all background tasks as independent concurrent loops.

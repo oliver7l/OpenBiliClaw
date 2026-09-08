@@ -17,6 +17,7 @@ from openbiliclaw.runtime._refresh_shared import (
     _COVER_PREFETCH_RECENT_HOURS,
     _COVER_PREFETCH_SCAN,
     _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS,
+    RefreshControllerAttrs,
     _call_accepts_limit,
 )
 from openbiliclaw.runtime.image_cache import (
@@ -28,23 +29,8 @@ from openbiliclaw.runtime.image_cache import (
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class PlatformLoopsMixin:
+class PlatformLoopsMixin(RefreshControllerAttrs):
     """平台生产者循环 / 轮询 / 封面缓存。"""
-
-    _is_initialized: Any  # 由 ContinuousRefreshController 提供
-    _llm_work_allowed: Any  # 由 ContinuousRefreshController 提供
-    _source_deficit: Any  # 由 ContinuousRefreshController 提供
-    bilibili_producer: Any  # 由 ContinuousRefreshController 提供
-    check_interval_seconds: Any  # 由 ContinuousRefreshController 提供
-    database: Any  # 由 ContinuousRefreshController 提供
-    discovery_limit: Any  # 由 ContinuousRefreshController 提供
-    douyin_producer: Any  # 由 ContinuousRefreshController 提供
-    rss_adapter_registry: Any  # 由 ContinuousRefreshController 提供
-    scheduler_config: Any  # 由 ContinuousRefreshController 提供
-    x_producer: Any  # 由 ContinuousRefreshController 提供
-    xhs_producer: Any  # 由 ContinuousRefreshController 提供
-    youtube_producer: Any  # 由 ContinuousRefreshController 提供
-    zhihu_producer: Any  # 由 ContinuousRefreshController 提供
 
     async def _loop_xhs_producer(self) -> None:
         """XHS keyword production — Soul-driven search task generation."""

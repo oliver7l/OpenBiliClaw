@@ -9,17 +9,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from openbiliclaw.runtime._refresh_shared import _MAX_DISCOVERY_BACKFILL_PER_REFRESH
+from openbiliclaw.runtime._refresh_shared import (
+    _MAX_DISCOVERY_BACKFILL_PER_REFRESH,
+    RefreshControllerAttrs,
+)
 
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class ReplenishmentMixin:
+class ReplenishmentMixin(RefreshControllerAttrs):
     """手动补货请求与池副本预计算。"""
-
-    _pending_replenishment_reasons: Any  # 由 ContinuousRefreshController 提供
-    recommendation_engine: Any  # 由 ContinuousRefreshController 提供
-    trigger_manual_refresh: Any  # 由 ContinuousRefreshController 提供
 
     @staticmethod
     def _normalize_replenishment_reason(reason: str) -> str:

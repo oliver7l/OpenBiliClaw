@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from openbiliclaw.runtime._refresh_shared import (
     _BILIBILI_DISCOVERY_SOURCES,
@@ -15,29 +14,14 @@ from openbiliclaw.runtime._refresh_shared import (
     _DEFAULT_PLATFORM_SOURCE_SHARES,
     _MAX_DISCOVERY_BACKFILL_PER_REFRESH,
     _PLATFORM_SOURCE_ORDER,
+    RefreshControllerAttrs,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class SourceBudgetMixin:
+class SourceBudgetMixin(RefreshControllerAttrs):
     """补货来源配额与预算规划。"""
-
-    _pending_signal_events_count: Any  # 由 ContinuousRefreshController 提供
-    _warned_pool_count_fallbacks: Any  # 由 ContinuousRefreshController 提供
-    _xhs_self_nickname: Any  # 由 ContinuousRefreshController 提供
-    database: Any  # 由 ContinuousRefreshController 提供
-    discovery_candidate_pipeline: Any  # 由 ContinuousRefreshController 提供
-    discovery_limit: Any  # 由 ContinuousRefreshController 提供
-    douyin_producer: Any  # 由 ContinuousRefreshController 提供
-    memory_manager: Any  # 由 ContinuousRefreshController 提供
-    pool_source_shares: Any  # 由 ContinuousRefreshController 提供
-    pool_target_count: Any  # 由 ContinuousRefreshController 提供
-    signal_event_threshold: Any  # 由 ContinuousRefreshController 提供
-    x_producer: Any  # 由 ContinuousRefreshController 提供
-    xhs_producer: Any  # 由 ContinuousRefreshController 提供
-    youtube_producer: Any  # 由 ContinuousRefreshController 提供
-    zhihu_producer: Any  # 由 ContinuousRefreshController 提供
 
     def _build_source_replenishment_plan(self) -> list[tuple[list[str], int]]:
         source_available_counts = self._count_pool_available_candidates_by_source()

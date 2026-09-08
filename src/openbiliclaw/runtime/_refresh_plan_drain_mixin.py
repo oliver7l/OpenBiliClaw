@@ -15,6 +15,7 @@ from openbiliclaw.discovery.pool_snapshot import (
 )
 from openbiliclaw.runtime._refresh_shared import (
     _PLATFORM_SOURCE_ORDER,
+    RefreshControllerAttrs,
     _call_accepts_keyword_ids,
     _call_accepts_keywords,
     _call_accepts_pool_snapshot,
@@ -25,61 +26,8 @@ from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _KW_PLATFORM
 logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
-class PlanDrainMixin:
+class PlanDrainMixin(RefreshControllerAttrs):
     """刷新计划构建与候选排水。"""
-
-    _build_source_replenishment_plan: Any  # 由 ContinuousRefreshController 提供
-    _candidate_eval_drain_batch_size: Any  # 由 ContinuousRefreshController 提供
-    _count_pool_available_candidates_by_source: Any  # 由 ContinuousRefreshController 提供
-    _count_pool_raw_material_by_source: Any  # 由 ContinuousRefreshController 提供
-    _dedupe_topics: Any  # 由 ContinuousRefreshController 提供
-    _discovery_drain_lock: Any  # 由 ContinuousRefreshController 提供
-    _enforce_pool_cap: Any  # 由 ContinuousRefreshController 提供
-    _extract_topics: Any  # 由 ContinuousRefreshController 提供
-    _int_state_value: Any  # 由 ContinuousRefreshController 提供
-    _is_due: Any  # 由 ContinuousRefreshController 提供
-    _list_state_value: Any  # 由 ContinuousRefreshController 提供
-    _manual_refresh_finished_at: Any  # 由 ContinuousRefreshController 提供
-    _manual_refresh_message: Any  # 由 ContinuousRefreshController 提供
-    _manual_refresh_state: Any  # 由 ContinuousRefreshController 提供
-    _normalized_pool_source_shares: Any  # 由 ContinuousRefreshController 提供
-    _now: Any  # 由 ContinuousRefreshController 提供
-    _pending_signal_events_count: Any  # 由 ContinuousRefreshController 提供
-    _pool_count_payload: Any  # 由 ContinuousRefreshController 提供
-    _pool_readiness_counts: Any  # 由 ContinuousRefreshController 提供
-    _precompute_lock: Any  # 由 ContinuousRefreshController 提供
-    _publish_delight_if_available: Any  # 由 ContinuousRefreshController 提供
-    _publish_event: Any  # 由 ContinuousRefreshController 提供
-    _publish_precompute_replenishment_if_needed: Any  # 由 ContinuousRefreshController 提供
-    _publish_probe_if_available: Any  # 由 ContinuousRefreshController 提供
-    _queue_replenishment_reason: Any  # 由 ContinuousRefreshController 提供
-    _raw_source_target_counts: Any  # 由 ContinuousRefreshController 提供
-    _requested_refresh_limit: Any  # 由 ContinuousRefreshController 提供
-    _requested_strategy_limits: Any  # 由 ContinuousRefreshController 提供
-    _safe_count_delight_candidates: Any  # 由 ContinuousRefreshController 提供
-    _safe_precompute_pool_copy: Any  # 由 ContinuousRefreshController 提供
-    _safe_prewarm_pool_mmr_embeddings: Any  # 由 ContinuousRefreshController 提供
-    _safe_prewarm_supergroup_embeddings: Any  # 由 ContinuousRefreshController 提供
-    _source_requested_count: Any  # 由 ContinuousRefreshController 提供
-    _source_target_counts: Any  # 由 ContinuousRefreshController 提供
-    _strategy_message: Any  # 由 ContinuousRefreshController 提供
-    _track_task: Any  # 由 ContinuousRefreshController 提供
-    _update_discovery_runtime_state: Any  # 由 ContinuousRefreshController 提供
-    _xhs_self_nickname: Any  # 由 ContinuousRefreshController 提供
-    database: Any  # 由 ContinuousRefreshController 提供
-    discovery_candidate_pipeline: Any  # 由 ContinuousRefreshController 提供
-    discovery_engine: Any  # 由 ContinuousRefreshController 提供
-    discovery_limit: Any  # 由 ContinuousRefreshController 提供
-    explore_refresh_hours: Any  # 由 ContinuousRefreshController 提供
-    force_refresh: Any  # 由 ContinuousRefreshController 提供
-    keyword_fetch: Any  # 由 ContinuousRefreshController 提供
-    memory_manager: Any  # 由 ContinuousRefreshController 提供
-    pool_target_count: Any  # 由 ContinuousRefreshController 提供
-    request_replenishment: Any  # 由 ContinuousRefreshController 提供
-    scheduler_config: Any  # 由 ContinuousRefreshController 提供
-    signal_event_threshold: Any  # 由 ContinuousRefreshController 提供
-    soul_engine: Any  # 由 ContinuousRefreshController 提供
-    trending_refresh_hours: Any  # 由 ContinuousRefreshController 提供
 
     def _build_refresh_plan(
         self,
