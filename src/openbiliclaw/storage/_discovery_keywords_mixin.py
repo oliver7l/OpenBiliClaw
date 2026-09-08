@@ -333,3 +333,64 @@ class DiscoveryKeywordsMixin:
             (platform.strip(), current_digest.strip()),
         )
         return int(cursor.rowcount or 0)
+
+    # ── Archive purge & yield accounting ──────────────────────────
+
+    def purge_archived_keywords(
+        self,
+        retention_hours: float,
+        *,
+        platform: str | None = None,
+    ) -> int:
+        """Delete archived (``used`` / ``expired`` / ``failed``) rows past retention."""
+        from datetime import UTC, datetime, timedelta
+
+        cutoff = (datetime.now(UTC) - timedelta(hours=max(0.0, retention_hours))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        params: list[Any] = [cutoff]
+        platform_clause = ""
+        if platform is not None:
+            platform_clause = " AND platform = ?"
+            params.append(platform.strip())
+        cursor = self._execute_write(
+            f"""
+            DELETE FROM discovery_keywords
+            WHERE status IN ('used', 'expired', 'failed')
+              AND COALESCE(used_at, executing_at, claimed_at, created_at) < ?
+              {platform_clause}
+            """,
+            params,
+        )
+        return int(cursor.rowcount or 0)
+
+    def increment_keyword_yield(self, keyword_id: int, content_id: str) -> bool:
+        """Idempotently credit one admitted content to the keyword that produced it."""
+        kid = int(keyword_id)
+        cid = str(content_id or "").strip()
+        if kid <= 0 or not cid:
+            return False
+        before = self.conn.total_changes
+        self._execute_write(
+            """
+            INSERT OR IGNORE INTO discovery_keyword_yield (keyword_id, content_id)
+            VALUES (?, ?)
+            """,
+            (kid, cid),
+        )
+        if self.conn.total_changes == before:
+            return False
+        self._execute_write(
+            "UPDATE discovery_keywords SET yield_count = yield_count + 1 WHERE id = ?",
+            (kid,),
+        )
+        return True
+
+    def keyword_yield_count(self, keyword_id: int) -> int:
+        """Return the stored ``yield_count`` for a keyword (0 if unknown)."""
+        self._ensure_fresh_read()
+        row = self.conn.execute(
+            "SELECT yield_count FROM discovery_keywords WHERE id = ?",
+            (int(keyword_id),),
+        ).fetchone()
+        return int(row["yield_count"]) if row is not None else 0
