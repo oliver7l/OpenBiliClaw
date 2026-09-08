@@ -5,7 +5,12 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
-from openbiliclaw.api.models import DouyinCookieResponse, XCookieResponse
+from openbiliclaw.api.models import (
+    DouyinCookieIn,
+    DouyinCookieResponse,
+    XCookieIn,
+    XCookieResponse,
+)
 from openbiliclaw.sources.x_auth import X_REQUIRED_COOKIE_NAMES, XCookieManager
 
 if TYPE_CHECKING:
@@ -16,7 +21,7 @@ def register_cookie_routes(app: Any, ctx: RuntimeContext, *, config: Any) -> Non
     """Register cookie management endpoints on the FastAPI app."""
 
     @app.post("/api/sources/dy/cookie", response_model=DouyinCookieResponse)
-    async def sync_douyin_cookie(payload: Any) -> DouyinCookieResponse:
+    async def sync_douyin_cookie(payload: DouyinCookieIn) -> DouyinCookieResponse:
         """Receive a Douyin cookie from the browser extension."""
         from openbiliclaw.sources.douyin_auth import DouyinCookieManager
         from openbiliclaw.sources.douyin_direct import parse_cookie_header
@@ -52,7 +57,7 @@ def register_cookie_routes(app: Any, ctx: RuntimeContext, *, config: Any) -> Non
         )
 
     @app.post("/api/sources/x/cookie", response_model=XCookieResponse)
-    async def sync_x_cookie(payload: Any) -> XCookieResponse:
+    async def sync_x_cookie(payload: XCookieIn) -> XCookieResponse:
         """Receive an X (Twitter) cookie from the browser extension."""
         from openbiliclaw.sources.douyin_direct import parse_cookie_header
 

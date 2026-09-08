@@ -4765,7 +4765,6 @@ def create_app(
         "blocked": "请求被拒绝 (403) —— 账号可能受限或需要重新验证。",
     }
 
-    @app.get("/api/sources/status", response_model=SourcesStatusResponse)
     def _mask_source_credential(value: str, *, reveal: bool) -> str:
         if reveal or not value:
             return value

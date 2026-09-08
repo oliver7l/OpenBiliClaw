@@ -6146,11 +6146,12 @@ class TestBackendAPI:
         async def fake_apply_new_dislikes(**_kwargs: object) -> list[str]:
             return []
 
+        from openbiliclaw.api import chat_probe_routes
+
         monkeypatch.setattr(
-            app_module,
+            chat_probe_routes,
             "apply_new_dislikes",
             fake_apply_new_dislikes,
-            raising=False,
         )
 
         memory = MemoryManager(tmp_path)
@@ -6434,11 +6435,12 @@ class TestBackendAPI:
             calls.append(dict(kwargs))
             return ["新增不喜欢方向: 标题党热点解读"]
 
+        from openbiliclaw.api import chat_probe_routes
+
         monkeypatch.setattr(
-            app_module,
+            chat_probe_routes,
             "apply_new_dislikes",
             fake_apply_new_dislikes,
-            raising=False,
         )
 
         class FakeSoulEngine:
@@ -9926,6 +9928,9 @@ class TestGuidedInitEndpoints:
             async def serve(self, profile: object, limit: int = 10) -> list[object]:
                 served.append(limit)
                 return []
+
+            def prefetch_batch_buffer(self, *args: object, **kwargs: object) -> None:
+                return None
 
         class _FakeSoul:
             def is_profile_ready(self) -> bool:
