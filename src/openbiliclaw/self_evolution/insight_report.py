@@ -408,7 +408,7 @@ def extract_topics(text: str, top_k: int = 5) -> list[str]:
     # Deduplicate and sort
     seen: set[str] = set()
     result: list[str] = []
-    for topic, score in sorted(found, key=lambda x: -x[1]):
+    for topic, _score in sorted(found, key=lambda x: -x[1]):
         if topic.lower() not in seen and len(topic) >= 2:
             seen.add(topic.lower())
             result.append(topic)

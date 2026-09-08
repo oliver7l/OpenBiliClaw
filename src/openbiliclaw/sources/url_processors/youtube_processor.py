@@ -199,7 +199,7 @@ class YouTubeProcessor(BaseProcessor):
             subtitles = info.get("requested_subtitles") or {}
             if subtitles:
                 # Get first available subtitle
-                for lang, sub_info in subtitles.items():
+                for _lang, sub_info in subtitles.items():
                     sub_url = sub_info.get("url")
                     if sub_url:
                         transcript = self._fetch_subtitle_text(sub_url)

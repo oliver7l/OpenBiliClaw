@@ -293,7 +293,7 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
         ("events", "事件", "事件"),
     ]
 
-    for key, label, tag in entity_types:
+    for key, label, _tag in entity_types:
         entities = wiki_data.get(key, {})
         bodies = wiki_bodies.get(key, {})
         logger.info("  导入 %s: %d 个", label, len(entities))

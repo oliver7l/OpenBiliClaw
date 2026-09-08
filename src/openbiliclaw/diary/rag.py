@@ -758,7 +758,7 @@ class DiaryRAGService:
 
         # 3. 计算每个 chunk 的相似度
         scored_entries: dict[int, float] = {}
-        for eid, cidx, vector, chunk_text in all_chunks:
+        for eid, _cidx, vector, _chunk_text in all_chunks:
             if eid == entry_id:
                 continue
             for _, target_vector, _ in target_chunks:

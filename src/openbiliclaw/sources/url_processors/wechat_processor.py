@@ -160,7 +160,7 @@ class WechatProcessor(BaseProcessor):
             (r"(\d{4})/(\d{1,2})/(\d{1,2})", "%Y-%m-%d"),
         ]
 
-        for pattern, fmt in patterns:
+        for pattern, _fmt in patterns:
             match = re.search(pattern, date_text)
             if match:
                 try:
