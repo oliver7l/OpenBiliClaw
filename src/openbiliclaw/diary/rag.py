@@ -255,7 +255,7 @@ class DiaryRAGService:
         # 为每个字符位置计算关键词密度
         # 简化版：找第一个匹配关键词的位置
         best_pos = 0
-        best_density = 0
+        best_density = 0.0
 
         for keyword in keywords:
             pos = content.find(keyword)

@@ -468,7 +468,7 @@ class TLDRGenerator:
         scored = []
         for i, sent in enumerate(sentences):
             sent_words = re.findall(r"[\u4e00-\u9fff]{2,}|[a-zA-Z]+", sent.lower())
-            score = sum(word_freq.get(w, 0) for w in sent_words)
+            score = float(sum(word_freq.get(w, 0) for w in sent_words))
             # Position bonus: first and last sentences are more important
             if i == 0:
                 score *= 1.3
