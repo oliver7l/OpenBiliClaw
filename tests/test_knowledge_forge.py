@@ -6,15 +6,13 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from openbiliclaw.knowledge_forge.content_cleaner import ContentCleaner
 from openbiliclaw.knowledge_forge.utils import (
     compress_whitespace,
     content_hash,
     decode_html_entities,
-    has_encoding_error,
     hamming_distance,
+    has_encoding_error,
     simhash,
     simhash_similarity,
     strip_html_tags,

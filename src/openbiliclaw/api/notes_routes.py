@@ -7,18 +7,21 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from openbiliclaw.api.runtime_context import RuntimeContext
 from openbiliclaw.notes import (
     NoteCreate,
     NoteListParams,
     NoteService,
     NoteUpdate,
 )
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from openbiliclaw.api.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 

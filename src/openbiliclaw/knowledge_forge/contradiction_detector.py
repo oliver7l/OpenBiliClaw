@@ -294,7 +294,8 @@ class ContradictionDetector:
         self, a: int, b: int, contradiction: bool, confidence: float, description: str
     ) -> None:
         """写 contradiction 关系。不矛盾的高置信度结论也记录（供审计），
-        但仅 contradiction=True 写入 relation_type=contradiction。"""
+        但仅 contradiction=True 写入 relation_type=contradiction。
+        """
         rtype = "contradiction" if contradiction else "not_contradiction"
         conn = self._connect()
         try:

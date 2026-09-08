@@ -20,7 +20,6 @@ import os
 import re
 import sqlite3
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -73,7 +72,9 @@ def _fetch_collections() -> list[dict[str, Any]]:
         timeout=60,
     )
     if result.returncode != 0:
-        logger.error("zhihu collect list failed (rc=%d): %s", result.returncode, result.stderr[:500])
+        logger.error(
+            "zhihu collect list failed (rc=%d): %s", result.returncode, result.stderr[:500]
+        )
         return []
     try:
         data = json.loads(result.stdout)
@@ -134,10 +135,14 @@ def _fetch_all_favorites(max_per_collection: int = 100) -> list[dict[str, Any]]:
         answer_count = int(coll.get("answer_count", 0) or 0)
 
         if not coll_id or answer_count == 0:
-            logger.info("skipping collection '%s' (id=%s, count=%d)", coll_title, coll_id, answer_count)
+            logger.info(
+                "skipping collection '%s' (id=%s, count=%d)", coll_title, coll_id, answer_count
+            )
             continue
 
-        logger.info("fetching collection '%s' (id=%s, ~%d items)", coll_title, coll_id, answer_count)
+        logger.info(
+            "fetching collection '%s' (id=%s, ~%d items)", coll_title, coll_id, answer_count
+        )
         items = _fetch_collection_items(coll_id, max_items=max_per_collection)
 
         new_count = 0
@@ -151,7 +156,9 @@ def _fetch_all_favorites(max_per_collection: int = 100) -> list[dict[str, Any]]:
                 all_items.append(item)
                 new_count += 1
 
-        logger.info("collection '%s': %d items fetched (%d new unique)", coll_title, len(items), new_count)
+        logger.info(
+            "collection '%s': %d items fetched (%d new unique)", coll_title, len(items), new_count
+        )
         time.sleep(2)  # be gentle with rate limits
 
     return all_items
@@ -292,7 +299,9 @@ def _run_once(max_per_collection: int = 100, dry_run: bool = False) -> dict[str,
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
     if dry_run:
-        logger.info("dry-run: %d items fetched, %d valid rows (not inserted)", len(items), len(rows))
+        logger.info(
+            "dry-run: %d items fetched, %d valid rows (not inserted)", len(items), len(rows)
+        )
         return {
             "ok": True,
             "items_fetched": len(items),
@@ -341,7 +350,9 @@ def run_forever(max_per_collection: int = 100, interval_hours: int = 24) -> None
                 if fetched > 0:
                     guard.record_success()
                 else:
-                    guard.record_failure(reason="empty_result", detail="zhihu favorites returned 0 items")
+                    guard.record_failure(
+                        reason="empty_result", detail="zhihu favorites returned 0 items"
+                    )
                 logger.info(
                     "zhihu favorites ok: %d fetched, %d new, %d duplicate",
                     fetched,
@@ -370,8 +381,12 @@ def _main() -> None:
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run forever (24h interval)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes")
-    parser.add_argument("--max", type=int, default=100, help="Max items per collection (default: 100)")
-    parser.add_argument("--interval", type=int, default=24, help="Loop interval in hours (default: 24)")
+    parser.add_argument(
+        "--max", type=int, default=100, help="Max items per collection (default: 100)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=24, help="Loop interval in hours (default: 24)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(

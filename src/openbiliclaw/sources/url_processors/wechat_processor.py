@@ -48,6 +48,7 @@ class WechatProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with WeChat article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -100,7 +101,9 @@ class WechatProcessor(BaseProcessor):
             content_elem = soup.select_one("#js_content, .rich_media_content, #page-content")
             if content_elem:
                 # Remove unwanted elements
-                for tag in content_elem.select("script, style, .qr_code_pc_outer, .rich_media_tool"):
+                for tag in content_elem.select(
+                    "script, style, .qr_code_pc_outer, .rich_media_tool"
+                ):
                     tag.decompose()
                 content_text = content_elem.get_text(separator="\n", strip=True)
                 # Clean up excessive newlines
@@ -146,9 +149,9 @@ class WechatProcessor(BaseProcessor):
 
         Returns:
             ISO format date string, or None if parsing fails.
+
         """
         import re
-        from datetime import datetime
 
         # Try common formats
         patterns = [

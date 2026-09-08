@@ -2,7 +2,8 @@
 
 ``make_splash`` renders the PNG PyInstaller shows while the packaged app starts.
 Verify it produces a valid PNG of the expected size regardless of which fonts
-the host happens to have (CJK or ASCII fallback)."""
+the host happens to have (CJK or ASCII fallback).
+"""
 
 from __future__ import annotations
 

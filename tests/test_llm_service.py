@@ -385,7 +385,7 @@ async def test_unknown_module_override_provider_falls_back_and_logs_once(
         module_overrides={"soul": ModuleOverride(provider="claud", model="expensive")},
     )
 
-    with caplog.at_level(logging.INFO, logger="openbiliclaw.llm.service"):
+    with caplog.at_level(logging.INFO, logger="obc_llm.service"):
         await service.complete_with_core_memory(
             system_instruction="A",
             user_input="B",

@@ -494,7 +494,8 @@ def test_promote_ready_handles_user_confirmed_status():
     the fix, ``promote_ready`` only matched ``status == "active"``, so
     confirmed rows piled up in ``state.active`` indefinitely — eventually
     wedging probe generation because ``len(state.active) >= max_active``
-    short-circuited ``_generate``. Now both paths converge here."""
+    short-circuited ``_generate``. Now both paths converge here.
+    """
     state = SpeculativeState(
         active=[
             SpeculativeInterest(
@@ -537,7 +538,8 @@ async def test_force_tick_unblocked_when_active_full_of_confirmed(monkeypatch, t
     ``force_tick`` return ``generated=0`` forever. After the
     ``promote_ready`` fix, the next tick must (1) drain those confirmed
     rows out of ``state.active`` and (2) generate fresh speculations
-    into the now-empty slots."""
+    into the now-empty slots.
+    """
     from openbiliclaw.soul.profile import OnionProfile
 
     # Seed the on-disk state with 5 confirmed rows occupying every active slot.

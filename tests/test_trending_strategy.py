@@ -344,7 +344,8 @@ async def test_trending_strategy_uses_bounded_evaluation_concurrency() -> None:
 async def test_trending_strategy_interleaves_rids_for_eval_fairness() -> None:
     """When one rid has many ranking entries and others few, candidates must
     be round-robin interleaved before eval so the downstream 30-item cap
-    can't starve smaller rids of evaluation slots."""
+    can't starve smaller rids of evaluation slots.
+    """
     from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
 
     # Pre-stage 50 score responses. v0.3.51+ added an intra-batch

@@ -14,12 +14,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..storage.database import Database
 from .models import (
     Allergy,
     AllergyCreate,
     AllergyStatus,
-    AllergyUpdate,
+    Appointment,
+    AppointmentCreate,
+    AppointmentStatus,
+    AppointmentType,
+    AppointmentUpdate,
     Condition,
     ConditionCreate,
     ConditionSeverity,
@@ -35,14 +38,6 @@ from .models import (
     EncounterPriority,
     EncounterType,
     EncounterUpdate,
-    Appointment,
-    AppointmentCreate,
-    AppointmentStatus,
-    AppointmentType,
-    AppointmentUpdate,
-    MedicationLog,
-    MedicationLogCreate,
-    MedicationLogStatus,
     HealthDocument,
     HealthDocumentCreate,
     HealthDocumentUpdate,
@@ -60,6 +55,9 @@ from .models import (
     LabTestComponentCreate,
     Medication,
     MedicationCreate,
+    MedicationLog,
+    MedicationLogCreate,
+    MedicationLogStatus,
     MedicationStatus,
     MedicationType,
     MedicationUpdate,
@@ -78,7 +76,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from ..storage.database import Database
 
 _SCHEMA_SQL = """
 -- 患者档案
@@ -451,9 +449,7 @@ class HealthStore:
         if not hasattr(self._thread_local, "conn") or self._thread_local.conn is None:
             assert self._db_path is not None
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(
-                str(self._db_path), timeout=30.0, check_same_thread=False
-            )
+            conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             self._thread_local.conn = conn
@@ -471,7 +467,9 @@ class HealthStore:
     def _migrate(self) -> None:
         """执行数据库迁移，为旧表添加新列。"""
         # 为 health_patients 表添加紧急联系人列
-        existing_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(health_patients)").fetchall()}
+        existing_cols = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(health_patients)").fetchall()
+        }
         for col, col_def in [
             ("emergency_contact_name", "TEXT DEFAULT ''"),
             ("emergency_contact_phone", "TEXT DEFAULT ''"),
@@ -515,9 +513,7 @@ class HealthStore:
         return self._row_to_patient(row)
 
     def list_patients(self) -> list[Patient]:
-        rows = self.conn.execute(
-            "SELECT * FROM health_patients ORDER BY id"
-        ).fetchall()
+        rows = self.conn.execute("SELECT * FROM health_patients ORDER BY id").fetchall()
         return [self._row_to_patient(r) for r in rows]
 
     def _row_to_patient(self, row: sqlite3.Row) -> Patient:
@@ -531,9 +527,9 @@ class HealthStore:
             weight_kg=row["weight_kg"],
             phone=row["phone"],
             relationship=row["relationship"],
-            emergency_contact_name=row["emergency_contact_name"] if "emergency_contact_name" in row.keys() else "",
-            emergency_contact_phone=row["emergency_contact_phone"] if "emergency_contact_phone" in row.keys() else "",
-            emergency_contact_relation=row["emergency_contact_relation"] if "emergency_contact_relation" in row.keys() else "",
+            emergency_contact_name=row.get("emergency_contact_name", ""),
+            emergency_contact_phone=row.get("emergency_contact_phone", ""),
+            emergency_contact_relation=row.get("emergency_contact_relation", ""),
             notes=row["notes"],
             created_at=_parse_dt(row["created_at"]),
             updated_at=_parse_dt(row["updated_at"]),
@@ -692,9 +688,7 @@ class HealthStore:
         return self.get_encounter(encounter_id)
 
     def delete_encounter(self, encounter_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_encounters WHERE id = ?", (encounter_id,)
-        )
+        self.conn.execute("DELETE FROM health_encounters WHERE id = ?", (encounter_id,))
         self.conn.commit()
 
     # ── 健康问题 ──────────────────────────────────────────────
@@ -796,9 +790,7 @@ class HealthStore:
         return self.get_condition(condition_id)
 
     def delete_condition(self, condition_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_conditions WHERE id = ?", (condition_id,)
-        )
+        self.conn.execute("DELETE FROM health_conditions WHERE id = ?", (condition_id,))
         self.conn.commit()
 
     # ── 用药记录 ──────────────────────────────────────────────
@@ -906,9 +898,7 @@ class HealthStore:
         return self.get_medication(medication_id)
 
     def delete_medication(self, medication_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_medications WHERE id = ?", (medication_id,)
-        )
+        self.conn.execute("DELETE FROM health_medications WHERE id = ?", (medication_id,))
         self.conn.commit()
 
     # ── 化验结果 ──────────────────────────────────────────────
@@ -1023,7 +1013,9 @@ class HealthStore:
             conditions.append("patient_id = ?")
             params.append(patient_id)
         if search:
-            conditions.append("(test_name LIKE ? OR facility LIKE ? OR overall_interpretation LIKE ?)")
+            conditions.append(
+                "(test_name LIKE ? OR facility LIKE ? OR overall_interpretation LIKE ?)"
+            )
             like = f"%{search}%"
             params.extend([like, like, like])
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -1062,9 +1054,7 @@ class HealthStore:
         return self.get_lab_result(lab_result_id)
 
     def delete_lab_result(self, lab_result_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_lab_results WHERE id = ?", (lab_result_id,)
-        )
+        self.conn.execute("DELETE FROM health_lab_results WHERE id = ?", (lab_result_id,))
         self.conn.commit()
 
     # ── 检查 / 手术 ───────────────────────────────────────────
@@ -1187,9 +1177,7 @@ class HealthStore:
         return self.get_procedure(procedure_id)
 
     def delete_procedure(self, procedure_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_procedures WHERE id = ?", (procedure_id,)
-        )
+        self.conn.execute("DELETE FROM health_procedures WHERE id = ?", (procedure_id,))
         self.conn.commit()
 
     # ── 过敏史 ────────────────────────────────────────────────
@@ -1291,9 +1279,7 @@ class HealthStore:
         return self.get_vitals(cur.lastrowid)
 
     def get_vitals(self, vitals_id: int) -> Vitals:
-        row = self.conn.execute(
-            "SELECT * FROM health_vitals WHERE id = ?", (vitals_id,)
-        ).fetchone()
+        row = self.conn.execute("SELECT * FROM health_vitals WHERE id = ?", (vitals_id,)).fetchone()
         if row is None:
             raise ValueError(f"生命体征记录不存在: {vitals_id}")
         return Vitals(
@@ -1309,7 +1295,9 @@ class HealthStore:
             oxygen_saturation=row["oxygen_saturation"],
             respiratory_rate=row["respiratory_rate"],
             blood_glucose=row["blood_glucose"],
-            glucose_context=VitalGlucoseContext(row["glucose_context"]) if row["glucose_context"] else None,
+            glucose_context=VitalGlucoseContext(row["glucose_context"])
+            if row["glucose_context"]
+            else None,
             pain_scale=row["pain_scale"],
             notes=row["notes"],
             created_at=_parse_dt(row["created_at"]),
@@ -1407,25 +1395,21 @@ class HealthStore:
         ]
 
     def delete_immunization(self, immunization_id: int) -> None:
-        self.conn.execute(
-            "DELETE FROM health_immunizations WHERE id = ?", (immunization_id,)
-        )
+        self.conn.execute("DELETE FROM health_immunizations WHERE id = ?", (immunization_id,))
         self.conn.commit()
 
     # ── 统计 ──────────────────────────────────────────────────
 
     def get_stats(self) -> HealthStats:
         def _count(table: str, where: str = "", params: tuple = ()) -> int:
-            return self.conn.execute(
-                f"SELECT COUNT(*) FROM {table} {where}", params
-            ).fetchone()[0]
+            return self.conn.execute(f"SELECT COUNT(*) FROM {table} {where}", params).fetchone()[0]
 
         earliest = self.conn.execute(
             "SELECT MIN(encounter_date) FROM health_encounters"
         ).fetchone()[0]
-        latest = self.conn.execute(
-            "SELECT MAX(encounter_date) FROM health_encounters"
-        ).fetchone()[0]
+        latest = self.conn.execute("SELECT MAX(encounter_date) FROM health_encounters").fetchone()[
+            0
+        ]
 
         return HealthStats(
             total_patients=_count("health_patients"),
@@ -1443,9 +1427,14 @@ class HealthStore:
             total_documents=_count("health_documents"),
             total_insights=_count("health_insights"),
             total_appointments=_count("health_appointments"),
-            upcoming_appointments=_count("health_appointments", "WHERE scheduled_date >= date('now') AND status IN ('scheduled', 'confirmed')"),
+            upcoming_appointments=_count(
+                "health_appointments",
+                "WHERE scheduled_date >= date('now') AND status IN ('scheduled', 'confirmed')",
+            ),
             total_medication_logs=_count("health_medication_logs"),
-            pending_follow_ups=_count("health_procedures", "WHERE needs_follow_up = 1 AND status = 'completed'"),
+            pending_follow_ups=_count(
+                "health_procedures", "WHERE needs_follow_up = 1 AND status = 'completed'"
+            ),
             earliest_encounter_date=earliest,
             latest_encounter_date=latest,
         )
@@ -1458,8 +1447,14 @@ class HealthStore:
                (name, title, specialty, hospital, department, phone, address, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                data.name, data.title, data.specialty, data.hospital,
-                data.department, data.phone, data.address, data.notes,
+                data.name,
+                data.title,
+                data.specialty,
+                data.hospital,
+                data.department,
+                data.phone,
+                data.address,
+                data.notes,
             ),
         )
         self.conn.commit()
@@ -1472,10 +1467,15 @@ class HealthStore:
         if row is None:
             raise ValueError(f"医生不存在: {doctor_id}")
         return Doctor(
-            id=row["id"], name=row["name"], title=row["title"],
-            specialty=row["specialty"], hospital=row["hospital"],
-            department=row["department"], phone=row["phone"],
-            address=row["address"], notes=row["notes"],
+            id=row["id"],
+            name=row["name"],
+            title=row["title"],
+            specialty=row["specialty"],
+            hospital=row["hospital"],
+            department=row["department"],
+            phone=row["phone"],
+            address=row["address"],
+            notes=row["notes"],
             created_at=_parse_dt(row["created_at"]),
             updated_at=_parse_dt(row["updated_at"]),
         )
@@ -1506,9 +1506,7 @@ class HealthStore:
             return self.get_doctor(doctor_id)
         updates.append("updated_at = CURRENT_TIMESTAMP")
         params.append(doctor_id)
-        self.conn.execute(
-            f"UPDATE health_doctors SET {', '.join(updates)} WHERE id = ?", params
-        )
+        self.conn.execute(f"UPDATE health_doctors SET {', '.join(updates)} WHERE id = ?", params)
         self.conn.commit()
         return self.get_doctor(doctor_id)
 
@@ -1525,10 +1523,18 @@ class HealthStore:
                 file_size, mime_type, document_date, hospital, summary, tags)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                data.patient_id, data.encounter_id, data.title,
-                data.document_type.value, data.file_name, data.file_path,
-                data.file_size, data.mime_type, data.document_date,
-                data.hospital, data.summary, _dump_json(data.tags),
+                data.patient_id,
+                data.encounter_id,
+                data.title,
+                data.document_type.value,
+                data.file_name,
+                data.file_path,
+                data.file_size,
+                data.mime_type,
+                data.document_date,
+                data.hospital,
+                data.summary,
+                _dump_json(data.tags),
             ),
         )
         self.conn.commit()
@@ -1541,13 +1547,19 @@ class HealthStore:
         if row is None:
             raise ValueError(f"文档不存在: {document_id}")
         return HealthDocument(
-            id=row["id"], patient_id=row["patient_id"],
-            encounter_id=row["encounter_id"], title=row["title"],
+            id=row["id"],
+            patient_id=row["patient_id"],
+            encounter_id=row["encounter_id"],
+            title=row["title"],
             document_type=DocumentType(row["document_type"]),
-            file_name=row["file_name"], file_path=row["file_path"],
-            file_size=row["file_size"], mime_type=row["mime_type"],
-            document_date=row["document_date"], hospital=row["hospital"],
-            summary=row["summary"], tags=_parse_json(row["tags"], []),
+            file_name=row["file_name"],
+            file_path=row["file_path"],
+            file_size=row["file_size"],
+            mime_type=row["mime_type"],
+            document_date=row["document_date"],
+            hospital=row["hospital"],
+            summary=row["summary"],
+            tags=_parse_json(row["tags"], []),
             created_at=_parse_dt(row["created_at"]),
             updated_at=_parse_dt(row["updated_at"]),
         )
@@ -1604,9 +1616,7 @@ class HealthStore:
             return self.get_document(document_id)
         updates.append("updated_at = CURRENT_TIMESTAMP")
         params.append(document_id)
-        self.conn.execute(
-            f"UPDATE health_documents SET {', '.join(updates)} WHERE id = ?", params
-        )
+        self.conn.execute(f"UPDATE health_documents SET {', '.join(updates)} WHERE id = ?", params)
         self.conn.commit()
         return self.get_document(document_id)
 
@@ -1622,8 +1632,12 @@ class HealthStore:
                (patient_id, target_type, target_id, insight_type, content, model)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
-                data.patient_id, data.target_type, data.target_id,
-                data.insight_type, data.content, data.model,
+                data.patient_id,
+                data.target_type,
+                data.target_id,
+                data.insight_type,
+                data.content,
+                data.model,
             ),
         )
         self.conn.commit()
@@ -1636,10 +1650,14 @@ class HealthStore:
         if row is None:
             raise ValueError(f"洞察不存在: {insight_id}")
         return HealthInsight(
-            id=row["id"], patient_id=row["patient_id"],
-            target_type=row["target_type"], target_id=row["target_id"],
-            insight_type=row["insight_type"], content=row["content"],
-            model=row["model"], created_at=_parse_dt(row["created_at"]),
+            id=row["id"],
+            patient_id=row["patient_id"],
+            target_type=row["target_type"],
+            target_id=row["target_id"],
+            insight_type=row["insight_type"],
+            content=row["content"],
+            model=row["model"],
+            created_at=_parse_dt(row["created_at"]),
         )
 
     def list_insights(
@@ -1691,12 +1709,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"], event_type="encounter",
-                title=f"{r['hospital'] or ''} {r['department'] or ''}".strip() or "就诊",
-                description=r["diagnosis"] or r["chief_complaint"] or "",
-                status=r["encounter_type"], severity="", related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"],
+                    event_type="encounter",
+                    title=f"{r['hospital'] or ''} {r['department'] or ''}".strip() or "就诊",
+                    description=r["diagnosis"] or r["chief_complaint"] or "",
+                    status=r["encounter_type"],
+                    severity="",
+                    related_id=r["id"],
+                )
+            )
 
         # 检查记录
         rows = self.conn.execute(
@@ -1706,14 +1730,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"], event_type="procedure",
-                title=r["procedure_name"],
-                description=r["conclusion"] or r["abnormal_summary"] or "",
-                status=r["procedure_type"],
-                severity="warning" if r["needs_follow_up"] else "",
-                related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"],
+                    event_type="procedure",
+                    title=r["procedure_name"],
+                    description=r["conclusion"] or r["abnormal_summary"] or "",
+                    status=r["procedure_type"],
+                    severity="warning" if r["needs_follow_up"] else "",
+                    related_id=r["id"],
+                )
+            )
 
         # 化验结果
         rows = self.conn.execute(
@@ -1729,14 +1757,18 @@ class HealthStore:
                    WHERE lab_result_id = ? AND status IN ('high','low','critical')""",
                 (r["id"],),
             ).fetchone()[0]
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"] or "", event_type="lab",
-                title=r["test_name"],
-                description=r["overall_interpretation"] or "",
-                status=f"{abnormal}项异常" if abnormal else "全部正常",
-                severity="warning" if abnormal else "",
-                related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"] or "",
+                    event_type="lab",
+                    title=r["test_name"],
+                    description=r["overall_interpretation"] or "",
+                    status=f"{abnormal}项异常" if abnormal else "全部正常",
+                    severity="warning" if abnormal else "",
+                    related_id=r["id"],
+                )
+            )
 
         # 用药记录
         rows = self.conn.execute(
@@ -1746,12 +1778,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"] or "", event_type="medication",
-                title=r["medication_name"],
-                description=f"{r['dosage'] or ''} {r['frequency'] or ''}".strip(),
-                status=r["status"], severity="", related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"] or "",
+                    event_type="medication",
+                    title=r["medication_name"],
+                    description=f"{r['dosage'] or ''} {r['frequency'] or ''}".strip(),
+                    status=r["status"],
+                    severity="",
+                    related_id=r["id"],
+                )
+            )
 
         # 健康问题
         rows = self.conn.execute(
@@ -1761,13 +1799,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"] or "", event_type="condition",
-                title=r["condition_name"],
-                description=r["diagnosis"] or "",
-                status=r["status"], severity=r["severity"] or "",
-                related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"] or "",
+                    event_type="condition",
+                    title=r["condition_name"],
+                    description=r["diagnosis"] or "",
+                    status=r["status"],
+                    severity=r["severity"] or "",
+                    related_id=r["id"],
+                )
+            )
 
         # 文档
         rows = self.conn.execute(
@@ -1777,12 +1820,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"] or "", event_type="document",
-                title=r["title"],
-                description=r["hospital"] or "",
-                status=r["document_type"], severity="", related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"] or "",
+                    event_type="document",
+                    title=r["title"],
+                    description=r["hospital"] or "",
+                    status=r["document_type"],
+                    severity="",
+                    related_id=r["id"],
+                )
+            )
 
         # 疫苗接种
         rows = self.conn.execute(
@@ -1792,12 +1841,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"], event_type="immunization",
-                title=r["vaccine_name"],
-                description=f"第{r['dose_number']}剂" if r["dose_number"] else "",
-                status=r["facility"] or "", severity="", related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"],
+                    event_type="immunization",
+                    title=r["vaccine_name"],
+                    description=f"第{r['dose_number']}剂" if r["dose_number"] else "",
+                    status=r["facility"] or "",
+                    severity="",
+                    related_id=r["id"],
+                )
+            )
 
         # 预约/复诊
         rows = self.conn.execute(
@@ -1807,14 +1862,18 @@ class HealthStore:
             (patient_id, limit, offset),
         ).fetchall()
         for r in rows:
-            events.append(TimelineEvent(
-                id=r["id"], date=r["date"], event_type="appointment",
-                title=r["title"],
-                description=f"{r['hospital'] or ''} {r['department'] or ''}".strip(),
-                status=r["status"],
-                severity="warning" if r["status"] == "scheduled" else "",
-                related_id=r["id"],
-            ))
+            events.append(
+                TimelineEvent(
+                    id=r["id"],
+                    date=r["date"],
+                    event_type="appointment",
+                    title=r["title"],
+                    description=f"{r['hospital'] or ''} {r['department'] or ''}".strip(),
+                    status=r["status"],
+                    severity="warning" if r["status"] == "scheduled" else "",
+                    related_id=r["id"],
+                )
+            )
 
         # 按日期排序
         events.sort(key=lambda e: e.date or "", reverse=True)
@@ -1830,12 +1889,20 @@ class HealthStore:
                 reminder_enabled, reminder_days_before)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                data.patient_id, data.doctor_id, data.title,
-                data.appointment_type.value, data.status.value,
-                data.scheduled_date, data.scheduled_time,
-                data.hospital, data.department, data.doctor_name,
-                data.reason, data.notes,
-                1 if data.reminder_enabled else 0, data.reminder_days_before,
+                data.patient_id,
+                data.doctor_id,
+                data.title,
+                data.appointment_type.value,
+                data.status.value,
+                data.scheduled_date,
+                data.scheduled_time,
+                data.hospital,
+                data.department,
+                data.doctor_name,
+                data.reason,
+                data.notes,
+                1 if data.reminder_enabled else 0,
+                data.reminder_days_before,
             ),
         )
         self.conn.commit()
@@ -1848,12 +1915,19 @@ class HealthStore:
         if row is None:
             raise ValueError(f"预约不存在: {appointment_id}")
         return Appointment(
-            id=row["id"], patient_id=row["patient_id"], doctor_id=row["doctor_id"],
-            title=row["title"], appointment_type=AppointmentType(row["appointment_type"]),
-            status=AppointmentStatus(row["status"]), scheduled_date=row["scheduled_date"],
-            scheduled_time=row["scheduled_time"], hospital=row["hospital"],
-            department=row["department"], doctor_name=row["doctor_name"],
-            reason=row["reason"], notes=row["notes"],
+            id=row["id"],
+            patient_id=row["patient_id"],
+            doctor_id=row["doctor_id"],
+            title=row["title"],
+            appointment_type=AppointmentType(row["appointment_type"]),
+            status=AppointmentStatus(row["status"]),
+            scheduled_date=row["scheduled_date"],
+            scheduled_time=row["scheduled_time"],
+            hospital=row["hospital"],
+            department=row["department"],
+            doctor_name=row["doctor_name"],
+            reason=row["reason"],
+            notes=row["notes"],
             reminder_enabled=bool(row["reminder_enabled"]),
             reminder_days_before=row["reminder_days_before"],
             created_at=_parse_dt(row["created_at"]),
@@ -1929,9 +2003,15 @@ class HealthStore:
                 scheduled_time, taken_at, status, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                data.patient_id, data.medication_id, data.medication_name,
-                data.dosage, data.scheduled_date, data.scheduled_time,
-                data.taken_at, data.status.value, data.notes,
+                data.patient_id,
+                data.medication_id,
+                data.medication_name,
+                data.dosage,
+                data.scheduled_date,
+                data.scheduled_time,
+                data.taken_at,
+                data.status.value,
+                data.notes,
             ),
         )
         self.conn.commit()
@@ -1944,11 +2024,16 @@ class HealthStore:
         if row is None:
             raise ValueError(f"服药记录不存在: {log_id}")
         return MedicationLog(
-            id=row["id"], patient_id=row["patient_id"],
-            medication_id=row["medication_id"], medication_name=row["medication_name"],
-            dosage=row["dosage"], scheduled_date=row["scheduled_date"],
-            scheduled_time=row["scheduled_time"], taken_at=row["taken_at"],
-            status=MedicationLogStatus(row["status"]), notes=row["notes"],
+            id=row["id"],
+            patient_id=row["patient_id"],
+            medication_id=row["medication_id"],
+            medication_name=row["medication_name"],
+            dosage=row["dosage"],
+            scheduled_date=row["scheduled_date"],
+            scheduled_time=row["scheduled_time"],
+            taken_at=row["taken_at"],
+            status=MedicationLogStatus(row["status"]),
+            notes=row["notes"],
             created_at=_parse_dt(row["created_at"]),
         )
 
@@ -2021,26 +2106,96 @@ class HealthStore:
     # ── 药物相互作用检查 ───────────────────────────────────────
 
     _KNOWN_DRUG_INTERACTIONS = [
-        {"drugs": ["warfarin", "aspirin"], "severity": "major", "description": "阿司匹林显著增强华法林的抗凝作用，增加严重出血风险。"},
-        {"drugs": ["warfarin", "ibuprofen"], "severity": "major", "description": "布洛芬等NSAIDs与华法林合用增加出血风险。"},
-        {"drugs": ["warfarin", "naproxen"], "severity": "major", "description": "萘普生可能增强华法林的抗凝作用，增加出血风险。"},
-        {"drugs": ["simvastatin", "clarithromycin"], "severity": "major", "description": "克拉霉素抑制CYP3A4，显著升高辛伐他汀水平，增加肌病风险。"},
-        {"drugs": ["simvastatin", "erythromycin"], "severity": "major", "description": "红霉素抑制CYP3A4，增加辛伐他汀暴露和横纹肌溶解风险。"},
-        {"drugs": ["metformin", "ibuprofen"], "severity": "moderate", "description": "NSAIDs可能降低肾功能，增加二甲双胍蓄积风险。"},
-        {"drugs": ["lisinopril", "potassium"], "severity": "moderate", "description": "ACE抑制剂与钾补充剂合用可导致危险的高钾血症。"},
-        {"drugs": ["methotrexate", "ibuprofen"], "severity": "major", "description": "NSAIDs降低甲氨蝶呤清除，可能导致严重毒性。"},
-        {"drugs": ["clopidogrel", "omeprazole"], "severity": "moderate", "description": "奥美拉唑降低氯吡格雷活化，可能减弱其抗血小板作用。"},
-        {"drugs": ["fluoxetine", "tramadol"], "severity": "major", "description": "合用增加5-羟色胺综合征风险，可能危及生命。"},
-        {"drugs": ["sertraline", "tramadol"], "severity": "major", "description": "5-羟色胺能药物与曲马多合用有5-羟色胺综合征风险。"},
-        {"drugs": ["digoxin", "amiodarone"], "severity": "major", "description": "胺碘酮显著升高地高辛血药浓度，有中毒风险。"},
-        {"drugs": ["sildenafil", "nitrates"], "severity": "major", "description": "西地那非与硝酸盐合用导致严重低血压，禁忌。"},
-        {"drugs": ["ciprofloxacin", "theophylline"], "severity": "major", "description": "环丙沙星抑制茶碱代谢，升高毒性风险。"},
-        {"drugs": ["aspirin", "ibuprofen"], "severity": "moderate", "description": "布洛芬可能降低阿司匹林的抗血小板作用。"},
-        {"drugs": ["amlodipine", "simvastatin"], "severity": "moderate", "description": "氨氯地平可能增加辛伐他汀暴露，需限制剂量。"},
-        {"drugs": ["pinaverium", "anticholinergic"], "severity": "moderate", "description": "匹维溴铵与抗胆碱药合用可能增强抗胆碱作用。"},
+        {
+            "drugs": ["warfarin", "aspirin"],
+            "severity": "major",
+            "description": "阿司匹林显著增强华法林的抗凝作用，增加严重出血风险。",
+        },
+        {
+            "drugs": ["warfarin", "ibuprofen"],
+            "severity": "major",
+            "description": "布洛芬等NSAIDs与华法林合用增加出血风险。",
+        },
+        {
+            "drugs": ["warfarin", "naproxen"],
+            "severity": "major",
+            "description": "萘普生可能增强华法林的抗凝作用，增加出血风险。",
+        },
+        {
+            "drugs": ["simvastatin", "clarithromycin"],
+            "severity": "major",
+            "description": "克拉霉素抑制CYP3A4，显著升高辛伐他汀水平，增加肌病风险。",
+        },
+        {
+            "drugs": ["simvastatin", "erythromycin"],
+            "severity": "major",
+            "description": "红霉素抑制CYP3A4，增加辛伐他汀暴露和横纹肌溶解风险。",
+        },
+        {
+            "drugs": ["metformin", "ibuprofen"],
+            "severity": "moderate",
+            "description": "NSAIDs可能降低肾功能，增加二甲双胍蓄积风险。",
+        },
+        {
+            "drugs": ["lisinopril", "potassium"],
+            "severity": "moderate",
+            "description": "ACE抑制剂与钾补充剂合用可导致危险的高钾血症。",
+        },
+        {
+            "drugs": ["methotrexate", "ibuprofen"],
+            "severity": "major",
+            "description": "NSAIDs降低甲氨蝶呤清除，可能导致严重毒性。",
+        },
+        {
+            "drugs": ["clopidogrel", "omeprazole"],
+            "severity": "moderate",
+            "description": "奥美拉唑降低氯吡格雷活化，可能减弱其抗血小板作用。",
+        },
+        {
+            "drugs": ["fluoxetine", "tramadol"],
+            "severity": "major",
+            "description": "合用增加5-羟色胺综合征风险，可能危及生命。",
+        },
+        {
+            "drugs": ["sertraline", "tramadol"],
+            "severity": "major",
+            "description": "5-羟色胺能药物与曲马多合用有5-羟色胺综合征风险。",
+        },
+        {
+            "drugs": ["digoxin", "amiodarone"],
+            "severity": "major",
+            "description": "胺碘酮显著升高地高辛血药浓度，有中毒风险。",
+        },
+        {
+            "drugs": ["sildenafil", "nitrates"],
+            "severity": "major",
+            "description": "西地那非与硝酸盐合用导致严重低血压，禁忌。",
+        },
+        {
+            "drugs": ["ciprofloxacin", "theophylline"],
+            "severity": "major",
+            "description": "环丙沙星抑制茶碱代谢，升高毒性风险。",
+        },
+        {
+            "drugs": ["aspirin", "ibuprofen"],
+            "severity": "moderate",
+            "description": "布洛芬可能降低阿司匹林的抗血小板作用。",
+        },
+        {
+            "drugs": ["amlodipine", "simvastatin"],
+            "severity": "moderate",
+            "description": "氨氯地平可能增加辛伐他汀暴露，需限制剂量。",
+        },
+        {
+            "drugs": ["pinaverium", "anticholinergic"],
+            "severity": "moderate",
+            "description": "匹维溴铵与抗胆碱药合用可能增强抗胆碱作用。",
+        },
     ]
 
-    def check_drug_interactions(self, drug_name: str, existing_drugs: list[str]) -> list[DrugInteraction]:
+    def check_drug_interactions(
+        self, drug_name: str, existing_drugs: list[str]
+    ) -> list[DrugInteraction]:
         """检查新药与现有药物的相互作用（静态已知危险对）。"""
         found = []
         drug_lower = drug_name.lower().strip()
@@ -2052,14 +2207,32 @@ class HealthStore:
                     match_a = drug_lower == drug_a and ex_lower == drug_b
                     match_b = drug_lower == drug_b and ex_lower == drug_a
                 else:
-                    match_a = (drug_lower == drug_a or drug_a.startswith(drug_lower) or drug_lower.startswith(drug_a)) and \
-                              (ex_lower == drug_b or drug_b.startswith(ex_lower) or ex_lower.startswith(drug_b))
-                    match_b = (drug_lower == drug_b or drug_b.startswith(drug_lower) or drug_lower.startswith(drug_b)) and \
-                              (ex_lower == drug_a or drug_a.startswith(ex_lower) or ex_lower.startswith(drug_a))
+                    match_a = (
+                        drug_lower == drug_a
+                        or drug_a.startswith(drug_lower)
+                        or drug_lower.startswith(drug_a)
+                    ) and (
+                        ex_lower == drug_b
+                        or drug_b.startswith(ex_lower)
+                        or ex_lower.startswith(drug_b)
+                    )
+                    match_b = (
+                        drug_lower == drug_b
+                        or drug_b.startswith(drug_lower)
+                        or drug_lower.startswith(drug_b)
+                    ) and (
+                        ex_lower == drug_a
+                        or drug_a.startswith(ex_lower)
+                        or ex_lower.startswith(drug_a)
+                    )
                 if match_a or match_b:
-                    found.append(DrugInteraction(
-                        drug_a=drug_name, drug_b=existing,
-                        severity=pair["severity"], description=pair["description"],
-                    ))
+                    found.append(
+                        DrugInteraction(
+                            drug_a=drug_name,
+                            drug_b=existing,
+                            severity=pair["severity"],
+                            description=pair["description"],
+                        )
+                    )
                     break
         return found

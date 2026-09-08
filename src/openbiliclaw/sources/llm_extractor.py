@@ -64,6 +64,7 @@ async def extract_content_from_page(
 
     Returns:
         List of DiscoveredContent items extracted from the page.
+
     """
     from openbiliclaw.discovery.engine import DiscoveredContent
 

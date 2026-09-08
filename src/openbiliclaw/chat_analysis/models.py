@@ -7,19 +7,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ChatType(str, Enum):
+class ChatType(StrEnum):
     """聊天类型枚举。"""
 
     GROUP = "group"  # 群聊
     PRIVATE = "private"  # 私聊
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     """消息类型枚举。"""
 
     TEXT = "text"  # 文本消息

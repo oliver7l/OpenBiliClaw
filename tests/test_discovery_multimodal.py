@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -20,10 +21,10 @@ async def test_prepare_cover_image_input_resizes_and_encodes_jpeg(monkeypatch) -
         assert url == "https://i.ytimg.com/vi/demo/hqdefault.jpg"
         return source.getvalue(), "image/png"
 
-    monkeypatch.setattr(
-        "openbiliclaw.discovery.multimodal.get_or_fetch_cover_bytes",
-        fake_get_or_fetch_cover_bytes,
-    )
+    # 抽取后 get_or_fetch_cover_bytes 从模块级函数变为 _image_cache 的方法；
+    # 注入 fake cache 到 obc_discovery.multimodal._image_cache。
+    fake_cache = SimpleNamespace(get_or_fetch_cover_bytes=fake_get_or_fetch_cover_bytes)
+    monkeypatch.setattr("obc_discovery.multimodal._image_cache", fake_cache)
 
     prepared = await prepare_cover_image_input(
         content_id="yt-demo",

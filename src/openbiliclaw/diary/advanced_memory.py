@@ -639,8 +639,10 @@ class AdvancedMemoryService:
         # 同一主题不同观点 → tension
         topics = ["工作", "家庭", "健康", "金钱", "人生", "未来"]
         for topic in topics:
-            if topic in text1 and topic in text2 and (
-                ("应该" in text1 or "必须" in text1) and ("不" in text2 or "别" in text2)
+            if (
+                topic in text1
+                and topic in text2
+                and (("应该" in text1 or "必须" in text1) and ("不" in text2 or "别" in text2))
             ):
                 return "tension"
 

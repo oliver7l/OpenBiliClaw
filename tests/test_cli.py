@@ -989,6 +989,13 @@ def test_run_api_server_prints_degraded_mode_panel(
     from openbiliclaw.api import app as api_app
 
     output = io.StringIO()
+
+    def _fake_app_get(_path: str, **_kwargs: object) -> object:
+        """No-op route decorator: register_chat_analysis_routes calls @app.get/post/delete."""
+        def _decorator(fn: object) -> object:
+            return fn
+        return _decorator
+
     fake_app = SimpleNamespace(
         state=SimpleNamespace(
             degraded=True,
@@ -1000,7 +1007,10 @@ def test_run_api_server_prints_degraded_mode_panel(
                     severity="blocking",
                 )
             ],
-        )
+        ),
+        get=_fake_app_get,
+        post=_fake_app_get,
+        delete=_fake_app_get,
     )
     run_calls: list[dict[str, object]] = []
 
@@ -1174,6 +1184,7 @@ def test_runtime_builders_share_database_instance(monkeypatch: pytest.MonkeyPatc
             database: object,
             embedding_service: object = None,
             xhs_self_info_provider: object = None,
+            **kwargs: object,
         ) -> None:
             self.llm = llm
             self.database = database
@@ -3461,7 +3472,8 @@ def test_enqueue_xhs_bootstrap_task_uses_env_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """v0.3.21+: scroll rounds and item caps are env-tunable.
-    Verifies the env vars actually flow through to the queue payload."""
+    Verifies the env vars actually flow through to the queue payload.
+    """
     from openbiliclaw.cli import _enqueue_xhs_bootstrap_task
 
     captured: dict = {}
@@ -3844,7 +3856,8 @@ def test_init_no_xhs_flag_skips_enqueue(
 ) -> None:
     """v0.3.27+: ``openbiliclaw init --no-xhs`` should completely skip
     the bootstrap enqueue path so users who don't want xhs touched
-    can be sure no task hits the queue."""
+    can be sure no task hits the queue.
+    """
 
     class FakeAuthManager:
         async def get_status(self) -> AuthStatus:
@@ -4401,7 +4414,8 @@ def test_save_embedding_config_writes_to_toml(
 ) -> None:
     """Verify the wizard's persistence helper writes both provider and model
     to [llm.embedding] in config.toml. Round-trips: start from a default
-    config, run the helper, reload, assert the embedding section persisted."""
+    config, run the helper, reload, assert the embedding section persisted.
+    """
     from openbiliclaw.config import (
         Config,
         LLMConfig,
@@ -4588,7 +4602,8 @@ def test_enqueue_dy_bootstrap_task_uses_env_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verifies that OPENBILICLAW_DY_BOOTSTRAP_* env vars actually flow
-    through into the DyTaskQueue payload, mirroring the XHS variant."""
+    through into the DyTaskQueue payload, mirroring the XHS variant.
+    """
     from openbiliclaw.cli import _enqueue_dy_bootstrap_task
 
     captured: dict = {}
@@ -4758,7 +4773,8 @@ def test_collect_dy_bootstrap_events_extracts_videos_from_completed_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A completed task with a videos[] payload converts into events
-    using dy_bootstrap_videos_to_events and surfaces scope_counts."""
+    using dy_bootstrap_videos_to_events and surfaces scope_counts.
+    """
     import json
 
     from openbiliclaw.cli import _collect_dy_bootstrap_events
@@ -4941,7 +4957,8 @@ def test_collect_dy_search_results_reads_completed_task(
 def test_dy_events_to_history_items_preserves_context_and_source_platform() -> None:
     """The history-item adapter must keep the natural-language context
     field and tag rows with source_platform=douyin so cross-source
-    analysis stays uniform with the XHS / B站 paths."""
+    analysis stays uniform with the XHS / B站 paths.
+    """
     from openbiliclaw.cli import _dy_events_to_history_items
     from openbiliclaw.sources.dy_tasks import dy_bootstrap_videos_to_events
 
@@ -4997,7 +5014,8 @@ def test_fetch_douyin_command_renders_scope_counts_after_extension_done(
     (which the daemon-side endpoint already propagates to memory),
     and prints the scope_counts. CLI itself does NOT propagate events
     (the daemon's /api/sources/dy/task-result handler does it once,
-    on receive), so we don't need a memory-manager fake here."""
+    on receive), so we don't need a memory-manager fake here.
+    """
     runner = CliRunner()
 
     monkeypatch.setattr(cli_module, "_enqueue_dy_bootstrap_task", lambda: "task-fake-id")
@@ -5061,7 +5079,8 @@ def test_fetch_douyin_does_not_call_prepare_init_runtime(
     """fetch-* are pure pull — they must NOT trigger init's runtime
     prep (which would force B站 cookie / auth checks the user doesn't
     care about for a single-source pull). The fixture records any
-    inadvertent call so a regression here trips loudly."""
+    inadvertent call so a regression here trips loudly.
+    """
     runner = CliRunner()
     prepared = {"called": False}
 
@@ -5091,7 +5110,8 @@ def test_fetch_douyin_does_not_propagate_events_cli_side(
     """The daemon's task-result endpoint propagates events the moment
     each partial POST lands. CLI MUST NOT propagate again — that would
     double-write every event. Fail loudly if anyone wires the CLI
-    propagation path back in."""
+    propagation path back in.
+    """
     runner = CliRunner()
     propagated: list = []
 
@@ -5463,7 +5483,8 @@ def test_fetch_douyin_does_not_rebuild_profile_cli_side(
 ) -> None:
     """``fetch-douyin`` only verifies/imports the source data. Profile
     rebuild stays on the init / learning paths instead of being hidden
-    behind the smoke command."""
+    behind the smoke command.
+    """
     runner = CliRunner()
     rebuilt = {"called": False}
 
@@ -5502,7 +5523,8 @@ def test_fetch_xhs_renders_xhs_specific_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """fetch-xhs has its own scope vocabulary (saved/liked/xhs_history)
-    and summary line format — verify they surface correctly."""
+    and summary line format — verify they surface correctly.
+    """
     runner = CliRunner()
 
     monkeypatch.setattr(cli_module, "_enqueue_xhs_bootstrap_task", lambda: "xhs-task")
@@ -5524,7 +5546,8 @@ def test_fetch_xhs_renders_xhs_specific_summary(
 
 def test_fetch_xhs_handles_timeout_status(monkeypatch: pytest.MonkeyPatch) -> None:
     """When the extension never reports back, the command surfaces a
-    'timeout' hint rather than crashing or claiming success."""
+    'timeout' hint rather than crashing or claiming success.
+    """
     runner = CliRunner()
     monkeypatch.setattr(cli_module, "_enqueue_xhs_bootstrap_task", lambda: "xhs-task")
     monkeypatch.setattr(
@@ -5796,7 +5819,8 @@ def test_persist_init_source_enabled_flags_toggles_twitter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``--yes-x`` flows into _persist_init_source_enabled_flags(include_x=True)
-    and must flip ``[sources.twitter].enabled`` on (mirror xhs/douyin/youtube)."""
+    and must flip ``[sources.twitter].enabled`` on (mirror xhs/douyin/youtube).
+    """
     from openbiliclaw.config import Config
 
     cfg = Config()
@@ -5831,7 +5855,8 @@ def test_persist_init_source_enabled_flags_toggles_twitter(
 
 def test_init_yes_x_flag_is_registered() -> None:
     """The ``init`` command must expose ``--yes-x`` (scripted opt-in),
-    mirroring ``--yes-xhs`` / ``--yes-douyin`` / ``--yes-youtube``."""
+    mirroring ``--yes-xhs`` / ``--yes-douyin`` / ``--yes-youtube``.
+    """
     import inspect
 
     sig = inspect.signature(cli_module.init)
@@ -6068,7 +6093,8 @@ def _guided_init_pipeline_doubles(monkeypatch) -> dict[str, Any]:
 
 def test_run_guided_init_without_bilibili_builds_profile_from_xhs(monkeypatch) -> None:
     """include_bili=False skips the B站 fetch entirely; XHS signals alone feed
-    analyze + profile build (client may be None)."""
+    analyze + profile build (client may be None).
+    """
     import asyncio
 
     state = _guided_init_pipeline_doubles(monkeypatch)
@@ -6113,7 +6139,8 @@ def test_run_guided_init_without_bilibili_builds_profile_from_xhs(monkeypatch) -
 
 def test_run_guided_init_without_bilibili_builds_profile_from_zhihu(monkeypatch) -> None:
     """Zhihu bootstrap signals should participate in first-profile init just
-    like the other plugin-backed sources."""
+    like the other plugin-backed sources.
+    """
     import asyncio
 
     state = _guided_init_pipeline_doubles(monkeypatch)

@@ -23,7 +23,8 @@ def test_desktop_web_static_contract_exposes_guided_init_cta() -> None:
     assert "renderInitOnboarding" in app_js
     assert "buildInitChecklist" in app_js
     assert "INIT_SOURCE_OPTIONS" in app_js
-    assert "init_progress" in app_js
+    # init_progress 事件处理已移到 profile.js；app.js 侧保留 initProgressView 渲染函数
+    assert "initProgressView" in app_js
     assert "openbiliclaw init" not in app_js
     assert ".init-onboarding" in app_css
     assert ".init-progress-fill" in app_css

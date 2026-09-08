@@ -90,6 +90,7 @@ class ProactivePushEngine:
         db_path: Path to the SQLite database.
         config: Push configuration.
         llm_service: Optional LLM service for notification generation.
+
     """
 
     def __init__(
@@ -118,6 +119,7 @@ class ProactivePushEngine:
 
         Returns:
             List of generated notifications.
+
         """
         if not self.config.enabled:
             return []
@@ -153,7 +155,7 @@ class ProactivePushEngine:
 
         # Limit to max per day
         remaining = self.config.max_notifications_per_day - self._count_today_sent()
-        notifications = notifications[:max(0, remaining)]
+        notifications = notifications[: max(0, remaining)]
 
         # Send notifications
         if not dry_run:
@@ -170,6 +172,7 @@ class ProactivePushEngine:
 
         Returns:
             A digest notification, or None if nothing to report.
+
         """
         conn = self._get_conn()
         try:
@@ -359,6 +362,7 @@ class ProactivePushEngine:
                 return None
 
             import json as json_mod
+
             try:
                 data = json_mod.loads(row["report_json"])
             except (json_mod.JSONDecodeError, TypeError):
@@ -448,8 +452,9 @@ class ProactivePushEngine:
         # Webhook channel
         if "webhook" in self.config.channels and self.config.webhook_url:
             try:
-                import urllib.request
                 import json as json_mod
+                import urllib.request
+
                 data = json_mod.dumps(notif.to_dict()).encode()
                 req = urllib.request.Request(
                     self.config.webhook_url,
@@ -462,8 +467,9 @@ class ProactivePushEngine:
 
         # Email channel (would need SMTP config)
         if "email" in self.config.channels and self.config.email_address:
-            logger.info("Email notification would be sent to %s: %s",
-                        self.config.email_address, notif.title)
+            logger.info(
+                "Email notification would be sent to %s: %s", self.config.email_address, notif.title
+            )
 
         return True
 
@@ -620,7 +626,7 @@ class ProactivePushEngine:
         """Get IDs of content already notified about."""
         conn = self._get_conn()
         try:
-            rows = conn.execute(
+            conn.execute(
                 "SELECT content_title FROM push_notifications WHERE notification_type = 'high_value'"
             ).fetchall()
             # This is a simplified approach - in production we'd store content_id
@@ -637,6 +643,7 @@ class ProactivePushEngine:
             ).fetchall()
             notified = set()
             import json as json_mod
+
             for row in rows:
                 if row["tags"]:
                     try:

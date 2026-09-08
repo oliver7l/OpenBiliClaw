@@ -330,7 +330,8 @@ def trust_env_for_endpoint(base_url: str) -> bool:
 
 def httpx_kwargs_for_endpoint(base_url: str) -> dict[str, Any]:
     """Return ``httpx`` client kwargs for a specific endpoint, honoring the
-    domestic-direct carve-out."""
+    domestic-direct carve-out.
+    """
     if is_domestic_endpoint(base_url):
         return {"trust_env": False}
     return outbound_httpx_kwargs()

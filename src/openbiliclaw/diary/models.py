@@ -7,12 +7,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class MoodLevel(str, Enum):
+class MoodLevel(StrEnum):
     """情绪等级枚举。"""
 
     VERY_HAPPY = "very_happy"
@@ -129,18 +129,18 @@ class DiaryFragmentCreate(BaseModel):
     tags: list[str] = Field(default_factory=list, description="标签列表")
 
 
-class TagType(str, Enum):
+class TagType(StrEnum):
     """标签类型枚举。"""
 
-    EMOTION = "emotion"          # 情绪类：开心、焦虑、难过
-    TOPIC = "topic"              # 主题类：工作、家庭、旅行
-    EVENT = "event"              # 事件类：生日、面试、搬家
-    LOCATION = "location"        # 地点类：深圳、北京、家里
-    WORK = "work"                # 工作相关
-    FAMILY = "family"            # 家庭相关
-    HEALTH = "health"            # 健康相关
-    FINANCE = "finance"          # 财务相关
-    OTHER = "other"              # 其他
+    EMOTION = "emotion"  # 情绪类：开心、焦虑、难过
+    TOPIC = "topic"  # 主题类：工作、家庭、旅行
+    EVENT = "event"  # 事件类：生日、面试、搬家
+    LOCATION = "location"  # 地点类：深圳、北京、家里
+    WORK = "work"  # 工作相关
+    FAMILY = "family"  # 家庭相关
+    HEALTH = "health"  # 健康相关
+    FINANCE = "finance"  # 财务相关
+    OTHER = "other"  # 其他
 
 
 class DiaryTag(BaseModel):
@@ -177,13 +177,19 @@ class DiaryPerson(BaseModel):
 class DiaryPersonDetail(DiaryPerson):
     """人物详情，包含相关日记列表。"""
 
-    related_entries: list[dict] = Field(default_factory=list, description="相关日记列表（id, date, title, context）")
+    related_entries: list[dict] = Field(
+        default_factory=list, description="相关日记列表（id, date, title, context）"
+    )
 
 
 class ExtractionResult(BaseModel):
     """AI 提取结果。"""
 
-    tags: list[dict] = Field(default_factory=list, description="提取的标签列表 [{name, type, confidence}]")
-    persons: list[dict] = Field(default_factory=list, description="提取的人物列表 [{name, relation, context}]")
+    tags: list[dict] = Field(
+        default_factory=list, description="提取的标签列表 [{name, type, confidence}]"
+    )
+    persons: list[dict] = Field(
+        default_factory=list, description="提取的人物列表 [{name, relation, context}]"
+    )
     locations: list[str] = Field(default_factory=list, description="提取的地点")
     events: list[str] = Field(default_factory=list, description="提取的事件")

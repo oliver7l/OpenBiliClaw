@@ -306,6 +306,7 @@ class SelfEvolutionService:
 
         Args:
             store: 日记存储服务
+
         """
         self.store = store
         self._ensure_tables()
@@ -388,6 +389,7 @@ class SelfEvolutionService:
 
         Returns:
             生成的夜间日志
+
         """
         if target_date is None:
             target_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -427,6 +429,7 @@ class SelfEvolutionService:
 
         Returns:
             更新后的用户画像
+
         """
         # 获取所有日记（用于构建完整画像）
         all_entries = self.store.list_entries(limit=5000)
@@ -691,6 +694,7 @@ class SelfEvolutionService:
 
         Returns:
             漂移事件列表
+
         """
         drifts: list[DriftEvent] = []
 
@@ -948,6 +952,7 @@ class SelfEvolutionService:
 
         Returns:
             标签优化建议
+
         """
         entries = self.store.list_entries(limit=5000)
         entries = [e for e in entries if e.entry_date <= target_date]
@@ -1102,6 +1107,7 @@ class SelfEvolutionService:
 
         Returns:
             生成的夜间日志
+
         """
         # 获取目标日期的日记
         target_entries = self.store.list_entries(
@@ -1172,13 +1178,8 @@ class SelfEvolutionService:
                 "emotion": "情感",
             }
             if top_focus:
-                focus_strs = [
-                    f"{focus_names.get(f, f)}（{v * 100:.0f}%）"
-                    for f, v in top_focus
-                ]
-                learnings.append(
-                    f"你最近最关注的领域是{'和'.join(focus_strs)}。"
-                )
+                focus_strs = [f"{focus_names.get(f, f)}（{v * 100:.0f}%）" for f, v in top_focus]
+                learnings.append(f"你最近最关注的领域是{'和'.join(focus_strs)}。")
 
         if profile.values:
             learnings.append(
@@ -1227,10 +1228,7 @@ class SelfEvolutionService:
             patterns.append(
                 {
                     "type": "writing_pattern",
-                    "description": (
-                        f"你平均每周写 {freq:.1f} 篇日记，"
-                        f"平均每篇 {avg_len} 字。"
-                    ),
+                    "description": (f"你平均每周写 {freq:.1f} 篇日记，平均每篇 {avg_len} 字。"),
                 }
             )
 
@@ -1263,9 +1261,7 @@ class SelfEvolutionService:
                     )
             elif drift.drift_type == "relationship" and "减少" in drift.title:
                 person_name = drift.title.replace("与", "").replace("的互动减少", "")
-                suggestions.append(
-                    f"和{person_name}的联系变少了，要不要主动联系一下？"
-                )
+                suggestions.append(f"和{person_name}的联系变少了，要不要主动联系一下？")
 
         # 基于写作频率的建议
         if profile.writing_pattern:
@@ -1324,6 +1320,7 @@ class SelfEvolutionService:
 
         Returns:
             用户画像，如果不存在返回 None
+
         """
         if target_date is None:
             target_date = datetime.now().strftime("%Y-%m-%d")
@@ -1357,6 +1354,7 @@ class SelfEvolutionService:
 
         Returns:
             画像历史列表
+
         """
         conn = self.store.conn
         cursor = conn.cursor()
@@ -1408,6 +1406,7 @@ class SelfEvolutionService:
 
         Returns:
             漂移事件列表
+
         """
         conn = self.store.conn
         cursor = conn.cursor()
@@ -1457,6 +1456,7 @@ class SelfEvolutionService:
 
         Returns:
             夜间日志列表（摘要）
+
         """
         conn = self.store.conn
         cursor = conn.cursor()
@@ -1498,6 +1498,7 @@ class SelfEvolutionService:
 
         Returns:
             夜间日志，如果不存在返回 None
+
         """
         conn = self.store.conn
         cursor = conn.cursor()

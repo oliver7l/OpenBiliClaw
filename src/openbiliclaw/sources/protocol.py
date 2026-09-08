@@ -31,6 +31,7 @@ class SourceRecipe:
             for manual creation, ``"agent"`` for conversationally created.
         created_at: ISO-8601 timestamp.
         last_fetched_at: ISO-8601 timestamp of the most recent successful fetch.
+
     """
 
     id: str
@@ -78,5 +79,6 @@ class SourceAdapter(Protocol):
 
         Returns:
             List of discovered content items ready for evaluation.
+
         """
         ...

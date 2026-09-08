@@ -107,7 +107,8 @@ class TestAtomicClaim:
     def test_claim_is_fifo_oldest_pending_first(self, db: Database) -> None:
         """P2.3: ``claim_keywords`` claims the OLDEST pending rows first so
         generated words rotate through fairly. With distinct ``created_at``
-        stamps the order is unambiguous; a partial claim leaves the newest."""
+        stamps the order is unambiguous; a partial claim leaves the newest.
+        """
         # Three words inserted; rewind created_at so "oldest" is well-defined
         # (a single batch shares a second-granularity CURRENT_TIMESTAMP).
         db.insert_pending_keywords(_BILI, ["oldest", "middle", "newest"], _DIGEST_A)

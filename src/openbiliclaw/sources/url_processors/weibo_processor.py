@@ -56,6 +56,7 @@ class WeiboProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Weibo post content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -86,6 +87,7 @@ class WeiboProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult or None if API fails.
+
         """
         try:
             import requests
@@ -135,6 +137,7 @@ class WeiboProcessor(BaseProcessor):
             if created_at:
                 try:
                     from datetime import datetime
+
                     dt = datetime.strptime(created_at, "%a %b %d %H:%M:%S %z %Y")
                     published_at = dt.isoformat()
                 except (ValueError, TypeError):
@@ -163,9 +166,7 @@ class WeiboProcessor(BaseProcessor):
             logger.debug("Weibo mobile API failed: %s", e)
             return None
 
-    async def _fetch_via_html(
-        self, url: str, cookies: dict[str, str]
-    ) -> ProcessorResult:
+    async def _fetch_via_html(self, url: str, cookies: dict[str, str]) -> ProcessorResult:
         """Fetch Weibo post via HTML parsing (fallback).
 
         Args:
@@ -174,6 +175,7 @@ class WeiboProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Weibo content.
+
         """
         import requests
         from bs4 import BeautifulSoup
@@ -227,7 +229,9 @@ class WeiboProcessor(BaseProcessor):
                 content_text = og_desc["content"].strip()
 
         if not title:
-            return self._failed_result(url, "Could not extract post content (may require login/cookies)")
+            return self._failed_result(
+                url, "Could not extract post content (may require login/cookies)"
+            )
 
         return ProcessorResult(
             title=title,
@@ -249,6 +253,7 @@ class WeiboProcessor(BaseProcessor):
 
         Returns:
             Post ID or None.
+
         """
         patterns = [
             r"weibo\.com/\d+/([A-Za-z0-9]+)",

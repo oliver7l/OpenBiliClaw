@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .models import (
@@ -43,7 +43,6 @@ class SynthesisStore:
 
     def _ensure_tables(self) -> None:
         with self._connect() as conn:
-
             # 合成版本表
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS synthesis_versions (
@@ -147,7 +146,7 @@ class SynthesisStore:
                 (
                     v.version,
                     v.parent_version,
-                    v.created_at or datetime.now(timezone.utc).isoformat(),
+                    v.created_at or datetime.now(UTC).isoformat(),
                     v.new_diary_count,
                     v.new_chat_insight_count,
                     v.new_chat_topic_count,
@@ -210,8 +209,7 @@ class SynthesisStore:
             themes=_safe_json_load(row.get("themes", "[]")),
             concerns=_safe_json_load(row.get("concerns", "[]")),
             cross_patterns=[
-                CrossModulePattern(**p)
-                for p in _safe_json_load(row.get("cross_patterns", "[]"))
+                CrossModulePattern(**p) for p in _safe_json_load(row.get("cross_patterns", "[]"))
             ],
             model_used=row.get("model_used", ""),
             tokens_used=row.get("tokens_used", 0),
@@ -231,15 +229,13 @@ class SynthesisStore:
                     json.dumps(de.enhanced_tags, ensure_ascii=False),
                     de.enhanced_insight,
                     json.dumps(de.cross_refs, ensure_ascii=False),
-                    de.updated_at or datetime.now(timezone.utc).isoformat(),
+                    de.updated_at or datetime.now(UTC).isoformat(),
                 ),
             )
 
     # ── 数据查询（跨模块拉取） ─────────────────────────────────────
 
-    def get_new_diary_analyses(
-        self, since_id: int, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    def get_new_diary_analyses(self, since_id: int, limit: int = 50) -> list[dict[str, Any]]:
         """获取上次合成以来的新增日记分析。"""
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
@@ -256,9 +252,7 @@ class SynthesisStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_new_chat_insights(
-        self, since_id: int, limit: int = 30
-    ) -> list[dict[str, Any]]:
+    def get_new_chat_insights(self, since_id: int, limit: int = 30) -> list[dict[str, Any]]:
         """获取上次合成以来的新增聊天洞察。"""
         try:
             conn = self._connect()
@@ -287,9 +281,7 @@ class SynthesisStore:
         except Exception:
             return []
 
-    def get_new_chat_topics(
-        self, since_id: int, limit: int = 20
-    ) -> list[dict[str, Any]]:
+    def get_new_chat_topics(self, since_id: int, limit: int = 20) -> list[dict[str, Any]]:
         """获取上次合成以来的新增聊天话题。"""
         try:
             conn = self._connect()

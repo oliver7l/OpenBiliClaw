@@ -43,6 +43,7 @@ class GenericURLProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with extracted content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -108,6 +109,7 @@ class GenericURLProcessor(BaseProcessor):
 
             # Extract source name from domain
             from urllib.parse import urlparse
+
             domain = urlparse(url).netloc.replace("www.", "")
             source_name = domain.split(".")[0].capitalize() if domain else "Web Article"
 
@@ -142,10 +144,23 @@ class GenericURLProcessor(BaseProcessor):
 
         Returns:
             Extracted text content, or None if not found.
+
         """
         # Remove unwanted elements
-        for tag in soup(["script", "style", "nav", "header", "footer",
-                          "aside", "iframe", "noscript", "svg", "button"]):
+        for tag in soup(
+            [
+                "script",
+                "style",
+                "nav",
+                "header",
+                "footer",
+                "aside",
+                "iframe",
+                "noscript",
+                "svg",
+                "button",
+            ]
+        ):
             tag.decompose()
 
         # Try common content containers
@@ -172,8 +187,9 @@ class GenericURLProcessor(BaseProcessor):
         # Fallback: extract all paragraphs
         paragraphs = soup.find_all("p")
         if paragraphs:
-            text = "\n\n".join(p.get_text(strip=True) for p in paragraphs
-                                if len(p.get_text(strip=True)) > 20)
+            text = "\n\n".join(
+                p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20
+            )
             if len(text) > 200:
                 return text
 

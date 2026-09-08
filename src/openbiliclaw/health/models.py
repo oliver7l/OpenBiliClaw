@@ -6,16 +6,15 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from enum import Enum
+from datetime import datetime
+from enum import Enum, StrEnum
 
 from pydantic import BaseModel, Field
-
 
 # ── 枚举 ──────────────────────────────────────────────────────
 
 
-class EncounterType(str, Enum):
+class EncounterType(StrEnum):
     """就诊类型。"""
 
     OUTPATIENT = "outpatient"  # 门诊
@@ -27,7 +26,7 @@ class EncounterType(str, Enum):
     OTHER = "other"
 
 
-class EncounterPriority(str, Enum):
+class EncounterPriority(StrEnum):
     """就诊优先级。"""
 
     ROUTINE = "routine"
@@ -35,7 +34,7 @@ class EncounterPriority(str, Enum):
     EMERGENCY = "emergency"
 
 
-class ConditionStatus(str, Enum):
+class ConditionStatus(StrEnum):
     """健康问题状态。"""
 
     ACTIVE = "active"
@@ -45,7 +44,7 @@ class ConditionStatus(str, Enum):
     RECURRENCE = "recurrence"
 
 
-class ConditionSeverity(str, Enum):
+class ConditionSeverity(StrEnum):
     """严重程度。"""
 
     MILD = "mild"
@@ -54,7 +53,7 @@ class ConditionSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class MedicationType(str, Enum):
+class MedicationType(StrEnum):
     """药物类型。"""
 
     PRESCRIPTION = "prescription"  # 处方药
@@ -63,7 +62,7 @@ class MedicationType(str, Enum):
     HERBAL = "herbal"  # 中药/草药
 
 
-class MedicationStatus(str, Enum):
+class MedicationStatus(StrEnum):
     """用药状态。"""
 
     ACTIVE = "active"
@@ -73,7 +72,7 @@ class MedicationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class LabResultStatus(str, Enum):
+class LabResultStatus(StrEnum):
     """化验结果状态。"""
 
     ORDERED = "ordered"
@@ -82,7 +81,7 @@ class LabResultStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class LabComponentStatus(str, Enum):
+class LabComponentStatus(StrEnum):
     """单个化验项目状态。"""
 
     NORMAL = "normal"
@@ -92,7 +91,7 @@ class LabComponentStatus(str, Enum):
     PENDING = "pending"
 
 
-class ProcedureType(str, Enum):
+class ProcedureType(StrEnum):
     """检查/手术类型。"""
 
     IMAGING = "imaging"  # 影像检查 (CT/MRI/超声/X光)
@@ -104,7 +103,7 @@ class ProcedureType(str, Enum):
     OTHER = "other"
 
 
-class ProcedureStatus(str, Enum):
+class ProcedureStatus(StrEnum):
     """检查/手术状态。"""
 
     SCHEDULED = "scheduled"
@@ -114,7 +113,7 @@ class ProcedureStatus(str, Enum):
     POSTPONED = "postponed"
 
 
-class AllergyStatus(str, Enum):
+class AllergyStatus(StrEnum):
     """过敏状态。"""
 
     ACTIVE = "active"
@@ -123,7 +122,7 @@ class AllergyStatus(str, Enum):
     UNCONFIRMED = "unconfirmed"
 
 
-class VitalGlucoseContext(str, Enum):
+class VitalGlucoseContext(StrEnum):
     """血糖测量上下文。"""
 
     FASTING = "fasting"
@@ -146,7 +145,9 @@ class Patient(BaseModel):
     height_cm: float | None = Field(default=None, description="身高 cm")
     weight_kg: float | None = Field(default=None, description="体重 kg")
     phone: str = Field(default="", description="联系电话")
-    relationship: str = Field(default="self", description="与本人关系：self/spouse/child/parent/other")
+    relationship: str = Field(
+        default="self", description="与本人关系：self/spouse/child/parent/other"
+    )
     emergency_contact_name: str = Field(default="", description="紧急联系人姓名")
     emergency_contact_phone: str = Field(default="", description="紧急联系人电话")
     emergency_contact_relation: str = Field(default="", description="紧急联系人关系")
@@ -321,7 +322,9 @@ class Medication(BaseModel):
     id: int = Field(description="用药记录 ID")
     patient_id: int = Field(description="关联患者 ID")
     medication_name: str = Field(description="药品名称")
-    medication_type: MedicationType = Field(default=MedicationType.PRESCRIPTION, description="药物类型")
+    medication_type: MedicationType = Field(
+        default=MedicationType.PRESCRIPTION, description="药物类型"
+    )
     dosage: str = Field(default="", description="剂量，如 50mg")
     frequency: str = Field(default="", description="频率，如 每日3次")
     route: str = Field(default="", description="给药途径，如 口服")
@@ -702,7 +705,7 @@ class DoctorUpdate(BaseModel):
 # ── 文档 / 附件 ───────────────────────────────────────────────
 
 
-class DocumentType(str, Enum):
+class DocumentType(StrEnum):
     """文档类型。"""
 
     REPORT = "report"  # 检查/化验报告
@@ -771,7 +774,7 @@ class HealthDocumentUpdate(BaseModel):
 # ── 预约 / 复诊 ────────────────────────────────────────────────
 
 
-class AppointmentStatus(str, Enum):
+class AppointmentStatus(StrEnum):
     """预约状态。"""
 
     SCHEDULED = "scheduled"  # 已预约
@@ -781,7 +784,7 @@ class AppointmentStatus(str, Enum):
     NO_SHOW = "no_show"  # 未就诊
 
 
-class AppointmentType(str, Enum):
+class AppointmentType(StrEnum):
     """预约类型。"""
 
     FOLLOW_UP = "follow_up"  # 复诊
@@ -799,7 +802,9 @@ class Appointment(BaseModel):
     patient_id: int = Field(description="关联患者 ID")
     doctor_id: int | None = Field(default=None, description="关联医生 ID")
     title: str = Field(description="预约标题")
-    appointment_type: AppointmentType = Field(default=AppointmentType.CONSULTATION, description="预约类型")
+    appointment_type: AppointmentType = Field(
+        default=AppointmentType.CONSULTATION, description="预约类型"
+    )
     status: AppointmentStatus = Field(default=AppointmentStatus.SCHEDULED, description="状态")
     scheduled_date: str = Field(description="预约日期 YYYY-MM-DD")
     scheduled_time: str = Field(default="", description="预约时间 HH:MM")
@@ -855,7 +860,7 @@ class AppointmentUpdate(BaseModel):
 # ── 服药记录 ──────────────────────────────────────────────────
 
 
-class MedicationLogStatus(str, Enum):
+class MedicationLogStatus(StrEnum):
     """服药记录状态。"""
 
     TAKEN = "taken"  # 已服用
@@ -914,7 +919,9 @@ class TimelineEvent(BaseModel):
 
     id: int = Field(description="事件 ID")
     date: str = Field(description="事件日期")
-    event_type: str = Field(description="事件类型：encounter/procedure/lab/medication/condition/document/vitals/immunization")
+    event_type: str = Field(
+        description="事件类型：encounter/procedure/lab/medication/condition/document/vitals/immunization"
+    )
     title: str = Field(description="事件标题")
     description: str = Field(default="", description="事件描述")
     status: str = Field(default="", description="状态标签")
@@ -932,7 +939,9 @@ class HealthInsight(BaseModel):
     patient_id: int = Field(description="关联患者 ID")
     target_type: str = Field(description="目标类型：lab_result/procedure/encounter/summary")
     target_id: int = Field(description="目标记录 ID")
-    insight_type: str = Field(default="interpretation", description="洞察类型：interpretation/trend/summary/warning")
+    insight_type: str = Field(
+        default="interpretation", description="洞察类型：interpretation/trend/summary/warning"
+    )
     content: str = Field(description="洞察内容")
     model: str = Field(default="", description="使用的模型")
     created_at: datetime = Field(description="创建时间")

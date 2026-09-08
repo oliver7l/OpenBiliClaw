@@ -1,25 +1,26 @@
 """Self-evolution module: auto-generate insights, detect interest drift, mine topics, generate knowledge cards, build knowledge graph, and proactively push valuable content."""
 
 from openbiliclaw.self_evolution.insight_report import (
+    DeepDiveCandidate,
     InsightReport,
     InsightReportGenerator,
+    InterestDrift,
     PlatformStats,
     TopicStats,
-    InterestDrift,
-    DeepDiveCandidate,
     extract_topics,
     infer_platform_from_url,
+)
+from openbiliclaw.self_evolution.insights import (
+    ContentInsightsAnalyzer,
+    CrossPlatformInsight,
+    InsightsReport,
+    KnowledgeGap,
 )
 from openbiliclaw.self_evolution.interest_drift import (
     DriftReport,
     InterestDriftDetector,
     PlatformDrift,
     TopicDrift,
-)
-from openbiliclaw.self_evolution.topic_miner import (
-    MiningReport,
-    TopicCandidate,
-    TopicMiner,
 )
 from openbiliclaw.self_evolution.knowledge_card import (
     KnowledgeCard,
@@ -38,20 +39,19 @@ from openbiliclaw.self_evolution.learning_path import (
     LearningPathGenerator,
     PathStep,
 )
+from openbiliclaw.self_evolution.proactive_push import (
+    ProactivePushEngine,
+    PushConfig,
+    PushNotification,
+)
 from openbiliclaw.self_evolution.tldr import (
     TLDR,
     TLDRGenerator,
 )
-from openbiliclaw.self_evolution.insights import (
-    ContentInsightsAnalyzer,
-    CrossPlatformInsight,
-    InsightsReport,
-    KnowledgeGap,
-)
-from openbiliclaw.self_evolution.proactive_push import (
-    PushConfig,
-    PushNotification,
-    ProactivePushEngine,
+from openbiliclaw.self_evolution.topic_miner import (
+    MiningReport,
+    TopicCandidate,
+    TopicMiner,
 )
 
 __all__ = [

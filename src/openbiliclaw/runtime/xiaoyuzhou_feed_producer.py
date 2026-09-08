@@ -6,6 +6,7 @@ every 24 hours, and inserts them into ``content_cache``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -24,10 +25,8 @@ def _obc_connect(db_path):
 
     _conn = _sqlite3.connect(db_path)
     _conn.execute("PRAGMA journal_mode=WAL")
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 

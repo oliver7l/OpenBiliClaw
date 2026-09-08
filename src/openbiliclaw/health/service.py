@@ -8,8 +8,8 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
-from ..storage.database import Database
 from .models import (
     Allergy,
     AllergyCreate,
@@ -54,6 +54,9 @@ from .models import (
 )
 from .store import HealthStore
 
+if TYPE_CHECKING:
+    from ..storage.database import Database
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,9 +99,7 @@ class HealthService:
         for p in patients:
             if p.relationship == "self":
                 return p
-        return self.store.create_patient(
-            PatientCreate(full_name="本人", relationship="self")
-        )
+        return self.store.create_patient(PatientCreate(full_name="本人", relationship="self"))
 
     # ── 就诊记录 ──────────────────────────────────────────────
 
@@ -396,8 +397,12 @@ class HealthService:
         offset: int = 0,
     ) -> tuple[list[HealthDocument], int]:
         return self.store.list_documents(
-            patient_id=patient_id, document_type=document_type,
-            encounter_id=encounter_id, search=search, limit=limit, offset=offset,
+            patient_id=patient_id,
+            document_type=document_type,
+            encounter_id=encounter_id,
+            search=search,
+            limit=limit,
+            offset=offset,
         )
 
     def update_document(self, document_id: int, data: HealthDocumentUpdate) -> HealthDocument:
@@ -422,8 +427,10 @@ class HealthService:
         limit: int = 50,
     ) -> list[HealthInsight]:
         return self.store.list_insights(
-            patient_id=patient_id, target_type=target_type,
-            target_id=target_id, limit=limit,
+            patient_id=patient_id,
+            target_type=target_type,
+            target_id=target_id,
+            limit=limit,
         )
 
     def delete_insight(self, insight_id: int) -> None:
@@ -431,7 +438,9 @@ class HealthService:
 
     # ── 健康时间线 ──────────────────────────────────────────────
 
-    def get_timeline(self, patient_id: int, limit: int = 100, offset: int = 0) -> list[TimelineEvent]:
+    def get_timeline(
+        self, patient_id: int, limit: int = 100, offset: int = 0
+    ) -> list[TimelineEvent]:
         """获取患者的健康时间线，聚合所有类型的健康事件。"""
         return self.store.get_timeline(patient_id=patient_id, limit=limit, offset=offset)
 
@@ -453,13 +462,13 @@ class HealthService:
 注意：你只能做信息整理和科普解释，不能给出确诊或治疗方案，必须建议咨询专业医生。
 
 报告名称：{lab.test_name}
-检验机构：{lab.facility or '未知'}
-检验日期：{lab.completed_date or '未知'}
+检验机构：{lab.facility or "未知"}
+检验日期：{lab.completed_date or "未知"}
 
 检验项目：
 {components_text}
 
-整体结论：{lab.overall_interpretation or '无'}
+整体结论：{lab.overall_interpretation or "无"}
 
 请按以下结构输出：
 1. 【总体概况】一句话总结
@@ -475,14 +484,16 @@ class HealthService:
                 max_tokens=2000,
             )
             content = response.content if hasattr(response, "content") else str(response)
-            insight = self.store.create_insight(HealthInsightCreate(
-                patient_id=lab.patient_id,
-                target_type="lab_result",
-                target_id=lab_result_id,
-                insight_type="interpretation",
-                content=content,
-                model=getattr(response, "model", ""),
-            ))
+            insight = self.store.create_insight(
+                HealthInsightCreate(
+                    patient_id=lab.patient_id,
+                    target_type="lab_result",
+                    target_id=lab_result_id,
+                    insight_type="interpretation",
+                    content=content,
+                    model=getattr(response, "model", ""),
+                )
+            )
             return insight
         except Exception as exc:
             logging.getLogger(__name__).warning("AI解读化验报告失败: %s", exc)
@@ -498,18 +509,18 @@ class HealthService:
 
 检查名称：{proc.procedure_name}
 检查类型：{proc.procedure_type}
-检查部位：{proc.body_part or '未知'}
-检查机构：{proc.facility or '未知'}
+检查部位：{proc.body_part or "未知"}
+检查机构：{proc.facility or "未知"}
 检查日期：{proc.procedure_date}
 
 检查所见：
-{proc.findings or '无'}
+{proc.findings or "无"}
 
 检查结论：
-{proc.conclusion or '无'}
+{proc.conclusion or "无"}
 
-异常摘要：{proc.abnormal_summary or '无'}
-随访建议：{proc.follow_up_recommendation or '无'}
+异常摘要：{proc.abnormal_summary or "无"}
+随访建议：{proc.follow_up_recommendation or "无"}
 
 请按以下结构输出：
 1. 【总体概况】一句话总结
@@ -525,14 +536,16 @@ class HealthService:
                 max_tokens=2000,
             )
             content = response.content if hasattr(response, "content") else str(response)
-            insight = self.store.create_insight(HealthInsightCreate(
-                patient_id=proc.patient_id,
-                target_type="procedure",
-                target_id=procedure_id,
-                insight_type="interpretation",
-                content=content,
-                model=getattr(response, "model", ""),
-            ))
+            insight = self.store.create_insight(
+                HealthInsightCreate(
+                    patient_id=proc.patient_id,
+                    target_type="procedure",
+                    target_id=procedure_id,
+                    insight_type="interpretation",
+                    content=content,
+                    model=getattr(response, "model", ""),
+                )
+            )
             return insight
         except Exception as exc:
             logging.getLogger(__name__).warning("AI解读检查报告失败: %s", exc)
@@ -555,8 +568,11 @@ class HealthService:
         offset: int = 0,
     ) -> tuple[list[Appointment], int]:
         return self.store.list_appointments(
-            patient_id=patient_id, status=status,
-            upcoming_only=upcoming_only, limit=limit, offset=offset,
+            patient_id=patient_id,
+            status=status,
+            upcoming_only=upcoming_only,
+            limit=limit,
+            offset=offset,
         )
 
     def update_appointment(self, appointment_id: int, data: AppointmentUpdate) -> Appointment:
@@ -583,8 +599,12 @@ class HealthService:
         offset: int = 0,
     ) -> tuple[list[MedicationLog], int]:
         return self.store.list_medication_logs(
-            patient_id=patient_id, medication_id=medication_id,
-            start_date=start_date, end_date=end_date, limit=limit, offset=offset,
+            patient_id=patient_id,
+            medication_id=medication_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
         )
 
     def delete_medication_log(self, log_id: int) -> None:
@@ -595,6 +615,8 @@ class HealthService:
 
     # ── 药物相互作用检查 ───────────────────────────────────────
 
-    def check_drug_interactions(self, drug_name: str, existing_drugs: list[str]) -> list[DrugInteraction]:
+    def check_drug_interactions(
+        self, drug_name: str, existing_drugs: list[str]
+    ) -> list[DrugInteraction]:
         """检查新药与现有药物的相互作用。"""
         return self.store.check_drug_interactions(drug_name, existing_drugs)

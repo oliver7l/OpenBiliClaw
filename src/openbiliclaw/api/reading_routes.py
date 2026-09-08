@@ -9,9 +9,8 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from openbiliclaw.api.utils import (
@@ -24,6 +23,9 @@ from openbiliclaw.api.utils import apply_reading_exclusions as _apply_reading_ex
 from openbiliclaw.api.utils import article_fit_score as _article_fit_score
 from openbiliclaw.api.utils import load_interest_keywords as _load_interest_keywords
 from openbiliclaw.api.utils import rule_parse_reading_intent as _rule_parse_reading_intent
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +280,8 @@ def register_reading_routes(app: FastAPI, ctx: Any) -> None:
     def reading_stats() -> JSONResponse:
         """Reading-library dashboard: totals, monthly finished trend,
         source mix, top tags, notes count, and a light interest-shift
-        view (recently-read tags vs the current interest profile)."""
+        view (recently-read tags vs the current interest profile).
+        """
         database = getattr(ctx, "database", None)
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)

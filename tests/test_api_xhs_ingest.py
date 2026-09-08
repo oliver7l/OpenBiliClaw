@@ -663,7 +663,8 @@ class TestXhsObservedUrls:
         Reproduces the leak where the user's own posts ("自家宝安领航城...
         165㎡大五房出售") landed in the XHS recommendation pool because the
         passive collector didn't carry self_info — only bootstrap_profile
-        did, and the search task pre-populated the pool first."""
+        did, and the search task pre-populated the pool first.
+        """
         app_client, db, _ = xhs_task_client
 
         own_url = "https://www.xiaohongshu.com/explore/passive-own-001?xsec_token=A"
@@ -706,7 +707,8 @@ class TestXhsObservedUrls:
     ) -> None:
         """v0.3.57+: once self_info arrives on any request, subsequent
         observed-urls posts (without their own self_info) must still
-        filter self-authored notes via the persisted state."""
+        filter self-authored notes via the persisted state.
+        """
         app_client, db, _ = xhs_task_client
 
         # 1st request: bring self_info
@@ -832,7 +834,8 @@ class TestXhsObservedUrls:
     ) -> None:
         """v0.3.57+: extension v0.3.10 may send self_info at the top of
         the task-result payload too. Top-level wins over the older
-        debug.xhs_bootstrap.steps[*].self_info nested location."""
+        debug.xhs_bootstrap.steps[*].self_info nested location.
+        """
         from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 
         app_client, db, _ = xhs_task_client
@@ -918,7 +921,8 @@ class TestXhsObservedUrls:
         xhs_task_client: tuple[TestClient, Database, RecordingMemoryManager],
     ) -> None:
         """When self_info arrives for the first time, already-pooled self rows
-        must be suppressed in the same request lifecycle."""
+        must be suppressed in the same request lifecycle.
+        """
         app_client, db, _ = xhs_task_client
 
         # Pre-seed a self-authored row before any self_info exists.
@@ -1193,7 +1197,8 @@ class TestXhsTaskResults:
         xhs_task_client: tuple[TestClient, Database, RecordingMemoryManager],
     ) -> None:
         """A second bootstrap task returning the same note must not replay
-        old profile signals into memory / incremental profile updates."""
+        old profile signals into memory / incremental profile updates.
+        """
         from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 
         app_client, db, memory = xhs_task_client

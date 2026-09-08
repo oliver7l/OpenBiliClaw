@@ -6,20 +6,22 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .cloner import clone_website
 from .models import (
+    CloneRequest,
     CloneSite,
     CloneSiteCreate,
     CloneSiteUpdate,
     CloneStats,
-    CloneRequest,
     CloneStatus,
 )
-from .store import CloneStore
+
+if TYPE_CHECKING:
+    from .store import CloneStore
 
 logger = logging.getLogger(__name__)
 
@@ -134,16 +136,18 @@ class CloneService:
             # 用更友好的方式推断名称
             name = _friendly_name(slug)
 
-            site = self._store.create_site(CloneSiteCreate(
-                name=name,
-                slug=slug,
-                source_url=source_url,
-                local_path=slug,
-                description="",
-                category=_infer_category(slug),
-                status=CloneStatus.CLONED,
-                tags=[],
-            ))
+            site = self._store.create_site(
+                CloneSiteCreate(
+                    name=name,
+                    slug=slug,
+                    source_url=source_url,
+                    local_path=slug,
+                    description="",
+                    category=_infer_category(slug),
+                    status=CloneStatus.CLONED,
+                    tags=[],
+                )
+            )
             self._store.update_site_size(site.id, size_bytes, file_count)
             site.size_bytes = size_bytes
             site.file_count = file_count
@@ -167,16 +171,18 @@ class CloneService:
         slug = _slugify(request.name)
         site_dir = self._sites_dir / slug
 
-        site = self._store.create_site(CloneSiteCreate(
-            name=request.name,
-            slug=slug,
-            source_url=request.url,
-            local_path=slug,
-            description="",
-            category=request.category,
-            status=CloneStatus.CLONING,
-            tags=request.tags,
-        ))
+        site = self._store.create_site(
+            CloneSiteCreate(
+                name=request.name,
+                slug=slug,
+                source_url=request.url,
+                local_path=slug,
+                description="",
+                category=request.category,
+                status=CloneStatus.CLONING,
+                tags=request.tags,
+            )
+        )
 
         try:
             result = clone_website(
@@ -185,19 +191,28 @@ class CloneService:
                 depth=request.depth,
             )
             if result["success"]:
-                self._store.update_site(site.id, CloneSiteUpdate(
-                    status=CloneStatus.CLONED,
-                ))
+                self._store.update_site(
+                    site.id,
+                    CloneSiteUpdate(
+                        status=CloneStatus.CLONED,
+                    ),
+                )
                 self._store.update_site_size(site.id, result["size_bytes"], result["file_count"])
             else:
-                self._store.update_site(site.id, CloneSiteUpdate(
-                    status=CloneStatus.FAILED,
-                ))
-        except Exception as exc:
+                self._store.update_site(
+                    site.id,
+                    CloneSiteUpdate(
+                        status=CloneStatus.FAILED,
+                    ),
+                )
+        except Exception:
             logger.exception("克隆站点失败: %s", request.url)
-            self._store.update_site(site.id, CloneSiteUpdate(
-                status=CloneStatus.FAILED,
-            ))
+            self._store.update_site(
+                site.id,
+                CloneSiteUpdate(
+                    status=CloneStatus.FAILED,
+                ),
+            )
 
         return self._store.get_site(site.id) or site
 

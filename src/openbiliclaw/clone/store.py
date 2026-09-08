@@ -10,9 +10,12 @@ import logging
 import sqlite3
 import threading
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from ..storage.database import Database
 from .models import CloneSite, CloneSiteCreate, CloneSiteUpdate, CloneStats
+
+if TYPE_CHECKING:
+    from ..storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -102,36 +105,34 @@ class CloneStore:
             ),
         )
         self.conn.commit()
-        return self._row_to_site({
-            "id": cursor.lastrowid,
-            "name": data.name,
-            "slug": data.slug,
-            "source_url": data.source_url,
-            "local_path": data.local_path,
-            "description": data.description,
-            "category": data.category,
-            "status": data.status.value,
-            "size_bytes": 0,
-            "file_count": 0,
-            "tags": tags_json,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        })
+        return self._row_to_site(
+            {
+                "id": cursor.lastrowid,
+                "name": data.name,
+                "slug": data.slug,
+                "source_url": data.source_url,
+                "local_path": data.local_path,
+                "description": data.description,
+                "category": data.category,
+                "status": data.status.value,
+                "size_bytes": 0,
+                "file_count": 0,
+                "tags": tags_json,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+        )
 
     def get_site(self, site_id: int) -> CloneSite | None:
         """根据 ID 获取站点。"""
         self.initialize()
-        row = self.conn.execute(
-            "SELECT * FROM clone_sites WHERE id = ?", (site_id,)
-        ).fetchone()
+        row = self.conn.execute("SELECT * FROM clone_sites WHERE id = ?", (site_id,)).fetchone()
         return self._row_to_site(row) if row else None
 
     def get_site_by_slug(self, slug: str) -> CloneSite | None:
         """根据 slug 获取站点。"""
         self.initialize()
-        row = self.conn.execute(
-            "SELECT * FROM clone_sites WHERE slug = ?", (slug,)
-        ).fetchone()
+        row = self.conn.execute("SELECT * FROM clone_sites WHERE slug = ?", (slug,)).fetchone()
         return self._row_to_site(row) if row else None
 
     def list_sites(
@@ -247,9 +248,7 @@ class CloneStore:
         ).fetchall()
         status_dist = {r[0]: int(r[1]) for r in status_rows}
 
-        tag_count = self.conn.execute(
-            "SELECT COUNT(*) FROM clone_tags"
-        ).fetchone()
+        tag_count = self.conn.execute("SELECT COUNT(*) FROM clone_tags").fetchone()
         total_tags = int(tag_count[0]) if tag_count else 0
 
         return CloneStats(
@@ -267,9 +266,7 @@ class CloneStore:
     def list_tags(self) -> list[dict]:
         """列出所有标签。"""
         self.initialize()
-        rows = self.conn.execute(
-            "SELECT * FROM clone_tags ORDER BY count DESC"
-        ).fetchall()
+        rows = self.conn.execute("SELECT * FROM clone_tags ORDER BY count DESC").fetchall()
         return [{"id": r[0], "name": r[1], "count": r[2]} for r in rows]
 
     def _sync_tags(self, tags: list[str]) -> None:

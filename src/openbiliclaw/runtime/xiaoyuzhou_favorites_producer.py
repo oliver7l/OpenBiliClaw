@@ -20,7 +20,6 @@ import os
 import re
 import sqlite3
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -74,7 +73,9 @@ def _run_xyz_cmd(args: list[str], timeout: int = 60) -> list[dict[str, Any]]:
         timeout=timeout,
     )
     if result.returncode != 0:
-        logger.error("xyz %s failed (rc=%d): %s", " ".join(args[:3]), result.returncode, result.stderr[:500])
+        logger.error(
+            "xyz %s failed (rc=%d): %s", " ".join(args[:3]), result.returncode, result.stderr[:500]
+        )
         return []
     items: list[dict[str, Any]] = []
     for line in result.stdout.strip().splitlines():
@@ -128,7 +129,7 @@ def _parse_subscriptions(podcasts: list[dict[str, Any]]) -> list[dict[str, Any]]
         episode_count = int(pod.get("episode_count", 0) or 0)
         latest_pub = str(pod.get("latest_episode_pub_date", "") or "").strip()
         has_unread = bool(pod.get("has_unread", False))
-        cover_url = str(pod.get("cover_url", "") or "").strip()
+        str(pod.get("cover_url", "") or "").strip()
 
         if not title:
             title = f"小宇宙播客 {pid}"
@@ -183,7 +184,7 @@ def _parse_history(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         seen.add(eid)
 
-        pid = str(ep.get("pid", "") or "").strip()
+        str(ep.get("pid", "") or "").strip()
         podcast_title = str(ep.get("podcast_title", "") or "").strip()
         title = str(ep.get("title", "") or "").strip()
         duration_seconds = int(ep.get("duration_seconds", 0) or 0)
@@ -328,7 +329,14 @@ def _run_once(
             len(all_rows),
             len(unique_rows),
         )
-        return {"ok": True, **stats, "total_fetched": len(all_rows), "unique": len(unique_rows), "inserted": 0, "dry_run": True}
+        return {
+            "ok": True,
+            **stats,
+            "total_fetched": len(all_rows),
+            "unique": len(unique_rows),
+            "inserted": 0,
+            "dry_run": True,
+        }
 
     conn = _obc_connect(DB_PATH)
     try:
@@ -381,7 +389,9 @@ def run_forever(
                 if unique > 0:
                     guard.record_success()
                 else:
-                    guard.record_failure(reason="empty_result", detail="xiaoyuzhou returned 0 unique items")
+                    guard.record_failure(
+                        reason="empty_result", detail="xiaoyuzhou returned 0 unique items"
+                    )
                 logger.info(
                     "xiaoyuzhou ok: %d unique, %d new, %d duplicate",
                     unique,
@@ -406,15 +416,21 @@ def run_forever(
 
 
 def _main() -> None:
-    parser = argparse.ArgumentParser(description="Xiaoyuzhou personal content producer (subscriptions/history)")
+    parser = argparse.ArgumentParser(
+        description="Xiaoyuzhou personal content producer (subscriptions/history)"
+    )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run forever (24h interval)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes")
     parser.add_argument("--subs", action="store_true", help="Fetch subscribed podcasts")
     parser.add_argument("--history", action="store_true", help="Fetch play history")
     parser.add_argument("--all", action="store_true", help="Fetch all modes (subs + history)")
-    parser.add_argument("--history-limit", type=int, default=100, help="Max history items (default: 100)")
-    parser.add_argument("--interval", type=int, default=24, help="Loop interval in hours (default: 24)")
+    parser.add_argument(
+        "--history-limit", type=int, default=100, help="Max history items (default: 100)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=24, help="Loop interval in hours (default: 24)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -433,7 +449,9 @@ def _main() -> None:
         logger.info("no mode specified, defaulting to --all")
 
     if args.once or args.dry_run:
-        result = _run_once(subs=subs, history=history, history_limit=args.history_limit, dry_run=args.dry_run)
+        result = _run_once(
+            subs=subs, history=history, history_limit=args.history_limit, dry_run=args.dry_run
+        )
         if result.get("ok"):
             logger.info(
                 "xiaoyuzhou ok: %d unique, %d new, %d duplicate",
@@ -446,7 +464,12 @@ def _main() -> None:
         return
 
     if args.loop:
-        run_forever(subs=subs, history=history, history_limit=args.history_limit, interval_hours=args.interval)
+        run_forever(
+            subs=subs,
+            history=history,
+            history_limit=args.history_limit,
+            interval_hours=args.interval,
+        )
         return
 
     parser.print_help()

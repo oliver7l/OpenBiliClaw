@@ -507,7 +507,8 @@ async def test_flag_on_planner_to_fetch_to_yield_end_to_end(db: Database) -> Non
 
 async def test_flag_flipped_off_mid_loop_no_ops(db: Database) -> None:
     """Flag flipped OFF mid-run → the planner pass and the fetch coordinator both
-    no-op: no LLM call, no claims, no store writes (clean opt-out / rollback)."""
+    no-op: no LLM call, no claims, no store writes (clean opt-out / rollback).
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
 

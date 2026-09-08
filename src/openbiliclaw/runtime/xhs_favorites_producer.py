@@ -20,11 +20,10 @@ import os
 import re
 import sqlite3
 import subprocess
-import sys
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
@@ -98,7 +97,12 @@ def _fetch_all_favorites(max_pages: int = 3) -> list[dict[str, Any]]:
     seen_ids: set[str] = set()
 
     for page in range(max_pages):
-        logger.info("fetching xhs favorites page %d/%d (cursor=%s)", page + 1, max_pages, cursor or "initial")
+        logger.info(
+            "fetching xhs favorites page %d/%d (cursor=%s)",
+            page + 1,
+            max_pages,
+            cursor or "initial",
+        )
         data = _fetch_favorites_page(cursor)
         if not data:
             break
@@ -271,7 +275,9 @@ def _run_once(pages: int = 3, dry_run: bool = False) -> dict[str, Any]:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
     if dry_run:
-        logger.info("dry-run: %d items fetched, %d valid rows (not inserted)", len(items), len(rows))
+        logger.info(
+            "dry-run: %d items fetched, %d valid rows (not inserted)", len(items), len(rows)
+        )
         return {
             "ok": True,
             "items_fetched": len(items),
@@ -324,7 +330,9 @@ def run_forever(pages: int = 3, interval_hours: int = 24) -> None:
                 if fetched > 0:
                     guard.record_success()
                 else:
-                    guard.record_failure(reason="empty_result", detail="xhs favorites returned 0 items")
+                    guard.record_failure(
+                        reason="empty_result", detail="xhs favorites returned 0 items"
+                    )
                 logger.info(
                     "xhs favorites ok: %d fetched, %d new, %d duplicate",
                     fetched,
@@ -353,8 +361,12 @@ def _main() -> None:
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run forever (24h interval)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes")
-    parser.add_argument("--pages", type=int, default=3, help="Max pages to fetch per cycle (default: 3)")
-    parser.add_argument("--interval", type=int, default=24, help="Loop interval in hours (default: 24)")
+    parser.add_argument(
+        "--pages", type=int, default=3, help="Max pages to fetch per cycle (default: 3)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=24, help="Loop interval in hours (default: 24)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(

@@ -7,10 +7,9 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from openbiliclaw.self_evolution import (
@@ -81,7 +80,9 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         return {"cards": [c.to_dict() for c in cards], "total": len(cards)}
 
     @router.post("/knowledge-cards/generate")
-    async def generate_knowledge_cards(article_id: int = None, limit: int = 20, max_per_article: int = 3):
+    async def generate_knowledge_cards(
+        article_id: int = None, limit: int = 20, max_per_article: int = 3
+    ):
         """Generate knowledge cards from articles."""
         gen = KnowledgeCardGenerator(db_path, llm_service=llm_service)
         if article_id:
@@ -158,7 +159,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def list_learning_paths(status: str | None = None, limit: int = 20):
         """List all learning paths."""
         from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = llm_service
+
         generator = LearningPathGenerator(db_path, llm_service=llm_service)
         paths = generator.list_paths(status=status, limit=limit)
         return {"paths": [p.to_dict() for p in paths]}
@@ -173,12 +174,12 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - max_articles: 最多考虑多少篇文章（默认30）
         """
         from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
+
         topic = (payload or {}).get("topic", "").strip()
         if not topic:
             return JSONResponse({"error": "topic is required"}, status_code=400)
         description = (payload or {}).get("description", "")
         max_articles = int((payload or {}).get("max_articles", 30))
-        llm_service = llm_service
         generator = LearningPathGenerator(db_path, llm_service=llm_service)
         try:
             path = generator.generate_path(
@@ -195,7 +196,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def get_learning_path(path_id: str):
         """Get a learning path by ID."""
         from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = llm_service
+
         generator = LearningPathGenerator(db_path, llm_service=llm_service)
         path = generator.get_path(path_id)
         if path is None:
@@ -203,9 +204,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         return {"path": path.to_dict()}
 
     @router.patch("/learning-paths/{path_id}/steps/{step_index}")
-    async def update_learning_step(
-        path_id: str, step_index: int, payload: dict[str, Any]
-    ):
+    async def update_learning_step(path_id: str, step_index: int, payload: dict[str, Any]):
         """Update progress on a learning path step.
 
         Request body:
@@ -213,13 +212,11 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - notes: 学习笔记（可选）
         """
         from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = llm_service
+
         generator = LearningPathGenerator(db_path, llm_service=llm_service)
         completed = (payload or {}).get("completed")
         notes = (payload or {}).get("notes")
-        path = generator.update_step_progress(
-            path_id, step_index, completed=completed, notes=notes
-        )
+        path = generator.update_step_progress(path_id, step_index, completed=completed, notes=notes)
         if path is None:
             return JSONResponse({"error": "path or step not found"}, status_code=404)
         return {"status": "ok", "path": path.to_dict()}
@@ -228,7 +225,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def delete_learning_path(path_id: str):
         """Delete a learning path."""
         from openbiliclaw.self_evolution.learning_path import LearningPathGenerator
-        llm_service = llm_service
+
         generator = LearningPathGenerator(db_path, llm_service=llm_service)
         ok = generator.delete_path(path_id)
         if not ok:
@@ -241,7 +238,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def list_tldrs(limit: int = 50, source_type: str | None = None):
         """List all cached TL;DR summaries."""
         from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = llm_service
+
         generator = TLDRGenerator(db_path, llm_service=llm_service)
         tldrs = generator.list_tldrs(limit=limit, source_type=source_type)
         return {"tldrs": [t.to_dict() for t in tldrs], "count": len(tldrs)}
@@ -250,7 +247,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def get_tldr(article_id: int):
         """Get a TL;DR for a specific article (generates if not cached)."""
         from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = llm_service
+
         generator = TLDRGenerator(db_path, llm_service=llm_service)
         tldr = generator.generate_tldr(article_id)
         if tldr is None:
@@ -261,7 +258,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def regenerate_tldr(article_id: int):
         """Force regenerate a TL;DR for an article."""
         from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = llm_service
+
         generator = TLDRGenerator(db_path, llm_service=llm_service)
         tldr = generator.generate_tldr(article_id, force=True)
         if tldr is None:
@@ -278,8 +275,8 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - force: regenerate even if exists (default false)
         """
         from openbiliclaw.self_evolution.tldr import TLDRGenerator
+
         payload = payload or {}
-        llm_service = llm_service
         generator = TLDRGenerator(db_path, llm_service=llm_service)
         try:
             results = generator.batch_generate(
@@ -287,7 +284,11 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
                 limit=int(payload.get("limit", 20)),
                 force=payload.get("force", False),
             )
-            return {"status": "ok", "generated": len(results), "tldrs": [t.to_dict() for t in results]}
+            return {
+                "status": "ok",
+                "generated": len(results),
+                "tldrs": [t.to_dict() for t in results],
+            }
         except Exception as e:
             logger.exception("批量生成 TL;DR 失败")
             return JSONResponse({"error": str(e)}, status_code=500)
@@ -296,7 +297,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def delete_tldr(article_id: int):
         """Delete a cached TL;DR."""
         from openbiliclaw.self_evolution.tldr import TLDRGenerator
-        llm_service = llm_service
+
         generator = TLDRGenerator(db_path, llm_service=llm_service)
         ok = generator.delete_tldr(article_id)
         if not ok:
@@ -315,8 +316,8 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - max_cross_platform: maximum cross-platform insights (default 10)
         """
         from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
+
         payload = payload or {}
-        llm_service = llm_service
         analyzer = ContentInsightsAnalyzer(db_path, llm_service=llm_service)
         try:
             report = analyzer.generate_report(
@@ -333,7 +334,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def get_latest_insights():
         """Get the latest content insights report."""
         from openbiliclaw.self_evolution.insights import ContentInsightsAnalyzer
-        llm_service = llm_service
+
         analyzer = ContentInsightsAnalyzer(db_path, llm_service=llm_service)
         report = analyzer.get_latest_report()
         if report is None:
@@ -346,6 +347,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def reading_schedule_stats():
         """Get reading schedule statistics."""
         from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
         scheduler = ReadingScheduler(db_path)
         return scheduler.get_stats()
 
@@ -359,6 +361,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
             new_count: Maximum number of new articles.
         """
         from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
         scheduler = ReadingScheduler(db_path)
         queue = scheduler.get_daily_queue(limit=limit, include_new=include_new, new_count=new_count)
         return {"queue": [item.to_dict() for item in queue], "count": len(queue)}
@@ -367,6 +370,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def reading_schedule_article(article_id: int):
         """Get reading schedule for a specific article."""
         from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
         scheduler = ReadingScheduler(db_path)
         item = scheduler.get_article_schedule(article_id)
         if item is None:
@@ -382,12 +386,16 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - reading_percent: Reading progress percentage (0-100), optional
         """
         from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler, ReviewRating
+
         payload = payload or {}
         rating_str = payload.get("rating", "good")
         try:
             rating = ReviewRating(rating_str)
         except ValueError:
-            return JSONResponse({"error": f"invalid rating: {rating_str}, must be one of: again/hard/good/easy"}, status_code=400)
+            return JSONResponse(
+                {"error": f"invalid rating: {rating_str}, must be one of: again/hard/good/easy"},
+                status_code=400,
+            )
 
         reading_percent = payload.get("reading_percent")
         if reading_percent is not None:
@@ -407,6 +415,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - limit: Maximum number of articles to register (default 1000)
         """
         from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
         payload = payload or {}
         limit = int(payload.get("limit", 1000))
         scheduler = ReadingScheduler(db_path)
@@ -417,12 +426,22 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     async def self_evolution_status():
         """Get self-evolution module status and stats."""
         import sqlite3
+
         conn = sqlite3.connect(db_path)
         stats = {}
-        for table in ["insight_reports", "drift_reports", "topic_mining_reports",
-                       "knowledge_cards", "knowledge_graph", "push_notifications",
-                       "learning_paths", "article_tldrs", "content_insights_reports",
-                       "reading_schedule", "article_snapshots"]:
+        for table in [
+            "insight_reports",
+            "drift_reports",
+            "topic_mining_reports",
+            "knowledge_cards",
+            "knowledge_graph",
+            "push_notifications",
+            "learning_paths",
+            "article_tldrs",
+            "content_insights_reports",
+            "reading_schedule",
+            "article_snapshots",
+        ]:
             try:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 stats[table] = count
@@ -442,6 +461,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
             limit: Maximum number of candidates to return.
         """
         from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
+
         generator = AutoTopicGenerator(db_path)
         candidates = generator.discover_candidates(min_mentions=min_mentions, limit=limit)
         return {
@@ -478,6 +498,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
             AutoTopicGenerator,
             TopicCandidate,
         )
+
         payload = payload or {}
 
         # 从候选主题生成，或从请求参数创建
@@ -494,13 +515,15 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
 
         max_articles = int(payload.get("max_articles", 50))
         use_llm = bool(payload.get("use_llm", True))
-        llm_service = llm_service if use_llm else None
+        _llm_svc = llm_service if use_llm else None
 
         generator = AutoTopicGenerator(db_path, llm_service=llm_service)
         topic = generator.generate_topic(candidate, max_articles=max_articles, use_llm=use_llm)
 
         if topic is None:
-            return JSONResponse({"error": "Failed to generate topic (no articles found)"}, status_code=404)
+            return JSONResponse(
+                {"error": "Failed to generate topic (no articles found)"}, status_code=404
+            )
 
         return topic.to_dict()
 
@@ -515,13 +538,14 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         - use_llm: Whether to use LLM for summary (default true)
         """
         from openbiliclaw.self_evolution.auto_topic_generator import AutoTopicGenerator
+
         payload = payload or {}
 
         min_mentions = int(payload.get("min_mentions", 50))
         max_topics = int(payload.get("max_topics", 3))
         max_articles_per_topic = int(payload.get("max_articles_per_topic", 50))
         use_llm = bool(payload.get("use_llm", True))
-        llm_service = llm_service if use_llm else None
+        _llm_svc = llm_service if use_llm else None
 
         generator = AutoTopicGenerator(db_path, llm_service=llm_service)
         topics = generator.auto_generate(
@@ -535,6 +559,5 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
             "generated": [t.to_dict() for t in topics],
             "count": len(topics),
         }
-
 
     return router

@@ -99,7 +99,8 @@ def test_topic_fatigue_curve_grows_steeply_after_first_repeat() -> None:
 def test_combined_topic_fatigue_uses_max_of_key_and_group_axes() -> None:
     """Sibling topic_keys (动漫杂谈/补番/解说) escape per-key fatigue but
     saturate the topic_group axis (动漫). The combined helper must take
-    the max so the group signal isn't lost."""
+    the max so the group signal isn't lost.
+    """
     from openbiliclaw.discovery.engine import DiscoveredContent
     from openbiliclaw.recommendation.curator import ScoringContext
 
@@ -199,7 +200,8 @@ def test_feedback_dislike_franchise_penalty_propagates_to_same_ip() -> None:
 def test_feedback_dislike_franchise_does_not_penalize_unrelated_ip() -> None:
     """Counterpart: a 原神 dislike must NOT down-rank a 塞尔达 video.
     The franchise penalty is keyed strictly on franchise_key equality;
-    different IPs are unaffected."""
+    different IPs are unaffected.
+    """
     feedback = FeedbackSignals(disliked_franchises=frozenset({"原神"}))
     item = DiscoveredContent(
         bvid="BV3",
@@ -215,7 +217,8 @@ def test_feedback_dislike_franchise_no_penalty_when_franchise_key_empty() -> Non
     """Items the LLM didn't tag (general-interest content) must pass
     through with zero franchise penalty even if any franchise is
     currently disliked. Otherwise we'd silently penalize untagged rows
-    when the LLM hadn't yet processed them — wrong default."""
+    when the LLM hadn't yet processed them — wrong default.
+    """
     feedback = FeedbackSignals(disliked_franchises=frozenset({"原神"}))
     item = DiscoveredContent(
         bvid="BV4",

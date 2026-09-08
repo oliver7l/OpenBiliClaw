@@ -75,6 +75,7 @@ class TopicMiner:
 
     Args:
         db_path: Path to the SQLite database.
+
     """
 
     def __init__(self, db_path: str) -> None:
@@ -107,6 +108,7 @@ class TopicMiner:
 
         Returns:
             A MiningReport with all candidates and actions.
+
         """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=window_days)
@@ -142,15 +144,13 @@ class TopicMiner:
 
                 # Calculate average quality
                 all_content = recent + previous
-                qualities = [c.get("quality_score", 0) or 0 for c in all_content if c.get("quality_score")]
+                qualities = [
+                    c.get("quality_score", 0) or 0 for c in all_content if c.get("quality_score")
+                ]
                 avg_quality = sum(qualities) / len(qualities) if qualities else 0.5
 
                 # Sample titles
-                sample_titles = [
-                    (c.get("title") or "")[:80]
-                    for c in recent[:5]
-                    if c.get("title")
-                ]
+                sample_titles = [(c.get("title") or "")[:80] for c in recent[:5] if c.get("title")]
 
                 # Score the candidate
                 score = self._score_candidate(
@@ -192,7 +192,10 @@ class TopicMiner:
             # Auto-create topics if enabled
             if auto_create:
                 for candidate in report.candidates:
-                    if candidate.recommendation == "create" and candidate.score >= auto_create_threshold:
+                    if (
+                        candidate.recommendation == "create"
+                        and candidate.score >= auto_create_threshold
+                    ):
                         created = self._create_topic(conn, candidate)
                         if created:
                             report.created_topics.append(candidate.topic_name)
@@ -224,7 +227,9 @@ class TopicMiner:
         topics: dict[str, list[dict[str, Any]]] = {}
 
         for row in rows:
-            text = " ".join(filter(None, [row["title"] or "", row["tags"] or "", row["ai_summary"] or ""]))
+            text = " ".join(
+                filter(None, [row["title"] or "", row["tags"] or "", row["ai_summary"] or ""])
+            )
             extracted = extract_topics(text, top_k=3)
 
             content = {
@@ -267,9 +272,7 @@ class TopicMiner:
 
         return volume_score + growth_score + quality_score + recency_score
 
-    def _find_related_topics(
-        self, topic: str, content_list: list[dict[str, Any]]
-    ) -> list[str]:
+    def _find_related_topics(self, topic: str, content_list: list[dict[str, Any]]) -> list[str]:
         """Find topics that frequently co-occur with the given topic."""
         co_occurrence: dict[str, int] = {}
 
@@ -319,8 +322,12 @@ class TopicMiner:
 
             # Add related content to topic
             # (This would need a topic_articles junction table)
-            logger.info("Created topic %s (id=%d) with %d related content",
-                        candidate.topic_name, topic_id, candidate.content_count)
+            logger.info(
+                "Created topic %s (id=%d) with %d related content",
+                candidate.topic_name,
+                topic_id,
+                candidate.content_count,
+            )
 
             conn.commit()
             return True

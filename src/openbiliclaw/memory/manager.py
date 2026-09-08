@@ -827,6 +827,7 @@ class MemoryManager:
 
         Args:
             event: Behavioral event data.
+
         """
         event_type = str(event.get("event_type") or event.get("type") or "").strip()
         if event_type not in _EVENT_TYPES:

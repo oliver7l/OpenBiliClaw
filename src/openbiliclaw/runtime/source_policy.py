@@ -27,7 +27,6 @@ DEFAULT_POOL_SOURCE_SHARES = {
 
 def source_enabled_map(config: Any) -> dict[str, bool]:
     """Return enabled state for pool-accounted discovery sources."""
-
     sources_cfg = getattr(config, "sources", None)
     enabled: dict[str, bool] = {}
     for source in SOURCE_ORDER:
@@ -39,7 +38,6 @@ def source_enabled_map(config: Any) -> dict[str, bool]:
 
 def effective_pool_source_shares(config: Any) -> dict[str, int]:
     """Return configured source shares after disabled sources are removed."""
-
     scheduler = getattr(config, "scheduler", None)
     raw_shares = getattr(scheduler, "pool_source_shares", None)
     shares = _normalize_shares(raw_shares)
@@ -59,7 +57,6 @@ def suggest_pool_source_shares(
     default. This keeps large imports from dominating while still giving
     active optional platforms visible quota.
     """
-
     enabled = _normalize_enabled_sources(enabled_sources)
     fallback = {
         source: share

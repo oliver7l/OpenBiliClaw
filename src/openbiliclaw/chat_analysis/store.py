@@ -211,7 +211,11 @@ class ChatAnalysisStore:
         # Migration: add analyzed columns if missing (existing databases)
         for col in ("analyzed", "last_analyzed_at"):
             try:
-                c.execute(f"ALTER TABLE chat_sessions ADD COLUMN {col} TEXT DEFAULT ''" if col == "last_analyzed_at" else f"ALTER TABLE chat_sessions ADD COLUMN {col} INTEGER DEFAULT 0")
+                c.execute(
+                    f"ALTER TABLE chat_sessions ADD COLUMN {col} TEXT DEFAULT ''"
+                    if col == "last_analyzed_at"
+                    else f"ALTER TABLE chat_sessions ADD COLUMN {col} INTEGER DEFAULT 0"
+                )
             except sqlite3.OperationalError:
                 pass  # column already exists
         c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
@@ -310,9 +314,11 @@ class ChatAnalysisStore:
             if val is not None:
                 updates.append(f"{field} = ?")
                 params.append(
-                    val.value if field == "chat_type" and isinstance(val, ChatType) else
-                    int(val) if field == "analyzed" and isinstance(val, bool) else
-                    val
+                    val.value
+                    if field == "chat_type" and isinstance(val, ChatType)
+                    else int(val)
+                    if field == "analyzed" and isinstance(val, bool)
+                    else val
                 )
         if not updates:
             return self.get_session(session_id)
@@ -418,9 +424,7 @@ class ChatAnalysisStore:
         使用 FTS5 trigram 分词 + BM25 相关度排序。
         如果 FTS 表为空，回退到 LIKE 搜索。
         """
-        fts_count = self.conn.execute(
-            "SELECT COUNT(*) FROM chat_messages_fts"
-        ).fetchone()[0]
+        fts_count = self.conn.execute("SELECT COUNT(*) FROM chat_messages_fts").fetchone()[0]
 
         if fts_count == 0:
             return self._search_like_fallback(query, session_id, limit, offset)
@@ -459,7 +463,7 @@ class ChatAnalysisStore:
                 timestamp=r["timestamp"],
                 content=r["content"],
                 # BM25 负数 = 更相关，反转为正数
-                rank_score = round(-r["score"], 4),
+                rank_score=round(-r["score"], 4),
             )
             for r in rows
         ]
@@ -481,7 +485,8 @@ class ChatAnalysisStore:
             params.append(session_id)
         where = " AND ".join(conditions)
         count_row = self.conn.execute(
-            f"SELECT COUNT(*) FROM chat_messages cm WHERE {where}", params,
+            f"SELECT COUNT(*) FROM chat_messages cm WHERE {where}",
+            params,
         ).fetchone()
         total = count_row[0]
         rows = self.conn.execute(
@@ -590,9 +595,17 @@ class ChatAnalysisStore:
 
     # ── 话题 CRUD ──
 
-    def create_topic(self, session_id: int, topic_name: str, keywords: list[str] | None = None,
-                     summary: str = "", participant_count: int = 0, message_count: int = 0,
-                     start_time: str = "", end_time: str = "") -> ChatTopic:
+    def create_topic(
+        self,
+        session_id: int,
+        topic_name: str,
+        keywords: list[str] | None = None,
+        summary: str = "",
+        participant_count: int = 0,
+        message_count: int = 0,
+        start_time: str = "",
+        end_time: str = "",
+    ) -> ChatTopic:
         c = self.conn
         now = datetime.now().isoformat()
         cur = c.execute(
@@ -600,8 +613,17 @@ class ChatAnalysisStore:
                (session_id, topic_name, keywords, start_time, end_time,
                 participant_count, message_count, summary, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (session_id, topic_name, ",".join(keywords or []), start_time, end_time,
-             participant_count, message_count, summary, now),
+            (
+                session_id,
+                topic_name,
+                ",".join(keywords or []),
+                start_time,
+                end_time,
+                participant_count,
+                message_count,
+                summary,
+                now,
+            ),
         )
         return self._row_to_topic(
             c.execute("SELECT * FROM chat_topics WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -628,11 +650,18 @@ class ChatAnalysisStore:
 
     # ── 洞见 CRUD ──
 
-    def create_insight(self, session_id: int, insight_type: str, content: str,
-                       evidence_messages: list[int] | None = None, confidence: float = 0.0) -> ChatInsight:
+    def create_insight(
+        self,
+        session_id: int,
+        insight_type: str,
+        content: str,
+        evidence_messages: list[int] | None = None,
+        confidence: float = 0.0,
+    ) -> ChatInsight:
         c = self.conn
         now = datetime.now().isoformat()
         import json
+
         ev = json.dumps(evidence_messages or [])
         cur = c.execute(
             """INSERT INTO chat_insights
@@ -644,8 +673,9 @@ class ChatAnalysisStore:
             c.execute("SELECT * FROM chat_insights WHERE id = ?", (cur.lastrowid,)).fetchone()
         )
 
-    def get_insights(self, session_id: int | None = None, insight_type: str | None = None,
-                     limit: int = 50) -> list[ChatInsight]:
+    def get_insights(
+        self, session_id: int | None = None, insight_type: str | None = None, limit: int = 50
+    ) -> list[ChatInsight]:
         conditions: list[str] = []
         params: list[Any] = []
         if session_id is not None:
@@ -670,9 +700,15 @@ class ChatAnalysisStore:
 
     # ── 嵌入向量 CRUD ──
 
-    def create_embedding(self, message_id: int, session_id: int, vector: list[float],
-                         model: str = "sentence-transformers") -> ChatEmbedding:
-        import struct, json
+    def create_embedding(
+        self,
+        message_id: int,
+        session_id: int,
+        vector: list[float],
+        model: str = "sentence-transformers",
+    ) -> ChatEmbedding:
+        import struct
+
         c = self.conn
         now = datetime.now().isoformat()
         blob = struct.pack(f"{len(vector)}f", *vector)
@@ -683,12 +719,20 @@ class ChatAnalysisStore:
             (message_id, session_id, blob, len(vector), model, now),
         )
         return ChatEmbedding(
-            id=cur.lastrowid, message_id=message_id, session_id=session_id,
-            vector=vector, dimension=len(vector), model=model, created_at=datetime.now(),
+            id=cur.lastrowid,
+            message_id=message_id,
+            session_id=session_id,
+            vector=vector,
+            dimension=len(vector),
+            model=model,
+            created_at=datetime.now(),
         )
 
-    def get_embeddings(self, session_id: int | None = None, limit: int = 100) -> list[ChatEmbedding]:
+    def get_embeddings(
+        self, session_id: int | None = None, limit: int = 100
+    ) -> list[ChatEmbedding]:
         import struct
+
         if session_id:
             rows = self.conn.execute(
                 "SELECT * FROM chat_embeddings WHERE session_id = ? ORDER BY id DESC LIMIT ?",
@@ -702,16 +746,25 @@ class ChatAnalysisStore:
         for r in rows:
             dim = r["dimension"]
             vec = list(struct.unpack(f"{dim}f", r["vector"]))
-            results.append(ChatEmbedding(
-                id=r["id"], message_id=r["message_id"], session_id=r["session_id"],
-                vector=vec, dimension=dim, model=r["model"], created_at=r["created_at"],
-            ))
+            results.append(
+                ChatEmbedding(
+                    id=r["id"],
+                    message_id=r["message_id"],
+                    session_id=r["session_id"],
+                    vector=vec,
+                    dimension=dim,
+                    model=r["model"],
+                    created_at=r["created_at"],
+                )
+            )
         return results
 
-    def search_similar_messages(self, query_vector: list[float], session_id: int | None = None,
-                                 limit: int = 20) -> list[tuple[ChatSearchResult, float]]:
+    def search_similar_messages(
+        self, query_vector: list[float], session_id: int | None = None, limit: int = 20
+    ) -> list[tuple[ChatSearchResult, float]]:
         """向量相似度搜索（余弦相似度）。"""
-        import math, struct
+        import math
+
         embeddings = self.get_embeddings(session_id=session_id, limit=5000)
         if not embeddings:
             return []
@@ -734,16 +787,28 @@ class ChatAnalysisStore:
 
         results: list[tuple[ChatSearchResult, float]] = []
         for msg_id, sim in top:
-            row = self.conn.execute("""SELECT cm.id, cm.session_id, cs.title as session_title,
+            row = self.conn.execute(
+                """SELECT cm.id, cm.session_id, cs.title as session_title,
                 cm.sender, cm.timestamp, cm.content
                 FROM chat_messages cm JOIN chat_sessions cs ON cm.session_id = cs.id
-                WHERE cm.id = ?""", (msg_id,)).fetchone()
+                WHERE cm.id = ?""",
+                (msg_id,),
+            ).fetchone()
             if row:
-                results.append((ChatSearchResult(
-                    message_id=row["id"], session_id=row["session_id"],
-                    session_title=row["session_title"], sender=row["sender"],
-                    timestamp=row["timestamp"], content=row["content"], rank_score=round(sim, 4),
-                ), sim))
+                results.append(
+                    (
+                        ChatSearchResult(
+                            message_id=row["id"],
+                            session_id=row["session_id"],
+                            session_title=row["session_title"],
+                            sender=row["sender"],
+                            timestamp=row["timestamp"],
+                            content=row["content"],
+                            rank_score=round(sim, 4),
+                        ),
+                        sim,
+                    )
+                )
         return results
 
     def count_embeddings(self) -> int:
@@ -920,6 +985,7 @@ class ChatAnalysisStore:
 
     def _row_to_insight(self, row: sqlite3.Row) -> ChatInsight:
         import json
+
         ev = json.loads(row["evidence_messages"]) if row["evidence_messages"] else []
         return ChatInsight(
             id=row["id"],

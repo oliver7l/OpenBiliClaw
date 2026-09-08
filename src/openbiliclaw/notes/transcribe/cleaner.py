@@ -28,6 +28,7 @@ class TextCleaner:
 
         Returns:
             包含清洗后文本和统计信息的字典。
+
         """
         if not raw_transcript:
             return {

@@ -161,7 +161,6 @@ def _batch_results_by_content_key(
 
 def _call_accepts_keyword(fn: Any, name: str) -> bool:
     """Return whether a callable accepts a keyword argument."""
-
     try:
         signature = inspect.signature(fn)
     except (TypeError, ValueError):
@@ -405,6 +404,7 @@ class RecommendationEngine:
 
         Returns:
             List of personalized recommendations.
+
         """
         label = "realtime" if expression_mode == "realtime" else "pool"
         multiplier = 4 if excluded_bvids else 3
@@ -975,6 +975,7 @@ class RecommendationEngine:
                 expression copy — sharing one limit would starve delight
                 scoring whenever the copy queue is short.
             batch_size: Batch size for expression generation LLM calls.
+
         """
         # v0.3.59+: classify_pool_backlog fires as a detached task instead
         # of awaiting. Previously precompute waited for classify to finish
@@ -1187,6 +1188,7 @@ class RecommendationEngine:
 
         Returns:
             Number of items classified.
+
         """
         if self._classify_lock.locked():
             return 0  # Another classify task is already running
@@ -1493,6 +1495,7 @@ class RecommendationEngine:
 
         Returns:
             (delight_reason, delight_hook) tuple.
+
         """
         from openbiliclaw.llm.prompts import build_delight_reason_prompt
 
@@ -2008,6 +2011,7 @@ class RecommendationEngine:
 
         Returns:
             A PersonalTopic with a custom title and description.
+
         """
         # TODO: Use LLM to create a personal topic narrative
         return PersonalTopic()
@@ -2029,6 +2033,7 @@ class RecommendationEngine:
 
         Returns:
             Expression text and a lightly personalized topic label.
+
         """
         generated = await self._try_generate_expression(content, profile)
         if generated is not None:

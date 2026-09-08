@@ -100,6 +100,7 @@ class InterestDriftDetector:
 
     Args:
         db_path: Path to the SQLite database.
+
     """
 
     def __init__(self, db_path: str) -> None:
@@ -130,6 +131,7 @@ class InterestDriftDetector:
 
         Returns:
             A DriftReport with all drift measurements and alerts.
+
         """
         if end_date is None:
             end_date = datetime.now()
@@ -195,7 +197,7 @@ class InterestDriftDetector:
                 # Simple z-score approximation
                 expected = total_current * (prev / max(total_previous, 1))
                 variance = max(expected, 1.0)
-                z_score = (curr - expected) / (variance ** 0.5) if variance > 0 else 0.0
+                z_score = (curr - expected) / (variance**0.5) if variance > 0 else 0.0
 
                 drifts.append(
                     TopicDrift(
@@ -204,7 +206,9 @@ class InterestDriftDetector:
                         previous_count=prev,
                         current_ratio=curr_ratio,
                         previous_ratio=prev_ratio,
-                        change_ratio=min(change_ratio, 10.0) if change_ratio != float("inf") else 10.0,
+                        change_ratio=min(change_ratio, 10.0)
+                        if change_ratio != float("inf")
+                        else 10.0,
                         direction=direction,
                         significance=significance,
                         z_score=z_score,
@@ -243,9 +247,7 @@ class InterestDriftDetector:
 
         return report
 
-    def _collect_topics(
-        self, conn: Any, start: datetime, end: datetime
-    ) -> dict[str, int]:
+    def _collect_topics(self, conn: Any, start: datetime, end: datetime) -> dict[str, int]:
         """Collect topic distribution for a time window."""
         rows = conn.execute(
             """
@@ -263,7 +265,9 @@ class InterestDriftDetector:
         topics: dict[str, int] = {}
         for row in rows:
             text = " ".join(
-                filter(None, [row["title"] or "", row["tags"] or "", (row["content_text"] or "")[:300]])
+                filter(
+                    None, [row["title"] or "", row["tags"] or "", (row["content_text"] or "")[:300]]
+                )
             )
             for topic in extract_topics(text, top_k=3):
                 topics[topic] = topics.get(topic, 0) + 1
@@ -279,6 +283,7 @@ class InterestDriftDetector:
         prev_end: datetime,
     ) -> list[PlatformDrift]:
         """Detect platform-level drift."""
+
         def get_platform_counts(start: datetime, end: datetime) -> dict[str, int]:
             rows = conn.execute(
                 """
@@ -306,7 +311,9 @@ class InterestDriftDetector:
             if c + p < 5:
                 continue
             change_pct = ((c - p) / max(p, 1)) * 100 if p > 0 else 100.0
-            direction = "rising" if change_pct > 20 else ("declining" if change_pct < -20 else "stable")
+            direction = (
+                "rising" if change_pct > 20 else ("declining" if change_pct < -20 else "stable")
+            )
             drifts.append(
                 PlatformDrift(
                     platform=platform,
@@ -324,7 +331,8 @@ class InterestDriftDetector:
         alerts: list[str] = []
 
         high_rising = [
-            d for d in report.topic_drifts
+            d
+            for d in report.topic_drifts
             if d.direction in ("rising", "new") and d.significance == "high"
         ]
         if high_rising:
@@ -332,7 +340,8 @@ class InterestDriftDetector:
             alerts.append(f"🔥 兴趣上升：{topics}")
 
         high_declining = [
-            d for d in report.topic_drifts
+            d
+            for d in report.topic_drifts
             if d.direction in ("declining", "faded") and d.significance == "high"
         ]
         if high_declining:
@@ -353,7 +362,11 @@ class InterestDriftDetector:
         if report.new_interests:
             parts.append(f"发现新兴趣：{', '.join(report.new_interests[:3])}")
 
-        rising = [d.topic for d in report.topic_drifts if d.direction == "rising" and d.significance == "high"]
+        rising = [
+            d.topic
+            for d in report.topic_drifts
+            if d.direction == "rising" and d.significance == "high"
+        ]
         if rising:
             parts.append(f"兴趣上升：{', '.join(rising[:3])}")
 

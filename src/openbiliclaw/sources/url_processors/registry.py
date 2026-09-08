@@ -29,6 +29,7 @@ def register_processor(cls: type[BaseProcessor]) -> type[BaseProcessor]:
 
     Returns:
         The registered class (unchanged).
+
     """
     global _COMPILED
     name = cls.__name__
@@ -42,8 +43,12 @@ def register_processor(cls: type[BaseProcessor]) -> type[BaseProcessor]:
     _PATTERNS.sort(key=lambda x: x[2], reverse=True)
     _COMPILED = True
 
-    logger.debug("Registered URL processor: %s (priority=%d, patterns=%d)",
-                 name, cls.priority, len(cls.url_patterns))
+    logger.debug(
+        "Registered URL processor: %s (priority=%d, patterns=%d)",
+        name,
+        cls.priority,
+        len(cls.url_patterns),
+    )
     return cls
 
 
@@ -58,6 +63,7 @@ def match_processor(url: str) -> BaseProcessor:
 
     Raises:
         ValueError: If no processor is found and GenericURLProcessor is not registered.
+
     """
     for compiled_pattern, name, _priority in _PATTERNS:
         if compiled_pattern.search(url):
@@ -83,6 +89,7 @@ def get_processor(name: str) -> BaseProcessor:
 
     Raises:
         KeyError: If the processor is not found.
+
     """
     if name not in _REGISTRY:
         raise KeyError(f"Processor not found: {name}")
@@ -94,16 +101,19 @@ def list_processors() -> list[dict[str, object]]:
 
     Returns:
         List of dicts with name, source_type, priority, and url_patterns.
+
     """
     result = []
     for name, cls in _REGISTRY.items():
-        result.append({
-            "name": name,
-            "source_type": cls.source_type,
-            "source_name": cls.source_name,
-            "priority": cls.priority,
-            "url_patterns": cls.url_patterns,
-        })
+        result.append(
+            {
+                "name": name,
+                "source_type": cls.source_type,
+                "source_name": cls.source_name,
+                "priority": cls.priority,
+                "url_patterns": cls.url_patterns,
+            }
+        )
     return result
 
 
@@ -112,5 +122,6 @@ def get_all_source_types() -> list[str]:
 
     Returns:
         List of source type identifiers.
+
     """
     return sorted({cls.source_type for cls in _REGISTRY.values()})

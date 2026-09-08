@@ -10,14 +10,17 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from openbiliclaw.api.models import ArticleNoteIn, ArticleUpdateIn
 from openbiliclaw.api.utils import article_fit_score as _article_fit_score
 from openbiliclaw.api.utils import article_tags_for_context as _article_tags_for_context
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from openbiliclaw.api.models import ArticleNoteIn, ArticleUpdateIn
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +407,7 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
 
         Returns:
             JSON with snapshot data (content_html, content_text, fetched_at).
+
         """
         db_path = "data/openbiliclaw.db"
         try:

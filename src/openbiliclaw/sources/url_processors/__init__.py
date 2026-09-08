@@ -25,20 +25,6 @@ Supported platforms:
     - Generic URL: any web page (fallback)
 """
 
-from openbiliclaw.sources.url_processors.base import (
-    BaseProcessor,
-    ProcessorResult,
-    ProcessorStatus,
-    is_safe_url,
-)
-from openbiliclaw.sources.url_processors.registry import (
-    get_all_source_types,
-    get_processor,
-    list_processors,
-    match_processor,
-    register_processor,
-)
-
 # Import all processors to trigger registration
 from openbiliclaw.sources.url_processors import (
     bilibili_processor,
@@ -59,6 +45,19 @@ from openbiliclaw.sources.url_processors import (
     xiaoyuzhou_processor,
     youtube_processor,
     zhihu_processor,
+)
+from openbiliclaw.sources.url_processors.base import (
+    BaseProcessor,
+    ProcessorResult,
+    ProcessorStatus,
+    is_safe_url,
+)
+from openbiliclaw.sources.url_processors.registry import (
+    get_all_source_types,
+    get_processor,
+    list_processors,
+    match_processor,
+    register_processor,
 )
 
 __all__ = [

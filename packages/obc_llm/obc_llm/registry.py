@@ -254,7 +254,8 @@ def _build_dedicated_embedding_provider(
     elif fallback_enabled:
         # Optional back-compat path: borrow from [llm.<candidate>] only
         # when embedding fallback is explicitly enabled.
-        chat_cfg = getattr(config.llm, candidate, None)
+        # LLMConfig 的 provider 配置直接在顶层（config.openai 等），没有 config.llm 嵌套。
+        chat_cfg = getattr(config, candidate, None)
         api_key = (getattr(chat_cfg, "api_key", "") if chat_cfg is not None else "").strip()
         base_url = (getattr(chat_cfg, "base_url", "") if chat_cfg is not None else "").strip()
         borrowed_chat_credentials = (

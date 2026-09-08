@@ -52,6 +52,7 @@ class YouTubeProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with YouTube video metadata and transcript.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -138,6 +139,7 @@ class YouTubeProcessor(BaseProcessor):
 
         Returns:
             Video ID or None.
+
         """
         patterns = [
             r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})",
@@ -157,6 +159,7 @@ class YouTubeProcessor(BaseProcessor):
 
         Returns:
             Tuple of (metadata dict, transcript text or None).
+
         """
         try:
             import yt_dlp
@@ -220,9 +223,11 @@ class YouTubeProcessor(BaseProcessor):
 
         Returns:
             Metadata dict or None.
+
         """
         try:
             import requests
+
             oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
             resp = requests.get(oembed_url, timeout=10)
             resp.raise_for_status()
@@ -249,9 +254,11 @@ class YouTubeProcessor(BaseProcessor):
 
         Returns:
             Plain text transcript or None.
+
         """
         try:
             import requests
+
             resp = requests.get(subtitle_url, timeout=10)
             resp.raise_for_status()
             content = resp.text
@@ -264,7 +271,11 @@ class YouTubeProcessor(BaseProcessor):
                 if not line or line.isdigit() or "-->" in line:
                     continue
                 # Remove VTT header
-                if line.startswith("WEBVTT") or line.startswith("Kind:") or line.startswith("Language:"):
+                if (
+                    line.startswith("WEBVTT")
+                    or line.startswith("Kind:")
+                    or line.startswith("Language:")
+                ):
                     continue
                 lines.append(line)
 

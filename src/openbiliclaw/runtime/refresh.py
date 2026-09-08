@@ -1871,7 +1871,8 @@ class ContinuousRefreshController:
                 batched = results.get("batched", False)
                 if batched:
                     stats = [
-                        f"{k}={v}" for k, v in results.items()
+                        f"{k}={v}"
+                        for k, v in results.items()
                         if isinstance(v, (int, float)) and v > 0
                     ]
                     if stats:
@@ -2008,7 +2009,6 @@ class ContinuousRefreshController:
         reason: str = "manual",
     ) -> dict[str, int]:
         """Drain one pending discovery-candidate batch through the shared evaluator."""
-
         return await self._drain_discovery_candidates_and_precompute(
             reason=reason,
             batch_size=batch_size,
@@ -2024,7 +2024,6 @@ class ContinuousRefreshController:
         precompute: bool = True,
     ) -> dict[str, int]:
         """Drain one pending raw-candidate batch and optionally precompute it."""
-
         pipeline = self.discovery_candidate_pipeline
         if pipeline is None:
             logger.debug("candidate eval drain skipped: reason=no_pipeline caller=%s", reason)
@@ -2345,7 +2344,9 @@ class ContinuousRefreshController:
             _events_retention = int(getattr(self.scheduler_config, "events_retention_days", 0) or 0)
             if _events_retention > 0:
                 try:
-                    cast("Any", self.database).prune_events_by_retention(retention_days=_events_retention)
+                    cast("Any", self.database).prune_events_by_retention(
+                        retention_days=_events_retention
+                    )
                 except Exception:
                     logger.debug("events retention prune failed", exc_info=True)
             # Same maintenance pass: bound the terminal crawl-task rows
@@ -2526,7 +2527,8 @@ class ContinuousRefreshController:
     def _safe_count_delight_candidates(self) -> int:
         """Best-effort count of pending delight candidates (returns 0 on any
         error so the caller can do delta-based comparison without crashing
-        the refresh tick)."""
+        the refresh tick).
+        """
         from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 
         try:

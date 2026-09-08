@@ -25,7 +25,6 @@ import os
 import re
 import sqlite3
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -78,7 +77,9 @@ def _run_bili_cmd(args: list[str], timeout: int = 60) -> dict[str, Any]:
         timeout=timeout,
     )
     if result.returncode != 0:
-        logger.error("bili %s failed (rc=%d): %s", " ".join(args[:3]), result.returncode, result.stderr[:500])
+        logger.error(
+            "bili %s failed (rc=%d): %s", " ".join(args[:3]), result.returncode, result.stderr[:500]
+        )
         return {}
     try:
         return json.loads(result.stdout)
@@ -121,10 +122,14 @@ def _fetch_all_favorites(max_pages_per_folder: int = 25) -> list[dict[str, Any]]
         media_count = int(folder.get("media_count", 0) or 0)
 
         if folder_id == 0 or media_count == 0:
-            logger.info("skipping folder '%s' (id=%d, count=%d)", folder_title, folder_id, media_count)
+            logger.info(
+                "skipping folder '%s' (id=%d, count=%d)", folder_title, folder_id, media_count
+            )
             continue
 
-        logger.info("fetching folder '%s' (id=%d, ~%d videos)", folder_title, folder_id, media_count)
+        logger.info(
+            "fetching folder '%s' (id=%d, ~%d videos)", folder_title, folder_id, media_count
+        )
         folder_new = 0
 
         for page in range(1, max_pages_per_folder + 1):
@@ -204,13 +209,20 @@ def _parse_items(items: list[dict[str, Any]], source: str) -> list[dict[str, Any
         upper = item.get("upper", {}) or {}
         author = str(upper.get("name", "") or item.get("owner", {}).get("name", "") or "").strip()
         duration = str(item.get("duration", "") or item.get("length", "") or "").strip()
-        duration_seconds = int(item.get("duration_seconds", 0) or 0)
+        int(item.get("duration_seconds", 0) or 0)
 
         # Stats (may not be present in favorites list)
-        view_count = int(item.get("view", 0) or item.get("play", 0) or 0)
+        int(item.get("view", 0) or item.get("play", 0) or 0)
         like_count = int(item.get("like", 0) or item.get("stat", {}).get("like", 0) or 0)
-        comment_count = int(item.get("reply", 0) or item.get("comment", 0) or item.get("stat", {}).get("reply", 0) or 0)
-        favorite_count = int(item.get("favorite", 0) or item.get("stat", {}).get("favorite", 0) or 0)
+        comment_count = int(
+            item.get("reply", 0)
+            or item.get("comment", 0)
+            or item.get("stat", {}).get("reply", 0)
+            or 0
+        )
+        favorite_count = int(
+            item.get("favorite", 0) or item.get("stat", {}).get("favorite", 0) or 0
+        )
         share_count = int(item.get("share", 0) or item.get("stat", {}).get("share", 0) or 0)
 
         # Folder context
@@ -353,7 +365,14 @@ def _run_once(
             len(all_rows),
             len(unique_rows),
         )
-        return {"ok": True, **stats, "total_fetched": len(all_rows), "unique": len(unique_rows), "inserted": 0, "dry_run": True}
+        return {
+            "ok": True,
+            **stats,
+            "total_fetched": len(all_rows),
+            "unique": len(unique_rows),
+            "inserted": 0,
+            "dry_run": True,
+        }
 
     conn = _obc_connect(DB_PATH)
     try:
@@ -414,7 +433,9 @@ def run_forever(
                 if unique > 0:
                     guard.record_success()
                 else:
-                    guard.record_failure(reason="empty_result", detail="bilibili returned 0 unique items")
+                    guard.record_failure(
+                        reason="empty_result", detail="bilibili returned 0 unique items"
+                    )
                 logger.info(
                     "bilibili ok: %d unique, %d new, %d duplicate",
                     unique,
@@ -439,16 +460,24 @@ def run_forever(
 
 
 def _main() -> None:
-    parser = argparse.ArgumentParser(description="Bilibili personal content producer (favorites/watch-later/history)")
+    parser = argparse.ArgumentParser(
+        description="Bilibili personal content producer (favorites/watch-later/history)"
+    )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run forever (24h interval)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes")
     parser.add_argument("--favorites", action="store_true", help="Fetch favorite folders")
     parser.add_argument("--watch-later", action="store_true", help="Fetch watch-later list")
     parser.add_argument("--history", action="store_true", help="Fetch watch history")
-    parser.add_argument("--all", action="store_true", help="Fetch all modes (favorites + watch-later + history)")
-    parser.add_argument("--max-history", type=int, default=100, help="Max history items (default: 100)")
-    parser.add_argument("--interval", type=int, default=24, help="Loop interval in hours (default: 24)")
+    parser.add_argument(
+        "--all", action="store_true", help="Fetch all modes (favorites + watch-later + history)"
+    )
+    parser.add_argument(
+        "--max-history", type=int, default=100, help="Max history items (default: 100)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=24, help="Loop interval in hours (default: 24)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(

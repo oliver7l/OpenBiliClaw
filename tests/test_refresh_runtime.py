@@ -159,7 +159,10 @@ class _FakeDatabase:
     def count_pool_candidates(self, *, xhs_self_nickname: str = "") -> int:
         return self.pool_count
 
-    def count_pool_readiness(self, *, xhs_self_nickname: str = "") -> dict[str, int]:
+    def count_pool_readiness(
+        self, *, xhs_self_nickname: str = "", allow_stale: bool = False
+    ) -> dict[str, int]:
+        # 真实实现（storage.database）支持 allow_stale；fake 无缓存语义，直接忽略该参数。
         pending_eval = int(self.discovery_status_counts.get("pending_eval", 0))
         pending_eval += int(self.discovery_status_counts.get("evaluating", 0))
         evaluated_pending = int(self.discovery_status_counts.get("evaluated", 0))
@@ -3527,7 +3530,8 @@ async def test_refresh_publishes_delight_refreshed_when_count_increases() -> Non
 
 async def test_refresh_skips_delight_refreshed_when_count_unchanged() -> None:
     """No event when precompute finishes without new above-threshold delights
-    (avoids spamming popup with no-op refreshes)."""
+    (avoids spamming popup with no-op refreshes).
+    """
     event_hub = _FakeEventHub()
     database = _FakeDatabase(
         [{"id": 1, "event_type": "view"}],
@@ -3553,7 +3557,8 @@ async def test_refresh_skips_delight_refreshed_when_count_unchanged() -> None:
 
 async def test_refresh_publishes_pool_status_when_count_changes() -> None:
     """``_publish_pool_status_if_changed`` emits ``pool_status`` only when
-    the count differs from last published."""
+    the count differs from last published.
+    """
     event_hub = _FakeEventHub()
     database = _FakeDatabase(
         [{"id": 1, "event_type": "view"}],
@@ -3618,7 +3623,8 @@ async def test_refresh_pool_status_includes_readiness_counts() -> None:
 async def test_refresh_pool_status_dedupes_unchanged_count() -> None:
     """Calling ``_publish_pool_status_if_changed`` repeatedly with the
     same count must only emit the first one — popup-side state
-    rendering would still re-paint on duplicate."""
+    rendering would still re-paint on duplicate.
+    """
     event_hub = _FakeEventHub()
     database = _FakeDatabase([], pool_count=42)
 
@@ -3642,7 +3648,8 @@ async def test_refresh_pool_status_dedupes_unchanged_count() -> None:
 
 async def test_refresh_pool_status_re_emits_when_count_rotates() -> None:
     """When count changes back, we must re-emit. Otherwise popup never
-    sees a pool drain → refill cycle."""
+    sees a pool drain → refill cycle.
+    """
     event_hub = _FakeEventHub()
     database = _FakeDatabase([], pool_count=42)
 
@@ -3669,7 +3676,8 @@ async def test_refresh_pool_status_re_emits_when_count_rotates() -> None:
 
 async def test_refresh_if_needed_skips_when_scheduler_disabled() -> None:
     """refresh_if_needed must respect the LLM gate so event-ingest and
-    feedback paths don't fire discovery when 停止后台 LLM 请求 is on."""
+    feedback paths don't fire discovery when 停止后台 LLM 请求 is on.
+    """
     controller = _controller_with_gate(
         scheduler_config=SimpleNamespace(enabled=False, pause_on_extension_disconnect=False),
     )

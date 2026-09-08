@@ -39,21 +39,25 @@ def create_synthesis_router(
         store = _get_store()
         state = store.get_state()
         latest = store.get_latest_version()
-        return JSONResponse({
-            "ok": True,
-            "state": state.model_dump(),
-            "latest_version": latest.model_dump() if latest else None,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "state": state.model_dump(),
+                "latest_version": latest.model_dump() if latest else None,
+            }
+        )
 
     @router.get("/versions")
     async def list_versions(limit: int = 20):
         """列出所有合成版本。"""
         store = _get_store()
         versions = store.list_versions(limit=limit)
-        return JSONResponse({
-            "ok": True,
-            "versions": [v.model_dump() for v in versions],
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "versions": [v.model_dump() for v in versions],
+            }
+        )
 
     @router.get("/versions/{version}")
     async def get_version(version: int):
@@ -73,14 +77,18 @@ def create_synthesis_router(
         engine = _get_engine()
         result = await engine.run()
         if result is None:
-            return JSONResponse({
-                "ok": False,
-                "error": "synthesis skipped (no new data or no LLM service)",
-            })
-        return JSONResponse({
-            "ok": True,
-            "version": result.model_dump(),
-        })
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "synthesis skipped (no new data or no LLM service)",
+                }
+            )
+        return JSONResponse(
+            {
+                "ok": True,
+                "version": result.model_dump(),
+            }
+        )
 
     @router.get("/pending")
     async def pending_count():
@@ -90,14 +98,16 @@ def create_synthesis_router(
         diary_new = len(store.get_new_diary_analyses(state.last_diary_analysis_id, limit=500))
         chat_insight_new = len(store.get_new_chat_insights(state.last_chat_insight_id, limit=500))
         chat_topic_new = len(store.get_new_chat_topics(state.last_chat_topic_id, limit=500))
-        return JSONResponse({
-            "ok": True,
-            "pending": {
-                "diary_analyses": diary_new,
-                "chat_insights": chat_insight_new,
-                "chat_topics": chat_topic_new,
-                "total": diary_new + chat_insight_new + chat_topic_new,
-            },
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "pending": {
+                    "diary_analyses": diary_new,
+                    "chat_insights": chat_insight_new,
+                    "chat_topics": chat_topic_new,
+                    "total": diary_new + chat_insight_new + chat_topic_new,
+                },
+            }
+        )
 
     return router

@@ -198,7 +198,8 @@ def test_query_events_and_stats_delegate_to_database(tmp_path: Path) -> None:
 async def test_propagate_event_persists_classification(tmp_path: Path) -> None:
     """MemoryManager.propagate_event flows through Database.insert_event,
     which is the single owner of classify_event_satisfaction. End-to-end
-    we should see the classification land on the row."""
+    we should see the classification land on the row.
+    """
     memory = MemoryManager(tmp_path)
     memory.initialize()
 

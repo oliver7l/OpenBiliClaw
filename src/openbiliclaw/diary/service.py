@@ -9,9 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from ..llm.service import LLMService
-from ..storage.database import Database
 from .models import (
     DiaryAnalysis,
     DiaryEntry,
@@ -26,6 +25,10 @@ from .models import (
     TagType,
 )
 from .store import DiaryStore
+
+if TYPE_CHECKING:
+    from ..llm.service import LLMService
+    from ..storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +139,9 @@ class DiaryService:
     # ── 基础 CRUD ───────────────────────────────────────────────
 
     def create_entry(
-        self, data: DiaryEntryCreate, auto_embed: bool = True,
+        self,
+        data: DiaryEntryCreate,
+        auto_embed: bool = True,
         auto_similar: bool = True,
     ) -> DiaryEntry:
         """创建日记。
@@ -148,12 +153,17 @@ class DiaryService:
 
         Returns:
             创建的日记
+
         """
         entry = self.store.create_entry(data)
         if auto_embed or auto_similar:
-            asyncio.ensure_future(self._auto_process_new_entry(
-                entry.id, do_embed=auto_embed, do_similar=auto_similar,
-            ))
+            asyncio.ensure_future(
+                self._auto_process_new_entry(
+                    entry.id,
+                    do_embed=auto_embed,
+                    do_similar=auto_similar,
+                )
+            )
         return entry
 
     def get_entry(self, entry_id: int) -> DiaryEntry:
@@ -217,6 +227,7 @@ class DiaryService:
 
         Returns:
             分析结果，若 LLM 不可用则返回 None
+
         """
         entry = self.store.get_entry(entry_id)
         if not force and entry.analysis_id is not None:
@@ -254,12 +265,16 @@ class DiaryService:
     # ── 自动处理（新日记后触发） ─────────────────────────────────
 
     async def _auto_process_new_entry(
-        self, entry_id: int, do_embed: bool = True, do_similar: bool = True,
+        self,
+        entry_id: int,
+        do_embed: bool = True,
+        do_similar: bool = True,
     ) -> dict:
         """新日记创建后的自动处理：生成 embedding + 同步 FTS5 + 发现相似日记。
 
         Returns:
             {"embedding": bool, "fts5": bool, "similar_entries": list}
+
         """
         result: dict = {"embedding": False, "fts5": False, "similar_entries": []}
         try:
@@ -271,8 +286,11 @@ class DiaryService:
         if do_embed:
             try:
                 from .rag import DiaryRAGService
+
                 rag = DiaryRAGService(store=self.store)
-                rag.set_embedding_service(self._embedding_service if hasattr(self, '_embedding_service') else None)
+                rag.set_embedding_service(
+                    self._embedding_service if hasattr(self, "_embedding_service") else None
+                )
                 if rag.embedding_service:
                     chunk_count = await rag._generate_chunk_embeddings(entry)
                     result["embedding"] = chunk_count > 0
@@ -290,6 +308,7 @@ class DiaryService:
         if do_similar:
             try:
                 from .rag import DiaryRAGService, cosine_similarity
+
                 rag = DiaryRAGService(store=self.store)
                 # 用 chunk embedding 找相似
                 target_chunks = self.store.get_entry_chunks(entry_id)
@@ -309,8 +328,7 @@ class DiaryService:
                                 similar.append((eid, score))
                         similar.sort(key=lambda x: x[1], reverse=True)
                         result["similar_entries"] = [
-                            {"id": eid, "score": round(score, 4)}
-                            for eid, score in similar[:5]
+                            {"id": eid, "score": round(score, 4)} for eid, score in similar[:5]
                         ]
                 else:
                     all_chunks = self.store.get_all_chunk_embeddings()
@@ -335,16 +353,23 @@ class DiaryService:
         if result["similar_entries"]:
             logger.info(
                 "新日记 #%d 自动处理完成：embedding=%s, fts5=%s, 相似日记=%d篇",
-                entry_id, result["embedding"], result["fts5"], len(result["similar_entries"]),
+                entry_id,
+                result["embedding"],
+                result["fts5"],
+                len(result["similar_entries"]),
             )
         return result
 
     async def find_similar_for_entry(
-        self, entry_id: int, top_k: int = 5, min_score: float = 0.5,
+        self,
+        entry_id: int,
+        top_k: int = 5,
+        min_score: float = 0.5,
     ) -> list[dict]:
         """查找与指定日记相似的历史日记（供 API 调用）。"""
         from .rag import DiaryRAGService, cosine_similarity
-        rag = DiaryRAGService(store=self.store)
+
+        DiaryRAGService(store=self.store)
 
         target_chunks = self.store.get_entry_chunks(entry_id)
         if not target_chunks:
@@ -368,14 +393,16 @@ class DiaryService:
         for eid, score in ranked:
             try:
                 entry = self.store.get_entry(eid)
-                results.append({
-                    "id": eid,
-                    "entry_date": entry.entry_date,
-                    "title": entry.title,
-                    "mood": entry.mood.value,
-                    "score": round(score, 4),
-                    "word_count": entry.word_count,
-                })
+                results.append(
+                    {
+                        "id": eid,
+                        "entry_date": entry.entry_date,
+                        "title": entry.title,
+                        "mood": entry.mood.value,
+                        "score": round(score, 4),
+                        "word_count": entry.word_count,
+                    }
+                )
             except Exception:
                 continue
         return results
@@ -383,9 +410,12 @@ class DiaryService:
     # ── 夜间 Consolidation ─────────────────────────────────────
 
     async def run_nightly_consolidation(
-        self, target_date: str | None = None,
-        do_profile: bool = True, do_drift: bool = True,
-        do_tags: bool = True, do_embedding: bool = True,
+        self,
+        target_date: str | None = None,
+        do_profile: bool = True,
+        do_drift: bool = True,
+        do_tags: bool = True,
+        do_embedding: bool = True,
     ) -> dict:
         """执行一次完整的夜间 consolidation。
 
@@ -405,9 +435,11 @@ class DiaryService:
 
         Returns:
             执行结果摘要
+
         """
         if target_date is None:
             from datetime import timedelta
+
             target_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
         logger.info("开始夜间 consolidation，目标日期: %s", target_date)
@@ -424,6 +456,7 @@ class DiaryService:
         if do_profile or do_drift:
             try:
                 from .self_evolution import SelfEvolutionService
+
                 evo = SelfEvolutionService(self.store)
                 if do_profile:
                     evo.update_user_profile(target_date)
@@ -438,6 +471,7 @@ class DiaryService:
         if do_tags:
             try:
                 from .self_evolution import SelfEvolutionService
+
                 evo = SelfEvolutionService(self.store)
                 evo.optimize_tags(target_date)
                 report["tags_optimized"] = True
@@ -448,8 +482,11 @@ class DiaryService:
         if do_embedding:
             try:
                 from .rag import DiaryRAGService
+
                 rag = DiaryRAGService(store=self.store)
-                if rag.embedding_service or (hasattr(self, '_embedding_service') and self._embedding_service):
+                if rag.embedding_service or (
+                    hasattr(self, "_embedding_service") and self._embedding_service
+                ):
                     if not rag.embedding_service:
                         rag.set_embedding_service(self._embedding_service)
                     stats = await rag.batch_generate_embeddings(limit=50, use_chunks=True)
@@ -478,6 +515,7 @@ class DiaryService:
 
         Returns:
             {entry_id: analysis_or_none}
+
         """
         results: dict[int, DiaryAnalysis | None] = {}
         semaphore = asyncio.Semaphore(concurrency)
@@ -512,10 +550,7 @@ class DiaryService:
         end_date = None
         if year and month:
             start_date = f"{year:04d}-{month:02d}-01"
-            if month == 12:
-                end_date = f"{year + 1:04d}-01-01"
-            else:
-                end_date = f"{year:04d}-{month + 1:02d}-01"
+            end_date = f"{year + 1:04d}-01-01" if month == 12 else f"{year:04d}-{month + 1:02d}-01"
         elif year:
             start_date = f"{year:04d}-01-01"
             end_date = f"{year + 1:04d}-01-01"
@@ -599,6 +634,7 @@ class DiaryService:
             media_path: 媒体文件路径
             media_description: 媒体内容描述
             tags: 标签列表
+
         """
         return self.store.create_fragment(
             content=content,
@@ -688,10 +724,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         """批量对未标注的碎片执行自动标签和情绪识别。"""
         # 获取所有碎片，筛选未标注的
         all_fragments = self.store.list_fragments(limit=500)
-        untagged = [
-            f for f in all_fragments
-            if not f.tags or f.mood == MoodLevel.UNKNOWN
-        ][:limit]
+        untagged = [f for f in all_fragments if not f.tags or f.mood == MoodLevel.UNKNOWN][:limit]
 
         if not untagged:
             return {"total": 0, "success": 0, "failed": 0, "message": "所有碎片都已标注"}
@@ -716,15 +749,62 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         content_lower = content.lower()
 
         # 情绪关键词
-        happy_keywords = ["开心", "高兴", "快乐", "幸福", "满足", "惊喜", "棒", "好", "爱", "喜欢", "笑"]
+        happy_keywords = [
+            "开心",
+            "高兴",
+            "快乐",
+            "幸福",
+            "满足",
+            "惊喜",
+            "棒",
+            "好",
+            "爱",
+            "喜欢",
+            "笑",
+        ]
         sad_keywords = ["难过", "伤心", "失落", "沮丧", "痛苦", "哭", "累", "疲惫", "无力", "绝望"]
         anxious_keywords = ["焦虑", "紧张", "担心", "害怕", "不安", "压力", "烦", "烦躁", "纠结"]
         angry_keywords = ["生气", "愤怒", "火", "气", "讨厌", "烦", "不爽", "吵架"]
 
         # 主题关键词
-        work_keywords = ["工作", "上班", "加班", "会议", "项目", "同事", "老板", "公司", "代码", "bug", "需求"]
-        family_keywords = ["妈妈", "爸爸", "老公", "老婆", "孩子", "儿子", "女儿", "家", "家人", "乐乐", "艳艳"]
-        health_keywords = ["身体", "生病", "医院", "医生", "药", "睡", "失眠", "运动", "健身", "跑步"]
+        work_keywords = [
+            "工作",
+            "上班",
+            "加班",
+            "会议",
+            "项目",
+            "同事",
+            "老板",
+            "公司",
+            "代码",
+            "bug",
+            "需求",
+        ]
+        family_keywords = [
+            "妈妈",
+            "爸爸",
+            "老公",
+            "老婆",
+            "孩子",
+            "儿子",
+            "女儿",
+            "家",
+            "家人",
+            "乐乐",
+            "艳艳",
+        ]
+        health_keywords = [
+            "身体",
+            "生病",
+            "医院",
+            "医生",
+            "药",
+            "睡",
+            "失眠",
+            "运动",
+            "健身",
+            "跑步",
+        ]
         travel_keywords = ["旅行", "旅游", "出去玩", "度假", "景点", "酒店", "飞机", "高铁", "开车"]
         food_keywords = ["吃", "美食", "饭", "菜", "火锅", "烧烤", "咖啡", "奶茶", "蛋糕"]
 
@@ -770,8 +850,9 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 
         return tags[:5], mood
 
-    async def generate_diary_from_fragments(self, fragment_date: str | None = None,
-                                               auto_delete: bool = True) -> DiaryEntry | None:
+    async def generate_diary_from_fragments(
+        self, fragment_date: str | None = None, auto_delete: bool = True
+    ) -> DiaryEntry | None:
         """从当天碎片 AI 聚合生成一篇完整日记（证据驱动版）。
 
         借鉴 Night-Journal 和 echolog 的设计：把白天的碎片整理成一篇连贯、私人的日记。
@@ -781,6 +862,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         Args:
             fragment_date: 碎片日期，默认今天
             auto_delete: 生成后是否删除已使用的碎片
+
         """
         if fragment_date is None:
             fragment_date = datetime.now().strftime("%Y-%m-%d")
@@ -800,7 +882,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
                 "link": "🔗 链接",
             }.get(f.fragment_type, "📝 文字")
 
-            part = f"【碎片 {i+1}】{time_str} {type_label}"
+            part = f"【碎片 {i + 1}】{time_str} {type_label}"
             if f.mood != MoodLevel.UNKNOWN:
                 part += f"（情绪：{f.mood.value}）"
             part += f"\n{f.content}"
@@ -928,6 +1010,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 
         Returns:
             ExtractionResult 提取结果，失败返回 None
+
         """
         entry = self.store.get_entry(entry_id)
         if entry is None:
@@ -1003,18 +1086,36 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 
         # 简单关键词匹配
         emotion_keywords = {
-            "开心": "emotion", "高兴": "emotion", "快乐": "emotion",
-            "难过": "emotion", "伤心": "emotion", "焦虑": "emotion",
-            "紧张": "emotion", "平静": "emotion", "兴奋": "emotion",
-            "累": "emotion", "疲惫": "emotion",
+            "开心": "emotion",
+            "高兴": "emotion",
+            "快乐": "emotion",
+            "难过": "emotion",
+            "伤心": "emotion",
+            "焦虑": "emotion",
+            "紧张": "emotion",
+            "平静": "emotion",
+            "兴奋": "emotion",
+            "累": "emotion",
+            "疲惫": "emotion",
         }
         topic_keywords = {
-            "工作": "work", "上班": "work", "加班": "work",
-            "家": "family", "妈妈": "family", "爸爸": "family",
-            "旅行": "topic", "旅游": "topic", "出去玩": "topic",
-            "学习": "topic", "看书": "topic", "读书": "topic",
-            "健身": "health", "运动": "health", "跑步": "health",
-            "生病": "health", "医院": "health",
+            "工作": "work",
+            "上班": "work",
+            "加班": "work",
+            "家": "family",
+            "妈妈": "family",
+            "爸爸": "family",
+            "旅行": "topic",
+            "旅游": "topic",
+            "出去玩": "topic",
+            "学习": "topic",
+            "看书": "topic",
+            "读书": "topic",
+            "健身": "health",
+            "运动": "health",
+            "跑步": "health",
+            "生病": "health",
+            "医院": "health",
         }
 
         for keyword, tag_type in {**emotion_keywords, **topic_keywords}.items():
@@ -1022,12 +1123,24 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
                 tags.append({"name": keyword, "type": tag_type, "confidence": 0.6})
 
         # 简单人物识别（基于常见称呼）
-        person_keywords = ["妈妈", "爸爸", "乐乐", "艳艳", "狄胖胖", "老公", "老婆", "儿子", "女儿", "同事", "朋友"]
+        person_keywords = [
+            "妈妈",
+            "爸爸",
+            "乐乐",
+            "艳艳",
+            "狄胖胖",
+            "老公",
+            "老婆",
+            "儿子",
+            "女儿",
+            "同事",
+            "朋友",
+        ]
         for name in person_keywords:
             if name in content:
                 # 找上下文
                 idx = content.find(name)
-                context = content[max(0, idx-20):idx+30].replace("\n", " ")
+                context = content[max(0, idx - 20) : idx + 30].replace("\n", " ")
                 persons.append({"name": name, "relation": "", "context": context})
 
         return ExtractionResult(tags=tags[:8], persons=persons[:10], locations=[], events=[])
@@ -1056,8 +1169,9 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
             logger.warning(f"无法解析提取响应: {text[:200]}")
             return None
 
-    async def batch_extract(self, limit: int = 100, start_id: int | None = None,
-                             only_unextracted: bool = True) -> dict:
+    async def batch_extract(
+        self, limit: int = 100, start_id: int | None = None, only_unextracted: bool = True
+    ) -> dict:
         """批量提取日记的标签和人物。
 
         Args:
@@ -1067,6 +1181,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
 
         Returns:
             统计信息 {total, success, failed, skipped}
+
         """
         # 获取需要处理的日记
         entries = self.store.list_entries(limit=limit + 500)  # 多取一些用于过滤
@@ -1103,7 +1218,7 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
                 failed += 1
 
             if (i + 1) % 10 == 0:
-                logger.info(f"已处理 {i+1}/{total}，成功 {success}，失败 {failed}")
+                logger.info(f"已处理 {i + 1}/{total}，成功 {success}，失败 {failed}")
 
         logger.info(f"批量提取完成：共 {total} 篇，成功 {success}，失败 {failed}")
         return {"total": total, "success": success, "failed": failed, "skipped": 0}
@@ -1112,13 +1227,15 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
     # 标签/人物查询
     # ═══════════════════════════════════════════
 
-    def get_tags(self, tag_type: TagType | None = None,
-                 limit: int = 200, min_count: int = 1) -> list[DiaryTag]:
+    def get_tags(
+        self, tag_type: TagType | None = None, limit: int = 200, min_count: int = 1
+    ) -> list[DiaryTag]:
         """获取标签列表。"""
         return self.store.list_tags(tag_type, limit, min_count)
 
-    def get_persons(self, relation: str | None = None,
-                    limit: int = 200, min_appearances: int = 1) -> list[DiaryPerson]:
+    def get_persons(
+        self, relation: str | None = None, limit: int = 200, min_appearances: int = 1
+    ) -> list[DiaryPerson]:
         """获取人物列表。"""
         return self.store.list_persons(relation, limit, min_appearances)
 
@@ -1145,9 +1262,13 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
         tags = self.store.get_entry_tags(entry_id)
         persons = self.store.get_entry_persons(entry_id)
         return {
-            "tags": [{"id": t.id, "name": t.name, "type": t.type.value, "count": t.count} for t in tags],
-            "persons": [{"id": p.id, "name": p.name, "relation": p.relation, "context": ctx}
-                        for p, ctx in persons],
+            "tags": [
+                {"id": t.id, "name": t.name, "type": t.type.value, "count": t.count} for t in tags
+            ],
+            "persons": [
+                {"id": p.id, "name": p.name, "relation": p.relation, "context": ctx}
+                for p, ctx in persons
+            ],
         }
 
     def get_extraction_stats(self) -> dict:

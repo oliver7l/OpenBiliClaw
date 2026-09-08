@@ -15,20 +15,21 @@ Usage::
     guard = RateLimitGuard("xhs-favorites", state_dir=Path("data/rate_limit"))
     if guard.should_skip():
         logger.info("skipped due to rate-limit cooldown until %s", guard.cooldown_until)
-        return
+
+Return:
     ok = fetch_and_insert(...)
     if ok:
         guard.record_success()
     else:
         guard.record_failure(reason="empty_result", detail=stderr_text)
+
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -90,7 +91,7 @@ class GuardState:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GuardState":
+    def from_dict(cls, data: dict[str, Any]) -> GuardState:
         # Filter out unknown keys for forward-compatibility
         valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in valid_keys}
@@ -112,6 +113,7 @@ class RateLimitGuard:
         Upper bound for cooldown duration.
     circuit_breaker_threshold:
         Number of consecutive failures before circuit opens (auto-pause).
+
     """
 
     def __init__(
@@ -221,6 +223,7 @@ class RateLimitGuard:
             Full stderr / response text for risk-keyword detection.
         exit_code:
             CLI exit code if applicable.
+
         """
         now = datetime.now().isoformat(timespec="seconds")
         self._state.consecutive_failures += 1

@@ -15,32 +15,119 @@ from typing import Any
 
 from .models import MoodLevel
 
-
 # ─── 中文情绪关键词词典（用于无 AI 分析时的快速情绪推断） ───
 
 _POSITIVE_WORDS = {
-    "开心", "高兴", "快乐", "愉快", "幸福", "满足", "欣慰", "感动",
-    "兴奋", "激动", "期待", "希望", "乐观", "轻松", "平静", "安宁",
-    "舒服", "惬意", "温馨", "温暖", "美好", "棒", "好", "赞", "喜欢",
-    "爱", "成功", "进步", "成长", "收获", "惊喜", "感恩", "珍惜",
+    "开心",
+    "高兴",
+    "快乐",
+    "愉快",
+    "幸福",
+    "满足",
+    "欣慰",
+    "感动",
+    "兴奋",
+    "激动",
+    "期待",
+    "希望",
+    "乐观",
+    "轻松",
+    "平静",
+    "安宁",
+    "舒服",
+    "惬意",
+    "温馨",
+    "温暖",
+    "美好",
+    "棒",
+    "好",
+    "赞",
+    "喜欢",
+    "爱",
+    "成功",
+    "进步",
+    "成长",
+    "收获",
+    "惊喜",
+    "感恩",
+    "珍惜",
 }
 
 _NEGATIVE_WORDS = {
-    "难过", "伤心", "悲伤", "痛苦", "焦虑", "紧张", "担心", "害怕",
-    "恐惧", "愤怒", "生气", "烦躁", "郁闷", "低落", "沮丧", "失望",
-    "绝望", "孤独", "寂寞", "空虚", "无聊", "疲惫", "累", "烦",
-    "压力", "纠结", "矛盾", "后悔", "遗憾", "愧疚", "自责", "自卑",
-    "迷茫", "困惑", "无助", "无力", "崩溃", "想哭", "眼泪",
+    "难过",
+    "伤心",
+    "悲伤",
+    "痛苦",
+    "焦虑",
+    "紧张",
+    "担心",
+    "害怕",
+    "恐惧",
+    "愤怒",
+    "生气",
+    "烦躁",
+    "郁闷",
+    "低落",
+    "沮丧",
+    "失望",
+    "绝望",
+    "孤独",
+    "寂寞",
+    "空虚",
+    "无聊",
+    "疲惫",
+    "累",
+    "烦",
+    "压力",
+    "纠结",
+    "矛盾",
+    "后悔",
+    "遗憾",
+    "愧疚",
+    "自责",
+    "自卑",
+    "迷茫",
+    "困惑",
+    "无助",
+    "无力",
+    "崩溃",
+    "想哭",
+    "眼泪",
 }
 
 _ANXIOUS_WORDS = {
-    "焦虑", "紧张", "担心", "害怕", "恐惧", "慌", "忐忑", "不安",
-    "忧心", "烦恼", "烦躁", "心急", "急迫", "压力", "纠结",
+    "焦虑",
+    "紧张",
+    "担心",
+    "害怕",
+    "恐惧",
+    "慌",
+    "忐忑",
+    "不安",
+    "忧心",
+    "烦恼",
+    "烦躁",
+    "心急",
+    "急迫",
+    "压力",
+    "纠结",
 }
 
 _ANGRY_WORDS = {
-    "愤怒", "生气", "恼火", "烦躁", "暴怒", "气愤", "不爽", "火大",
-    "发脾气", "怒吼", "咆哮", "恨", "讨厌", "厌恶",
+    "愤怒",
+    "生气",
+    "恼火",
+    "烦躁",
+    "暴怒",
+    "气愤",
+    "不爽",
+    "火大",
+    "发脾气",
+    "怒吼",
+    "咆哮",
+    "恨",
+    "讨厌",
+    "厌恶",
 }
 
 
@@ -142,6 +229,7 @@ class DiaryInsightsService:
             granularity: "month" 按月，"year" 按年
             start_date: 起始日期 YYYY-MM-DD
             end_date: 结束日期 YYYY-MM-DD
+
         """
         entries = self._store.list_entries(
             limit=10000,
@@ -152,10 +240,7 @@ class DiaryInsightsService:
         # 按周期分组
         groups: dict[str, list] = defaultdict(list)
         for entry in entries:
-            if granularity == "year":
-                period = entry.entry_date[:4]
-            else:
-                period = entry.entry_date[:7]
+            period = entry.entry_date[:4] if granularity == "year" else entry.entry_date[:7]
             groups[period].append(entry)
 
         result = []
@@ -238,29 +323,26 @@ class DiaryInsightsService:
 
     # ─── 字数趋势 ───
 
-    def get_word_trend(
-        self, granularity: str = "month"
-    ) -> list[dict[str, Any]]:
+    def get_word_trend(self, granularity: str = "month") -> list[dict[str, Any]]:
         """获取字数趋势数据。"""
         entries = self._store.list_entries(limit=10000)
 
         groups: dict[str, list[int]] = defaultdict(list)
         for entry in entries:
-            if granularity == "year":
-                period = entry.entry_date[:4]
-            else:
-                period = entry.entry_date[:7]
+            period = entry.entry_date[:4] if granularity == "year" else entry.entry_date[:7]
             groups[period].append(entry.word_count)
 
         result = []
         for period in sorted(groups.keys()):
             counts = groups[period]
-            result.append({
-                "period": period,
-                "total_words": sum(counts),
-                "avg_words": round(sum(counts) / len(counts), 1),
-                "entry_count": len(counts),
-            })
+            result.append(
+                {
+                    "period": period,
+                    "total_words": sum(counts),
+                    "avg_words": round(sum(counts) / len(counts), 1),
+                    "entry_count": len(counts),
+                }
+            )
         return result
 
     # ─── 高频关键词（简易词云） ───
@@ -280,17 +362,100 @@ class DiaryInsightsService:
 
         # 停用词
         stop_words = {
-            "的", "了", "是", "在", "我", "有", "和", "就", "不", "人",
-            "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去",
-            "你", "会", "着", "没有", "看", "好", "自己", "这", "那", "他",
-            "她", "它", "们", "这个", "那个", "什么", "怎么", "为什么",
-            "因为", "所以", "但是", "然后", "还是", "或者", "如果", "虽然",
-            "今天", "昨天", "明天", "现在", "时候", "一下", "一些", "有点",
-            "比较", "非常", "特别", "真的", "确实", "其实", "可能", "应该",
-            "可以", "能够", "需要", "想要", "觉得", "感觉", "知道", "认为",
-            "这样", "那样", "这么", "那么", "一起", "出来", "回来", "过去",
-            "起来", "下来", "上来", "过来", "以后", "以前", "之前", "之后",
-            "里面", "外面", "上面", "下面", "前面", "后面", "中间", "旁边",
+            "的",
+            "了",
+            "是",
+            "在",
+            "我",
+            "有",
+            "和",
+            "就",
+            "不",
+            "人",
+            "都",
+            "一",
+            "一个",
+            "上",
+            "也",
+            "很",
+            "到",
+            "说",
+            "要",
+            "去",
+            "你",
+            "会",
+            "着",
+            "没有",
+            "看",
+            "好",
+            "自己",
+            "这",
+            "那",
+            "他",
+            "她",
+            "它",
+            "们",
+            "这个",
+            "那个",
+            "什么",
+            "怎么",
+            "为什么",
+            "因为",
+            "所以",
+            "但是",
+            "然后",
+            "还是",
+            "或者",
+            "如果",
+            "虽然",
+            "今天",
+            "昨天",
+            "明天",
+            "现在",
+            "时候",
+            "一下",
+            "一些",
+            "有点",
+            "比较",
+            "非常",
+            "特别",
+            "真的",
+            "确实",
+            "其实",
+            "可能",
+            "应该",
+            "可以",
+            "能够",
+            "需要",
+            "想要",
+            "觉得",
+            "感觉",
+            "知道",
+            "认为",
+            "这样",
+            "那样",
+            "这么",
+            "那么",
+            "一起",
+            "出来",
+            "回来",
+            "过去",
+            "起来",
+            "下来",
+            "上来",
+            "过来",
+            "以后",
+            "以前",
+            "之前",
+            "之后",
+            "里面",
+            "外面",
+            "上面",
+            "下面",
+            "前面",
+            "后面",
+            "中间",
+            "旁边",
         }
 
         counter: Counter = Counter()
@@ -302,7 +467,7 @@ class DiaryInsightsService:
                 # 提取 2-4 字的词
                 for length in range(2, min(5, len(word) + 1)):
                     for i in range(len(word) - length + 1):
-                        w = word[i:i + length]
+                        w = word[i : i + length]
                         if w not in stop_words and len(w) >= 2:
                             counter[w] += 1
 
@@ -314,9 +479,7 @@ class DiaryInsightsService:
         """获取年度洞察的统计数据（用于前端展示或传给 LLM 生成报告）。"""
         start = f"{year}-01-01"
         end = f"{year}-12-31"
-        entries = self._store.list_entries(
-            limit=10000, start_date=start, end_date=end
-        )
+        entries = self._store.list_entries(limit=10000, start_date=start, end_date=end)
 
         if not entries:
             return {"year": year, "entry_count": 0, "message": "该年度暂无日记"}
@@ -363,12 +526,16 @@ class DiaryInsightsService:
                 "date": longest.entry_date,
                 "title": longest.title,
                 "word_count": longest.word_count,
-            } if longest else None,
+            }
+            if longest
+            else None,
             "shortest_entry": {
                 "date": shortest.entry_date,
                 "title": shortest.title,
                 "word_count": shortest.word_count,
-            } if shortest else None,
+            }
+            if shortest
+            else None,
             "date_range": {
                 "earliest": entries[0].entry_date,
                 "latest": entries[-1].entry_date,
@@ -393,11 +560,11 @@ class DiaryInsightsService:
 请根据以下统计数据，生成一份温暖、真实、有洞察力的年度回顾报告。
 
 ## 年度数据
-- 日记篇数：{stats.get('entry_count', 0)} 篇
-- 总字数：{stats.get('total_words', 0)} 字
-- 平均每篇：{stats.get('avg_words', 0)} 字
-- 平均情绪分：{stats.get('avg_mood_score', 0)}（-1到1，正数偏积极）
-- 时间范围：{stats.get('date_range', {}).get('earliest', '?')} ~ {stats.get('date_range', {}).get('latest', '?')}
+- 日记篇数：{stats.get("entry_count", 0)} 篇
+- 总字数：{stats.get("total_words", 0)} 字
+- 平均每篇：{stats.get("avg_words", 0)} 字
+- 平均情绪分：{stats.get("avg_mood_score", 0)}（-1到1，正数偏积极）
+- 时间范围：{stats.get("date_range", {}).get("earliest", "?")} ~ {stats.get("date_range", {}).get("latest", "?")}
 
 ## 月度分布
 {monthly_str}
@@ -406,13 +573,13 @@ class DiaryInsightsService:
 {keywords_str}
 
 ## 情绪分布
-{stats.get('mood_distribution', {})}
+{stats.get("mood_distribution", {})}
 
 ## 最长日记
-{stats.get('longest_entry', {})}
+{stats.get("longest_entry", {})}
 
 ## 最短日记
-{stats.get('shortest_entry', {})}
+{stats.get("shortest_entry", {})}
 
 请按以下结构生成报告（用中文，第一人称"我"，温柔真实的语气）：
 

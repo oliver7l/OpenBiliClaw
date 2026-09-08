@@ -69,6 +69,7 @@ async def run_wechat_polling(
 
     Returns:
         Total number of articles fetched.
+
     """
     import uuid
 

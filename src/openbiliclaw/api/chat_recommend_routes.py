@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException
 
@@ -13,6 +13,9 @@ from openbiliclaw.api.models import (
     ChatRecommendResponse,
     RecommendationOut,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +27,7 @@ def register_chat_recommend_routes(
     serialize_recommendation_items: Callable[[list[Any]], list[RecommendationOut]],
 ) -> None:
     """Register conversational recommendation endpoints on the FastAPI app."""
-
     _chat_recommend_sessions: dict[str, Any] = {}
-
 
     @app.post("/api/chat/recommend", response_model=ChatRecommendResponse)
     async def chat_recommend_endpoint(payload: ChatRecommendIn) -> ChatRecommendResponse:
@@ -45,7 +46,10 @@ def register_chat_recommend_routes(
             raise HTTPException(status_code=422, detail="Message is required.")
 
         # Get or create session
-        session_id = payload.session_id or f"rec-{int(asyncio.get_event_loop().time() * 1000)}-{id(message) % 10000}"
+        session_id = (
+            payload.session_id
+            or f"rec-{int(asyncio.get_event_loop().time() * 1000)}-{id(message) % 10000}"
+        )
         session = _chat_recommend_sessions.get(session_id)
         if session is None:
             # Snapshot user profile at session start
@@ -75,9 +79,8 @@ def register_chat_recommend_routes(
         last_recs = getattr(session, "last_recommendations", []) or []
         if last_recs:
             try:
-                recs_out = _serialize_recommendation_items(last_recs)
+                recs_out = serialize_recommendation_items(last_recs)
             except Exception:
                 logger.exception("Failed to serialize chat recommendations")
 
         return ChatRecommendResponse(reply=reply, session_id=session_id, recommendations=recs_out)
-

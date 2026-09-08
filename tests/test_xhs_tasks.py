@@ -320,7 +320,8 @@ class TestXhsTaskApi:
 
 def test_next_pending_only_ids_restricts_claim(queue: XhsTaskQueue) -> None:
     """gui-init: during init, next-task is restricted to init-owned ids so a
-    stale pending task can't be claimed and starve the run."""
+    stale pending task can't be claimed and starve the run.
+    """
     stale_id = queue.enqueue_with_id("bootstrap_profile", {"scopes": []}, daily_budget=0)
     owned_id = queue.enqueue_with_id("bootstrap_profile", {"scopes": []}, daily_budget=0)
     assert stale_id and owned_id

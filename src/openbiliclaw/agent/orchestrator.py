@@ -59,6 +59,7 @@ class AgentOrchestrator:
 
         Args:
             skill: The skill instance to register.
+
         """
         if skill.name in self._skills:
             logger.warning("Skill '%s' already registered, overwriting.", skill.name)
@@ -95,6 +96,7 @@ class AgentOrchestrator:
 
         Args:
             feedback: Feedback data from the user.
+
         """
         logger.info("Processing user feedback...")
         # TODO: Route feedback to memory manager and soul engine
@@ -107,6 +109,7 @@ class AgentOrchestrator:
 
         Returns:
             Agent's response.
+
         """
         logger.info("Chat message received: %s", message[:50])
         # TODO: Implement Socratic dialogue

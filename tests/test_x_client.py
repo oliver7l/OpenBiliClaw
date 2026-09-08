@@ -23,7 +23,8 @@ from openbiliclaw.sources.x_client import (
 
 def _make_tweet(rest_id: str, text: str = "hello world"):
     """Build a real ``twitter_cli.models.Tweet`` so the production
-    ``tweet_to_dict`` serializer runs against it (no network)."""
+    ``tweet_to_dict`` serializer runs against it (no network).
+    """
     from twitter_cli.models import Author, Metrics, Tweet
 
     return Tweet(

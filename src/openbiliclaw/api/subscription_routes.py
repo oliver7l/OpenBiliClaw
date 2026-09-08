@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from openbiliclaw.api.models import (
@@ -15,6 +14,9 @@ from openbiliclaw.api.models import (
     SubscriptionListOut,
     SubscriptionStatsOut,
 )
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -160,4 +162,3 @@ def register_subscription_routes(
             setattr(_cfg.scheduler, field_name, new_list)
             _save_cfg(_cfg)
         return JSONResponse({"ok": True})
-

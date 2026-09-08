@@ -59,7 +59,8 @@ class _FakeSoulEngine:
 class _FakeLLMService:
     """Bypass the real LLM. ``generate_xhs_keywords`` is monkeypatched
     in tests, so this stub is never actually called — but the producer
-    still type-checks against it."""
+    still type-checks against it.
+    """
 
     async def complete_structured_task(self, **_kwargs: Any) -> Any:
         raise NotImplementedError

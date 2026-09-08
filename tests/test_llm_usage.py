@@ -40,7 +40,8 @@ def test_estimate_cost_falls_back_to_provider_default() -> None:
 def test_estimate_cost_unknown_provider_uses_generic_fallback() -> None:
     """Truly-unknown provider gets a midrange estimate, not silent zero —
     so unexpected provider names still show up in the bill instead of
-    hiding under a 0."""
+    hiding under a 0.
+    """
     cost = estimate_cost("totally-new-co", "model-x", 1000, 500)
     assert cost > 0
 
@@ -52,7 +53,8 @@ def test_estimate_cost_ollama_is_free() -> None:
 
 def test_estimate_cost_handles_negative_token_counts() -> None:
     """Defensive: negative token values clamp to 0 instead of producing
-    negative cost."""
+    negative cost.
+    """
     assert estimate_cost("deepseek", "deepseek-chat", -10, -5) == 0.0
 
 
@@ -194,7 +196,8 @@ def test_database_query_llm_usage_total(tmp_path: Path) -> None:
 
 def test_database_query_llm_usage_total_empty_returns_zeros(tmp_path: Path) -> None:
     """When no usage has been recorded, total is all-zeros — the CLI
-    relies on this to print a friendly empty-state message."""
+    relies on this to print a friendly empty-state message.
+    """
     db = Database(tmp_path / "usage.db")
     db.initialize()
 
@@ -251,7 +254,8 @@ def test_usage_recorder_persists_response_tokens(tmp_path: Path) -> None:
 
 def test_usage_recorder_no_op_when_sink_missing() -> None:
     """A recorder without a sink shouldn't raise — useful for tests
-    and standalone scripts that don't care about cost tracking."""
+    and standalone scripts that don't care about cost tracking.
+    """
     recorder = UsageRecorder(sink=None)
     assert not recorder.enabled
 
@@ -268,7 +272,8 @@ def test_usage_recorder_no_op_when_sink_missing() -> None:
 def test_usage_recorder_swallows_sink_errors(tmp_path: Path) -> None:
     """Billing should never break the LLM hot path. If the sink
     raises (e.g. DB locked, schema mismatch), record() just logs +
-    moves on."""
+    moves on.
+    """
 
     class _BrokenSink:
         def insert_llm_usage(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -287,7 +292,8 @@ def test_usage_recorder_swallows_sink_errors(tmp_path: Path) -> None:
 
 def test_usage_recorder_handles_response_without_usage(tmp_path: Path) -> None:
     """Some providers (e.g. older models, partial failures) may return
-    LLMResponse without a usage dict. Record 0 tokens / 0 cost."""
+    LLMResponse without a usage dict. Record 0 tokens / 0 cost.
+    """
     db = Database(tmp_path / "usage.db")
     db.initialize()
     recorder = UsageRecorder(sink=db)
@@ -311,7 +317,8 @@ def test_usage_recorder_handles_response_without_usage(tmp_path: Path) -> None:
 
 def test_usage_recorder_persists_cached_input_tokens(tmp_path: Path) -> None:
     """When the response carries cached_input_tokens, it must flow
-    into the DB row + apply the cache discount in the cost estimate."""
+    into the DB row + apply the cache discount in the cost estimate.
+    """
     db = Database(tmp_path / "usage.db")
     db.initialize()
     recorder = UsageRecorder(sink=db)

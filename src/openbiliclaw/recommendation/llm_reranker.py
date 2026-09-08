@@ -308,6 +308,7 @@ def blend_scores(
 
     Returns:
         Blended scores mapping content_id -> final score [0, 1].
+
     """
     if not llm_scores or weight <= 0.0:
         return dict(curator_scores)
@@ -363,6 +364,7 @@ class LLMReranker:
             batch_size: Number of candidates per LLM call. Default 5.
             top_k: Only rerank the top-K candidates. Default 30.
             weight: LLM score weight in blended final score. Default 0.3.
+
         """
         self._llm_service = llm_service
         self._batch_size = max(1, batch_size)
@@ -408,6 +410,7 @@ class LLMReranker:
         Returns:
             Mapping content_id -> LLM score [0, 1]. Empty dict on any
             failure (caller should fall back to curator scores).
+
         """
         if not candidates:
             return {}

@@ -12,9 +12,12 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import DiaryEntry, DiaryEntryCreate, MoodLevel
-from .service import DiaryService
+
+if TYPE_CHECKING:
+    from .service import DiaryService
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,7 @@ class DiaryImporter:
 
         Returns:
             (导入数量, 导入的日记列表)
+
         """
         path = Path(file_path)
         if not path.exists():
@@ -105,6 +109,7 @@ class DiaryImporter:
 
         Returns:
             (导入数量, 导入的日记列表)
+
         """
         path = Path(file_path)
         if not path.exists():
@@ -145,6 +150,7 @@ class DiaryImporter:
 
         Returns:
             (导入数量, 导入的日记列表)
+
         """
         path = Path(file_path)
         if not path.exists():
@@ -177,6 +183,7 @@ class DiaryImporter:
 
         Returns:
             [(日期, 内容, 标题), ...]
+
         """
         lines = text.split("\n")
         result: list[tuple[str, str, str]] = []

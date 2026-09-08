@@ -67,7 +67,6 @@ class _NeverFullPipeline:
 
 def find_free_port() -> int:
     """Return an available loopback TCP port."""
-
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
@@ -75,7 +74,6 @@ def find_free_port() -> int:
 
 def resolve_chrome_executable(explicit_path: str | None = None) -> Path:
     """Resolve a Chrome/Chromium executable suitable for loading MV3 extensions."""
-
     if explicit_path:
         path = Path(explicit_path).expanduser()
         if not path.exists():
@@ -118,7 +116,6 @@ def resolve_chrome_executable(explicit_path: str | None = None) -> Path:
 
 def choose_bili_service_worker_target(targets: list[dict[str, Any]]) -> dict[str, Any]:
     """Pick the OpenBiliClaw MV3 service worker target from CDP /json/list."""
-
     for target in targets:
         if target.get("type") != "service_worker":
             continue
@@ -132,7 +129,6 @@ def choose_bili_service_worker_target(targets: list[dict[str, Any]]) -> dict[str
 
 def is_bili_extension_e2e_candidate(row: dict[str, Any], *, bvids: set[str]) -> bool:
     """Return whether a candidate row belongs to this harness' cleanup scope."""
-
     return (
         str(row.get("source_platform", "")) == "bilibili"
         and str(row.get("source_strategy", "")) == "bili-extension-search"

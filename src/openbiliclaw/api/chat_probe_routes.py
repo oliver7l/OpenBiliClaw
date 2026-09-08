@@ -6,7 +6,7 @@ import asyncio
 import logging
 import uuid
 from contextlib import suppress
-from typing import Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -20,17 +20,23 @@ from openbiliclaw.api.models import (
 )
 from openbiliclaw.soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = logging.getLogger(__name__)
 
 
 # ── Lazy imports for module-level helpers ─────
 
+
 def _get_probe_metadata_for_payload(item: object) -> tuple[str, bool]:
     from openbiliclaw.api.app import _probe_metadata_for_payload
+
     return _probe_metadata_for_payload(item)
 
 
 # ── Route registration ───────────────────────────────────────────
+
 
 def register_chat_probe_routes(
     app: FastAPI,
@@ -40,7 +46,6 @@ def register_chat_probe_routes(
     serialize_recommendation_items: Callable[[list[Any]], list[RecommendationOut]] | None = None,
 ) -> None:
     """Register chat turns and interest/avoidance probe endpoints."""
-
     chat_turn_lock = asyncio.Lock()
     fallback_chat_turns: dict[str, dict[str, Any]] = {}
     running_chat_turn_tasks: set[str] = set()
@@ -1203,7 +1208,7 @@ def register_chat_probe_routes(
         try:
             from openbiliclaw.soul.avoidance_speculator import load_avoidance_state
 
-            runtime_config = getattr(ctx, "config", None) or config
+            runtime_config = getattr(ctx, "config", None)
             avoidance_state = load_avoidance_state(runtime_config.data_path)
             active = [item for item in avoidance_state.active if item.status == "active"]
             items = [
@@ -1421,4 +1426,3 @@ def register_chat_probe_routes(
         "record_exploration_buffer_event": _record_exploration_buffer_event,
         "recommendation_buffer_domain": _recommendation_buffer_domain,
     }
-

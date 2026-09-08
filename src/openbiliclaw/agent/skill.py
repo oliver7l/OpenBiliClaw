@@ -64,6 +64,7 @@ class Skill(ABC):
 
         Returns:
             Skill-specific result.
+
         """
         ...
 
@@ -108,6 +109,7 @@ class SkillRegistry:
 
         Returns:
             List of paths to SKILL.md files.
+
         """
         if not skills_dir.exists():
             return []

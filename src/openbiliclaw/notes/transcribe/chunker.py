@@ -43,6 +43,7 @@ class AudioChunker:
 
         Returns:
             时长（秒），失败返回 0.0。
+
         """
         ffprobe_bin = shutil.which("ffprobe")
         if ffprobe_bin:
@@ -101,6 +102,7 @@ class AudioChunker:
 
         Returns:
             切片信息列表，每个元素包含 chunk_index、start_sec、end_sec、filepath 等。
+
         """
         src = Path(audio_filepath).resolve()
         if not src.exists():

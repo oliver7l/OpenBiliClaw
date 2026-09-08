@@ -1,6 +1,7 @@
 """Tests for the reading-library enhancement layer (progress / favorites /
 notes / AI summary / stats), the article_finished / article_dismissed event
-classification, and the terminal ``hidden`` (block / 不再出现) state."""
+classification, and the terminal ``hidden`` (block / 不再出现) state.
+"""
 
 from __future__ import annotations
 
@@ -195,7 +196,8 @@ def test_article_dismissed_classified_negative() -> None:
 
 def test_blocking_article_suppresses_matching_pool_rows() -> None:
     """屏蔽文章时同步清洗候选池：同一 content_url 的 fresh 行被抑制，
-    其它 URL 与已展示的历史行不受影响。"""
+    其它 URL 与已展示的历史行不受影响。
+    """
     db, _ = _make_db()
     db.cache_content(
         "BV1P",

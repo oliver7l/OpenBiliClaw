@@ -143,7 +143,6 @@ from openbiliclaw.api.models import (
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
-from openbiliclaw.clone import CloneService
 from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService, MoodLevel
 from openbiliclaw.diary.importer import DiaryImporter
 from openbiliclaw.health import (
@@ -200,6 +199,8 @@ _PROJECT_ROOT = _Path(__file__).resolve().parent.parent.parent.parent
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
+
+    from openbiliclaw.clone import CloneService
 
 logger = logging.getLogger(__name__)
 _CONFIG_SAVE_LOCK = asyncio.Lock()
@@ -672,7 +673,6 @@ def _validate_llm_buildable(cfg: Any, base_issues: list[Any]) -> list[Any]:
 
 def _count_events_by_source_platform(database: Any) -> dict[str, int]:
     """Count stored behavior events by normalized source platform."""
-
     counter = {source: 0 for source in _SOURCE_SHARE_ORDER}
     if hasattr(database, "count_events_by_source_platform"):
         raw_counts = database.count_events_by_source_platform()
@@ -1125,13 +1125,17 @@ def create_app(
     auto_update_service: Any | None = None,
 ) -> FastAPI:
     """Create the local backend API app."""
+    # 每个 app 实例拥有独立的 API 统计缓存域：``_api_cache`` 是进程级单例，
+    # 测试多次 create_app 时若不清理，同 path 的 GET 会命中前一个 app 的缓存
+    # （响应被旧 app 的注入组件数据污染，见 test_recommendations_endpoint_*）。
+    _api_cache.invalidate_namespace(_API_CACHE_NAMESPACE)
+    from openbiliclaw.api.notes_routes import register_notes_routes
     from openbiliclaw.api.recommendation_routes import build_recommendation_router
     from openbiliclaw.api.runtime_context import (
         RuntimeContext,
         build_degraded_runtime_context,
         build_runtime_context,
     )
-    from openbiliclaw.api.notes_routes import register_notes_routes
     from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
@@ -1500,7 +1504,8 @@ def create_app(
     def _init_owns_task(task_id: str) -> bool:
         """Whether ``task_id`` is a bootstrap task enqueued by the active init
         run (so its task-result is init's own data, not a stale/steady-state
-        completion). Defensive — never raises."""
+        completion). Defensive — never raises.
+        """
         coord = getattr(ctx, "init_coordinator", None)
         if coord is None or not task_id:
             return False
@@ -1512,7 +1517,8 @@ def create_app(
     def _init_owned_ids_filter() -> set[str] | None:
         """``next-task`` filter: during an active init, restrict the dispatcher
         to init-owned bootstrap task ids (so a stale pending task can't be
-        claimed and starve the run's collectors); None = no restriction."""
+        claimed and starve the run's collectors); None = no restriction.
+        """
         if not _init_active_now():
             return None
         coord = getattr(ctx, "init_coordinator", None)
@@ -2234,7 +2240,8 @@ def create_app(
 
     def _init_runtime_supported() -> tuple[bool, str]:
         """Cheap guard: GUI init needs a writable host runtime (gui-init §5b,
-        review R2 A-7). Docker uses the headless auto-init path instead."""
+        review R2 A-7). Docker uses the headless auto-init path instead.
+        """
         from openbiliclaw.docker_runtime import is_running_in_container
 
         if is_running_in_container():
@@ -2256,7 +2263,6 @@ def create_app(
         popup, and later background discovery aligned with the user's explicit
         checkbox choice.
         """
-
         cfg = getattr(ctx, "config", None)
         sources_cfg = getattr(cfg, "sources", None) if cfg is not None else None
         if sources_cfg is None or not effective_sources:
@@ -3655,10 +3661,7 @@ def create_app(
                 raw,
             ).fetchall():
                 wl_set.add(str(r["bvid"]))
-        return {
-            b: {"saved": b in fav_set, "watch_later": b in wl_set}
-            for b in raw
-        }
+        return {b: {"saved": b in fav_set, "watch_later": b in wl_set} for b in raw}
 
     @app.get("/api/favorites", response_model=FavoriteListResponse)
     async def favorite_list(
@@ -3767,7 +3770,6 @@ def create_app(
 
     async def _drain_discovery_candidates_once() -> None:
         """Best-effort drain for newly enqueued source candidates."""
-
         drain = getattr(ctx.runtime_controller, "drain_discovery_candidates_once", None)
         if not callable(drain):
             return
@@ -4765,7 +4767,10 @@ def create_app(
             raise HTTPException(status_code=422, detail="Message is required.")
 
         # Get or create session
-        session_id = payload.session_id or f"rec-{int(asyncio.get_event_loop().time() * 1000)}-{id(message) % 10000}"
+        session_id = (
+            payload.session_id
+            or f"rec-{int(asyncio.get_event_loop().time() * 1000)}-{id(message) % 10000}"
+        )
         session = _chat_recommend_sessions.get(session_id)
         if session is None:
             # Snapshot user profile at session start
@@ -6456,7 +6461,6 @@ def create_app(
         source_keyword_id: int | None = None,
     ) -> int:
         """Enqueue extension-collected Bilibili search videos for evaluation."""
-
         from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
         from openbiliclaw.discovery.engine import DiscoveredContent
 
@@ -6607,7 +6611,6 @@ def create_app(
         later, rewrite the previously-cached bare URL so share links
         don't dead-end at xhs's login wall.
         """
-
         updated = 0
         for url in urls:
             if "xsec_token=" not in url:
@@ -6841,7 +6844,6 @@ def create_app(
         each ingested candidate here so admission can backfill the keyword's
         yield. ``None`` for passive / observed / non-planner ingests.
         """
-
         from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
         from openbiliclaw.discovery.engine import DiscoveredContent
 
@@ -7056,7 +7058,6 @@ def create_app(
     @app.post("/api/sources/bili/task-result")
     async def bili_task_result(payload: dict[str, Any]) -> dict[str, Any]:
         """Accept Bilibili extension search results and enqueue candidates."""
-
         task_id = str(payload.get("task_id", "") or "").strip()
         status = str(payload.get("status", "") or "").strip()
         videos = [video for video in payload.get("videos", []) if isinstance(video, dict)]
@@ -7921,7 +7922,8 @@ def create_app(
     async def xhs_task_kick() -> dict[str, Any]:
         """Broadcast `xhs_task_available` so any subscribed extension
         service-worker triggers an immediate poll. Idempotent and best
-        effort — failures here never affect task state."""
+        effort — failures here never affect task state.
+        """
         publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
         if callable(publish):
             with suppress(Exception):
@@ -7931,7 +7933,8 @@ def create_app(
     @app.post("/api/sources/dy/kick")
     async def dy_task_kick() -> dict[str, Any]:
         """Broadcast `dy_task_available` over runtime-stream. See
-        xhs_task_kick docstring for rationale."""
+        xhs_task_kick docstring for rationale.
+        """
         publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
         if callable(publish):
             with suppress(Exception):
@@ -8267,7 +8270,8 @@ def create_app(
         latest /dist bundle without the user clicking the reload icon
         in chrome://extensions.
 
-        Best-effort — silent when no event-hub is wired."""
+        Best-effort — silent when no event-hub is wired.
+        """
         publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
         if callable(publish):
             with suppress(Exception):
@@ -10290,7 +10294,8 @@ def create_app(
     def reading_stats() -> JSONResponse:
         """Reading-library dashboard: totals, monthly finished trend,
         source mix, top tags, notes count, and a light interest-shift
-        view (recently-read tags vs the current interest profile)."""
+        view (recently-read tags vs the current interest profile).
+        """
         database = getattr(ctx, "database", None)
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
@@ -10420,21 +10425,25 @@ def create_app(
                 site = r[3] or "unknown"
                 if site not in by_source:
                     by_source[site] = []
-                by_source[site].append({
-                    "article_id": r[0],
-                    "title": r[1],
-                    "url": r[2],
-                    "summary": r[5] or "",
-                    "tags": json.loads(r[6]) if r[6] else [],
-                })
+                by_source[site].append(
+                    {
+                        "article_id": r[0],
+                        "title": r[1],
+                        "url": r[2],
+                        "summary": r[5] or "",
+                        "tags": json.loads(r[6]) if r[6] else [],
+                    }
+                )
 
-            return JSONResponse({
-                "ok": True,
-                "concept": concept_name,
-                "type": concept_type,
-                "total": len(rows),
-                "by_source": by_source,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "concept": concept_name,
+                    "type": concept_type,
+                    "total": len(rows),
+                    "by_source": by_source,
+                }
+            )
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -10449,9 +10458,7 @@ def create_app(
             total_concepts = conn.execute(
                 "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
             ).fetchone()[0]
-            total_backlinks = conn.execute(
-                "SELECT COUNT(*) FROM knowledge_backlinks"
-            ).fetchone()[0]
+            total_backlinks = conn.execute("SELECT COUNT(*) FROM knowledge_backlinks").fetchone()[0]
 
             sources = conn.execute(
                 "SELECT source_site, COUNT(*) as cnt FROM knowledge_backlinks "
@@ -10459,12 +10466,14 @@ def create_app(
             ).fetchall()
             source_stats = {r[0]: r[1] for r in sources}
 
-            return JSONResponse({
-                "ok": True,
-                "total_concepts": total_concepts,
-                "total_backlinks": total_backlinks,
-                "sources": source_stats,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "total_concepts": total_concepts,
+                    "total_backlinks": total_backlinks,
+                    "sources": source_stats,
+                }
+            )
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -10509,10 +10518,7 @@ def create_app(
                 ),
                 node_names + node_names,
             ).fetchall()
-            edges = [
-                {"source": r[0], "target": r[1], "weight": r[2]}
-                for r in edges_raw
-            ]
+            edges = [{"source": r[0], "target": r[1], "weight": r[2]} for r in edges_raw]
 
             return JSONResponse({"ok": True, "nodes": nodes, "edges": edges})
         except Exception as e:
@@ -10819,7 +10825,9 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         if svc.llm_service is None:
             return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
-        results = await svc.analyze_unanalyzed(limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10)))
+        results = await svc.analyze_unanalyzed(
+            limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10))
+        )
         success = sum(1 for v in results.values() if v is not None)
         return JSONResponse(
             {
@@ -10827,7 +10835,9 @@ def create_app(
                 "total": len(results),
                 "success": success,
                 "failed": len(results) - success,
-                "results": {str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()},
+                "results": {
+                    str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()
+                },
             }
         )
 
@@ -10851,11 +10861,17 @@ def create_app(
         importer = DiaryImporter(svc)
         try:
             if fmt == "lele" or (fmt == "auto" and "lele" in file_path.lower()):
-                count, entries = importer.import_lele_diary(file_path, source=source or "import_lele")
+                count, entries = importer.import_lele_diary(
+                    file_path, source=source or "import_lele"
+                )
             elif fmt == "markdown" or (fmt == "auto" and file_path.lower().endswith(".md")):
-                count, entries = importer.import_markdown_file(file_path, source=source or "import_markdown")
+                count, entries = importer.import_markdown_file(
+                    file_path, source=source or "import_markdown"
+                )
             else:
-                count, entries = importer.import_text_file(file_path, source=source or "import_text")
+                count, entries = importer.import_text_file(
+                    file_path, source=source or "import_text"
+                )
         except FileNotFoundError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
         except Exception as exc:
@@ -10885,6 +10901,7 @@ def create_app(
             granularity: month / year
             start_date: 起始日期 YYYY-MM-DD
             end_date: 结束日期 YYYY-MM-DD
+
         """
         svc = _get_diary_service()
         if svc is None:
@@ -11018,7 +11035,9 @@ def create_app(
         return JSONResponse({"ok": True, "data": report.__dict__})
 
     @app.post("/api/diary/reflection/weekly/generate")
-    async def diary_reflection_weekly_generate(payload: dict[str, Any] | None = None) -> JSONResponse:
+    async def diary_reflection_weekly_generate(
+        payload: dict[str, Any] | None = None,
+    ) -> JSONResponse:
         """生成 AI 周报。
 
         请求体（可选）：
@@ -11038,11 +11057,13 @@ def create_app(
         prompt = reflection.build_weekly_report_prompt(report)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": report.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": report.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("周报生成失败")
             return JSONResponse(
@@ -11073,16 +11094,20 @@ def create_app(
         reflection = ReflectionService(svc.store)
         result = reflection.generate_monthly_reflection(year, month)
         if result.entry_count == 0:
-            return JSONResponse({"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404)
+            return JSONResponse(
+                {"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404
+            )
 
         prompt = reflection.build_monthly_reflection_prompt(result)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": result.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": result.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("月度反思生成失败")
             return JSONResponse(
@@ -11118,11 +11143,13 @@ def create_app(
         prompt = reflection.build_yearly_review_prompt(result)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": result.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": result.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("年度回顾生成失败")
             return JSONResponse(
@@ -11151,11 +11178,13 @@ def create_app(
         reflection = ReflectionService(svc.store)
         milestones = reflection.detect_milestones(start_date, end_date)
         milestones = milestones[:limit]
-        return JSONResponse({
-            "ok": True,
-            "data": [m.__dict__ for m in milestones],
-            "total": len(milestones),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [m.__dict__ for m in milestones],
+                "total": len(milestones),
+            }
+        )
 
     # ─── 知识图谱 API（标签关联+人物关系+知识网络） ─────────────────
 
@@ -11296,11 +11325,13 @@ def create_app(
 
         kg = KnowledgeGraphService(svc.store)
         relations = kg.analyze_person_relations(person_name, start_date, end_date)
-        return JSONResponse({
-            "ok": True,
-            "data": [r.__dict__ for r in relations],
-            "total": len(relations),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [r.__dict__ for r in relations],
+                "total": len(relations),
+            }
+        )
 
     # ─── 自进化 API（夜间自我改进循环） ─────────────────────────────
 
@@ -11321,7 +11352,9 @@ def create_app(
         se = SelfEvolutionService(svc.store)
         profile = se.get_user_profile(target_date)
         if profile is None:
-            return JSONResponse({"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404)
+            return JSONResponse(
+                {"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404
+            )
         return JSONResponse({"ok": True, "data": profile.to_dict()})
 
     @app.get("/api/diary/self-evolution/profile/history")
@@ -11364,11 +11397,13 @@ def create_app(
 
         se = SelfEvolutionService(svc.store)
         drifts = se.get_drifts(drift_type, severity, status, limit)
-        return JSONResponse({
-            "ok": True,
-            "data": [d.to_dict() for d in drifts],
-            "total": len(drifts),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [d.to_dict() for d in drifts],
+                "total": len(drifts),
+            }
+        )
 
     @app.get("/api/diary/self-evolution/nightly-logs")
     def diary_se_nightly_logs(
@@ -11424,11 +11459,13 @@ def create_app(
 
         se = SelfEvolutionService(svc.store)
         nightly_log = se.run_nightly_cycle(target_date)
-        return JSONResponse({
-            "ok": True,
-            "message": "夜间循环完成",
-            "data": nightly_log.to_dict(),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": "夜间循环完成",
+                "data": nightly_log.to_dict(),
+            }
+        )
 
     @app.get("/api/diary/self-evolution/tag-optimizations")
     def diary_se_tag_optimizations(
@@ -11488,11 +11525,13 @@ def create_app(
 
         engine = InsightEngineService(svc.store)
         patterns = engine.discover_patterns(lookback_days)
-        return JSONResponse({
-            "ok": True,
-            "data": [asdict(p) for p in patterns],
-            "total": len(patterns),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [asdict(p) for p in patterns],
+                "total": len(patterns),
+            }
+        )
 
     @app.get("/api/diary/insights/morning-briefing")
     def diary_insights_morning_briefing(
@@ -11555,11 +11594,13 @@ def create_app(
 
         engine = InsightEngineService(svc.store)
         loops = engine.get_open_loops(status, loop_type, priority, limit)
-        return JSONResponse({
-            "ok": True,
-            "data": [l.to_dict() for l in loops],
-            "total": len(loops),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [l.to_dict() for l in loops],
+                "total": len(loops),
+            }
+        )
 
     @app.post("/api/diary/insights/open-loops/scan")
     def diary_insights_scan_open_loops(
@@ -11577,12 +11618,14 @@ def create_app(
 
         engine = InsightEngineService(svc.store)
         loops = engine.scan_open_loops(lookback_days)
-        return JSONResponse({
-            "ok": True,
-            "data": [l.to_dict() for l in loops],
-            "total": len(loops),
-            "message": f"扫描完成，发现 {len(loops)} 个开放循环",
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [l.to_dict() for l in loops],
+                "total": len(loops),
+                "message": f"扫描完成，发现 {len(loops)} 个开放循环",
+            }
+        )
 
     @app.put("/api/diary/insights/open-loops/{loop_id}/status")
     def diary_insights_update_open_loop_status(
@@ -11650,7 +11693,9 @@ def create_app(
 
         memory = MemorySystemService(svc.store)
         updated = memory.update_memory_tiers()
-        return JSONResponse({"ok": True, "updated": updated, "message": f"更新了 {updated} 个记忆条目的层级"})
+        return JSONResponse(
+            {"ok": True, "updated": updated, "message": f"更新了 {updated} 个记忆条目的层级"}
+        )
 
     @app.post("/api/diary/memory/compress-cold")
     def diary_memory_compress_cold() -> JSONResponse:
@@ -11698,11 +11743,13 @@ def create_app(
 
         memory = MemorySystemService(svc.store)
         results = memory.search_memories(query, tier, limit, min_importance)
-        return JSONResponse({
-            "ok": True,
-            "data": results,
-            "total": len(results),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": results,
+                "total": len(results),
+            }
+        )
 
     @app.get("/api/diary/memory/{diary_id}")
     def diary_memory_get_by_id(diary_id: int) -> JSONResponse:
@@ -11884,7 +11931,9 @@ def create_app(
         from openbiliclaw.diary import AdvancedMemoryService
 
         am = AdvancedMemoryService(svc.store)
-        results = am.search_memories(query=query, layer=layer, min_importance=min_importance, limit=limit)
+        results = am.search_memories(
+            query=query, layer=layer, min_importance=min_importance, limit=limit
+        )
         return JSONResponse({"ok": True, "data": results})
 
     # ─── 智能时间线卡片 API ───────────────────────────────────────────
@@ -12103,13 +12152,16 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             from openbiliclaw.diary.models import TagType
+
             tag_type = TagType(type) if type else None
             tags = svc.get_tags(tag_type=tag_type, limit=limit, min_count=min_count)
-            return JSONResponse({
-                "ok": True,
-                "data": [t.model_dump(mode="json") for t in tags],
-                "total": len(tags),
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": [t.model_dump(mode="json") for t in tags],
+                    "total": len(tags),
+                }
+            )
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -12130,12 +12182,16 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            persons = svc.get_persons(relation=relation, limit=limit, min_appearances=min_appearances)
-            return JSONResponse({
-                "ok": True,
-                "data": [p.model_dump(mode="json") for p in persons],
-                "total": len(persons),
-            })
+            persons = svc.get_persons(
+                relation=relation, limit=limit, min_appearances=min_appearances
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": [p.model_dump(mode="json") for p in persons],
+                    "total": len(persons),
+                }
+            )
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -12262,7 +12318,10 @@ def create_app(
         if rag is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         if rag.embedding_service is None:
-            return JSONResponse({"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"}, status_code=400)
+            return JSONResponse(
+                {"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"},
+                status_code=400,
+            )
         payload = payload or {}
         try:
             stats = await rag.batch_generate_embeddings(
@@ -12308,24 +12367,27 @@ def create_app(
                 end_date=end_date,
                 source=source,
             )
-            return JSONResponse({
-                "ok": True,
-                "query": q,
-                "count": len(results),
-                "results": [
-                    {
-                        "id": r.entry.id,
-                        "date": r.entry.entry_date,
-                        "title": r.entry.title,
-                        "content": r.entry.content[:500] + ("..." if len(r.entry.content) > 500 else ""),
-                        "source": r.entry.source,
-                        "mood": r.entry.mood.value,
-                        "score": round(r.score, 4),
-                        "highlight": r.highlight,
-                    }
-                    for r in results
-                ],
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "query": q,
+                    "count": len(results),
+                    "results": [
+                        {
+                            "id": r.entry.id,
+                            "date": r.entry.entry_date,
+                            "title": r.entry.title,
+                            "content": r.entry.content[:500]
+                            + ("..." if len(r.entry.content) > 500 else ""),
+                            "source": r.entry.source,
+                            "mood": r.entry.mood.value,
+                            "score": round(r.score, 4),
+                            "highlight": r.highlight,
+                        }
+                        for r in results
+                    ],
+                }
+            )
         except Exception as exc:
             logger.exception("语义搜索失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -12344,21 +12406,24 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             results = rag.find_similar_entries(entry_id=entry_id, top_k=top_k, min_score=min_score)
-            return JSONResponse({
-                "ok": True,
-                "entry_id": entry_id,
-                "count": len(results),
-                "results": [
-                    {
-                        "id": r.entry.id,
-                        "date": r.entry.entry_date,
-                        "title": r.entry.title,
-                        "content": r.entry.content[:300] + ("..." if len(r.entry.content) > 300 else ""),
-                        "score": round(r.score, 4),
-                    }
-                    for r in results
-                ],
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "entry_id": entry_id,
+                    "count": len(results),
+                    "results": [
+                        {
+                            "id": r.entry.id,
+                            "date": r.entry.entry_date,
+                            "title": r.entry.title,
+                            "content": r.entry.content[:300]
+                            + ("..." if len(r.entry.content) > 300 else ""),
+                            "score": round(r.score, 4),
+                        }
+                        for r in results
+                    ],
+                }
+            )
         except Exception as exc:
             logger.exception("相似日记查询失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -12384,13 +12449,15 @@ def create_app(
                 question=question,
                 top_k=payload.get("top_k", 8),
             )
-            return JSONResponse({
-                "ok": True,
-                "question": question,
-                "answer": answer.answer,
-                "sources": answer.sources,
-                "related_questions": answer.related_questions,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "question": question,
+                    "answer": answer.answer,
+                    "sources": answer.sources,
+                    "related_questions": answer.related_questions,
+                }
+            )
         except Exception as exc:
             logger.exception("RAG 问答失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -12510,13 +12577,15 @@ def create_app(
             end_date=end_date,
             search=search,
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [e.model_dump(mode="json") for e in items],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [e.model_dump(mode="json") for e in items],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
 
     @app.post("/api/health/encounters")
     def health_encounters_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12584,14 +12653,18 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_conditions(
-            patient_id=patient_id, status=status,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            status=status,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [c.model_dump(mode="json") for c in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [c.model_dump(mode="json") for c in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/conditions")
     def health_conditions_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12655,14 +12728,18 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_medications(
-            patient_id=patient_id, status=status,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            status=status,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [m.model_dump(mode="json") for m in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [m.model_dump(mode="json") for m in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/medications")
     def health_medications_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12730,11 +12807,13 @@ def create_app(
             offset=max(0, int(offset)),
             search=search,
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [l.model_dump(mode="json") for l in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [l.model_dump(mode="json") for l in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/lab-results")
     def health_lab_results_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12813,11 +12892,13 @@ def create_app(
             limit=max(1, min(int(limit), 200)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [p.model_dump(mode="json") for p in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [p.model_dump(mode="json") for p in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/procedures")
     def health_procedures_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12912,11 +12993,13 @@ def create_app(
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [v.model_dump(mode="json") for v in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [v.model_dump(mode="json") for v in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/vitals")
     def health_vitals_create(payload: dict[str, Any]) -> JSONResponse:
@@ -12977,7 +13060,9 @@ def create_app(
     # ── 医生信息 ──
 
     @app.get("/api/health/doctors")
-    def health_doctors_list(specialty: str | None = None, search: str | None = None) -> JSONResponse:
+    def health_doctors_list(
+        specialty: str | None = None, search: str | None = None
+    ) -> JSONResponse:
         svc = _get_health_service()
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
@@ -13047,15 +13132,20 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_documents(
-            patient_id=patient_id, document_type=document_type,
-            encounter_id=encounter_id, search=search,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            document_type=document_type,
+            encounter_id=encounter_id,
+            search=search,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [d.model_dump(mode="json") for d in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [d.model_dump(mode="json") for d in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/documents")
     def health_documents_create(payload: dict[str, Any]) -> JSONResponse:
@@ -13118,8 +13208,10 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items = svc.list_insights(
-            patient_id=patient_id, target_type=target_type,
-            target_id=target_id, limit=max(1, min(int(limit), 200)),
+            patient_id=patient_id,
+            target_type=target_type,
+            target_id=target_id,
+            limit=max(1, min(int(limit), 200)),
         )
         return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
 
@@ -13159,12 +13251,14 @@ def create_app(
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "patient_id": patient_id,
-            "items": [e.model_dump(mode="json") for e in events],
-            "total": len(events),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "patient_id": patient_id,
+                "items": [e.model_dump(mode="json") for e in events],
+                "total": len(events),
+            }
+        )
 
     # ── 预约 / 复诊 ──
 
@@ -13180,14 +13274,19 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_appointments(
-            patient_id=patient_id, status=status,
+            patient_id=patient_id,
+            status=status,
             upcoming_only=upcoming_only,
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True, "items": [a.model_dump(mode="json") for a in items], "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [a.model_dump(mode="json") for a in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/appointments")
     def health_appointments_create(data: AppointmentCreate) -> JSONResponse:
@@ -13248,14 +13347,20 @@ def create_app(
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_medication_logs(
-            patient_id=patient_id, medication_id=medication_id,
-            start_date=start_date, end_date=end_date,
+            patient_id=patient_id,
+            medication_id=medication_id,
+            start_date=start_date,
+            end_date=end_date,
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True, "items": [m.model_dump(mode="json") for m in items], "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [m.model_dump(mode="json") for m in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/medication-logs")
     def health_medication_logs_create(data: MedicationLogCreate) -> JSONResponse:
@@ -13308,13 +13413,15 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         drugs = [d.strip() for d in existing_drugs.split(",") if d.strip()]
         interactions = svc.check_drug_interactions(drug_name, drugs)
-        return JSONResponse({
-            "ok": True,
-            "drug_name": drug_name,
-            "existing_drugs": drugs,
-            "interactions": [i.model_dump(mode="json") for i in interactions],
-            "has_interaction": len(interactions) > 0,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "drug_name": drug_name,
+                "existing_drugs": drugs,
+                "interactions": [i.model_dump(mode="json") for i in interactions],
+                "has_interaction": len(interactions) > 0,
+            }
+        )
 
     # ── AI 报告解读 ──
 
@@ -13329,7 +13436,9 @@ def create_app(
         try:
             insight = await svc.interpret_lab_result(lab_result_id)
             if insight is None:
-                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+                return JSONResponse(
+                    {"ok": False, "error": "interpretation failed"}, status_code=500
+                )
             return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
@@ -13345,7 +13454,9 @@ def create_app(
         try:
             insight = await svc.interpret_procedure(procedure_id)
             if insight is None:
-                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+                return JSONResponse(
+                    {"ok": False, "error": "interpretation failed"}, status_code=500
+                )
             return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
@@ -13510,7 +13621,9 @@ def create_app(
         build_travel_router(
             data_path=getattr(_travel_cfg, "data_path", "") or "",
             budget_doc=getattr(_travel_cfg, "budget_doc", "新疆旅行预算.md"),
-            flights_json=getattr(_travel_cfg, "flights_json", "ctrip-ticket-crawler/our_routes_results.json"),
+            flights_json=getattr(
+                _travel_cfg, "flights_json", "ctrip-ticket-crawler/our_routes_results.json"
+            ),
         )
     )
 
@@ -13569,13 +13682,15 @@ def create_app(
             tag=tag,
             search=search,
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [s.model_dump(mode="json") for s in sites],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [s.model_dump(mode="json") for s in sites],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
 
     @app.get("/api/clone/stats")
     def clone_stats() -> JSONResponse:
@@ -13605,7 +13720,12 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             from openbiliclaw.clone import CloneSiteCreate, CloneStatus
-            status = CloneStatus(payload.get("status", "cloned")) if payload.get("status") else CloneStatus.CLONED
+
+            status = (
+                CloneStatus(payload.get("status", "cloned"))
+                if payload.get("status")
+                else CloneStatus.CLONED
+            )
             data = CloneSiteCreate(
                 name=payload["name"],
                 slug=payload.get("slug", ""),
@@ -13629,6 +13749,7 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             from openbiliclaw.clone import CloneSiteUpdate
+
             data = CloneSiteUpdate(
                 name=payload.get("name"),
                 description=payload.get("description"),
@@ -13664,11 +13785,13 @@ def create_app(
             _web_dir = _Path(__file__).resolve().parent.parent / "web"
             sites_dir = _web_dir / "clone" / "sites"
             imported = svc.import_existing_sites(sites_dir)
-            return JSONResponse({
-                "ok": True,
-                "imported": [s.model_dump(mode="json") for s in imported],
-                "count": len(imported),
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "imported": [s.model_dump(mode="json") for s in imported],
+                    "count": len(imported),
+                }
+            )
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
@@ -13680,6 +13803,7 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             from openbiliclaw.clone import CloneRequest
+
             request = CloneRequest(
                 url=payload["url"],
                 name=payload["name"],
@@ -13819,7 +13943,8 @@ def create_app(
 
             Returns the SPA shell; the client reads location.pathname and opens
             the matching view. `page` is a single path segment, so /web/assets/*
-            static requests are never intercepted. Unknown pages 404."""
+            static requests are never intercepted. Unknown pages 404.
+            """
             if page not in _desktop_page_names:
                 raise HTTPException(status_code=404, detail="unknown desktop page")
             return _desktop_index_response()
@@ -13847,7 +13972,8 @@ def create_app(
     @app.get("/library/{source}", include_in_schema=False)
     def reading_library_platform(source: str) -> Response:
         """Bookmarkable per-platform reading page. Reuses the same SPA,
-        injecting the active source so the client filters and labels by it."""
+        injecting the active source so the client filters and labels by it.
+        """
         import re
 
         from fastapi.responses import Response
@@ -13910,9 +14036,7 @@ def create_app(
 
                 return _page
 
-            app.get("/" + _slug, include_in_schema=False)(
-                _make_entity_page(_etype, _html)
-            )
+            app.get("/" + _slug, include_in_schema=False)(_make_entity_page(_etype, _html))
         app.mount(
             "/entities",
             _StaticFiles(directory=_entity_dir, html=True),
@@ -13965,6 +14089,7 @@ def create_app(
     async def list_url_processors():
         """List all registered URL content processors."""
         from openbiliclaw.sources.url_processors import get_all_source_types, list_processors
+
         processors = list_processors()
         return {
             "processors": processors,
@@ -14033,6 +14158,7 @@ def create_app(
 
         Returns:
             The inserted article ID, or None if insertion failed.
+
         """
         import sqlite3
 
@@ -14080,11 +14206,18 @@ def create_app(
                         """INSERT INTO article_snapshots
                            (article_id, url, content_html, content_text, fetch_source)
                            VALUES (?, ?, ?, ?, 'url_extractor')""",
-                        (article_id, result.url, result.content_html or "", result.content_text or ""),
+                        (
+                            article_id,
+                            result.url,
+                            result.content_html or "",
+                            result.content_text or "",
+                        ),
                     )
                     logger.info("Saved snapshot for article (id=%s)", article_id)
                 except Exception as snap_err:
-                    logger.warning("Failed to save snapshot for article %s: %s", article_id, snap_err)
+                    logger.warning(
+                        "Failed to save snapshot for article %s: %s", article_id, snap_err
+                    )
 
             conn.commit()
             conn.close()
@@ -14092,10 +14225,13 @@ def create_app(
             # 自动注册到阅读调度系统
             try:
                 from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
                 scheduler = ReadingScheduler(db_path)
                 scheduler.register_article(article_id, initial_delay_days=1.0)
             except Exception as sched_err:
-                logger.warning("Failed to register article %s to reading schedule: %s", article_id, sched_err)
+                logger.warning(
+                    "Failed to register article %s to reading schedule: %s", article_id, sched_err
+                )
 
             logger.info("Saved extracted article (id=%s): %s", article_id, result.title)
             return article_id
@@ -14113,6 +14249,7 @@ def create_app(
 
         Returns:
             JSON with snapshot data (content_html, content_text, fetched_at).
+
         """
         import sqlite3
 
@@ -14215,6 +14352,7 @@ def create_app(
 
         Args:
             hours: 查询时间窗口（小时），默认 5 小时（与商汤 API 限流窗口对齐）。
+
         """
         try:
             import sqlite3
@@ -14274,7 +14412,7 @@ def create_app(
             ]
 
             # 商汤日日新配额估算（假设 1 point ≈ 1000 tokens）
-            sensenova_calls = sum(m["calls"] for m in by_model if "sensenova" in m["model"])
+            sum(m["calls"] for m in by_model if "sensenova" in m["model"])
             sensenova_tokens = sum(m["tokens"] for m in by_model if "sensenova" in m["model"])
             estimated_points = max(1, sensenova_tokens // 1000)
             quota_limit = 60000
@@ -14282,17 +14420,19 @@ def create_app(
 
             conn.close()
 
-            return JSONResponse({
-                "ok": True,
-                "window_hours": hours,
-                "total_calls": total_calls,
-                "total_tokens": total_tokens,
-                "estimated_sensenova_points": estimated_points,
-                "sensenova_quota_limit": quota_limit,
-                "sensenova_quota_usage_pct": quota_usage_pct,
-                "by_model": by_model,
-                "by_module": by_module,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "window_hours": hours,
+                    "total_calls": total_calls,
+                    "total_tokens": total_tokens,
+                    "estimated_sensenova_points": estimated_points,
+                    "sensenova_quota_limit": quota_limit,
+                    "sensenova_quota_usage_pct": quota_usage_pct,
+                    "by_model": by_model,
+                    "by_module": by_module,
+                }
+            )
         except Exception as e:
             logger.exception("LLM quota query failed")
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
@@ -14301,12 +14441,20 @@ def create_app(
     # 已独立为 src/openbiliclaw/self_evolution/api.py，此处仅注册路由
     from openbiliclaw.self_evolution.api import create_self_evolution_router
 
-    _self_evo_db_path = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
-    app.include_router(create_self_evolution_router(_self_evo_db_path, getattr(ctx, "llm_service", None)))
+    _self_evo_db_path = (
+        str(getattr(getattr(ctx, "config", None), "storage", None).db_path)
+        if getattr(getattr(ctx, "config", None), "storage", None)
+        else "data/openbiliclaw.db"
+    )
+    app.include_router(
+        create_self_evolution_router(_self_evo_db_path, getattr(ctx, "llm_service", None))
+    )
 
     # ── Synthesis (迭代合成) API endpoints ─────────────────────────
     from openbiliclaw.synthesis.api import create_synthesis_router
 
-    app.include_router(create_synthesis_router(_self_evo_db_path, getattr(ctx, "llm_service", None)))
+    app.include_router(
+        create_synthesis_router(_self_evo_db_path, getattr(ctx, "llm_service", None))
+    )
 
     return app

@@ -70,6 +70,7 @@ class AuthManager:
 
         Args:
             cookie: Cookie string from browser.
+
         """
         self._cookie = cookie.strip()
         self._save_cookie()
@@ -80,6 +81,7 @@ class AuthManager:
 
         Returns:
             Cookie string, or empty string if not found.
+
         """
         if self._cookie_path.exists():
             # encoding="utf-8" matches save_cookie() — Bilibili cookies

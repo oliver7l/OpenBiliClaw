@@ -401,7 +401,8 @@ async def test_explore_strategy_interleaves_domains_for_eval_fairness() -> None:
     """Two domains with equal novelty must be round-robin interleaved before
     the 30-item eval cap. Verifying via post-eval order works only when
     novelty (and therefore the exploration bonus) matches across domains;
-    otherwise _sort_results re-ranks by score."""
+    otherwise _sort_results re-ranks by score.
+    """
     from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(

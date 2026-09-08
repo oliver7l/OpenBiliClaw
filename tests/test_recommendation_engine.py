@@ -826,7 +826,8 @@ async def test_generate_expression_normalizes_style_key_for_prompt() -> None:
 @pytest.mark.asyncio
 async def test_generate_expression_passes_body_text_for_text_items() -> None:
     """Task 11: text-first X items have low-information titles, so the
-    expression builder must see ``body_text`` in its USER message."""
+    expression builder must see ``body_text`` in its USER message.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         db = Database(Path(tmpdir) / "test.db")
         db.initialize()
@@ -924,7 +925,8 @@ async def test_generate_expression_requests_no_core_memory_injection_when_suppor
 async def test_select_diversified_batch_tolerates_text_items_without_cover() -> None:
     """Task 11: ranking / diversity / MMR must not assume a cover_url or a
     non-zero duration. Text-first X items (empty cover, duration 0) must
-    rank without raising or dropping out."""
+    rank without raising or dropping out.
+    """
     text_items = [
         DiscoveredContent(
             bvid=f"179000000000000000{i}",
@@ -1196,7 +1198,8 @@ async def test_append_returns_immediately_when_exclusions_empty_candidates() -> 
 async def test_reshuffle_recommendations_hides_missing_precomputed_copy() -> None:
     """v0.3.57+: rows without pool_expression/pool_topic_label are hidden by
     the pool gate; reshuffle should return zero recommendations rather than
-    falling back to a placeholder template."""
+    falling back to a placeholder template.
+    """
 
     class _ExplodingLLM(_DummyLLM):
         async def complete_structured_task(self, **kwargs) -> LLMResponse:  # type: ignore[override]
@@ -1446,7 +1449,8 @@ async def test_reshuffle_recommendations_backfills_to_requested_limit_when_style
 async def test_reshuffle_recommendations_hides_missing_copy_instead_of_style_fallback() -> None:
     """v0.3.57+: even when style_key is set, missing pool_expression/topic_label
     keeps the row out of the pool. The old behavior — falling back to a
-    style-keyed template — is no longer acceptable."""
+    style-keyed template — is no longer acceptable.
+    """
 
     class _ExplodingLLM(_DummyLLM):
         async def complete_structured_task(self, **kwargs) -> LLMResponse:  # type: ignore[override]
@@ -1817,7 +1821,8 @@ def test_diversity_tokens_excludes_source_strategy() -> None:
 @pytest.mark.asyncio
 async def test_classify_pool_backlog_fills_metadata() -> None:
     """classify_pool_backlog should assign style_key and topic_group to
-    un-classified pool items via LLM evaluation."""
+    un-classified pool items via LLM evaluation.
+    """
 
     # LLM mock that returns batch classification results
     class _ClassifyLLM:

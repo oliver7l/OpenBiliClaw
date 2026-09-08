@@ -29,13 +29,25 @@ SITE_CONFIG: dict[str, dict[str, Any]] = {
         "tags": ["投资", "巴菲特", "价值投资", "股东信"],
         "label": "巴菲特股东信知识库",
         "exclude_patterns": [
-            r"index\.html$", r"book\.html$", r"about\.html$",
-            r"changelog\.html$", r"graph\.html$", r"donate\.html$",
-            r"coin-rain\.html$", r"talk\.html$", r"nav\.js$", r"search\.js$",
+            r"index\.html$",
+            r"book\.html$",
+            r"about\.html$",
+            r"changelog\.html$",
+            r"graph\.html$",
+            r"donate\.html$",
+            r"coin-rain\.html$",
+            r"talk\.html$",
+            r"nav\.js$",
+            r"search\.js$",
         ],
         # 要解析的页面目录
         "content_dirs": [
-            "concepts", "companies", "people", "partnership", "berkshire", "special",
+            "concepts",
+            "companies",
+            "people",
+            "partnership",
+            "berkshire",
+            "special",
         ],
     },
     "mungermodels": {
@@ -45,11 +57,17 @@ SITE_CONFIG: dict[str, dict[str, Any]] = {
         "tags": ["思维模型", "芒格", "多元思维模型", "决策"],
         "label": "查理·芒格的思维模型",
         "exclude_patterns": [
-            r"index\.html$", r"all\.html$", r"book\.html$", r"about\.html$",
-            r"graph\.html$", r"canonical\.html$",
+            r"index\.html$",
+            r"all\.html$",
+            r"book\.html$",
+            r"about\.html$",
+            r"graph\.html$",
+            r"canonical\.html$",
         ],
         "content_dirs": [
-            "models", "disciplines", "scenarios",
+            "models",
+            "disciplines",
+            "scenarios",
         ],
     },
     "aichainmap": {
@@ -117,7 +135,9 @@ def _extract_learnbuffett(soup: Any, path: Path) -> dict | None:
     content_parts: list[str] = []
     for el in article.find_all(["p", "h2", "h3", "h4", "blockquote", "ul", "ol", "div"]):
         # 跳过 backlinks 和 quotes-section
-        if el.get("class") and any(c in ["backlinks-section", "quotes-section"] for c in el.get("class", [])):
+        if el.get("class") and any(
+            c in ["backlinks-section", "quotes-section"] for c in el.get("class", [])
+        ):
             continue
         text = el.get_text(strip=True)
         if not text or len(text) < 20:
@@ -249,9 +269,13 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
     wiki_bodies = _parse_js_var(wiki_bodies_file, "WIKI_BODIES")
 
     meta = wiki_data.get("meta", {})
-    logger.info("AI产业链地图: %d 公司, %d 概念, %d 人物, %d 事件",
-                 meta.get("companies_count", 0), meta.get("concepts_count", 0),
-                 meta.get("people_count", 0), meta.get("events_count", 0))
+    logger.info(
+        "AI产业链地图: %d 公司, %d 概念, %d 人物, %d 事件",
+        meta.get("companies_count", 0),
+        meta.get("concepts_count", 0),
+        meta.get("people_count", 0),
+        meta.get("events_count", 0),
+    )
 
     LAYER_MAP = {
         "1": "第一层-能源与基础设施",
@@ -277,13 +301,13 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
         for entity_name, entity_data in entities.items():
             try:
                 title = entity_data.get("title", entity_name)
-                aliases = entity_data.get("aliases", [])
+                entity_data.get("aliases", [])
                 layer = entity_data.get("layer", "")
                 subsector = entity_data.get("subsector", "")
                 tags_raw = entity_data.get("tags", []) or []
                 hq = entity_data.get("hq", "")
                 ticker = entity_data.get("ticker", "")
-                status = entity_data.get("status", "")
+                entity_data.get("status", "")
 
                 summary_parts = []
                 if layer:
@@ -297,7 +321,9 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
                     summary_parts.append(f"代码: {ticker}")
                 summary = " | ".join(summary_parts)[:500]
 
-                all_tags = list(set(config["tags"] + tags_raw + [label, f"层{layer}" if layer else ""]))
+                all_tags = list(
+                    set(config["tags"] + tags_raw + [label, f"层{layer}" if layer else ""])
+                )
                 all_tags = [t for t in all_tags if t]
 
                 body_html = bodies.get(entity_name, "")
@@ -337,6 +363,7 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
             except Exception as e:
                 if args.verbose:
                     import traceback
+
                     logger.error("  ✗ %s: %s\n%s", entity_name, e, traceback.format_exc())
 
     return imported
@@ -352,6 +379,7 @@ def _get_db(script_dir: Path) -> Any:
     ]
     try:
         from openbiliclaw.config import load_config
+
         cfg = load_config()
         if cfg.storage.db_path:
             _db_paths.insert(0, Path(cfg.storage.db_path))
@@ -466,6 +494,7 @@ def main() -> None:
 
             except Exception as e:
                 import traceback
+
                 logger.error("  ✗ %s: %s\n%s", f.name, e, traceback.format_exc())
 
             if args.limit and imported >= args.limit:

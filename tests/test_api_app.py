@@ -38,7 +38,6 @@ def _isolate_runtime_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     this fixture CI sees the repo's empty template while local runs may see a
     private config.toml with real credentials.
     """
-
     from openbiliclaw.config import Config, save_config
 
     project_root = tmp_path / "runtime"
@@ -1064,6 +1063,7 @@ class TestBackendAPI:
                 embedding_service: object = None,
                 task_registry: object = None,
                 xhs_self_info_provider: object = None,
+                **kwargs: object,
             ) -> None:
                 self.llm = llm
                 self.database = database
@@ -1167,6 +1167,12 @@ class TestBackendAPI:
                 speculation_max_secondary_interests=66,
                 speculator_idle_interval_minutes=11,
             ),
+            recommendation=SimpleNamespace(
+                llm_reranker_enabled=False,
+                llm_reranker_top_k=30,
+                llm_reranker_weight=0.3,
+                llm_reranker_batch_size=5,
+            ),
         )
 
         monkeypatch.setattr("openbiliclaw.config.load_config", lambda: fake_config)
@@ -1268,7 +1274,8 @@ class TestBackendAPI:
 
     def test_cap_by_franchise_zero_disables_cap(self) -> None:
         """max_per_franchise=0 is the escape hatch for ops who want to
-        debug without re-deploying. Returns input unchanged."""
+        debug without re-deploying. Returns input unchanged.
+        """
         from openbiliclaw.api.recommendation_routes import _cap_by_franchise
 
         rows = [
@@ -1294,7 +1301,8 @@ class TestBackendAPI:
 
     def test_ping_endpoint_is_pure_liveness(self) -> None:
         """/api/ping answers instantly with no probes — the extension badge
-        depends on it never inheriting /api/health's embedding-probe latency."""
+        depends on it never inheriting /api/health's embedding-probe latency.
+        """
         from fastapi.testclient import TestClient
 
         app = create_app(memory_manager=object(), database=object(), soul_engine=object())
@@ -2202,7 +2210,8 @@ class TestBackendAPI:
     def test_events_endpoint_preserves_top_level_dwell_fields(self) -> None:
         """v0.3.x event-satisfaction: top-level watch_seconds /
         video_duration_seconds get folded into metadata so the storage
-        classifier sees them."""
+        classifier sees them.
+        """
         from fastapi.testclient import TestClient
 
         class FakeMemoryManager:
@@ -3061,7 +3070,8 @@ class TestBackendAPI:
     def test_recommendations_endpoint_caps_same_franchise(self) -> None:
         """End-to-end: when the DB returns 5 同 IP rows in the
         franchise_key column, the API trims down to ``max_per_franchise=2``
-        before serving."""
+        before serving.
+        """
         from fastapi.testclient import TestClient
 
         class FakeDatabase:
@@ -6941,7 +6951,8 @@ class TestBackendAPI:
     def test_recommendation_click_endpoint_persists_dwell_fields(self) -> None:
         """When the extension reports dwell on the click-through, those
         fields flow into the persisted click event so storage can classify
-        the recommendation outcome (meaningful_dwell vs quick_exit)."""
+        the recommendation outcome (meaningful_dwell vs quick_exit).
+        """
         from fastapi.testclient import TestClient
 
         class FakeMemoryManager:
@@ -6997,7 +7008,8 @@ class TestBackendAPI:
     def test_recommendation_click_endpoint_persists_without_dwell_fields(self) -> None:
         """No dwell fields supplied → click still persists (storage will
         classify it as unknown / missing_dwell, but the endpoint must
-        not require the fields)."""
+        not require the fields).
+        """
         from fastapi.testclient import TestClient
 
         class FakeMemoryManager:
@@ -7625,7 +7637,8 @@ class TestBackendAPI:
         """PUT /api/config must persist sources.twitter (enable + budgets) and
         the twitter pool share — previously the handler silently dropped the
         whole sources.twitter block, so the settings-page X toggle was lost on
-        reload."""
+        reload.
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig, save_config
@@ -7675,7 +7688,8 @@ class TestBackendAPI:
     ) -> None:
         """v0.3.32+ — embedding owns api_key/base_url. PUT /api/config
         must accept the new fields and round-trip them through GET (with
-        the api_key masked on the way out)."""
+        the api_key masked on the way out).
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import (
@@ -7836,7 +7850,8 @@ class TestEmbeddingAndCompatProviderE2E:
     @staticmethod
     def _make_client(monkeypatch, tmp_path, initial_cfg):
         """Wire up a TestClient with load_config/save_config patched to
-        round-trip against a real on-disk config in tmp_path."""
+        round-trip against a real on-disk config in tmp_path.
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import save_config
@@ -7865,7 +7880,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_get_config_exposes_openai_compatible_block(self, monkeypatch, tmp_path) -> None:
         """The /api/config response must include the new
         [llm.openai_compatible] block so the popup can populate its
-        fields. api_key is masked by default."""
+        fields. api_key is masked by default.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(
@@ -7896,7 +7912,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_get_config_exposes_embedding_credentials_masked(self, monkeypatch, tmp_path) -> None:
         """v0.3.32+ embedding owns api_key/base_url. They must surface
         in /api/config (so the popup knows what's configured) with
-        api_key masked."""
+        api_key masked.
+        """
         from openbiliclaw.config import (
             Config,
             EmbeddingConfig,
@@ -7932,7 +7949,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_get_config_with_reveal_keys_returns_raw_secrets(self, monkeypatch, tmp_path) -> None:
         """``GET /api/config?reveal_keys=true`` returns unmasked keys
         for both new fields (openai_compatible.api_key + embedding.api_key).
-        Used by the popup when the user clicks "show" to edit."""
+        Used by the popup when the user clicks "show" to edit.
+        """
         from openbiliclaw.config import (
             Config,
             EmbeddingConfig,
@@ -7960,7 +7978,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_put_openai_compatible_round_trips_through_get(self, monkeypatch, tmp_path) -> None:
         """PUT a full [llm.openai_compatible] block, then GET — the
         non-secret fields come back identical, api_key comes back
-        masked but the in-memory config object holds the real value."""
+        masked but the in-memory config object holds the real value.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-openai")))
@@ -8000,7 +8019,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_put_openai_compatible_does_not_stomp_openai_block(self, monkeypatch, tmp_path) -> None:
         """Partial PUT with only [llm.openai_compatible] must NOT clear
         the existing [llm.openai] block. Both providers can coexist
-        (the whole point of the v0.3.32 split)."""
+        (the whole point of the v0.3.32 split).
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(
@@ -8046,7 +8066,8 @@ class TestEmbeddingAndCompatProviderE2E:
         appears in the PUT response so the popup can highlight the
         offending field — without this, the bad config would silently
         save and the daemon would 401 against api.openai.com on first
-        request."""
+        request.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-openai")))
@@ -8076,7 +8097,8 @@ class TestEmbeddingAndCompatProviderE2E:
     def test_put_embedding_via_openai_compatible_round_trip(self, monkeypatch, tmp_path) -> None:
         """Embedding can independently target an openai_compatible
         backend (vLLM / Together / Azure OpenAI), with its own api_key
-        and base_url — no need to also fill [llm.openai_compatible]."""
+        and base_url — no need to also fill [llm.openai_compatible].
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-openai")))
@@ -8118,7 +8140,8 @@ class TestEmbeddingAndCompatProviderE2E:
         edits an unrelated field (model) → submits — the masked api_key
         gets echoed back. Backend must detect the mask (any '*') and
         keep the real key. Otherwise every save would silently destroy
-        the user's secret."""
+        the user's secret.
+        """
         from openbiliclaw.config import (
             Config,
             EmbeddingConfig,
@@ -8168,7 +8191,8 @@ class TestEmbeddingAndCompatProviderE2E:
         ``reloaded=true`` flag in the response is the externally
         observable signal that the registry was actually rebuilt — the
         popup uses this to decide whether to show "立即生效" vs "重启
-        生效" feedback."""
+        生效" feedback.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-old")))
@@ -8198,7 +8222,8 @@ class TestEmbeddingAndCompatProviderE2E:
         """Set both [llm.openai] (real OpenAI for chat) and
         [llm.openai_compatible] (Groq for fast drafting) in one PUT.
         Both blocks must round-trip independently — the v0.3.32 split
-        explicitly enables this dual-stack scenario."""
+        explicitly enables this dual-stack scenario.
+        """
         from openbiliclaw.config import Config, LLMConfig
 
         cfg = Config(llm=LLMConfig())
@@ -8237,7 +8262,8 @@ class TestEmbeddingAndCompatProviderE2E:
 
     def test_get_config_exposes_sources_and_advanced_settings(self, monkeypatch, tmp_path) -> None:
         """The config API should expose persisted advanced fields so the
-        extension settings page can stay aligned with config.toml."""
+        extension settings page can stay aligned with config.toml.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(
@@ -8535,7 +8561,8 @@ class TestEmbeddingAndCompatProviderE2E:
 
     def test_put_config_updates_sources_and_advanced_settings(self, monkeypatch, tmp_path) -> None:
         """PUT /api/config should update the same advanced fields that the
-        extension settings page exposes."""
+        extension settings page exposes.
+        """
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-openai")))
@@ -8761,7 +8788,8 @@ class TestEmbeddingAndCompatProviderE2E:
 
     def test_source_share_suggestion_uses_event_counts(self, monkeypatch, tmp_path) -> None:
         """GET /api/config/source-share-suggestion should suggest ratios
-        from observed platform event counts and current enabled switches."""
+        from observed platform event counts and current enabled switches.
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import Config, save_config
@@ -8826,7 +8854,8 @@ class TestEmbeddingAndCompatProviderE2E:
 
     def test_source_share_suggestion_post_uses_form_overrides(self, monkeypatch, tmp_path) -> None:
         """POST /api/config/source-share-suggestion should support the
-        extension settings page's unsaved switch/share state."""
+        extension settings page's unsaved switch/share state.
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import Config, save_config
@@ -8973,7 +9002,8 @@ def test_events_endpoint_emits_activity_added_runtime_event() -> None:
 
 def test_events_endpoint_skips_activity_added_for_empty_batch() -> None:
     """No events accepted → no activity.added (avoids spamming popup
-    when the extension flushes an empty buffer)."""
+    when the extension flushes an empty buffer).
+    """
     from fastapi.testclient import TestClient
 
     class FakeMemoryManager:
@@ -9824,7 +9854,8 @@ class TestGuidedInitEndpoints:
     def test_init_status_bilibili_login_is_informational_not_blocking(self, tmp_path: Path) -> None:
         """v0.3.118+: B站 login no longer hard-gates can_start — whether it
         blocks depends on the client's source selection, which only POST sees.
-        The status still reports the login state + reason for client gating."""
+        The status still reports the login state + reason for client gating.
+        """
         from fastapi.testclient import TestClient
 
         prereqs = _FakeInitPrereqs(bili="failed", chat=True, platforms=["bilibili"])

@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import suppress
-from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException
 
@@ -20,34 +19,44 @@ from openbiliclaw.api.models import (
     TopicCreateIn,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
 
 # ── Lazy imports for module-level helpers ─────
 
+
 def _get_fallback_recommendation_click_url(
-    source_platform: str, content_id: str, bvid: str = ''
+    source_platform: str, content_id: str, bvid: str = ""
 ) -> str:
     from openbiliclaw.api.app import _fallback_recommendation_click_url
+
     return _fallback_recommendation_click_url(source_platform, content_id, bvid)
 
 
 def _get_infer_source_platform_from_url(url: str) -> str:
     from openbiliclaw.api.app import _infer_source_platform_from_url
+
     return _infer_source_platform_from_url(url)
 
 
 def _get_normalize_source_platform(raw: str) -> str:
     from openbiliclaw.api.app import _normalize_source_platform
+
     return _normalize_source_platform(raw)
 
 
 def _get_project_root() -> Path:
     from openbiliclaw.api.app import _PROJECT_ROOT
+
     return _PROJECT_ROOT
 
 
 # ── Route registration ───────────────────────────────────────────
+
 
 def register_feedback_topics_routes(
     app: FastAPI,
@@ -55,7 +64,8 @@ def register_feedback_topics_routes(
     *,
     schedule_post_feedback_tasks: Callable[[], None] | None = None,
     record_exploration_buffer_event: Callable[..., None] | None = None,
-    recommendation_buffer_domain: Callable[[dict[str, object]], tuple[str, list[str]]] | None = None,
+    recommendation_buffer_domain: Callable[[dict[str, object]], tuple[str, list[str]]]
+    | None = None,
 ) -> None:
     """Register feedback, topics, and insight endpoints on the FastAPI app."""
 
@@ -451,4 +461,3 @@ def register_feedback_topics_routes(
             validated=bool(result.get("validated", False)),
             confidence=float(result.get("confidence", 0.0)),
         )
-

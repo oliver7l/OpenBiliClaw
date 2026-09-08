@@ -50,6 +50,7 @@ class XiaohongshuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Xiaohongshu note content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -107,7 +108,9 @@ class XiaohongshuProcessor(BaseProcessor):
                 tags = re.findall(r"#(\w+)", content_text)
 
             if not title:
-                return self._failed_result(url, "Could not extract note content (may require login)")
+                return self._failed_result(
+                    url, "Could not extract note content (may require login)"
+                )
 
             summary = None
             if stats:
@@ -137,6 +140,7 @@ class XiaohongshuProcessor(BaseProcessor):
         """Follow xhslink.com short link redirect."""
         try:
             import requests
+
             resp = requests.head(url, allow_redirects=True, timeout=10)
             return resp.url
         except Exception:
@@ -152,6 +156,7 @@ class XiaohongshuProcessor(BaseProcessor):
 
         Returns:
             Tuple of (title, author, content, tags, stats).
+
         """
         import json
 
@@ -167,30 +172,43 @@ class XiaohongshuProcessor(BaseProcessor):
                 script_text = script.string or ""
                 if "__INITIAL_STATE__" in script_text or "window.__INITIAL_STATE__" in script_text:
                     # Extract JSON
-                    match = re.search(r"window\.__INITIAL_STATE__\s*=\s*(\{.*?\});", script_text, re.DOTALL)
+                    match = re.search(
+                        r"window\.__INITIAL_STATE__\s*=\s*(\{.*?\});", script_text, re.DOTALL
+                    )
                     if not match:
-                        match = re.search(r"__INITIAL_STATE__\s*=\s*(\{.*?\})", script_text, re.DOTALL)
+                        match = re.search(
+                            r"__INITIAL_STATE__\s*=\s*(\{.*?\})", script_text, re.DOTALL
+                        )
 
                     if match:
                         try:
                             data = json.loads(match.group(1))
                             # Navigate to note data
-                            note = (
-                                data.get("note", {})
-                                .get("noteDetailMap", {})
-                            )
+                            note = data.get("note", {}).get("noteDetailMap", {})
                             if note:
                                 first_key = next(iter(note))
                                 note_data = note[first_key].get("note", {})
                                 title = note_data.get("title")
                                 content = note_data.get("desc")
                                 author = note_data.get("user", {}).get("nickname")
-                                tags = [t.get("name", "") for t in note_data.get("tagList", []) if t.get("name")]
+                                tags = [
+                                    t.get("name", "")
+                                    for t in note_data.get("tagList", [])
+                                    if t.get("name")
+                                ]
                                 stats = {
-                                    "liked_count": note_data.get("interactInfo", {}).get("likedCount"),
-                                    "collected_count": note_data.get("interactInfo", {}).get("collectedCount"),
-                                    "comment_count": note_data.get("interactInfo", {}).get("commentCount"),
-                                    "share_count": note_data.get("interactInfo", {}).get("shareCount"),
+                                    "liked_count": note_data.get("interactInfo", {}).get(
+                                        "likedCount"
+                                    ),
+                                    "collected_count": note_data.get("interactInfo", {}).get(
+                                        "collectedCount"
+                                    ),
+                                    "comment_count": note_data.get("interactInfo", {}).get(
+                                        "commentCount"
+                                    ),
+                                    "share_count": note_data.get("interactInfo", {}).get(
+                                        "shareCount"
+                                    ),
                                 }
                         except json.JSONDecodeError:
                             pass

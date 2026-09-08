@@ -86,6 +86,7 @@ class BrowserManager:
         cdp_url: CDP WebSocket/HTTP endpoint of a pre-launched Chrome.
             Example: ``http://127.0.0.1:9222``. When set, this backend
             takes precedence over agent-browser.
+
     """
 
     def __init__(

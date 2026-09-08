@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
 
 def register_library_routes(app: FastAPI, ctx: Any) -> None:
     """Register URL extraction and library endpoints on the FastAPI app."""
-
-
     # ── URL Content Extraction (单篇URL内容提取) ───────────────────
     # Inspired by Agent-SaveMark's processor pattern. Extracts structured
     # content from a single URL using platform-specific processors.
@@ -25,6 +25,7 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
     async def list_url_processors():
         """List all registered URL content processors."""
         from openbiliclaw.sources.url_processors import get_all_source_types, list_processors
+
         processors = list_processors()
         return {
             "processors": processors,
@@ -93,6 +94,7 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
 
         Returns:
             The inserted article ID, or None if insertion failed.
+
         """
         import sqlite3
 
@@ -140,11 +142,18 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
                         """INSERT INTO article_snapshots
                            (article_id, url, content_html, content_text, fetch_source)
                            VALUES (?, ?, ?, ?, 'url_extractor')""",
-                        (article_id, result.url, result.content_html or "", result.content_text or ""),
+                        (
+                            article_id,
+                            result.url,
+                            result.content_html or "",
+                            result.content_text or "",
+                        ),
                     )
                     logger.info("Saved snapshot for article (id=%s)", article_id)
                 except Exception as snap_err:
-                    logger.warning("Failed to save snapshot for article %s: %s", article_id, snap_err)
+                    logger.warning(
+                        "Failed to save snapshot for article %s: %s", article_id, snap_err
+                    )
 
             conn.commit()
             conn.close()
@@ -152,10 +161,13 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
             # 自动注册到阅读调度系统
             try:
                 from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
+
                 scheduler = ReadingScheduler(db_path)
                 scheduler.register_article(article_id, initial_delay_days=1.0)
             except Exception as sched_err:
-                logger.warning("Failed to register article %s to reading schedule: %s", article_id, sched_err)
+                logger.warning(
+                    "Failed to register article %s to reading schedule: %s", article_id, sched_err
+                )
 
             logger.info("Saved extracted article (id=%s): %s", article_id, result.title)
             return article_id
@@ -163,4 +175,3 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
         except Exception as e:
             logger.exception("Failed to save extracted article: %s", e)
             return None
-

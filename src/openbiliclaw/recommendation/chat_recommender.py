@@ -48,6 +48,7 @@ class ChatIntent:
         explain_index: 0-based index of the recommendation to explain
             (only for ``explain`` intent).
         raw_message: The original user message (for logging / fallback).
+
     """
 
     intent_type: str = "recommend"
@@ -108,8 +109,16 @@ def _parse_intent_keywords(message: str) -> ChatIntent:
     if explain_match:
         raw = explain_match.group(1)
         cn_map = {
-            "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
-            "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+            "一": 1,
+            "二": 2,
+            "三": 3,
+            "四": 4,
+            "五": 5,
+            "六": 6,
+            "七": 7,
+            "八": 8,
+            "九": 9,
+            "十": 10,
         }
         idx = cn_map.get(raw, int(raw) if raw.isdigit() else 1) - 1
         intent.explain_index = max(0, idx)
@@ -218,6 +227,7 @@ class ChatSession:
         turn_count: Number of turns in this session.
         accumulated_filters: Accumulated platform / keyword filters from
             previous turns (applied to subsequent recommendations).
+
     """
 
     session_id: str
@@ -263,10 +273,7 @@ def _format_recommendations_for_prompt(recommendations: list[Any]) -> str:
         expression = getattr(rec, "expression", "")
         platform = getattr(content, "source_platform", "") if content else ""
         lines.append(
-            f"[{i + 1}] {title}\n"
-            f"    平台: {platform}\n"
-            f"    推荐理由: {expression}\n"
-            f"    链接: {url}"
+            f"[{i + 1}] {title}\n    平台: {platform}\n    推荐理由: {expression}\n    链接: {url}"
         )
     return "\n\n".join(lines)
 
@@ -313,9 +320,7 @@ async def generate_chat_response(
             profile_summary = ""
             if session is not None:
                 top_interests = getattr(session.profile, "top_interests", []) or []
-                interest_domains = ", ".join(
-                    i.get("domain", "") for i in top_interests[:3]
-                )
+                interest_domains = ", ".join(i.get("domain", "") for i in top_interests[:3])
                 profile_summary = (
                     f"用户画像关键词: {getattr(session.profile, 'current_focus', '')}, "
                     f"兴趣: {interest_domains}"
@@ -409,6 +414,7 @@ async def chat_recommend(
 
     Returns:
         The assistant's natural-language reply.
+
     """
     session.add_user_message(message)
 

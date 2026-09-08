@@ -53,6 +53,7 @@ async def judge_speculations(
 
     Returns:
         PersonaJudgment with per-speculation verdicts.
+
     """
     if not speculations:
         return PersonaJudgment(persona_summary=persona_context[:100])

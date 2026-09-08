@@ -8,9 +8,9 @@ Handles:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
+from datetime import UTC
 from typing import Any
 
 from openbiliclaw.sources.url_processors.base import (
@@ -51,6 +51,7 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with extracted Zhihu content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -102,6 +103,7 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with answer content.
+
         """
         import requests
 
@@ -128,8 +130,9 @@ class ZhihuProcessor(BaseProcessor):
 
         published_at = None
         if created_time:
-            from datetime import datetime, timezone
-            published_at = datetime.fromtimestamp(created_time, tz=timezone.utc).isoformat()
+            from datetime import datetime
+
+            published_at = datetime.fromtimestamp(created_time, tz=UTC).isoformat()
 
         return ProcessorResult(
             title=title,
@@ -162,6 +165,7 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with article content.
+
         """
         import requests
 
@@ -185,8 +189,9 @@ class ZhihuProcessor(BaseProcessor):
 
         published_at = None
         if created:
-            from datetime import datetime, timezone
-            published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
+            from datetime import datetime
+
+            published_at = datetime.fromtimestamp(created, tz=UTC).isoformat()
 
         return ProcessorResult(
             title=title,
@@ -218,6 +223,7 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with question and top answer content.
+
         """
         import requests
 
@@ -250,7 +256,9 @@ class ZhihuProcessor(BaseProcessor):
             top_answer = a_data["data"][0]
             author = top_answer.get("author", {}).get("name", "")
             answer_content = self._html_to_text(top_answer.get("content", ""))
-            content_text = f"【问题描述】\n{content_text}\n\n【最高赞回答 by {author}】\n{answer_content}"
+            content_text = (
+                f"【问题描述】\n{content_text}\n\n【最高赞回答 by {author}】\n{answer_content}"
+            )
 
         return ProcessorResult(
             title=title,
@@ -277,6 +285,7 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             Headers dict.
+
         """
         headers = {
             "User-Agent": (
@@ -300,11 +309,13 @@ class ZhihuProcessor(BaseProcessor):
 
         Returns:
             Plain text content.
+
         """
         if not html:
             return ""
         try:
             from bs4 import BeautifulSoup
+
             soup = BeautifulSoup(html, "lxml")
             # Replace <br> with newlines
             for br in soup.find_all("br"):
@@ -315,11 +326,13 @@ class ZhihuProcessor(BaseProcessor):
             text = soup.get_text(separator="\n", strip=True)
             # Clean up excessive newlines
             import re as _re
+
             text = _re.sub(r"\n{3,}", "\n\n", text)
             return text.strip()
         except Exception:
             # Fallback: simple tag stripping
             import re as _re
+
             text = _re.sub(r"<[^>]+>", "", html)
             text = _re.sub(r"&nbsp;", " ", text)
             text = _re.sub(r"&amp;", "&", text)

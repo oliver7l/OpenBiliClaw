@@ -63,6 +63,7 @@ def filter_subscriptions(
 
     Returns:
         Filtered subscription list.
+
     """
     result = subscriptions
     if exclude_keywords:
@@ -109,6 +110,7 @@ def load_bestblogs_subscriptions(
 
     Returns:
         List of RSS subscriptions.
+
     """
     import os
 

@@ -67,6 +67,7 @@ class TLDRGenerator:
     Args:
         db_path: Path to the SQLite database.
         llm_service: Optional LLM service for generation.
+
     """
 
     # Reading speed: words per minute (Cruxwire uses 200)
@@ -115,6 +116,7 @@ class TLDRGenerator:
 
         Returns:
             The generated TLDR, or None if the article doesn't exist.
+
         """
         # Check cache
         if not force:
@@ -188,6 +190,7 @@ class TLDRGenerator:
 
         Returns:
             List of generated TL;DRs.
+
         """
         conn = self._get_conn()
         try:
@@ -314,9 +317,7 @@ class TLDRGenerator:
 
         return max(1, round(total_minutes))
 
-    def _generate_with_llm(
-        self, *, title: str, content: str, source_type: str
-    ) -> dict[str, Any]:
+    def _generate_with_llm(self, *, title: str, content: str, source_type: str) -> dict[str, Any]:
         """Generate TL;DR using LLM.
 
         Returns dict with key_points, conclusion, model.
@@ -340,21 +341,19 @@ class TLDRGenerator:
             "结论：..."
         )
 
-        user_input = (
-            f"文章标题：{title}\n"
-            f"来源平台：{source_type}\n"
-            f"文章内容：\n{content[:6000]}"
-        )
+        user_input = f"文章标题：{title}\n来源平台：{source_type}\n文章内容：\n{content[:6000]}"
 
-        result = _run_async(generate_structured(
-            self.llm_service,
-            system_instruction=system_instruction,
-            user_input=user_input,
-            parse=lambda x: x,
-            label="tldr_generation",
-            temperature=0.3,
-            max_tokens=800,
-        ))
+        result = _run_async(
+            generate_structured(
+                self.llm_service,
+                system_instruction=system_instruction,
+                user_input=user_input,
+                parse=lambda x: x,
+                label="tldr_generation",
+                temperature=0.3,
+                max_tokens=800,
+            )
+        )
 
         text = str(result).strip()
         return self._parse_tldr_response(text)
@@ -397,7 +396,8 @@ class TLDRGenerator:
             lines = [
                 line.strip().rstrip("。.")
                 for line in text.split("\n")
-                if line.strip() and len(line.strip()) > 10
+                if line.strip()
+                and len(line.strip()) > 10
                 and not line.strip().startswith(("结论", "总结", "要点", "文章"))
             ]
             key_points = lines[:5]
@@ -431,7 +431,36 @@ class TLDRGenerator:
         words = re.findall(r"[\u4e00-\u9fff]{2,}|[a-zA-Z]+", content.lower())
         word_freq = Counter(words)
         # Remove very common words
-        stopwords = {"的", "了", "是", "在", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这"}
+        stopwords = {
+            "的",
+            "了",
+            "是",
+            "在",
+            "我",
+            "有",
+            "和",
+            "就",
+            "不",
+            "人",
+            "都",
+            "一",
+            "一个",
+            "上",
+            "也",
+            "很",
+            "到",
+            "说",
+            "要",
+            "去",
+            "你",
+            "会",
+            "着",
+            "没有",
+            "看",
+            "好",
+            "自己",
+            "这",
+        }
         for sw in stopwords:
             word_freq.pop(sw, None)
 

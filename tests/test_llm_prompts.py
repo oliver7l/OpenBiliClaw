@@ -90,7 +90,8 @@ def test_build_socratic_dialogue_prompt_includes_dialogue_instructions() -> None
 
 def test_build_recommendation_expression_prompt_mentions_old_friend_tone() -> None:
     """v0.3.28+: tone-profile rendering with 老B友 lives in user_prompt
-    instead of system_prompt. System keeps the algorithm-rejection rule."""
+    instead of system_prompt. System keeps the algorithm-rejection rule.
+    """
     messages = build_recommendation_expression_prompt(
         profile_summary={"personality_portrait": "偏好高信息密度内容"},
         content_summary={"title": "讲透国际局势", "up_name": "某UP"},
@@ -293,7 +294,8 @@ def test_build_explore_domains_prompt_requires_core_interest_anchors() -> None:
 def test_build_explore_domains_prompt_passes_covered_groups_into_user_msg() -> None:
     """v0.3.31+: covered_topic_groups feeds into the user message and
     the system prompt names the rule. Together this lets the LLM avoid
-    re-proposing already-saturated areas."""
+    re-proposing already-saturated areas.
+    """
     covered = ["人工智能", "认知科学", "体育预测"]
     messages = build_explore_domains_prompt(
         profile_summary={"interests": ["AI"]},
@@ -316,7 +318,8 @@ def test_build_explore_domains_prompt_passes_covered_groups_into_user_msg() -> N
 
 def test_build_explore_domains_prompt_omits_block_when_no_covered_groups() -> None:
     """Empty / None covered list → original prompt shape, no extra
-    block added (back-compat for callers that don't pass DB)."""
+    block added (back-compat for callers that don't pass DB).
+    """
     messages_none = build_explore_domains_prompt(
         profile_summary={"interests": []},
         covered_topic_groups=None,
@@ -346,7 +349,8 @@ def test_awareness_prompt_orders_stable_context_before_recent_events() -> None:
 def test_build_awareness_prompt_system_message_equals_constant() -> None:
     """The system message is the literal _AWARENESS_SYSTEM_PROMPT — no
     interpolation, no concatenation. Required for provider-side prompt
-    cache to fire on the awareness call."""
+    cache to fire on the awareness call.
+    """
     messages = build_awareness_prompt(
         events=[{"event_type": "view", "title": "X"}],
         preference_summary={"a": 1},
@@ -376,7 +380,8 @@ def test_awareness_prompt_mentions_dislike_as_awareness_signal() -> None:
 
 def test_build_awareness_prompt_user_block_ends_with_recent_events() -> None:
     """Recent events is the most-variable block and must be the suffix.
-    Anything stable after it would shrink the cache prefix on every call."""
+    Anything stable after it would shrink the cache prefix on every call.
+    """
     messages = build_awareness_prompt(
         events=[{"event_type": "view", "title": "本次最新事件"}],
         preference_summary={"interests": ["长期偏好"]},
@@ -393,7 +398,8 @@ def test_build_awareness_prompt_serialization_is_deterministic() -> None:
     yield byte-identical user messages. Validates sort_keys=True on the
     profile, preference, and event-object json.dumps calls. Without this,
     every call writes a new cache prefix and the awareness call loses
-    its ~36k-token cache hit."""
+    its ~36k-token cache hit.
+    """
     soul_profile_a = {"core_traits": ["稳定画像"], "values": ["求真"]}
     soul_profile_b = {"values": ["求真"], "core_traits": ["稳定画像"]}
 
@@ -560,7 +566,8 @@ def test_build_explore_domains_prompt_caps_covered_groups_at_12() -> None:
     """Defensive: don't over-constrain the model. Cap at 12 so the most-
     saturated topic_groups make it into the avoidance signal but the
     model still has room to maneuver. Larger caps (e.g. 30) caused
-    DeepSeek to return empty content on ~half of explore cycles."""
+    DeepSeek to return empty content on ~half of explore cycles.
+    """
     covered = [f"topic_{i}" for i in range(100)]
     messages = build_explore_domains_prompt(
         profile_summary={"interests": []},
@@ -868,7 +875,8 @@ def test_preference_analysis_system_prompt_contains_full_vocab() -> None:
 def test_batch_eval_no_examples_user_message_equals_none_path() -> None:
     """negative_examples=None and =[] both produce a user message
     byte-identical to the pre-feature shape — preserves cache prefix for
-    cold-start users with no negative classified events yet."""
+    cold-start users with no negative classified events yet.
+    """
     base_kwargs: dict[str, object] = dict(
         profile_summary={"a": 1},
         content_items=[{"x": 1}],
@@ -884,7 +892,8 @@ def test_batch_eval_no_examples_user_message_equals_none_path() -> None:
 
 def test_batch_eval_negative_examples_block_sits_after_source_context() -> None:
     """When supplied, the block sits strictly between <source_context>
-    and <content_batch> — the cache-stable suffix slot in the builder."""
+    and <content_batch> — the cache-stable suffix slot in the builder.
+    """
     msg = build_batch_content_evaluation_prompt(
         profile_summary={"a": 1},
         content_items=[{"x": 1}],
@@ -905,7 +914,8 @@ def test_batch_eval_negative_examples_block_sits_after_source_context() -> None:
 def test_batch_eval_system_message_byte_equal_to_constant_with_negatives() -> None:
     """The system prompt must remain identical to the module constant
     regardless of whether negative_examples is supplied — the two new
-    rules (10, 11) are PERMANENT additions, not call-conditional."""
+    rules (10, 11) are PERMANENT additions, not call-conditional.
+    """
     base_kwargs: dict[str, object] = dict(
         profile_summary={"a": 1},
         content_items=[{"x": 1}],
@@ -952,7 +962,8 @@ def test_batch_eval_system_uses_json_object_results_wrapper() -> None:
 def test_batch_eval_negative_examples_json_uses_sort_keys() -> None:
     """The new block must round-trip differently-ordered dict keys to
     byte-identical bytes — same prompt-cache discipline as the rest of
-    the builder."""
+    the builder.
+    """
     examples_a = [
         {"title": "X", "reason": "quick_exit", "age_days": 1},
         {"age_days": 2, "title": "Y", "reason": "explicit_negative"},
@@ -1173,7 +1184,8 @@ def _merged_platform_blocks() -> list[dict[str, object]]:
 
 def test_merged_keywords_prompt_system_message_equals_constant() -> None:
     """The system message must be the literal module constant — no
-    interpolation — so the provider prompt cache fires across calls."""
+    interpolation — so the provider prompt cache fires across calls.
+    """
     messages = build_merged_keywords_prompt(
         profile_summary={"interests": [{"name": "AI", "weight": 0.9}]},
         platform_blocks=_merged_platform_blocks(),
@@ -1185,7 +1197,8 @@ def test_merged_keywords_prompt_system_message_equals_constant() -> None:
 
 def test_merged_keywords_prompt_user_message_carries_profile_once_and_due_platforms() -> None:
     """User message holds <profile_summary> exactly once plus only the
-    platforms passed in — absent platforms must not leak into the prompt."""
+    platforms passed in — absent platforms must not leak into the prompt.
+    """
     messages = build_merged_keywords_prompt(
         profile_summary={"interests": [{"name": "AI", "weight": 0.9}]},
         platform_blocks=_merged_platform_blocks(),
@@ -1208,7 +1221,8 @@ def test_merged_keywords_prompt_user_message_carries_profile_once_and_due_platfo
 
 def test_merged_keywords_prompt_serialization_is_deterministic() -> None:
     """Differently-ordered dict keys with identical semantics must yield a
-    byte-identical user message (sort_keys=True discipline)."""
+    byte-identical user message (sort_keys=True discipline).
+    """
     blocks_a = [
         {
             "platform": "bilibili",
@@ -1325,7 +1339,8 @@ def test_parse_merged_keywords_zero_cap_returns_empty_lists() -> None:
 
 def test_merged_keywords_system_prompt_carries_supply_advantage_table() -> None:
     """The static system prompt embeds the per-platform supply-advantage block
-    (P2.1) — each platform mapped to where it structurally has good content."""
+    (P2.1) — each platform mapped to where it structurally has good content.
+    """
     sys_prompt = _MERGED_KEYWORDS_SYSTEM_PROMPT
 
     assert "<supply_advantage>" in sys_prompt
@@ -1341,7 +1356,8 @@ def test_merged_keywords_system_prompt_carries_supply_advantage_table() -> None:
 def test_merged_keywords_system_prompt_permits_decline() -> None:
     """The static system prompt instructs the model it MAY return fewer / an
     empty list for a platform whose supply advantage doesn't fit the user
-    (P2.2 decline) rather than padding."""
+    (P2.2 decline) rather than padding.
+    """
     sys_prompt = _MERGED_KEYWORDS_SYSTEM_PROMPT
 
     assert "弃权" in sys_prompt
@@ -1351,7 +1367,8 @@ def test_merged_keywords_system_prompt_permits_decline() -> None:
 def test_merged_keywords_system_prompt_is_fully_static_supply_table() -> None:
     """The supply-advantage table never depends on per-call data — two builds
     with different profiles / platforms keep a byte-identical system message
-    (the call-invariance contract holds with the P2 table added)."""
+    (the call-invariance contract holds with the P2 table added).
+    """
     msg_a = build_merged_keywords_prompt(
         profile_summary={"interests": [{"name": "AI", "weight": 0.9}]},
         platform_blocks=[
@@ -1389,7 +1406,8 @@ def test_merged_keywords_system_prompt_is_fully_static_supply_table() -> None:
 
 def test_parse_merged_keywords_with_presence_marks_explicit_empty_as_present() -> None:
     """A platform whose value is an explicit empty list is PRESENT (an
-    intentional decline); an omitted platform is NOT present (an omission)."""
+    intentional decline); an omitted platform is NOT present (an omission).
+    """
     content = '{"bilibili": ["历史 盘点"], "xiaohongshu": []}'
     keywords, present = parse_merged_keywords_with_presence(
         content, ["bilibili", "xiaohongshu", "douyin"], per_platform_cap=10
@@ -1405,7 +1423,8 @@ def test_parse_merged_keywords_with_presence_marks_explicit_empty_as_present() -
 
 def test_parse_merged_keywords_with_presence_non_list_is_not_present() -> None:
     """A non-list garbage value is treated as an omission (not present), so the
-    planner will fall back rather than read it as a decline."""
+    planner will fall back rather than read it as a decline.
+    """
     content = '{"bilibili": ["ok"], "xiaohongshu": "not a list", "douyin": 42}'
     keywords, present = parse_merged_keywords_with_presence(
         content, ["bilibili", "xiaohongshu", "douyin"], per_platform_cap=10
@@ -1436,7 +1455,8 @@ def test_parse_merged_keywords_with_presence_zero_cap_no_present() -> None:
 
 def test_parse_merged_keywords_still_collapses_present_and_absent() -> None:
     """The legacy ``parse_merged_keywords`` keeps its presence-agnostic shape:
-    present-empty and absent both yield ``[]`` (back-compat for old callers)."""
+    present-empty and absent both yield ``[]`` (back-compat for old callers).
+    """
     content = '{"bilibili": ["a"], "xiaohongshu": []}'
     parsed = parse_merged_keywords(
         content, ["bilibili", "xiaohongshu", "douyin"], per_platform_cap=10

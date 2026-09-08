@@ -24,7 +24,6 @@ _RECENT_TASK_STATUSES = ("pending", "in_progress", "completed", "failed")
 
 def bili_search_video_key(video: dict[str, Any]) -> str:
     """Return the stable identity key for one Bilibili search result."""
-
     for key in ("bvid", "content_id", "url", "content_url", "title"):
         value = str(video.get(key, "") or "").strip()
         if value:
@@ -107,7 +106,6 @@ class BiliTaskQueue:
         daily_budget: int = 100,
     ) -> bool:
         """Enqueue a task if today's budget for this type allows it."""
-
         return self.enqueue_with_id(task_type, payload, daily_budget=daily_budget) is not None
 
     def enqueue_with_id(
@@ -118,7 +116,6 @@ class BiliTaskQueue:
         daily_budget: int = 100,
     ) -> str | None:
         """Enqueue a task and return its id, or ``None`` when budget is exhausted."""
-
         # Recover orphaned ``in_progress`` tasks before issuing new work: a
         # task claimed by a worker (browser extension) that then goes offline
         # can sit in ``in_progress`` forever otherwise — ``next_pending`` only
@@ -156,7 +153,6 @@ class BiliTaskQueue:
 
     def next_pending(self) -> dict[str, Any] | None:
         """Claim and return the oldest runnable task, or ``None``."""
-
         stale_before = (datetime.now(UTC) - timedelta(minutes=15)).strftime("%Y-%m-%d %H:%M:%S")
         conn = self._db.open_connection()
         try:
@@ -198,7 +194,6 @@ class BiliTaskQueue:
         statuses: tuple[str, ...] | None = None,
     ) -> dict[str, Any] | None:
         """Return a recent task of this type for idempotent enqueue paths."""
-
         if recent_hours <= 0:
             return None
         selected_statuses = statuses or _RECENT_TASK_STATUSES
@@ -228,7 +223,6 @@ class BiliTaskQueue:
 
     def get(self, task_id: str) -> dict[str, Any] | None:
         """Return a task by id, or ``None``."""
-
         row = self._db.conn.execute(
             "SELECT * FROM bili_tasks WHERE id = ?",
             (task_id,),
@@ -244,7 +238,6 @@ class BiliTaskQueue:
         complete: bool = False,
     ) -> list[dict[str, Any]]:
         """Merge a partial/final result and optionally mark the task complete."""
-
         row = self.get(task_id)
         current: dict[str, Any] = {}
         if row and row.get("result_json"):
@@ -279,7 +272,6 @@ class BiliTaskQueue:
         debug: dict[str, Any] | None = None,
     ) -> None:
         """Mark a task as failed."""
-
         result_payload: dict[str, Any] = {"error": error}
         if debug is not None:
             result_payload["debug"] = debug
@@ -333,7 +325,6 @@ class BiliTaskQueue:
 
 def source_keyword_id_from_bili_task(payload_json: str | None) -> int | None:
     """Read ``source_keyword_id`` off a Bili task payload, or ``None``."""
-
     if not payload_json:
         return None
     try:

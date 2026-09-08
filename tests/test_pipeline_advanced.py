@@ -2678,7 +2678,6 @@ async def test_cognition_cycle_sync_exception_does_not_propagate(
     tmp_path: Path,
 ) -> None:
     """If _sync_to_profile raises mid-flow, the cycle must still finish cleanly."""
-
     cycle, svc, memory = _make_cognition_cycle(tmp_path)
     memory.get_layer("soul").data.update(OnionProfile().to_dict())
     memory.get_layer("soul").save()

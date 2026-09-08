@@ -1089,7 +1089,8 @@ async def test_non_context_service_error_still_aborts_chunked_analysis() -> None
 @pytest.mark.asyncio
 async def test_analyze_events_passes_unfiltered_when_satisfaction_flag_off() -> None:
     """Default behavior (flag off): every event the caller passes shows up
-    verbatim in the LLM user prompt, including quick-exit / negative rows."""
+    verbatim in the LLM user prompt, including quick-exit / negative rows.
+    """
     from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(LLMResponse(content="{}", provider="openai"))

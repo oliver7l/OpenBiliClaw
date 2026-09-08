@@ -31,6 +31,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import logging
@@ -50,10 +51,8 @@ def _obc_connect(db_path):
     from pathlib import Path as _Path
 
     _conn = _sqlite3.connect(db_path)
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 

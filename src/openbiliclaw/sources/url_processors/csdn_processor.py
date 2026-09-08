@@ -46,6 +46,7 @@ class CsdnProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with CSDN article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -96,7 +97,9 @@ class CsdnProcessor(BaseProcessor):
             content_text = None
             content_elem = soup.select_one("#content_views, .article-content, #article_content")
             if content_elem:
-                for tag in content_elem.select("script, style, .advertisement, .recommend, .csdn-side-toolbar"):
+                for tag in content_elem.select(
+                    "script, style, .advertisement, .recommend, .csdn-side-toolbar"
+                ):
                     tag.decompose()
                 content_text = content_elem.get_text(separator="\n", strip=True)
                 content_text = re.sub(r"\n{3,}", "\n\n", content_text).strip()
@@ -139,6 +142,7 @@ class CsdnProcessor(BaseProcessor):
     def _parse_date(self, date_text: str) -> str | None:
         """Parse date string to ISO format."""
         import re
+
         patterns = [
             (r"(\d{4})-(\d{1,2})-(\d{1,2})", "%Y-%m-%d"),
             (r"(\d{4})年(\d{1,2})月(\d{1,2})日", "%Y-%m-%d"),

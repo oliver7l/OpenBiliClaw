@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -563,10 +564,8 @@ class InsightEngineService:
             past_moods = []
             for e in memory.entries:
                 if e.get("mood") is not None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         past_moods.append(float(e["mood"]))
-                    except (ValueError, TypeError):
-                        pass
             if past_moods:
                 avg_past = sum(past_moods) / len(past_moods)
                 if avg_past > 0.3:

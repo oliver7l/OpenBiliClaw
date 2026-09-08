@@ -39,7 +39,6 @@ class DouyinBudgetExhausted(Exception):  # noqa: N818 - plan-mandated name (no E
 
 def _normalize_daily_budget(value: int) -> int:
     """Normalize daily task budget; 0 disables the per-day cap."""
-
     return max(0, int(value))
 
 

@@ -478,7 +478,8 @@ def test_summarize_history_synthesises_context_for_raw_bilibili_items() -> None:
     """v0.3.23+: raw B站 history items don't carry a ``context`` field
     natively. _summarize_history should synthesise one via
     format_event_context so the LLM sees a uniform stream of
-    natural-language descriptions across sources."""
+    natural-language descriptions across sources.
+    """
     from openbiliclaw.soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
@@ -500,7 +501,8 @@ def test_summarize_history_synthesises_context_for_raw_bilibili_items() -> None:
 def test_summarize_history_preserves_xhs_native_context() -> None:
     """v0.3.23+: history items already carrying ``context`` (xhs items
     via _xhs_events_to_history_items) should pass through verbatim,
-    not be overwritten by the synthesised fallback."""
+    not be overwritten by the synthesised fallback.
+    """
     from openbiliclaw.soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
@@ -529,7 +531,8 @@ def test_summarize_history_preserves_xhs_native_context() -> None:
 def test_summarize_history_recent_contexts_split_matches_recent_titles() -> None:
     """recent_contexts / older_contexts mirror the same recent/older
     cutoff used by recent_titles / older_titles, so a downstream
-    consumer can assume they're index-aligned."""
+    consumer can assume they're index-aligned.
+    """
     from openbiliclaw.soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [

@@ -203,7 +203,8 @@ manage_ollama = true
 
     def test_soul_preference_satisfaction_filter_defaults_on(self) -> None:
         """v0.3.x event-satisfaction: default drops quick-exit rows while
-        keeping explicit dislike evidence for disliked_topics."""
+        keeping explicit dislike evidence for disliked_topics.
+        """
         config = Config()
         assert isinstance(config.soul, SoulConfig)
         assert isinstance(config.soul.preference, SoulPreferenceConfig)
@@ -226,7 +227,8 @@ manage_ollama = true
     def test_soul_preference_section_appears_in_rendered_toml(self) -> None:
         """The default config should round-trip through render with a
         documented `[soul.preference]` section so existing installs see
-        the new toggle on the next save."""
+        the new toggle on the next save.
+        """
         from openbiliclaw.config import _render_config_toml
 
         rendered = _render_config_toml(Config())
@@ -457,7 +459,8 @@ def test_validate_runtime_config_requires_openrouter_api_key() -> None:
 
 def test_build_config_supports_openai_compatible_provider() -> None:
     """v0.3.32+ — generic OpenAI-protocol-compatible provider with its
-    own [llm.openai_compatible] block. Distinct from [llm.openai]."""
+    own [llm.openai_compatible] block. Distinct from [llm.openai].
+    """
     config = _build_config(
         {
             "llm": {
@@ -483,7 +486,8 @@ def test_build_config_supports_openai_compatible_provider() -> None:
 
 def test_save_config_round_trips_openai_compatible(tmp_path: Path) -> None:
     """[llm.openai_compatible] must survive a save/load cycle so popup
-    edits don't get silently dropped on backend restart."""
+    edits don't get silently dropped on backend restart.
+    """
     config_path = tmp_path / "config.toml"
     config = Config()
     config.llm.openai_compatible.api_key = "gsk-test-key"
@@ -577,7 +581,8 @@ def test_collect_issues_blocks_codex_oauth_with_custom_base_url(
 def test_collect_issues_flags_missing_base_url_for_openai_compatible() -> None:
     """openai_compatible without a base_url is meaningless — it would
     just hit api.openai.com with the wrong key. Surface a config issue
-    so the user fixes it before the daemon starts."""
+    so the user fixes it before the daemon starts.
+    """
     from openbiliclaw.config import _collect_config_issues
 
     config = Config(
@@ -1228,7 +1233,8 @@ def test_llm_and_embedding_fallback_defaults_are_disabled() -> None:
 def test_save_config_round_trips_embedding_credentials(tmp_path: Path) -> None:
     """v0.3.32+ EmbeddingConfig owns api_key/base_url. They must survive
     a save/load round-trip — otherwise the popup's PUT /api/config would
-    silently lose the user's dedicated embedding credentials on restart."""
+    silently lose the user's dedicated embedding credentials on restart.
+    """
     config_path = tmp_path / "config.toml"
     config = Config()
     config.llm.embedding.provider = "openai"
@@ -1259,7 +1265,8 @@ def test_load_config_accepts_legacy_embedding_section_without_api_key(
     """Pre-v0.3.32 configs only have provider/model/similarity_threshold
     in [llm.embedding]. Loading must still succeed and the new fields
     default to empty strings (which triggers the back-compat fallback in
-    build_embedding_service)."""
+    build_embedding_service).
+    """
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
@@ -1355,7 +1362,8 @@ def test_save_config_omits_env_auth_field_absent_on_disk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When an env-overridden auth field has no on-disk value, save omits it
-    rather than baking the env value — load then falls back to the safe default."""
+    rather than baking the env value — load then falls back to the safe default.
+    """
     from openbiliclaw.config import load_config, save_config
 
     path = tmp_path / "config.toml"
@@ -1489,7 +1497,8 @@ def test_password_hash_env_governs_credential_without_disk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """OPENBILICLAW_API_AUTH_PASSWORD_HASH must be used verbatim, not mangled by
-    the generic env splitter into a dict hashed as its repr (review r7#1)."""
+    the generic env splitter into a dict hashed as its repr (review r7#1).
+    """
     from openbiliclaw.auth_core import hash_password, verify_password
     from openbiliclaw.config import get_auth_plain_password, load_config
 
@@ -1512,7 +1521,8 @@ def test_password_hash_env_does_not_crash_with_on_disk_plaintext(
 ) -> None:
     """An on-disk plaintext `password` plus PASSWORD_HASH env must not crash load
     (the splitter previously raised TypeError descending into the string), and the
-    env hash must WIN precedence over the on-disk plaintext (review r7#1)."""
+    env hash must WIN precedence over the on-disk plaintext (review r7#1).
+    """
     from openbiliclaw.auth_core import hash_password, verify_password
     from openbiliclaw.config import load_config
 
@@ -1549,7 +1559,8 @@ def test_password_hash_env_preserves_on_disk_plaintext_for_after_env_removed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A PASSWORD_HASH-env-managed save preserves the on-disk plaintext password so
-    removing the env override restores the operator's own credential (review r7#1)."""
+    removing the env override restores the operator's own credential (review r7#1).
+    """
     from openbiliclaw.auth_core import hash_password, verify_password
     from openbiliclaw.config import load_config, save_config
 
@@ -1595,7 +1606,8 @@ def test_save_config_preserves_unchanged_plaintext_password_non_env(
 def test_save_config_drops_stale_plaintext_when_password_changed(tmp_path: Path) -> None:
     """When the in-memory hash no longer matches the on-disk plaintext (password
     deliberately changed, e.g. set-password), the stale plaintext is dropped and
-    the new hash persisted — the change is not silently reverted (review r8)."""
+    the new hash persisted — the change is not silently reverted (review r8).
+    """
     from openbiliclaw.auth_core import hash_password, verify_password
     from openbiliclaw.config import load_config, save_config
 
@@ -1657,7 +1669,8 @@ def test_save_config_does_not_bake_in_config_local_password(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A config.local plaintext password must not be materialized into config.toml
-    by an unrelated save; config.toml keeps its own credential (review r10)."""
+    by an unrelated save; config.toml keeps its own credential (review r10).
+    """
     from openbiliclaw.auth_core import verify_password
     from openbiliclaw.config import load_config, save_config
 
@@ -1887,7 +1900,8 @@ class TestDiscoveryConfig:
 
     def test_discovery_defaults_match_spec_section_6(self) -> None:
         """Defaults are the owner-approved §6 baseline. Pinning every value here
-        is the contract the planner relies on before any TOML is written."""
+        is the contract the planner relies on before any TOML is written.
+        """
         config = Config()
 
         assert isinstance(config.discovery, DiscoveryConfig)
@@ -1920,7 +1934,8 @@ class TestDiscoveryConfig:
 
     def test_top_level_discovery_is_distinct_from_llm_discovery(self) -> None:
         """`[discovery]` (planner knobs) must not collide with `[llm.discovery]`
-        (per-module provider override) — they are independent tables."""
+        (per-module provider override) — they are independent tables.
+        """
         config = _build_config(
             {
                 "discovery": {"unified_keyword_planner_enabled": True, "gen_batch": 42},
@@ -2058,7 +2073,8 @@ admission_min_score = {literal}
 
     def test_discovery_non_table_value_falls_back_to_defaults(self) -> None:
         """A malformed `discovery = "x"` (scalar, not a table) must not crash;
-        it falls back to all defaults like other dict-guarded sections."""
+        it falls back to all defaults like other dict-guarded sections.
+        """
         config = _build_config({"discovery": "not-a-table"})
 
         assert config.discovery == DiscoveryConfig()
@@ -2066,7 +2082,8 @@ admission_min_score = {literal}
     def test_discovery_env_override_coerces_string_values(self) -> None:
         """`_apply_env_overrides` injects env values as strings into the raw
         table; the loader coerces them exactly like the scheduler fields do.
-        This mirrors the real load path for a (hypothetical) single-token key."""
+        This mirrors the real load path for a (hypothetical) single-token key.
+        """
         config = _build_config(
             {
                 "discovery": {
@@ -2090,7 +2107,8 @@ admission_min_score = {literal}
         NOT reach the field — exactly like ``[scheduler]`` multi-word keys. The
         loader silently keeps the default rather than crashing. Pinned so the
         behavior is intentional, not an accidental regression. (A future env
-        override for these would need an explicit reader, like `[api.auth]`.)"""
+        override for these would need an explicit reader, like `[api.auth]`.)
+        """
         toml_path = tmp_path / "c.toml"
         toml_path.write_text("[discovery]\ngen_batch = 30\n", encoding="utf-8")
         monkeypatch.setenv("OPENBILICLAW_DISCOVERY_GEN_BATCH", "7")

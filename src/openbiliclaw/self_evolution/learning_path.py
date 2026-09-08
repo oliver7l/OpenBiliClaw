@@ -96,6 +96,7 @@ class LearningPathGenerator:
     Args:
         db_path: Path to the SQLite database.
         llm_service: Optional LLM service for ordering and generating learning points.
+
     """
 
     def __init__(self, db_path: str, *, llm_service: Any | None = None) -> None:
@@ -151,6 +152,7 @@ class LearningPathGenerator:
 
         Raises:
             ValueError: If not enough articles are found for the topic.
+
         """
         # Step 1: Search for relevant articles
         articles = self._search_articles(topic, limit=max_articles)
@@ -291,7 +293,11 @@ class LearningPathGenerator:
         conn = self._get_conn()
         try:
             # Split topic into keywords for broader matching
-            keywords = [w.strip() for w in topic.replace("，", " ").replace(",", " ").split() if len(w.strip()) >= 2]
+            keywords = [
+                w.strip()
+                for w in topic.replace("，", " ").replace(",", " ").split()
+                if len(w.strip()) >= 2
+            ]
             if not keywords:
                 keywords = [topic]
 
@@ -299,7 +305,9 @@ class LearningPathGenerator:
             conditions = []
             params: list[Any] = []
             for kw in keywords[:5]:  # Limit to 5 keywords for performance
-                conditions.append("(title LIKE ? OR tags LIKE ? OR ai_summary LIKE ? OR content_text LIKE ?)")
+                conditions.append(
+                    "(title LIKE ? OR tags LIKE ? OR ai_summary LIKE ? OR content_text LIKE ?)"
+                )
                 like = f"%{kw}%"
                 params.extend([like, like, like, like])
 
@@ -344,13 +352,15 @@ class LearningPathGenerator:
         for a in articles[:20]:  # Limit to 20 for LLM context
             summary = (a.get("ai_summary") or "")[:200]
             tags = a.get("tags") or ""
-            articles_data.append({
-                "id": a["id"],
-                "title": a["title"][:100],
-                "source": a["source_type"],
-                "tags": tags[:100],
-                "summary": summary,
-            })
+            articles_data.append(
+                {
+                    "id": a["id"],
+                    "title": a["title"][:100],
+                    "source": a["source_type"],
+                    "tags": tags[:100],
+                    "summary": summary,
+                }
+            )
 
         system_instruction = (
             "你是一个学习路径规划专家。根据用户提供的文章列表，为指定主题生成一个循序渐进的学习路径。"
@@ -361,7 +371,7 @@ class LearningPathGenerator:
             "4. 为整个学习路径生成一个标题和描述\n"
             "5. 只使用提供的文章，不要编造不存在的文章\n"
             "6. 如果文章太多，挑选最相关的10-15篇\n"
-            "返回JSON格式：{\"title\": \"...\", \"description\": \"...\", \"steps\": [{\"article_id\": 123, \"learning_point\": \"...\", \"estimated_minutes\": 15}]}"
+            '返回JSON格式：{"title": "...", "description": "...", "steps": [{"article_id": 123, "learning_point": "...", "estimated_minutes": 15}]}'
         )
 
         user_input = (
@@ -372,15 +382,17 @@ class LearningPathGenerator:
         )
 
         try:
-            result = _run_async(generate_structured(
-                self.llm_service,
-                system_instruction=system_instruction,
-                user_input=user_input,
-                parse=lambda x: x,
-                label="learning_path_generation",
-                temperature=0.3,
-                max_tokens=2000,
-            ))
+            result = _run_async(
+                generate_structured(
+                    self.llm_service,
+                    system_instruction=system_instruction,
+                    user_input=user_input,
+                    parse=lambda x: x,
+                    label="learning_path_generation",
+                    temperature=0.3,
+                    max_tokens=2000,
+                )
+            )
 
             # Parse the result
             text = str(result).strip()
@@ -418,7 +430,7 @@ class LearningPathGenerator:
         last = text.rfind("}")
         if first != -1 and last != -1 and last > first:
             try:
-                return json.loads(text[first:last + 1])
+                return json.loads(text[first : last + 1])
             except json.JSONDecodeError:
                 pass
 
@@ -439,11 +451,13 @@ class LearningPathGenerator:
         for a in sorted_articles[:15]:
             content_len = a.get("content_length") or 1000
             estimated = max(5, min(60, content_len // 200))  # ~200 chars per minute
-            steps.append({
-                "article_id": a["id"],
-                "learning_point": f"阅读《{a['title'][:30]}》，理解核心概念",
-                "estimated_minutes": estimated,
-            })
+            steps.append(
+                {
+                    "article_id": a["id"],
+                    "learning_point": f"阅读《{a['title'][:30]}》，理解核心概念",
+                    "estimated_minutes": estimated,
+                }
+            )
 
         return {
             "title": f"{sorted_articles[0]['title'][:20]}...学习路径",

@@ -428,7 +428,7 @@ class TestGapFiller:
         assert len(gaps) == 1 and gaps[0]["description"].startswith("主题「RL」")
 
     def test_fill_loop_with_mocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """mock 搜索与提取：缺口被填补并标记 resolved。"""
+        """Mock 搜索与提取：缺口被填补并标记 resolved。"""
         from openbiliclaw.knowledge_forge import gap_filler as gf
         from openbiliclaw.knowledge_forge.gap_filler import GapFiller
 

@@ -17,7 +17,6 @@ from openbiliclaw.chat_analysis import ChatAnalysisService
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-    from openbiliclaw.api.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +29,15 @@ def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
     @app.get("/api/chat-analysis/health")
     def chat_analysis_health() -> JSONResponse:
         import os
-        return JSONResponse({
-            "ok": True,
-            "db_exists": _CHAT_DB_PATH.exists(),
-            "db_path": str(_CHAT_DB_PATH),
-            "cwd": os.getcwd(),
-        })
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "db_exists": _CHAT_DB_PATH.exists(),
+                "db_path": str(_CHAT_DB_PATH),
+                "cwd": os.getcwd(),
+            }
+        )
 
     def _get_svc() -> ChatAnalysisService | None:
         global _chat_analysis_service
@@ -46,9 +48,7 @@ def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
             return None
         runtime_ctx = getattr(ctx, "runtime_context", None)
         llm_service = getattr(runtime_ctx, "llm_service", None) if runtime_ctx else None
-        _chat_analysis_service = ChatAnalysisService(
-            db_path=_CHAT_DB_PATH, llm_service=llm_service
-        )
+        _chat_analysis_service = ChatAnalysisService(db_path=_CHAT_DB_PATH, llm_service=llm_service)
         return _chat_analysis_service
 
     # ── 全局统计 ──
@@ -271,14 +271,16 @@ def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "服务未就绪"}, status_code=503)
         q = svc.quota
-        return JSONResponse({
-            "ok": True,
-            "used_calls": q.used,
-            "max_calls_per_window": q.max_calls_per_window,
-            "window_seconds": q.window_seconds,
-            "remaining": q.remaining,
-            "is_exhausted": q.is_exhausted,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "used_calls": q.used,
+                "max_calls_per_window": q.max_calls_per_window,
+                "window_seconds": q.window_seconds,
+                "remaining": q.remaining,
+                "is_exhausted": q.is_exhausted,
+            }
+        )
 
     # ── 导入 ──
 

@@ -349,7 +349,8 @@ async def test_claude_provider_extracts_cache_read_and_creation_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When Anthropic reports cache hit/write tokens, normalize them
-    under ``cached_input_tokens`` and ``cache_creation_input_tokens``."""
+    under ``cached_input_tokens`` and ``cache_creation_input_tokens``.
+    """
     provider = ClaudeProvider(api_key="test-key")
 
     async def fake_create(**_: object) -> SimpleNamespace:
@@ -528,7 +529,8 @@ async def test_ollama_provider_embed_calls_native_endpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify embed() POSTs to /api/embeddings (Ollama's native route),
-    sends {model, prompt}, and returns the embedding vector."""
+    sends {model, prompt}, and returns the embedding vector.
+    """
     import httpx
 
     captured_url: list[str] = []
@@ -640,7 +642,8 @@ async def test_ollama_provider_num_ctx_routes_chat_to_native_endpoint(
 ) -> None:
     """With num_ctx>0, complete() must POST to native /api/chat with
     options.num_ctx so the context window actually applies (the /v1 shim
-    silently ignores it), and map prompt_eval_count/eval_count to usage."""
+    silently ignores it), and map prompt_eval_count/eval_count to usage.
+    """
     captured_url: list[str] = []
     captured_payload: list[dict[str, object]] = []
     _install_fake_chat_client(
@@ -701,7 +704,8 @@ async def test_ollama_provider_default_num_ctx_uses_openai_shim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """num_ctx=0 (default) keeps the OpenAI-compat /v1 path untouched —
-    the native /api/chat client must never be constructed."""
+    the native /api/chat client must never be constructed.
+    """
     provider = OllamaProvider(model="llama3", base_url="http://localhost:11434/v1")
 
     async def fake_request(**kwargs: object) -> SimpleNamespace:
@@ -724,7 +728,8 @@ async def test_ollama_provider_native_retries_without_format_on_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Empty content under format=json triggers one unconstrained retry —
-    parity with the OpenAI-shim empty-content recovery."""
+    parity with the OpenAI-shim empty-content recovery.
+    """
     captured_payload: list[dict[str, object]] = []
 
     class _TwoShotClient:

@@ -44,7 +44,8 @@ def test_format_context_xiaohongshu_like_with_author() -> None:
 
 def test_format_context_unknown_event_type_falls_back() -> None:
     """Unknown event_type strings shouldn't crash — they fall through
-    to a generic verb so the rendered sentence is still readable."""
+    to a generic verb so the rendered sentence is still readable.
+    """
     text = format_event_context(
         event_type="custom_action",
         source_platform=SOURCE_BILIBILI,
@@ -103,7 +104,8 @@ def test_build_event_explicit_context_wins_over_auto_generated() -> None:
 
 def test_build_event_url_omitted_when_empty() -> None:
     """URL is optional — events without one (e.g. follow events) shouldn't
-    carry a key with empty-string value."""
+    carry a key with empty-string value.
+    """
     event = build_event(
         event_type="follow",
         source_platform=SOURCE_BILIBILI,
@@ -116,7 +118,8 @@ def test_build_event_url_omitted_when_empty() -> None:
 def test_build_event_metadata_source_platform_explicit_wins() -> None:
     """If a producer passes source_platform inside metadata, that value
     wins over the parameter — supports edge cases where metadata is
-    pre-filled by an upstream layer."""
+    pre-filled by an upstream layer.
+    """
     event = build_event(
         event_type="view",
         source_platform=SOURCE_BILIBILI,
@@ -178,7 +181,8 @@ def _has_unified_shape(event: dict) -> bool:
 
 def test_bilibili_history_event_has_unified_shape() -> None:
     """v0.3.22+: B站 history events must carry context + source_platform
-    just like 小红书 events did from day one."""
+    just like 小红书 events did from day one.
+    """
     item = {
         "history": {"bvid": "BV1A", "view_at": 1710000000},
         "title": "讲透历史叙事",
@@ -227,7 +231,8 @@ def test_xiaohongshu_bootstrap_events_have_unified_shape() -> None:
 def test_bilibili_and_xiaohongshu_events_share_consumer_contract() -> None:
     """A consumer reading {event_type, title, context, metadata.source_platform,
     metadata.author} should not need to special-case which source produced the
-    event. This is the core unification invariant."""
+    event. This is the core unification invariant.
+    """
     bili = _history_item_to_event(
         {
             "history": {"bvid": "BV1", "view_at": 1},
@@ -378,7 +383,8 @@ def test_event_db_round_trip_legacy_dict_context_still_works(tmp_path) -> None:
 def test_feedback_event_uses_natural_language_context() -> None:
     """v0.3.22+: /api/feedback now builds a custom context with the
     feedback verb (点赞/踩/评论) instead of leaving context empty.
-    Replicates the api/app.py logic so the contract stays pinned."""
+    Replicates the api/app.py logic so the contract stays pinned.
+    """
     feedback_label = {"like": "点赞了", "dislike": "踩了", "comment": "评论了"}["dislike"]
     rec_title = "某个视频"
     note = "封面太花哨"

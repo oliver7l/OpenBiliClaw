@@ -659,8 +659,7 @@ async def test_feedback_targets_values_not_role_vs_behavior(tmp_path: object) ->
 
 @pytest.mark.asyncio
 async def test_channel_eval_report(tmp_path: object, capsys: object) -> None:
-    """
-    End-to-end evaluation of all 6 channels.
+    """End-to-end evaluation of all 6 channels.
 
     Scores:
       routing_score — fraction of expected layers that were buffered (0.0–1.0)

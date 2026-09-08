@@ -109,7 +109,8 @@ def test_stop_managed_ollama_noop_when_nothing_started(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With no daemon we started (None handle = adopted external Ollama), stop
-    is a no-op so a user-managed Ollama is never killed."""
+    is a no-op so a user-managed Ollama is never killed.
+    """
     from openbiliclaw.runtime import ollama_supervisor as sup
 
     monkeypatch.setattr(sup, "_managed_proc", None)
@@ -220,7 +221,8 @@ def test_start_serve_does_not_record_when_already_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Adopting an already-running Ollama leaves the handle None → stop won't
-    kill it."""
+    kill it.
+    """
     from openbiliclaw.runtime import ollama_supervisor as sup
 
     monkeypatch.setattr(sup, "_managed_proc", None)

@@ -27,6 +27,7 @@ def _run_async(coro: Any) -> Any:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(asyncio.run, coro).result()
         return loop.run_until_complete(coro)
@@ -128,6 +129,7 @@ class SM2Scheduler:
 
         Returns:
             The updated card.
+
         """
         quality = max(0, min(5, quality))
         now = datetime.now()
@@ -167,6 +169,7 @@ class KnowledgeCardGenerator:
     Args:
         db_path: Path to the SQLite database.
         llm_service: Optional LLM service for card generation.
+
     """
 
     def __init__(self, db_path: str, *, llm_service: Any | None = None) -> None:
@@ -197,6 +200,7 @@ class KnowledgeCardGenerator:
 
         Returns:
             List of generated KnowledgeCard objects.
+
         """
         if card_types is None:
             card_types = ["qa", "concept", "summary", "action"]
@@ -212,9 +216,9 @@ class KnowledgeCardGenerator:
                 logger.warning("Article not found: %d", article_id)
                 return []
 
-            content = article["content_text"] or ""
-            summary = article["ai_summary"] or ""
-            title = article["title"] or ""
+            article["content_text"] or ""
+            article["ai_summary"] or ""
+            article["title"] or ""
 
             # Use LLM if available, otherwise use heuristic extraction
             if self.llm_service is not None:
@@ -257,6 +261,7 @@ class KnowledgeCardGenerator:
 
         Returns:
             List of all generated cards.
+
         """
         conn = self._get_conn()
         try:
@@ -269,7 +274,9 @@ class KnowledgeCardGenerator:
                 params: list[Any] = []
 
                 if only_favorited:
-                    query += " AND a.id IN (SELECT article_id FROM events WHERE event_type = 'favorite')"
+                    query += (
+                        " AND a.id IN (SELECT article_id FROM events WHERE event_type = 'favorite')"
+                    )
 
                 query += " ORDER BY length(a.content_text) DESC LIMIT ?"
                 params.append(limit)
@@ -295,8 +302,9 @@ class KnowledgeCardGenerator:
         card_types: list[str],
     ) -> list[KnowledgeCard]:
         """Generate cards using LLM."""
-        from openbiliclaw.llm.generation import generate_structured
         import json as json_mod
+
+        from openbiliclaw.llm.generation import generate_structured
 
         content = (article.get("content_text") or "")[:3000]
         summary = article.get("ai_summary") or ""
@@ -314,15 +322,17 @@ class KnowledgeCardGenerator:
         user_input = f"文章标题：{title}\n文章摘要：{summary}\n文章内容：{content}"
 
         try:
-            result = _run_async(generate_structured(
-                self.llm_service,
-                system_instruction=system_instruction,
-                user_input=user_input,
-                parse=lambda x: json_mod.loads(x) if isinstance(x, str) else x,
-                label="knowledge_card_generation",
-                temperature=0.3,
-                max_tokens=1000,
-            ))
+            result = _run_async(
+                generate_structured(
+                    self.llm_service,
+                    system_instruction=system_instruction,
+                    user_input=user_input,
+                    parse=lambda x: json_mod.loads(x) if isinstance(x, str) else x,
+                    label="knowledge_card_generation",
+                    temperature=0.3,
+                    max_tokens=1000,
+                )
+            )
 
             cards: list[KnowledgeCard] = []
             if isinstance(result, list):
@@ -395,12 +405,18 @@ class KnowledgeCardGenerator:
 
             concept_count = 0
             for sent in sentences:
-                if any(term in sent for term in key_terms) and len(sent) > 20 and concept_count < max_cards:
+                if (
+                    any(term in sent for term in key_terms)
+                    and len(sent) > 20
+                    and concept_count < max_cards
+                ):
                     # Extract concept name (simplified)
                     concept_name = sent[:30] + "..." if len(sent) > 30 else sent
                     cards.append(
                         KnowledgeCard(
-                            card_id=hashlib.md5(f"{article['id']}-concept-{concept_count}".encode()).hexdigest()[:12],
+                            card_id=hashlib.md5(
+                                f"{article['id']}-concept-{concept_count}".encode()
+                            ).hexdigest()[:12],
                             source_article_id=article["id"],
                             source_title=title,
                             source_url=article.get("url") or "",
@@ -423,7 +439,9 @@ class KnowledgeCardGenerator:
                 if any(term in sent for term in action_terms) and len(sent) > 15:
                     cards.append(
                         KnowledgeCard(
-                            card_id=hashlib.md5(f"{article['id']}-action".encode()).hexdigest()[:12],
+                            card_id=hashlib.md5(f"{article['id']}-action".encode()).hexdigest()[
+                                :12
+                            ],
                             source_article_id=article["id"],
                             source_title=title,
                             source_url=article.get("url") or "",

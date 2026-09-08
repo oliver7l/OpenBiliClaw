@@ -86,6 +86,7 @@ class SocraticDialogue:
 
         Returns:
             Agent's response.
+
         """
         from openbiliclaw.llm.service import LLMServiceError
 
@@ -194,6 +195,7 @@ class SocraticDialogue:
 
         Returns:
             List of extracted insight dicts.
+
         """
         # TODO: Use LLM to identify preference signals, motivations,
         #       personality traits from the conversation

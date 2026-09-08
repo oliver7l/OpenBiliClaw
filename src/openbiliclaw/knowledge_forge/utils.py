@@ -103,7 +103,7 @@ def hamming_distance(h1: int, h2: int) -> int:
 
 
 def simhash_similarity(h1: int, h2: int, hash_bits: int = 64) -> float:
-    """simhash 相似度 0-1。"""
+    """Simhash 相似度 0-1。"""
     if not h1 and not h2:
         return 1.0
     return 1.0 - hamming_distance(h1, h2) / hash_bits

@@ -6,19 +6,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class CloneStatus(str, Enum):
+class CloneStatus(StrEnum):
     """克隆站点状态。"""
 
-    CLONED = "cloned"           # 已克隆完成
-    CLONING = "cloning"         # 正在克隆中
-    FAILED = "failed"           # 克隆失败
-    MOVED = "moved"             # 源站已迁移
-    ARCHIVED = "archived"       # 已归档
+    CLONED = "cloned"  # 已克隆完成
+    CLONING = "cloning"  # 正在克隆中
+    FAILED = "failed"  # 克隆失败
+    MOVED = "moved"  # 源站已迁移
+    ARCHIVED = "archived"  # 已归档
 
 
 class CloneSite(BaseModel):
@@ -30,7 +30,9 @@ class CloneSite(BaseModel):
     source_url: str = Field(default="", description="原始来源 URL")
     local_path: str = Field(description="站点在本地的相对路径（相对于 clone/sites/）")
     description: str = Field(default="", description="站点描述")
-    category: str = Field(default="other", description="分类：website/single-page/tool/game/art/other")
+    category: str = Field(
+        default="other", description="分类：website/single-page/tool/game/art/other"
+    )
     status: CloneStatus = Field(default=CloneStatus.CLONED, description="克隆状态")
     size_bytes: int = Field(default=0, description="站点文件总大小")
     file_count: int = Field(default=0, description="站点文件数")

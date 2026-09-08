@@ -11,10 +11,10 @@ LLM 配额说明：
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import deque
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ from .models import (
 from .store import ChatAnalysisStore
 
 if TYPE_CHECKING:
-    from ..storage.database import Database
+    from pathlib import Path
 
 
 class LLMQuota:
@@ -129,8 +129,14 @@ class ChatAnalysisService:
 
 只返回 JSON 对象，不要其他内容。"""
 
-    def __init__(self, database=None, db_path: Path | None = None, llm_service=None,
-                 max_llm_calls_per_window: int = 1000, llm_window_seconds: int = 5 * 3600):
+    def __init__(
+        self,
+        database=None,
+        db_path: Path | None = None,
+        llm_service=None,
+        max_llm_calls_per_window: int = 1000,
+        llm_window_seconds: int = 5 * 3600,
+    ):
         self.database = database
         self.db_path = db_path
         self._llm_service = llm_service
@@ -239,7 +245,9 @@ class ChatAnalysisService:
 
         # FTS5 搜索
         fts_results, fts_total = self.store.search_messages(
-            query, session_id=session_id, limit=limit * 2,
+            query,
+            session_id=session_id,
+            limit=limit * 2,
         )
         fts_map = {r.message_id: r for r in fts_results}
 
@@ -247,7 +255,9 @@ class ChatAnalysisService:
         vec_map: dict[int, float] = {}
         if query_vector:
             vec_results = self.store.search_similar_messages(
-                query_vector, session_id=session_id, limit=limit * 2,
+                query_vector,
+                session_id=session_id,
+                limit=limit * 2,
             )
             for r, sim in vec_results:
                 vec_map[r.message_id] = sim
@@ -319,10 +329,13 @@ class ChatAnalysisService:
 
     # ── 洞见管理 ──
 
-    def get_insights(self, session_id: int | None = None, insight_type: str | None = None,
-                     limit: int = 50) -> list[ChatInsight]:
+    def get_insights(
+        self, session_id: int | None = None, insight_type: str | None = None, limit: int = 50
+    ) -> list[ChatInsight]:
         return self.store.get_insights(
-            session_id=session_id, insight_type=insight_type, limit=limit,
+            session_id=session_id,
+            insight_type=insight_type,
+            limit=limit,
         )
 
     def count_insights(self, session_id: int | None = None) -> int:
@@ -330,15 +343,23 @@ class ChatAnalysisService:
 
     # ── 嵌入向量管理 ──
 
-    def create_embedding(self, message_id: int, session_id: int, vector: list[float],
-                         model: str = "sentence-transformers") -> ChatEmbedding:
+    def create_embedding(
+        self,
+        message_id: int,
+        session_id: int,
+        vector: list[float],
+        model: str = "sentence-transformers",
+    ) -> ChatEmbedding:
         return self.store.create_embedding(message_id, session_id, vector, model=model)
 
-    def get_embeddings(self, session_id: int | None = None, limit: int = 100) -> list[ChatEmbedding]:
+    def get_embeddings(
+        self, session_id: int | None = None, limit: int = 100
+    ) -> list[ChatEmbedding]:
         return self.store.get_embeddings(session_id=session_id, limit=limit)
 
-    def search_similar(self, query_vector: list[float], session_id: int | None = None,
-                        limit: int = 20) -> list[tuple[ChatSearchResult, float]]:
+    def search_similar(
+        self, query_vector: list[float], session_id: int | None = None, limit: int = 20
+    ) -> list[tuple[ChatSearchResult, float]]:
         return self.store.search_similar_messages(query_vector, session_id=session_id, limit=limit)
 
     def count_embeddings(self) -> int:
@@ -364,7 +385,8 @@ class ChatAnalysisService:
             logger.warning(
                 "LLM 配额已用完（窗口内已用 %d/%d 次），"
                 "跳过调用。可通过 max_llm_calls_per_window 调整，或稍后再试。",
-                self._quota.used, self._quota.max_calls_per_window,
+                self._quota.used,
+                self._quota.max_calls_per_window,
             )
             return False
         return True
@@ -433,7 +455,9 @@ class ChatAnalysisService:
             topics.append(topic)
         return topics
 
-    async def generate_insights(self, session_id: int, max_messages: int = 500) -> list[ChatInsight]:
+    async def generate_insights(
+        self, session_id: int, max_messages: int = 500
+    ) -> list[ChatInsight]:
         """使用 LLM 从会话中生成洞察。"""
         messages = self.store.get_messages(session_id, limit=max_messages)
         if not messages:
@@ -459,7 +483,9 @@ class ChatAnalysisService:
             insights.append(insight)
         return insights
 
-    async def summarize_session(self, session_id: int, max_messages: int = 500) -> dict[str, Any] | None:
+    async def summarize_session(
+        self, session_id: int, max_messages: int = 500
+    ) -> dict[str, Any] | None:
         """使用 LLM 生成会话摘要。"""
         messages = self.store.get_messages(session_id, limit=max_messages)
         if not messages:
@@ -495,9 +521,7 @@ class ChatAnalysisService:
 
         return result
 
-    async def analyze_unanalyzed(
-        self, limit: int = 20, concurrency: int = 3
-    ) -> dict[str, int]:
+    async def analyze_unanalyzed(self, limit: int = 20, concurrency: int = 3) -> dict[str, int]:
         """批量分析未分析的会话，每个会话执行完整分析后标记为已分析。
 
         增量设计：每次只处理 limit 个未分析会话，分析完成后标记 analyzed=1，
@@ -512,7 +536,9 @@ class ChatAnalysisService:
         async def _analyze_one(session: ChatSession) -> bool:
             async with sem:
                 try:
-                    logger.info("chat_analysis: analyzing session %d (%s)", session.id, session.title)
+                    logger.info(
+                        "chat_analysis: analyzing session %d (%s)", session.id, session.title
+                    )
                     await self.analyze_session(session.id)
                     self.store.mark_session_analyzed(session.id)
                     return True

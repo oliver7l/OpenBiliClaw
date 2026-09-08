@@ -407,7 +407,7 @@ def test_database_delight_candidates_skip_feedbacked_items(tmp_path: Path) -> No
 
 
 def test_delight_claim_threshold_in_sync() -> None:
-    """storage mirrors DEFAULT_DELIGHT_THRESHOLD without importing recommendation.
+    """Storage mirrors DEFAULT_DELIGHT_THRESHOLD without importing recommendation.
 
     The regular feed's delight-claim guard (storage layer) must use the
     same threshold as the surprise queue, or content could fall in the
@@ -593,7 +593,7 @@ def test_extract_delight_entries_handles_fenced_wrapper() -> None:
 
 
 def test_extract_delight_entries_handles_jsonl_extra_data() -> None:
-    """mimo "Extra data" mode: multiple roots newline-separated."""
+    """Mimo "Extra data" mode: multiple roots newline-separated."""
     from openbiliclaw.recommendation.delight import _extract_delight_entries
 
     payload = '{"bvid":"BV1","score":0.7}\n{"bvid":"BV2","score":0.5}'
@@ -640,7 +640,8 @@ def test_get_pool_candidates_filters_by_min_relevance(tmp_path: Path) -> None:
 
 def test_get_pool_candidates_default_min_relevance_is_055(tmp_path: Path) -> None:
     """v0.3.35: default gate must remain 0.55 (any change is a behaviour
-    swing affecting how many candidates the LLM sees per cycle)."""
+    swing affecting how many candidates the LLM sees per cycle).
+    """
     database = _make_database(tmp_path)
     database.cache_content("BV1HALF", title="Right at edge", relevance_score=0.54)
     database.cache_content("BV1OVER", title="Just over", relevance_score=0.56)

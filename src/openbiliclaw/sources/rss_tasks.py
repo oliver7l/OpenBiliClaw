@@ -70,6 +70,7 @@ async def run_rss_polling(
 
     Returns:
         Total number of articles fetched.
+
     """
     import uuid
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -890,7 +891,7 @@ class TestNoteGenerator:
     async def test_generate_note(self):
         """测试生成笔记。"""
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(return_value="# 生成的笔记\n\n这是内容")
+        mock_llm.complete_structured_task = AsyncMock(return_value=SimpleNamespace(content="# 生成的笔记\n\n这是内容"))
 
         generator = NoteGenerator(mock_llm)
         result = await generator.generate_note(
@@ -899,7 +900,7 @@ class TestNoteGenerator:
             content_type="article",
         )
         assert result == "# 生成的笔记\n\n这是内容"
-        mock_llm.complete.assert_called_once()
+        mock_llm.complete_structured_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_generate_note_empty_content(self):
@@ -908,13 +909,13 @@ class TestNoteGenerator:
         generator = NoteGenerator(mock_llm)
         result = await generator.generate_note(title="测试", content="")
         assert result == ""
-        mock_llm.complete.assert_not_called()
+        mock_llm.complete_structured_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_rectify_asr(self):
         """测试 ASR 校对。"""
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(return_value="校对后的文本")
+        mock_llm.complete_structured_task = AsyncMock(return_value=SimpleNamespace(content="校对后的文本"))
 
         generator = NoteGenerator(mock_llm)
         result = await generator.rectify_asr(raw_text="原始转录文本", domain_hint="计算机科学")
@@ -927,13 +928,13 @@ class TestNoteGenerator:
         generator = NoteGenerator(mock_llm)
         result = await generator.rectify_asr(raw_text="")
         assert result == ""
-        mock_llm.complete.assert_not_called()
+        mock_llm.complete_structured_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_rectify_asr_fallback_on_error(self):
         """测试 ASR 校对失败时回退到原始文本。"""
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(side_effect=Exception("LLM不可用"))
+        mock_llm.complete_structured_task = AsyncMock(side_effect=Exception("LLM不可用"))
 
         generator = NoteGenerator(mock_llm)
         result = await generator.rectify_asr(raw_text="原始文本", domain_hint="测试")
@@ -943,7 +944,7 @@ class TestNoteGenerator:
     async def test_generate_note_raises_on_error(self):
         """测试笔记生成失败时向上抛出异常。"""
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(side_effect=Exception("LLM不可用"))
+        mock_llm.complete_structured_task = AsyncMock(side_effect=Exception("LLM不可用"))
 
         generator = NoteGenerator(mock_llm)
         with pytest.raises(Exception, match="LLM不可用"):
@@ -997,7 +998,7 @@ class TestVideoToNotePipeline:
         )
 
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(return_value="# 生成的笔记")
+        mock_llm.complete_structured_task = AsyncMock(return_value=SimpleNamespace(content="# 生成的笔记"))
 
         mock_note_service = MagicMock()
         mock_note_service.create_note.return_value = Note(
@@ -1053,7 +1054,7 @@ class TestVideoToNotePipeline:
         mock_bilibili.get_audio_streams = AsyncMock(return_value={"best_stream_url": ""})
 
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(return_value="# 笔记")
+        mock_llm.complete_structured_task = AsyncMock(return_value=SimpleNamespace(content="# 笔记"))
 
         pipeline = VideoToNotePipeline(
             bilibili_client=mock_bilibili,
@@ -1151,7 +1152,7 @@ class TestVideoToNotePipeline:
     async def test_pipeline_subtitle_no_bilibili_client(self):
         """测试无 bilibili_client 时字幕路径仍可用。"""
         mock_llm = MagicMock()
-        mock_llm.complete = AsyncMock(return_value="# 笔记")
+        mock_llm.complete_structured_task = AsyncMock(return_value=SimpleNamespace(content="# 笔记"))
 
         pipeline = VideoToNotePipeline(
             bilibili_client=None,

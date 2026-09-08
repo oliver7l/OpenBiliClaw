@@ -303,6 +303,7 @@ async def recall_and_llm_purge_pool(
 
     Returns:
         Number of candidates purged.
+
     """
     clean_new = [t.strip() for t in topics if t and t.strip()]
     clean_all = [t.strip() for t in all_disliked_topics if t and t.strip()]

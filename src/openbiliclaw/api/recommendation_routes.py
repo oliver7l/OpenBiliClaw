@@ -649,6 +649,7 @@ def build_recommendation_router(
 
         total = await loop.run_in_executor(None, _query_total)
         rows = await loop.run_in_executor(None, _query_rows)
+
         # SQLite 可能返回 NULL（如 cover_url / quality_score），pydantic
         # str/float 字段不接受 None：字符串兜底空串、数值兜底 0.0。
         def _clean(row: Any) -> dict[str, Any]:

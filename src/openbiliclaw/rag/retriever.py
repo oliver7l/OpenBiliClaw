@@ -92,7 +92,8 @@ class ArticleRagRetriever:
     """Lazy, in-memory retriever over ``article_rag.db``."""
 
     def __init__(
-        self, rag_db_path: Path | None = None,
+        self,
+        rag_db_path: Path | None = None,
         embed_cfg: dict[str, Any] | None = None,
     ) -> None:
         self._rag_db = Path(rag_db_path or _RAG_DB_PATH)

@@ -502,7 +502,7 @@ class TestMobileWebViewModels:
         )
 
     def test_delight_action_state(self) -> None:
-        """getDelightActionState maps UI actions to backend-safe API tokens."""
+        """GetDelightActionState maps UI actions to backend-safe API tokens."""
         _assert_js(
             dedent("""
             import assert from "node:assert/strict";
@@ -828,11 +828,11 @@ class TestMobileWebViewModels:
     def test_profile_confirm_probe_actions_mark_profile_surface(self) -> None:
         api_js = Path("src/openbiliclaw/web/js/api.js").read_text()
         profile_js = Path("src/openbiliclaw/web/js/views/profile.js").read_text()
-        desktop_js = Path("src/openbiliclaw/web/desktop/assets/js/app.js").read_text()
+        desktop_profile_js = Path("src/openbiliclaw/web/desktop/assets/js/profile.js").read_text()
 
         assert "export async function respondToProbe(domain, responseType, options = {})" in api_js
         assert 'surface: "profile"' in profile_js
-        assert 'payload.surface = "profile"' in desktop_js
+        assert 'payload.surface = "profile"' in desktop_profile_js
         assert 'respondToProbe(domain, action, { surface: "profile" })' in profile_js
 
     def test_normalize_profile_summary_preserves_probe_mode_metadata(self) -> None:
@@ -886,11 +886,12 @@ class TestMobileWebViewModels:
         assert "panel.appendChild(emptyState)" in chat_js
 
     def test_desktop_web_knows_avoidance_probe_endpoint(self) -> None:
-        source = Path("src/openbiliclaw/web/desktop/assets/js/app.js").read_text()
+        app_js = Path("src/openbiliclaw/web/desktop/assets/js/app.js").read_text()
+        profile_js = Path("src/openbiliclaw/web/desktop/assets/js/profile.js").read_text()
 
-        assert "avoidanceProbeRespond" in source
-        assert "avoidance.probe" in source
-        assert "确实不喜欢" in source
+        assert "avoidanceProbeRespond" in app_js
+        assert "avoidance.probe" in profile_js
+        assert "确实不喜欢" in profile_js
 
     def test_profile_display_helpers_preserve_plugin_semantics(self) -> None:
         _assert_js(

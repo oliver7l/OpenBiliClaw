@@ -41,6 +41,7 @@ def is_safe_url(url: str) -> bool:
 
     Returns:
         True if the URL is safe, False otherwise.
+
     """
     try:
         parsed = urlparse(url)
@@ -64,7 +65,7 @@ def is_safe_url(url: str) -> bool:
         return False
 
 
-class ProcessorStatus(str, enum.Enum):
+class ProcessorStatus(enum.StrEnum):
     """Status of a content extraction."""
 
     success = "success"
@@ -90,6 +91,7 @@ class ProcessorResult:
         metadata: Additional platform-specific metadata.
         status: Extraction status.
         error: Error message if extraction failed.
+
     """
 
     title: str | None = None
@@ -112,10 +114,12 @@ class ProcessorResult:
 
         Returns:
             Dictionary with article fields matching the articles table schema.
+
         """
         import hashlib
         import json
         from datetime import datetime
+
         content_hash = ""
         if self.content_text:
             content_hash = hashlib.sha256(self.content_text.encode("utf-8")).hexdigest()[:32]
@@ -152,6 +156,7 @@ class BaseProcessor(ABC):
         priority: Matching priority (higher = matched first).
         source_type: Source platform identifier.
         source_name: Human-readable source name.
+
     """
 
     url_patterns: list[str] = []
@@ -165,6 +170,7 @@ class BaseProcessor(ABC):
         Args:
             llm_service: LLM service for AI-powered extraction.
             browser_cdp_url: Chrome DevTools Protocol URL for browser-based extraction.
+
         """
         self._llm_service = llm_service
         self._browser_cdp_url = browser_cdp_url
@@ -179,6 +185,7 @@ class BaseProcessor(ABC):
 
         Returns:
             ProcessorResult with extracted content.
+
         """
         ...
 
@@ -191,6 +198,7 @@ class BaseProcessor(ABC):
 
         Returns:
             ProcessorResult with failed status.
+
         """
         return ProcessorResult(
             url=url,

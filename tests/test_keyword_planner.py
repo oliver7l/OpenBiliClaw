@@ -190,7 +190,8 @@ def _pending(db: Database, platform: str, digest: str) -> list[str]:
 async def test_cold_start_multiple_platforms_one_merged_call(db: Database) -> None:
     """Cold start with several platforms in deficit → exactly ONE merged LLM
     call covering all due platforms; pending rows land per platform with the
-    current digest."""
+    current digest.
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     llm = _FakeLLM(
@@ -248,7 +249,8 @@ async def test_cold_start_merged_prompt_carries_diversity_hints(db: Database) ->
 
 async def test_full_pool_no_deficit_zero_llm_calls(db: Database) -> None:
     """No platform has a deficit and B站 has no catalyst → nothing due → zero
-    LLM calls, zero inserts."""
+    LLM calls, zero inserts.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     llm = _FakeLLM(payload={_BILI: ["should not be used"]})
@@ -267,7 +269,8 @@ async def test_full_pool_no_deficit_zero_llm_calls(db: Database) -> None:
 
 async def test_digest_change_expires_old_and_regenerates(db: Database) -> None:
     """When the profile digest changes, old-digest pending is expired and new
-    keywords are generated under the new digest."""
+    keywords are generated under the new digest.
+    """
     old_profile = _profile(("露营", 0.9))
     old_digest = profile_kw_digest(old_profile)
     # Seed stale pending under the OLD digest directly in the store.
@@ -299,7 +302,8 @@ async def test_single_flight_second_concurrent_run_does_not_double_generate(
     db: Database,
 ) -> None:
     """A second ``run_once`` overlapping the first finds the planner lock held
-    and skips, so the merged LLM call fires only once."""
+    and skips, so the merged LLM call fires only once.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     gate = asyncio.Event()
@@ -327,7 +331,8 @@ async def test_single_flight_second_concurrent_run_does_not_double_generate(
 
 async def test_lock_held_by_other_owner_skips_generation(db: Database) -> None:
     """If another owner already holds the planner lock, ``run_once`` skips —
-    no LLM call, no inserts (single-flight, deterministic)."""
+    no LLM call, no inserts (single-flight, deterministic).
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     llm = _FakeLLM(payload={_XHS: ["w1"]})
@@ -346,7 +351,8 @@ async def test_lock_held_by_other_owner_skips_generation(db: Database) -> None:
 
 async def test_llm_failure_falls_back_to_interest_names(db: Database) -> None:
     """When the merged LLM call raises, every due platform falls back to
-    deterministic weight-ranked interest names — no crash, pending inserted."""
+    deterministic weight-ranked interest names — no crash, pending inserted.
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     llm = _RaisingLLM()
@@ -364,7 +370,8 @@ async def test_llm_failure_falls_back_to_interest_names(db: Database) -> None:
 
 async def test_missing_platform_in_result_falls_back(db: Database) -> None:
     """A platform the model omits falls back to interest names; the platforms
-    it returned use the model output."""
+    it returned use the model output.
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     # LLM returns only bilibili; xiaohongshu is omitted → fallback for XHS.
@@ -385,7 +392,8 @@ async def test_explicit_empty_platform_declines_no_fallback(db: Database) -> Non
     """A SUCCESSFUL merged call where a platform returns an explicit ``[]`` is an
     intentional decline (P2.2): that platform gets NO interest-name fallback and
     NO pending row, while a different platform that returned words still gets
-    them. The declined platform keeps its (here empty) pending for next cycle."""
+    them. The declined platform keeps its (here empty) pending for next cycle.
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     # bilibili gets keywords; xiaohongshu explicitly declines with [].
@@ -408,7 +416,8 @@ async def test_explicit_empty_platform_declines_no_fallback(db: Database) -> Non
 async def test_declined_platform_does_not_recycle(db: Database) -> None:
     """A declined platform is left fully alone — even when it has ``used`` words
     that recycle-on-shortfall could otherwise top up, decline wins (no recycle,
-    no fallback). Distinguishes decline from the sparse-profile recycle path."""
+    no fallback). Distinguishes decline from the sparse-profile recycle path.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     # Seed a used word so a recycle WOULD be possible if the platform were not
@@ -434,7 +443,8 @@ async def test_call_failure_falls_back_for_all_due_even_with_decline_shape(
 ) -> None:
     """When the merged LLM call FAILS entirely, every due platform falls back to
     interest names — there is no 'decline' on a failed call (P2.2: decline is
-    only inferred from a successful, parsed response)."""
+    only inferred from a successful, parsed response).
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     llm = _RaisingLLM()
@@ -456,7 +466,8 @@ async def test_call_failure_falls_back_for_all_due_even_with_decline_shape(
 async def test_recycle_on_shortfall_tops_up_low_non_declined_platform(db: Database) -> None:
     """A non-declined platform that produced SOME new words but whose pending is
     still below ``kw_cache_low`` is topped up from its oldest ``used`` words
-    (P2.3) — no extra LLM call, conservative top-up only to the gap."""
+    (P2.3) — no extra LLM call, conservative top-up only to the gap.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     # Three used words available to recycle (oldest-first).
@@ -484,7 +495,8 @@ async def test_recycle_on_shortfall_tops_up_low_non_declined_platform(db: Databa
 
 async def test_no_recycle_when_pending_already_at_or_above_low(db: Database) -> None:
     """When a platform's pending is already at / above ``kw_cache_low`` after the
-    insert, recycle-on-shortfall does NOT fire (it stays conservative)."""
+    insert, recycle-on-shortfall does NOT fire (it stays conservative).
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     # A used word that COULD be recycled if shortfall fired.
@@ -509,7 +521,8 @@ async def test_no_recycle_when_pending_already_at_or_above_low(db: Database) -> 
 async def test_bilibili_catalyst_due_even_when_cache_not_below_low(db: Database) -> None:
     """B站 enters ``due`` on its catalyst (pool-below-target / ≥6 signals) even
     when its keyword cache is NOT below the low watermark and it has no
-    plain deficit."""
+    plain deficit.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     # Fill B站 cache ABOVE low (low=10) so cache_below_low is False.
@@ -538,7 +551,8 @@ async def test_bilibili_catalyst_due_even_when_cache_not_below_low(db: Database)
 
 async def test_bilibili_catalyst_skips_generation_when_cache_full(db: Database) -> None:
     """B站 due via catalyst but cache already at high → need=0 → no LLM call,
-    no new rows (the platform is dropped from the prompt)."""
+    no new rows (the platform is dropped from the prompt).
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     db.insert_pending_keywords(_BILI, [f"满{i}" for i in range(30)], digest)  # == high
@@ -562,7 +576,8 @@ async def test_bilibili_catalyst_skips_generation_when_cache_full(db: Database) 
 async def test_sparse_profile_recycles_oldest_used(db: Database) -> None:
     """A due platform whose generation + fallback yield nothing NEW (sparse
     profile, all words already in-flight) recycles its oldest ``used`` word
-    back to pending instead of starving."""
+    back to pending instead of starving.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     # Make "露营" a USED historical row (so the interest-name fallback word is
@@ -588,7 +603,8 @@ async def test_sparse_profile_recycles_oldest_used(db: Database) -> None:
 
 async def test_flag_off_run_once_does_nothing(db: Database) -> None:
     """Flag OFF → ``run_once`` is a pure no-op: no LLM call, no store writes,
-    even with deficits present."""
+    even with deficits present.
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     llm = _FakeLLM(payload={_BILI: ["x"], _XHS: ["y"]})
@@ -611,7 +627,8 @@ async def test_flag_off_run_once_does_nothing(db: Database) -> None:
 
 async def test_flag_off_run_loop_does_nothing(db: Database) -> None:
     """Flag OFF → the ``run()`` poll loop never touches the LLM or the store
-    (one iteration, sleep cancelled)."""
+    (one iteration, sleep cancelled).
+    """
     profile = _profile(("露营", 0.9))
     digest = profile_kw_digest(profile)
     llm = _FakeLLM(payload={_XHS: ["y"]})
@@ -657,7 +674,8 @@ async def test_cycle_ledger_captures_per_platform_generated_and_yield(db: Databa
     every platform generated this pass — generated counts from this pass plus
     each platform's cumulative admit-credited yield — even though the merged LLM
     call is a single ``discovery.keyword_planner`` caller (no per-platform token
-    split). One platform is pre-credited with yield to prove it is surfaced."""
+    split). One platform is pre-credited with yield to prove it is surfaced.
+    """
     profile = _profile(("露营", 0.9), ("和田玉", 0.7))
     digest = profile_kw_digest(profile)
     # Seed bilibili with an already-used keyword that has produced 2 admitted
@@ -696,7 +714,8 @@ async def test_cycle_ledger_logs_structured_line(
     db: Database, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The generation pass emits one structured ledger log line carrying the
-    per-platform generated/yield counts (operator observability)."""
+    per-platform generated/yield counts (operator observability).
+    """
     import logging
 
     profile = _profile(("露营", 0.9))

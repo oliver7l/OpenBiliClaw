@@ -247,6 +247,7 @@ def get_prompt_for_content_type(content_type: str) -> str:
 
     Returns:
         对应的 prompt 模板字符串。
+
     """
     prompts = {
         "study": NOTE_STUDY_PROMPT,

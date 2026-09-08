@@ -21,7 +21,8 @@ def test_mobile_web_probe_cards_have_type_specific_copy_and_styles() -> None:
 
 
 def test_desktop_web_probe_cards_have_type_specific_copy_and_styles() -> None:
-    app_js = Path("src/openbiliclaw/web/desktop/assets/js/app.js").read_text()
+    # probe 卡片逻辑已从 app.js 拆到 profile.js
+    app_js = Path("src/openbiliclaw/web/desktop/assets/js/profile.js").read_text()
     app_css = Path("src/openbiliclaw/web/desktop/assets/css/app.css").read_text()
 
     assert "is-interest-probe" in app_js
@@ -39,7 +40,8 @@ def test_desktop_web_probe_cards_have_type_specific_copy_and_styles() -> None:
 
 def test_desktop_probe_chat_expands_inline_in_message_card() -> None:
     """Desktop Inbox probe chat must stay in the card instead of opening chat view."""
-    app_js = Path("src/openbiliclaw/web/desktop/assets/js/app.js").read_text()
+    # probe chat 逻辑已从 app.js 拆到 profile.js
+    app_js = Path("src/openbiliclaw/web/desktop/assets/js/profile.js").read_text()
     app_css = Path("src/openbiliclaw/web/desktop/assets/css/app.css").read_text()
 
     assert "function openInlineMessageProbeChat(msg, el)" in app_js

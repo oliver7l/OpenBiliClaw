@@ -129,6 +129,7 @@ class KnowledgeGraphService:
 
         Returns:
             KnowledgeGraph 标签关联网络
+
         """
         entries = self._get_entries_in_range(start_date, end_date)
         if not entries:
@@ -209,6 +210,7 @@ class KnowledgeGraphService:
 
         Returns:
             KnowledgeGraph 人物关系图谱
+
         """
         entries = self._get_entries_in_range(start_date, end_date)
         if not entries:
@@ -306,6 +308,7 @@ class KnowledgeGraphService:
 
         Returns:
             KnowledgeGraph 混合知识网络
+
         """
         tag_graph = self.build_tag_network(start_date, end_date, min_count, max_nodes // 2)
         person_graph = self.build_person_network(start_date, end_date, 1, max_nodes // 2)
@@ -365,6 +368,7 @@ class KnowledgeGraphService:
 
         Returns:
             人物关系列表
+
         """
         entries = self._get_entries_in_range(start_date, end_date)
         if not entries:
@@ -467,6 +471,7 @@ class KnowledgeGraphService:
 
         Returns:
             KnowledgeNodeDetail 节点详情，节点不存在返回 None
+
         """
         if ":" not in node_id:
             return None
@@ -480,9 +485,12 @@ class KnowledgeGraphService:
         related_entries = []
         for entry in entries:
             content = (entry.title or "") + " " + entry.content
-            if node_type == "tag" and (
-                node_label in (entry.tags or []) or node_label in content
-            ) or node_type == "person" and node_label in content:
+            if (
+                node_type == "tag"
+                and (node_label in (entry.tags or []) or node_label in content)
+                or node_type == "person"
+                and node_label in content
+            ):
                 related_entries.append(entry)
 
         if not related_entries:
@@ -549,6 +557,7 @@ class KnowledgeGraphService:
 
         Returns:
             统计信息字典
+
         """
         entries = self._get_entries_in_range(start_date, end_date)
         if not entries:

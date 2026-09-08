@@ -15,7 +15,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from ..storage.database import Database
+from typing import TYPE_CHECKING
+
 from .models import (
     DiaryAnalysis,
     DiaryEntry,
@@ -28,6 +29,9 @@ from .models import (
     MoodLevel,
     TagType,
 )
+
+if TYPE_CHECKING:
+    from ..storage.database import Database
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS diary_entries (
@@ -251,9 +255,7 @@ class DiaryStore:
 
         for col_name, col_def in new_columns.items():
             if col_name not in existing_columns:
-                self.conn.execute(
-                    f"ALTER TABLE diary_fragments ADD COLUMN {col_name} {col_def}"
-                )
+                self.conn.execute(f"ALTER TABLE diary_fragments ADD COLUMN {col_name} {col_def}")
                 logger.info("数据库迁移：为 diary_fragments 添加列 %s", col_name)
 
     # ── 日记条目 CRUD ──────────────────────────────────────────
@@ -605,6 +607,7 @@ class DiaryStore:
             media_path: 媒体文件路径
             media_description: 媒体内容描述
             tags: 标签列表
+
         """
         self.initialize()
         if fragment_date is None:
@@ -617,8 +620,16 @@ class DiaryStore:
                  media_path, media_description, tags)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (content, mood.value, fragment_date, source, fragment_type,
-             media_path, media_description, tags_json),
+            (
+                content,
+                mood.value,
+                fragment_date,
+                source,
+                fragment_type,
+                media_path,
+                media_description,
+                tags_json,
+            ),
         )
         self.conn.commit()
         return self.get_fragment(cursor.lastrowid)
@@ -626,9 +637,7 @@ class DiaryStore:
     def get_fragment(self, fragment_id: int) -> DiaryFragment | None:
         """根据 ID 获取碎片。"""
         self.initialize()
-        cursor = self.conn.execute(
-            "SELECT * FROM diary_fragments WHERE id = ?", (fragment_id,)
-        )
+        cursor = self.conn.execute("SELECT * FROM diary_fragments WHERE id = ?", (fragment_id,))
         row = cursor.fetchone()
         return self._row_to_fragment(row) if row else None
 
@@ -685,9 +694,7 @@ class DiaryStore:
     def delete_fragment(self, fragment_id: int) -> bool:
         """删除碎片。"""
         self.initialize()
-        cursor = self.conn.execute(
-            "DELETE FROM diary_fragments WHERE id = ?", (fragment_id,)
-        )
+        cursor = self.conn.execute("DELETE FROM diary_fragments WHERE id = ?", (fragment_id,))
         self.conn.commit()
         return cursor.rowcount > 0
 
@@ -716,6 +723,7 @@ class DiaryStore:
 
     def _row_to_fragment(self, row: sqlite3.Row) -> DiaryFragment:
         """将数据库行转换为 DiaryFragment 对象。"""
+
         # 兼容旧表结构（没有新字段时使用默认值）
         def safe_get(key: str, default=None):
             try:
@@ -775,8 +783,9 @@ class DiaryStore:
         row = cursor.fetchone()
         return self._row_to_tag(row) if row else None
 
-    def list_tags(self, tag_type: TagType | None = None,
-                  limit: int = 200, min_count: int = 1) -> list[DiaryTag]:
+    def list_tags(
+        self, tag_type: TagType | None = None, limit: int = 200, min_count: int = 1
+    ) -> list[DiaryTag]:
         """列出标签，可按类型筛选，按使用次数排序。"""
         self.initialize()
         if tag_type:
@@ -895,8 +904,9 @@ class DiaryStore:
         row = cursor.fetchone()
         return self._row_to_person(row) if row else None
 
-    def list_persons(self, relation: str | None = None,
-                     limit: int = 200, min_appearances: int = 1) -> list[DiaryPerson]:
+    def list_persons(
+        self, relation: str | None = None, limit: int = 200, min_appearances: int = 1
+    ) -> list[DiaryPerson]:
         """列出人物，可按关系筛选，按出现次数排序。"""
         self.initialize()
         if relation:
@@ -921,8 +931,9 @@ class DiaryStore:
             )
         return [self._row_to_person(row) for row in cursor.fetchall()]
 
-    def add_person_to_entry(self, entry_id: int, person_id: int,
-                             context: str = "", entry_date: str = "") -> None:
+    def add_person_to_entry(
+        self, entry_id: int, person_id: int, context: str = "", entry_date: str = ""
+    ) -> None:
         """给日记添加人物关联（幂等），并更新人物统计。"""
         self.initialize()
         cursor = self.conn.execute(
@@ -967,7 +978,7 @@ class DiaryStore:
         results = []
         for row in cursor.fetchall():
             person = self._row_to_person(row)
-            context = row["ep_context"] if "ep_context" in row.keys() else ""
+            context = row.get("ep_context", "")
             results.append((person, context))
         return results
 
@@ -987,13 +998,15 @@ class DiaryStore:
         )
         results = []
         for row in cursor.fetchall():
-            results.append({
-                "id": row["id"],
-                "entry_date": row["entry_date"],
-                "title": row["title"],
-                "context": row["context"] or "",
-                "content_preview": row["content"][:200] if row["content"] else "",
-            })
+            results.append(
+                {
+                    "id": row["id"],
+                    "entry_date": row["entry_date"],
+                    "title": row["title"],
+                    "context": row["context"] or "",
+                    "content_preview": row["content"][:200] if row["content"] else "",
+                }
+            )
         return results
 
     def count_persons(self) -> int:
@@ -1048,6 +1061,7 @@ class DiaryStore:
             entry_id: 日记 ID
             vector: embedding 向量
             model: 使用的 embedding 模型
+
         """
         self.initialize()
         now = datetime.now()
@@ -1125,8 +1139,12 @@ class DiaryStore:
     # ── 分块 Embedding CRUD ──────────────────────────────────
 
     def upsert_chunk_embedding(
-        self, entry_id: int, chunk_index: int, chunk_text: str,
-        vector: list[float], model: str = "",
+        self,
+        entry_id: int,
+        chunk_index: int,
+        chunk_text: str,
+        vector: list[float],
+        model: str = "",
     ) -> None:
         """插入或更新某篇日记的一个 chunk 向量。"""
         self.initialize()
@@ -1157,7 +1175,9 @@ class DiaryStore:
         for row in cursor.fetchall():
             try:
                 vector = json.loads(row["vector"])
-                results.append((row["entry_id"], row["chunk_index"], vector, row["chunk_text"] or ""))
+                results.append(
+                    (row["entry_id"], row["chunk_index"], vector, row["chunk_text"] or "")
+                )
             except (json.JSONDecodeError, TypeError):
                 continue
         return results
@@ -1180,7 +1200,7 @@ class DiaryStore:
 
     def get_unembedded_chunks(self, limit: int = 100) -> list[tuple[DiaryEntry, int]]:
         """获取尚未生成 chunk 向量的日记，返回 [(entry, chunk_count), ...]。
-        
+
         如果某篇日记完全没有 chunk，且之前没有全篇 embedding，也返回。
         """
         self.initialize()
@@ -1215,19 +1235,26 @@ class DiaryStore:
 
     def sync_fts5(self, entry_id: int | None = None) -> None:
         """将日记同步到 FTS5 索引。
-        
+
         Args:
             entry_id: 指定日记 ID，为 None 则全量重建
+
         """
         self.initialize()
         if entry_id is not None:
             # 删除旧索引并插入新数据
-            self.conn.execute("INSERT INTO diary_fts5(diary_fts5, rowid, title, content, tags) VALUES ('delete', ?, ?, ?, ?)",
-                              (entry_id, "", "", ""))
-            row = self.conn.execute("SELECT title, content, tags FROM diary_entries WHERE id = ?", (entry_id,)).fetchone()
+            self.conn.execute(
+                "INSERT INTO diary_fts5(diary_fts5, rowid, title, content, tags) VALUES ('delete', ?, ?, ?, ?)",
+                (entry_id, "", "", ""),
+            )
+            row = self.conn.execute(
+                "SELECT title, content, tags FROM diary_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
             if row:
-                self.conn.execute("INSERT INTO diary_fts5(rowid, title, content, tags) VALUES (?, ?, ?, ?)",
-                                  (entry_id, row["title"], row["content"], row["tags"]))
+                self.conn.execute(
+                    "INSERT INTO diary_fts5(rowid, title, content, tags) VALUES (?, ?, ?, ?)",
+                    (entry_id, row["title"], row["content"], row["tags"]),
+                )
         else:
             # 全量重建
             self.conn.execute("INSERT INTO diary_fts5(diary_fts5) VALUES('rebuild')")
@@ -1241,7 +1268,7 @@ class DiaryStore:
         """
         self.initialize()
         # 判断是否包含中文
-        has_chinese = any('\u4e00' <= ch <= '\u9fff' for ch in query)
+        has_chinese = any("\u4e00" <= ch <= "\u9fff" for ch in query)
 
         if not has_chinese:
             # 纯英文/数字查询：尝试 FTS5

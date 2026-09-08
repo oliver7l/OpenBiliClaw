@@ -738,7 +738,7 @@ def test_build_profile_summary_keeps_newest_window_and_all_dislikes() -> None:
 def test_extract_interest_tags_fills_specifics_by_global_weight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.discovery.strategies import _utils
+    from obc_discovery.strategies import _utils
 
     profile = OnionProfile(
         interest=InterestLayer(

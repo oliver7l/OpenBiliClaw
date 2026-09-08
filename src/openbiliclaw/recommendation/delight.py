@@ -438,6 +438,7 @@ class DelightScorer:
             A tuple of (delight_score, signals, reason_stub).
             reason_stub is a short hint for the LLM to expand into the
             full delight_reason.
+
         """
         w = self._weights
         signals = await self._compute_signals(candidate, profile)

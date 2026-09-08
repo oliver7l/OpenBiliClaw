@@ -47,6 +47,7 @@ class Kr36Processor(BaseProcessor):
 
         Returns:
             ProcessorResult with 36Kr article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -93,7 +94,9 @@ class Kr36Processor(BaseProcessor):
             content_text = None
             content_elem = soup.select_one(".article-content, .content, .article-detail-content")
             if content_elem:
-                for tag in content_elem.select("script, style, .advertisement, .recommend, .qrcode"):
+                for tag in content_elem.select(
+                    "script, style, .advertisement, .recommend, .qrcode"
+                ):
                     tag.decompose()
                 content_text = content_elem.get_text(separator="\n", strip=True)
                 content_text = re.sub(r"\n{3,}", "\n\n", content_text).strip()

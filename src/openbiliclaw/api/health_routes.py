@@ -154,13 +154,15 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             end_date=end_date,
             search=search,
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [e.model_dump(mode="json") for e in items],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [e.model_dump(mode="json") for e in items],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
 
     @app.post("/api/health/encounters")
     def health_encounters_create(payload: dict[str, Any]) -> JSONResponse:
@@ -228,14 +230,18 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_conditions(
-            patient_id=patient_id, status=status,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            status=status,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [c.model_dump(mode="json") for c in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [c.model_dump(mode="json") for c in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/conditions")
     def health_conditions_create(payload: dict[str, Any]) -> JSONResponse:
@@ -299,14 +305,18 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_medications(
-            patient_id=patient_id, status=status,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            status=status,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [m.model_dump(mode="json") for m in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [m.model_dump(mode="json") for m in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/medications")
     def health_medications_create(payload: dict[str, Any]) -> JSONResponse:
@@ -374,11 +384,13 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             offset=max(0, int(offset)),
             search=search,
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [l.model_dump(mode="json") for l in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [l.model_dump(mode="json") for l in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/lab-results")
     def health_lab_results_create(payload: dict[str, Any]) -> JSONResponse:
@@ -457,11 +469,13 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             limit=max(1, min(int(limit), 200)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [p.model_dump(mode="json") for p in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [p.model_dump(mode="json") for p in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/procedures")
     def health_procedures_create(payload: dict[str, Any]) -> JSONResponse:
@@ -556,11 +570,13 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [v.model_dump(mode="json") for v in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [v.model_dump(mode="json") for v in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/vitals")
     def health_vitals_create(payload: dict[str, Any]) -> JSONResponse:
@@ -621,7 +637,9 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
     # ── 医生信息 ──
 
     @app.get("/api/health/doctors")
-    def health_doctors_list(specialty: str | None = None, search: str | None = None) -> JSONResponse:
+    def health_doctors_list(
+        specialty: str | None = None, search: str | None = None
+    ) -> JSONResponse:
         svc = _get_health_service(ctx)
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
@@ -691,15 +709,20 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_documents(
-            patient_id=patient_id, document_type=document_type,
-            encounter_id=encounter_id, search=search,
-            limit=max(1, min(int(limit), 200)), offset=max(0, int(offset)),
+            patient_id=patient_id,
+            document_type=document_type,
+            encounter_id=encounter_id,
+            search=search,
+            limit=max(1, min(int(limit), 200)),
+            offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "items": [d.model_dump(mode="json") for d in items],
-            "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [d.model_dump(mode="json") for d in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/documents")
     def health_documents_create(payload: dict[str, Any]) -> JSONResponse:
@@ -762,8 +785,10 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items = svc.list_insights(
-            patient_id=patient_id, target_type=target_type,
-            target_id=target_id, limit=max(1, min(int(limit), 200)),
+            patient_id=patient_id,
+            target_type=target_type,
+            target_id=target_id,
+            limit=max(1, min(int(limit), 200)),
         )
         return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
 
@@ -803,12 +828,14 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True,
-            "patient_id": patient_id,
-            "items": [e.model_dump(mode="json") for e in events],
-            "total": len(events),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "patient_id": patient_id,
+                "items": [e.model_dump(mode="json") for e in events],
+                "total": len(events),
+            }
+        )
 
     # ── 预约 / 复诊 ──
 
@@ -824,14 +851,19 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_appointments(
-            patient_id=patient_id, status=status,
+            patient_id=patient_id,
+            status=status,
             upcoming_only=upcoming_only,
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True, "items": [a.model_dump(mode="json") for a in items], "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [a.model_dump(mode="json") for a in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/appointments")
     def health_appointments_create(data: AppointmentCreate) -> JSONResponse:
@@ -892,14 +924,20 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         items, total = svc.list_medication_logs(
-            patient_id=patient_id, medication_id=medication_id,
-            start_date=start_date, end_date=end_date,
+            patient_id=patient_id,
+            medication_id=medication_id,
+            start_date=start_date,
+            end_date=end_date,
             limit=max(1, min(int(limit), 500)),
             offset=max(0, int(offset)),
         )
-        return JSONResponse({
-            "ok": True, "items": [m.model_dump(mode="json") for m in items], "total": total,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "items": [m.model_dump(mode="json") for m in items],
+                "total": total,
+            }
+        )
 
     @app.post("/api/health/medication-logs")
     def health_medication_logs_create(data: MedicationLogCreate) -> JSONResponse:
@@ -952,13 +990,15 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         drugs = [d.strip() for d in existing_drugs.split(",") if d.strip()]
         interactions = svc.check_drug_interactions(drug_name, drugs)
-        return JSONResponse({
-            "ok": True,
-            "drug_name": drug_name,
-            "existing_drugs": drugs,
-            "interactions": [i.model_dump(mode="json") for i in interactions],
-            "has_interaction": len(interactions) > 0,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "drug_name": drug_name,
+                "existing_drugs": drugs,
+                "interactions": [i.model_dump(mode="json") for i in interactions],
+                "has_interaction": len(interactions) > 0,
+            }
+        )
 
     # ── AI 报告解读 ──
 
@@ -973,7 +1013,9 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         try:
             insight = await svc.interpret_lab_result(lab_result_id)
             if insight is None:
-                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+                return JSONResponse(
+                    {"ok": False, "error": "interpretation failed"}, status_code=500
+                )
             return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
@@ -989,8 +1031,9 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         try:
             insight = await svc.interpret_procedure(procedure_id)
             if insight is None:
-                return JSONResponse({"ok": False, "error": "interpretation failed"}, status_code=500)
+                return JSONResponse(
+                    {"ok": False, "error": "interpretation failed"}, status_code=500
+                )
             return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-

@@ -64,6 +64,7 @@ class BilibiliSubtitleFetcher:
     Args:
         cookie: Bilibili 登录 cookie（可选，部分视频需要登录才能获取字幕）
         timeout: 请求超时时间（秒）
+
     """
 
     def __init__(self, cookie: str = "", timeout: float = 15.0) -> None:
@@ -102,6 +103,7 @@ class BilibiliSubtitleFetcher:
 
         Returns:
             视频 cid，失败返回 0。
+
         """
         if not self._client:
             raise RuntimeError("Must use as async context manager")
@@ -126,6 +128,7 @@ class BilibiliSubtitleFetcher:
 
         Returns:
             字幕轨道列表，无字幕时返回空列表。
+
         """
         if not self._client:
             raise RuntimeError("Must use as async context manager")
@@ -170,6 +173,7 @@ class BilibiliSubtitleFetcher:
 
         Returns:
             填充了 cues 的字幕轨道。
+
         """
         if not self._client:
             raise RuntimeError("Must use as async context manager")
@@ -215,6 +219,7 @@ class BilibiliSubtitleFetcher:
 
         Returns:
             填充了内容的字幕轨道列表。
+
         """
         tracks = await self.list_subtitles(bvid, cid)
         if not tracks:
@@ -251,6 +256,7 @@ class BilibiliSubtitleFetcher:
 
         Returns:
             字幕纯文本，无字幕时返回空字符串。
+
         """
         tracks = await self.fetch_subtitles(bvid, cid, preferred_lan=preferred_lan)
         if not tracks:

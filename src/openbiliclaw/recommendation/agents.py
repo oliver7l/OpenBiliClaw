@@ -58,6 +58,7 @@ class IntentAgent:
                 "platform_filter": "",        # tombstones not yet supported
                 "content_type_filter": "",
             }
+
         """
         exclude_platforms: list[str] = []
         exclude_content_types: list[str] = []
@@ -300,7 +301,6 @@ class RankAgent:
         Rows without a cached vector keep the pure keyword fit, and with no
         centroids at all the behaviour is byte-identical to pre-centroid.
         """
-
         profile_domains = {k for k, w in profile_keywords if w >= 0.5}
         from openbiliclaw.llm.embedding import cosine_similarity
 

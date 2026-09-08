@@ -17,7 +17,6 @@ import logging
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,9 @@ except ImportError:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="构建知识库概念反向索引")
-    p.add_argument("--source", default="all", choices=["all", "learnbuffett", "mungermodels", "aichainmap"])
+    p.add_argument(
+        "--source", default="all", choices=["all", "learnbuffett", "mungermodels", "aichainmap"]
+    )
     p.add_argument("--clear", action="store_true", help="清空已有数据重新构建")
     p.add_argument("--verbose", "-v", action="store_true", help="详细输出")
     return p.parse_args()
@@ -44,6 +45,7 @@ def _get_conn() -> sqlite3.Connection | None:
     ]
     try:
         from openbiliclaw.config import load_config
+
         cfg = load_config()
         if cfg.storage.db_path:
             _paths.insert(0, Path(cfg.storage.db_path))
@@ -66,6 +68,7 @@ def _clear_tables(conn: sqlite3.Connection) -> None:
 
 
 # ── learnbuffett.com ──────────────────────────────────────────────
+
 
 def _learnbuffett_articles(conn: sqlite3.Connection) -> dict[str, dict]:
     """获取 learnbuffett 文章 ID 映射。"""
@@ -104,13 +107,16 @@ def _extract_learnbuffett_wikilinks(html: str) -> list[dict]:
             link_type = "company"
         elif "/people/" in href or "人物" in href:
             link_type = "person"
-        elif "/letters/" in href or "股东信" in href or "partnership" in href or "berkshire" in href:
+        elif (
+            "/letters/" in href or "股东信" in href or "partnership" in href or "berkshire" in href
+        ):
             link_type = "letter"
         links.append({"text": text, "href": href, "type": link_type})
     return links
 
 
 # ── mungermodels.com ──────────────────────────────────────────────
+
 
 def _extract_mungermodels_wikilinks(html: str) -> list[dict]:
     """从 mungermodels HTML 中提取 wikilink。"""
@@ -135,6 +141,7 @@ def _extract_mungermodels_wikilinks(html: str) -> list[dict]:
 
 
 # ── aichainmap.com ────────────────────────────────────────────────
+
 
 def _aichainmap_articles(conn: sqlite3.Connection) -> dict[str, dict]:
     """获取 aichainmap 文章 ID 映射。"""
@@ -164,7 +171,7 @@ def _extract_aichainmap_wikilinks(html: str) -> list[dict]:
         href = a.get("href", "")
         text = a.get_text(strip=True)
         # 从 class 中提取类型
-        classes = (a.get("class", []) or [])
+        classes = a.get("class", []) or []
         link_type = "concept"
         for cls_val in classes:
             if "companies" in cls_val:
@@ -190,9 +197,17 @@ def _extract_aichainmap_wikilinks(html: str) -> list[dict]:
 
 # ── 主构建逻辑 ────────────────────────────────────────────────────
 
+
 def _build_learnbuffett(conn: sqlite3.Connection, args: argparse.Namespace) -> tuple[int, int, int]:
     """从 learnbuffett 克隆文件提取链接。"""
-    sites_dir = Path(__file__).resolve().parent.parent / "web" / "clone" / "sites" / "learnbuffett-com" / "learnbuffett.com"
+    sites_dir = (
+        Path(__file__).resolve().parent.parent
+        / "web"
+        / "clone"
+        / "sites"
+        / "learnbuffett-com"
+        / "learnbuffett.com"
+    )
     file_articles = _learnbuffett_articles(conn)
 
     total_concepts = 0
@@ -235,7 +250,15 @@ def _build_learnbuffett(conn: sqlite3.Connection, args: argparse.Namespace) -> t
 
                 conn.execute(
                     "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (source_id, source_title, source_url, "learnbuffett", concept, link_type, link_href),
+                    (
+                        source_id,
+                        source_title,
+                        source_url,
+                        "learnbuffett",
+                        concept,
+                        link_type,
+                        link_href,
+                    ),
                 )
                 total_backlinks += 1
 
@@ -243,13 +266,22 @@ def _build_learnbuffett(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 logger.info("  learnbuffett: %d 文件, %d 链接", total_files, total_backlinks)
 
     conn.commit()
-    logger.info("learnbuffett: %d 文件, %d 概念, %d 反向链接", total_files, total_concepts, total_backlinks)
+    logger.info(
+        "learnbuffett: %d 文件, %d 概念, %d 反向链接", total_files, total_concepts, total_backlinks
+    )
     return total_files, total_concepts, total_backlinks
 
 
 def _build_mungermodels(conn: sqlite3.Connection, args: argparse.Namespace) -> tuple[int, int, int]:
     """从 mungermodels 克隆文件提取链接。"""
-    sites_dir = Path(__file__).resolve().parent.parent / "web" / "clone" / "sites" / "mungermodels-com" / "mungermodels.com"
+    sites_dir = (
+        Path(__file__).resolve().parent.parent
+        / "web"
+        / "clone"
+        / "sites"
+        / "mungermodels-com"
+        / "mungermodels.com"
+    )
     rows = conn.execute(
         "SELECT id, url, title FROM articles WHERE source_type = 'mungermodels'"
     ).fetchall()
@@ -299,7 +331,15 @@ def _build_mungermodels(conn: sqlite3.Connection, args: argparse.Namespace) -> t
 
                 conn.execute(
                     "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (source_id, source_title, source_url, "mungermodels", concept, link_type, link_href),
+                    (
+                        source_id,
+                        source_title,
+                        source_url,
+                        "mungermodels",
+                        concept,
+                        link_type,
+                        link_href,
+                    ),
                 )
                 total_backlinks += 1
 
@@ -307,13 +347,22 @@ def _build_mungermodels(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 logger.info("  mungermodels: %d 文件, %d 链接", total_files, total_backlinks)
 
     conn.commit()
-    logger.info("mungermodels: %d 文件, %d 概念, %d 反向链接", total_files, total_concepts, total_backlinks)
+    logger.info(
+        "mungermodels: %d 文件, %d 概念, %d 反向链接", total_files, total_concepts, total_backlinks
+    )
     return total_files, total_concepts, total_backlinks
 
 
 def _build_aichainmap(conn: sqlite3.Connection, args: argparse.Namespace) -> tuple[int, int, int]:
     """从 aichainmap 数据文件提取链接。"""
-    sites_dir = Path(__file__).resolve().parent.parent / "web" / "clone" / "sites" / "aichainmap-com" / "aichainmap.com"
+    sites_dir = (
+        Path(__file__).resolve().parent.parent
+        / "web"
+        / "clone"
+        / "sites"
+        / "aichainmap-com"
+        / "aichainmap.com"
+    )
     articles = _aichainmap_articles(conn)
 
     bodies_file = sites_dir / "data" / "wiki-bodies.js?v=1"
@@ -374,19 +423,35 @@ def _build_aichainmap(conn: sqlite3.Connection, args: argparse.Namespace) -> tup
 
                 conn.execute(
                     "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (source_id, source_title, source_url, "aichainmap", concept, link_type, link_href),
+                    (
+                        source_id,
+                        source_title,
+                        source_url,
+                        "aichainmap",
+                        concept,
+                        link_type,
+                        link_href,
+                    ),
                 )
                 total_backlinks += 1
 
             if args.verbose and total_backlinks % 1000 == 0:
-                logger.info("  aichainmap: %d 实体, %d 链接", total_backlinks // 10, total_backlinks)
+                logger.info(
+                    "  aichainmap: %d 实体, %d 链接", total_backlinks // 10, total_backlinks
+                )
 
     conn.commit()
-    logger.info("aichainmap: %d 实体, %d 概念, %d 反向链接", total_backlinks // 10, total_concepts, total_backlinks)
+    logger.info(
+        "aichainmap: %d 实体, %d 概念, %d 反向链接",
+        total_backlinks // 10,
+        total_concepts,
+        total_backlinks,
+    )
     return 0, total_concepts, total_backlinks
 
 
 # ── 入口 ──────────────────────────────────────────────────────────
+
 
 def main() -> None:
     args = _parse_args()

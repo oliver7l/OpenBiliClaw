@@ -47,6 +47,7 @@ class GcoresProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Gcores article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")

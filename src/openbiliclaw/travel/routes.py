@@ -209,12 +209,14 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
                 if line.startswith("|") and "---" not in line and "项目" not in line:
                     cells = [c.strip() for c in line.strip("|").split("|")]
                     if len(cells) >= 4 and cells[0]:
-                        plans.append({
-                            "item": cells[0],
-                            "plan_a": cells[1],
-                            "plan_b": cells[2],
-                            "plan_c": cells[3],
-                        })
+                        plans.append(
+                            {
+                                "item": cells[0],
+                                "plan_a": cells[1],
+                                "plan_b": cells[2],
+                                "plan_c": cells[3],
+                            }
+                        )
                 elif line.startswith("##") or line.startswith("---"):
                     in_plans = False
 

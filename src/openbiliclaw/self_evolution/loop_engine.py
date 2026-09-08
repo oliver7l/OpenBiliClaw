@@ -177,13 +177,9 @@ class ContentFilter:
             f"a.id > {since_id}",
         ]
         if exclude_with_tldr:
-            conditions.append(
-                "a.id NOT IN (SELECT article_id FROM article_tldrs)"
-            )
+            conditions.append("a.id NOT IN (SELECT article_id FROM article_tldrs)")
         if exclude_with_cards:
-            conditions.append(
-                "a.id NOT IN (SELECT source_article_id FROM knowledge_cards)"
-            )
+            conditions.append("a.id NOT IN (SELECT source_article_id FROM knowledge_cards)")
 
         where_clause = " AND ".join(conditions)
 
@@ -419,9 +415,7 @@ class SelfEvolutionLoopEngine:
             since_id = self._state.last_processed_article_id
             new_count = ContentFilter.count_new_articles(conn, since_id)
             last_batch = self._state.last_batch_run_at
-            hours_since_batch = (
-                (now - last_batch).total_seconds() / 3600 if last_batch else 999
-            )
+            hours_since_batch = (now - last_batch).total_seconds() / 3600 if last_batch else 999
 
             enough_new = new_count >= self._batch_threshold
             force_timeout = hours_since_batch >= self._batch_max_hours
@@ -451,8 +445,7 @@ class SelfEvolutionLoopEngine:
             try:
                 window_stats = SlidingWindowStats.refresh(conn)
                 results["window_stats"] = {
-                    d: {"total": s["total"]}
-                    for d, s in window_stats.items()
+                    d: {"total": s["total"]} for d, s in window_stats.items()
                 }
             except Exception:
                 logger.debug("self_evolution: window_stats failed", exc_info=True)
@@ -467,8 +460,7 @@ class SelfEvolutionLoopEngine:
 
             if not candidate_ids:
                 logger.info(
-                    "self_evolution: no new candidates to process "
-                    "(last_id=%d, new_count=%d)",
+                    "self_evolution: no new candidates to process (last_id=%d, new_count=%d)",
                     since_id,
                     new_count,
                 )
@@ -542,9 +534,7 @@ class SelfEvolutionLoopEngine:
                         KnowledgeCardGenerator,
                     )
 
-                    kc = KnowledgeCardGenerator(
-                        self._db_path, llm_service=self._llm_service
-                    )
+                    kc = KnowledgeCardGenerator(self._db_path, llm_service=self._llm_service)
                     cards = await asyncio_to_thread(
                         kc.generate_cards_batch,
                         article_ids=candidate_ids,
@@ -644,9 +634,7 @@ class SelfEvolutionLoopEngine:
 
     def _update_last_id(self, conn: sqlite3.Connection) -> None:
         try:
-            row = conn.execute(
-                "SELECT MAX(id) AS max_id FROM articles"
-            ).fetchone()
+            row = conn.execute("SELECT MAX(id) AS max_id FROM articles").fetchone()
             if row and row["max_id"]:
                 self._state.last_processed_article_id = int(row["max_id"])
         except Exception:
@@ -685,9 +673,7 @@ class SelfEvolutionLoopEngine:
         )
         await asyncio_to_thread(detector.save_report, report)
         if report.alerts:
-            logger.info(
-                "self_evolution: drift detected %d alerts", len(report.alerts)
-            )
+            logger.info("self_evolution: drift detected %d alerts", len(report.alerts))
             return {"alerts": len(report.alerts)}
         return None
 
@@ -696,9 +682,7 @@ class SelfEvolutionLoopEngine:
             InsightReportGenerator,
         )
 
-        gen = InsightReportGenerator(
-            self._db_path, llm_service=self._llm_service
-        )
+        gen = InsightReportGenerator(self._db_path, llm_service=self._llm_service)
         report = await asyncio_to_thread(
             gen.generate_report, window_days=7, include_llm_summary=True
         )
@@ -710,9 +694,7 @@ class SelfEvolutionLoopEngine:
         from openbiliclaw.self_evolution.topic_miner import TopicMiner
 
         miner = TopicMiner(self._db_path)
-        report = await asyncio_to_thread(
-            miner.mine, window_days=14, auto_create=True
-        )
+        report = await asyncio_to_thread(miner.mine, window_days=14, auto_create=True)
         await asyncio_to_thread(miner.save_report, report)
         if report.candidates:
             logger.info(
@@ -728,9 +710,7 @@ class SelfEvolutionLoopEngine:
         )
 
         builder = KnowledgeGraphBuilder(self._db_path)
-        graph = await asyncio_to_thread(
-            builder.build, limit=1000, min_mentions=2
-        )
+        graph = await asyncio_to_thread(builder.build, limit=1000, min_mentions=2)
         await asyncio_to_thread(builder.save_graph, graph)
         logger.info(
             "self_evolution: knowledge graph built (%d entities, %d rels)",
@@ -752,9 +732,7 @@ class SelfEvolutionLoopEngine:
             atg.auto_generate, min_mentions=30, max_topics=2, use_llm=True
         )
         if topics:
-            logger.info(
-                "self_evolution: auto-generated %d topics", len(topics)
-            )
+            logger.info("self_evolution: auto-generated %d topics", len(topics))
             return {"topics": len(topics)}
         return None
 
@@ -763,9 +741,7 @@ class SelfEvolutionLoopEngine:
             ContentInsightsAnalyzer,
         )
 
-        analyzer = ContentInsightsAnalyzer(
-            self._db_path, llm_service=self._llm_service
-        )
+        analyzer = ContentInsightsAnalyzer(self._db_path, llm_service=self._llm_service)
         report = await asyncio_to_thread(analyzer.generate_report)
         logger.info(
             "self_evolution: content insights generated (%d gaps, %d cross-plat)",

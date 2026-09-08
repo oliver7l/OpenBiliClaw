@@ -28,6 +28,7 @@ class NoteGenerator:
 
         Args:
             llm_service: LLMService 实例，需支持 complete_structured_task() 方法。
+
         """
         self._llm = llm_service
 
@@ -46,6 +47,7 @@ class NoteGenerator:
 
         Returns:
             校对后的文本。
+
         """
         if not raw_text.strip():
             return ""
@@ -89,6 +91,7 @@ class NoteGenerator:
 
         Returns:
             生成的 Markdown 格式笔记。
+
         """
         if not content.strip():
             return ""

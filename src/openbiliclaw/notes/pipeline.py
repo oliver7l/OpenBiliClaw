@@ -75,6 +75,7 @@ class VideoToNotePipeline:
             enable_asr_rectify: 是否启用 ASR 校对（需要 LLM）。
             content_type: 笔记内容类型（study/news/general/article）。
             whisper_model: faster-whisper 模型大小（base/small/medium 等）。
+
         """
         self._bilibili = bilibili_client
         self._cookie = cookie
@@ -101,6 +102,7 @@ class VideoToNotePipeline:
 
         Returns:
             VideoToNoteResult 结果对象。
+
         """
         result = VideoToNoteResult()
         temp_dir: Path | None = None
@@ -248,6 +250,7 @@ class VideoToNotePipeline:
 
         Returns:
             字幕纯文本，获取失败返回空字符串。
+
         """
         try:
             async with BilibiliSubtitleFetcher(cookie=self._cookie) as fetcher:
@@ -277,6 +280,7 @@ class VideoToNotePipeline:
 
         Returns:
             转录文本，失败返回空字符串。
+
         """
         # 确保有 bilibili client 用于获取音频流
         if self._bilibili is None:

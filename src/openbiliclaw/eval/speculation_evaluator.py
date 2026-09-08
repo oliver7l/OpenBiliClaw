@@ -266,6 +266,7 @@ class SpeculationEvaluator:
             persona_judgment: Optional PersonaJudgment from persona_judge.
                 When provided, per-speculation resonance scores are used.
                 When absent, persona_resonance defaults to 0.5.
+
         """
         if not speculations:
             return SpeculationEvalReport(timestamp=datetime.now().isoformat())

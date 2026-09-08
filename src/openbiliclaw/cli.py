@@ -111,6 +111,7 @@ note_app = typer.Typer(help="笔记管理命令")
 app.add_typer(note_app, name="note")
 
 # Knowledge Forge（知识锻造炉）命令组
+_APP_CONTEXT: dict[str, Any] = {}
 try:
     from openbiliclaw.knowledge_forge.cli import register as _register_kf
 
@@ -119,7 +120,6 @@ except Exception as _kf_import_exc:  # noqa: BLE001 — 可选模块导入失败
     _APP_CONTEXT["kf_import_error"] = str(_kf_import_exc)
 
 console = Console()
-_APP_CONTEXT: dict[str, Any] = {}
 
 # 求职面试备战（interview）命令组
 try:
@@ -616,10 +616,19 @@ def _build_recommendation_engine() -> Any:
         embedding_service=embedding_service,
         xhs_self_info_provider=_xhs_self_info_provider,
         # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
-        llm_reranker_enabled=bool(getattr(cfg.recommendation, "llm_reranker_enabled", False)),
-        llm_reranker_top_k=int(getattr(cfg.recommendation, "llm_reranker_top_k", 30)),
-        llm_reranker_weight=float(getattr(cfg.recommendation, "llm_reranker_weight", 0.3)),
-        llm_reranker_batch_size=int(getattr(cfg.recommendation, "llm_reranker_batch_size", 5)),
+        # 防御性：测试 fake_config（SimpleNamespace）可能缺 recommendation 段
+        llm_reranker_enabled=bool(
+            getattr(getattr(cfg, "recommendation", None), "llm_reranker_enabled", False)
+        ),
+        llm_reranker_top_k=int(
+            getattr(getattr(cfg, "recommendation", None), "llm_reranker_top_k", 30)
+        ),
+        llm_reranker_weight=float(
+            getattr(getattr(cfg, "recommendation", None), "llm_reranker_weight", 0.3)
+        ),
+        llm_reranker_batch_size=int(
+            getattr(getattr(cfg, "recommendation", None), "llm_reranker_batch_size", 5)
+        ),
     )
 
 
@@ -4247,14 +4256,18 @@ def note_list(
     search: str | None = typer.Option(None, "--search", "-s", help="全文搜索关键词"),
 ) -> None:
     """列出笔记。"""
-    from openbiliclaw.notes import NoteListParams, NoteService
+    from openbiliclaw.notes import NoteListParams
 
     svc = _get_note_service()
     if svc is None:
         return
     params = NoteListParams(
-        limit=limit, offset=offset, note_type=note_type,
-        source_platform=platform, tag=tag, search=search,
+        limit=limit,
+        offset=offset,
+        note_type=note_type,
+        source_platform=platform,
+        tag=tag,
+        search=search,
     )
     items = svc.list_notes(params)
     total = svc.count_notes(params)
@@ -4267,8 +4280,6 @@ def note_list(
 @note_app.command("get")
 def note_get(note_id: int = typer.Argument(..., help="笔记 ID")) -> None:
     """查看笔记详情。"""
-    from openbiliclaw.notes import NoteService
-
     svc = _get_note_service()
     if svc is None:
         return
@@ -4299,16 +4310,21 @@ def note_create(
     tags: str = typer.Option("", "--tags", help="标签，逗号分隔"),
 ) -> None:
     """创建笔记。"""
-    from openbiliclaw.notes import NoteCreate, NoteService
+    from openbiliclaw.notes import NoteCreate
 
     svc = _get_note_service()
     if svc is None:
         return
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     data = NoteCreate(
-        title=title, content_md=content, note_type=note_type,
-        source_platform=platform, source_url=url, source_ref=ref,
-        author=author, tags=tag_list,
+        title=title,
+        content_md=content,
+        note_type=note_type,
+        source_platform=platform,
+        source_url=url,
+        source_ref=ref,
+        author=author,
+        tags=tag_list,
     )
     note = svc.create_note(data)
     console.print(f"[green]笔记已创建: #{note.id}[/green]")
@@ -4317,8 +4333,6 @@ def note_create(
 @note_app.command("delete")
 def note_delete(note_id: int = typer.Argument(..., help="笔记 ID")) -> None:
     """删除笔记。"""
-    from openbiliclaw.notes import NoteService
-
     svc = _get_note_service()
     if svc is None:
         return
@@ -4335,7 +4349,7 @@ def note_search(
     limit: int = typer.Option(50, "--limit", "-l", help="返回数量"),
 ) -> None:
     """全文搜索笔记。"""
-    from openbiliclaw.notes import NoteListParams, NoteService
+    from openbiliclaw.notes import NoteListParams
 
     svc = _get_note_service()
     if svc is None:
@@ -4350,13 +4364,11 @@ def note_search(
 @note_app.command("stats")
 def note_stats() -> None:
     """查看笔记统计信息。"""
-    from openbiliclaw.notes import NoteService
-
     svc = _get_note_service()
     if svc is None:
         return
     stats = svc.get_stats()
-    console.print(f"[bold]笔记统计[/bold]")
+    console.print("[bold]笔记统计[/bold]")
     console.print(f"总数: {stats.total}")
     console.print(f"按类型: {stats.by_type}")
     console.print(f"按平台: {stats.by_platform}")
@@ -4371,19 +4383,21 @@ def note_import_read_archive(
     notes_dir: str = typer.Argument(..., help="已读库目录路径"),
 ) -> None:
     """从已读库目录导入笔记。"""
-    from openbiliclaw.notes import NoteService
-
     svc = _get_note_service()
     if svc is None:
         return
     result = svc.import_from_read_archive(notes_dir)
-    console.print(f"[green]导入完成: {result['imported']} 导入, {result['skipped']} 跳过, {result['errors']} 错误[/green]")
+    console.print(
+        f"[green]导入完成: {result['imported']} 导入, {result['skipped']} 跳过, {result['errors']} 错误[/green]"
+    )
 
 
 @note_app.command("video")
 def note_video(
     bvid: str = typer.Argument(..., help="视频 BV 号"),
-    content_type: str = typer.Option("article", "--type", "-t", help="笔记类型：article/study/news/general"),
+    content_type: str = typer.Option(
+        "article", "--type", "-t", help="笔记类型：article/study/news/general"
+    ),
     no_subtitle: bool = typer.Option(False, "--no-subtitle", help="跳过字幕，直接走音频转录"),
     no_rectify: bool = typer.Option(False, "--no-rectify", help="跳过 ASR 校对"),
     no_save: bool = typer.Option(False, "--no-save", help="不保存到笔记库，仅输出结果"),
@@ -4412,6 +4426,7 @@ def note_video(
     bilibili_client = None
     if cookie:
         from openbiliclaw.bilibili.api import BilibiliAPIClient
+
         bilibili_client = BilibiliAPIClient(cookie=cookie)
 
     # 注入 llm_service（如果可用）
@@ -4476,8 +4491,6 @@ def note_tasks(
     status: str | None = typer.Option(None, "--status", "-s", help="按状态筛选"),
 ) -> None:
     """列出笔记生成任务。"""
-    from openbiliclaw.notes import NoteService
-
     svc = _get_note_service()
     if svc is None:
         return
@@ -5077,7 +5090,6 @@ def _persist_init_source_enabled_flags(
     include_zhihu: bool = False,
 ) -> None:
     """Persist init source choices so background discovery obeys them."""
-
     try:
         from openbiliclaw.config import load_config, save_config
 
@@ -5121,7 +5133,6 @@ def _select_init_source_shares(
     configured_shares: Mapping[str, int],
 ) -> dict[str, int]:
     """Return source shares selected during interactive init."""
-
     from openbiliclaw.runtime.source_policy import (
         SOURCE_ORDER,
         suggest_pool_source_shares,
@@ -5159,7 +5170,6 @@ def _select_init_source_shares(
 
 def _maybe_update_init_source_shares(event_counts: Mapping[str, int]) -> None:
     """Ask the user to accept/update source shares after init event collection."""
-
     try:
         from openbiliclaw.config import load_config, save_config
         from openbiliclaw.runtime.source_policy import source_enabled_map
@@ -5319,7 +5329,8 @@ def _ask_init_bilibili_limits(
 @dataclass
 class InitResult:
     """Outcome of :func:`run_guided_init`, consumed by the CLI summary
-    and (gui-init) the API init endpoint."""
+    and (gui-init) the API init endpoint.
+    """
 
     history: list[dict[str, Any]]
     favorites_data: list[dict[str, Any]]

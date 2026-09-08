@@ -175,18 +175,17 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 return _err("entity not found", 404)
             entity = dict(row)
             # 3.2 实体页增强：引用时间线（按月聚合，默认最近 8 个月，months<=0 全量）
-            _tl_sql = (
-                """SELECT substr(a.published_at, 1, 7) AS ym, COUNT(*) AS n
+            _tl_sql = """SELECT substr(a.published_at, 1, 7) AS ym, COUNT(*) AS n
                    FROM article_entities ae JOIN articles a ON a.id = ae.article_id
                    WHERE ae.entity_id = ?
                      AND a.published_at IS NOT NULL AND a.published_at != ''
-                   GROUP BY ym ORDER BY ym DESC"""
-                + (f" LIMIT {int(months)}" if int(months) > 0 else "")
+                   GROUP BY ym ORDER BY ym DESC""" + (
+                f" LIMIT {int(months)}" if int(months) > 0 else ""
             )
             timeline_rows = conn.execute(_tl_sql, (entity_id,)).fetchall()
-            entity["timeline"] = [
-                {"month": r["ym"], "count": int(r["n"])} for r in timeline_rows
-            ][::-1]
+            entity["timeline"] = [{"month": r["ym"], "count": int(r["n"])} for r in timeline_rows][
+                ::-1
+            ]
             # 3.2 实体页增强：相关实体（优先读持久化 entity_relations，
             # 表缺失或数据为空时回退实时共现计算）
             try:
@@ -339,7 +338,6 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         finally:
             conn.close()
 
-
     @app.post("/api/contradictions/{relation_id}/resolve")
     def contradiction_resolve(relation_id: int, action: str = "false_positive") -> JSONResponse:
         """标记矛盾对处理结果：confirmed（确认属实留档）/ false_positive（误报，列表不再展示）。
@@ -369,7 +367,6 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": True, "status": action})
         finally:
             conn.close()
-
 
     @app.get("/api/knowledge-graph")
     def knowledge_graph(entity_type: str = "", limit: int = 100) -> JSONResponse:
@@ -559,9 +556,9 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 if key in summary:
                     summary[key] = int(r["n"])
             summary["open"] = int(
-                conn.execute(
-                    "SELECT COUNT(*) FROM audit_issues WHERE status = 'open'"
-                ).fetchone()[0]
+                conn.execute("SELECT COUNT(*) FROM audit_issues WHERE status = 'open'").fetchone()[
+                    0
+                ]
             )
             return JSONResponse({"ok": True, "summary": summary})
         finally:

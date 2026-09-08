@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
 import time
@@ -38,11 +37,12 @@ def clone_website(
 
     Returns:
         dict: {success, message, size_bytes, file_count}
+
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    start = time.time()
+    time.time()
 
     if _is_tool_available("wget"):
         return _clone_with_wget(url, output_path, depth, timeout)
@@ -92,7 +92,12 @@ def _clone_with_wget(
 
     if result.returncode not in (0, 4, 8):
         logger.warning("wget 返回非零状态 %d: %s", result.returncode, result.stderr[:500])
-        return {"success": False, "message": f"wget 失败: {result.stderr[:200]}", "size_bytes": 0, "file_count": 0}
+        return {
+            "success": False,
+            "message": f"wget 失败: {result.stderr[:200]}",
+            "size_bytes": 0,
+            "file_count": 0,
+        }
 
     return _count_output(output_dir)
 
@@ -111,7 +116,8 @@ def _clone_with_httrack(
             [
                 "httrack",
                 url,
-                "-O", str(output_dir),
+                "-O",
+                str(output_dir),
                 f"-r{depth}",
                 "--disable-security-limits",
                 "-v",
@@ -126,7 +132,12 @@ def _clone_with_httrack(
         return {"success": False, "message": "httrack 未安装", "size_bytes": 0, "file_count": 0}
 
     if result.returncode != 0:
-        return {"success": False, "message": f"httrack 失败: {result.stderr[:200]}", "size_bytes": 0, "file_count": 0}
+        return {
+            "success": False,
+            "message": f"httrack 失败: {result.stderr[:200]}",
+            "size_bytes": 0,
+            "file_count": 0,
+        }
 
     return _count_output(output_dir)
 
@@ -142,7 +153,12 @@ def _clone_with_playwright(
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return {"success": False, "message": "未安装 playwright，请安装 wget 或 httrack", "size_bytes": 0, "file_count": 0}
+        return {
+            "success": False,
+            "message": "未安装 playwright，请安装 wget 或 httrack",
+            "size_bytes": 0,
+            "file_count": 0,
+        }
 
     try:
         with sync_playwright() as p:
@@ -158,7 +174,12 @@ def _clone_with_playwright(
 
         return _count_output(output_dir)
     except Exception as exc:
-        return {"success": False, "message": f"playwright 克隆失败: {exc}", "size_bytes": 0, "file_count": 0}
+        return {
+            "success": False,
+            "message": f"playwright 克隆失败: {exc}",
+            "size_bytes": 0,
+            "file_count": 0,
+        }
 
 
 def _count_output(directory: Path) -> dict:

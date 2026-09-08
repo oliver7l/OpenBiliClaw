@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC
 from typing import Any
 
 from openbiliclaw.sources.url_processors.base import (
@@ -46,6 +47,7 @@ class V2exProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with V2EX topic content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -110,8 +112,9 @@ class V2exProcessor(BaseProcessor):
 
             published_at = None
             if created:
-                from datetime import datetime, timezone
-                published_at = datetime.fromtimestamp(created, tz=timezone.utc).isoformat()
+                from datetime import datetime
+
+                published_at = datetime.fromtimestamp(created, tz=UTC).isoformat()
 
             tags = ["V2EX", node_name] if node_name else ["V2EX"]
 

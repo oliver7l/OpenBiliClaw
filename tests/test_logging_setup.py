@@ -12,7 +12,8 @@ from openbiliclaw.logging_setup import configure_logging
 
 def _wait_for_file_contains(path: Path, needle: str, timeout: float = 3.0) -> bool:
     """configure_logging routes records through a QueueListener, so writes
-    happen on a listener thread — poll instead of reading synchronously."""
+    happen on a listener thread — poll instead of reading synchronously.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -238,7 +239,8 @@ def test_configure_logging_leaves_small_existing_file_intact(tmp_path: Path) -> 
 
 def test_sweep_truncates_oversized_unmanaged_files(tmp_path: Path) -> None:
     """A non-managed *.log file over unmanaged_truncate_mb must be
-    truncated to ~0 bytes on configure_logging startup."""
+    truncated to ~0 bytes on configure_logging startup.
+    """
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     # 5 MB unmanaged file
@@ -304,7 +306,8 @@ def test_sweep_deletes_stale_unmanaged_files(tmp_path: Path) -> None:
 def test_sweep_enforces_aggregate_dir_budget(tmp_path: Path) -> None:
     """When total dir size exceeds aggregate_budget_mb, oldest unmanaged
     files are deleted until under budget. Managed files are kept
-    regardless."""
+    regardless.
+    """
     import os
     import time
 
@@ -344,7 +347,8 @@ def test_sweep_enforces_aggregate_dir_budget(tmp_path: Path) -> None:
 
 def test_sweep_skipped_when_flag_disabled(tmp_path: Path) -> None:
     """Passing sweep_unmanaged=False keeps unmanaged files intact —
-    used by the logs-prune CLI's dry-run path."""
+    used by the logs-prune CLI's dry-run path.
+    """
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     huge = log_dir / "backend-restart.log"

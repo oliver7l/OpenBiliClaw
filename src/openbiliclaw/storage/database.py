@@ -612,12 +612,8 @@ class Database:
                     for ddl in (
                         self._extract_create_table_sql(_SCHEMA_SQL, "content_cache"),
                         self._extract_create_table_sql(_SCHEMA_SQL, "recommendations"),
-                        self._extract_create_table_sql(
-                            _XHS_OBSERVED_URLS_DDL, "xhs_observed_urls"
-                        ),
-                        self._extract_create_table_sql(
-                            _USER_FEEDBACK_DDL, "user_feedback"
-                        ),
+                        self._extract_create_table_sql(_XHS_OBSERVED_URLS_DDL, "xhs_observed_urls"),
+                        self._extract_create_table_sql(_USER_FEEDBACK_DDL, "user_feedback"),
                     )
                     if ddl
                 ).replace("pool.", "")
@@ -1409,6 +1405,7 @@ class Database:
 
         Returns:
             Inserted row ID.
+
         """
         import json
 
@@ -1465,6 +1462,7 @@ class Database:
 
         Returns:
             List of event dicts.
+
         """
         cursor = self.conn.execute(
             "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
@@ -1928,6 +1926,7 @@ class Database:
         Args:
             bvid: Video BV ID.
             **kwargs: Content fields.
+
         """
         import json
 
@@ -2173,7 +2172,6 @@ class Database:
         row is not duplicated, but ``last_seen_at`` is refreshed so active
         sources do not look stale.
         """
-
         inserted = 0
         touched_sources: set[str] = set()
         for candidate in candidates:
@@ -2302,7 +2300,6 @@ class Database:
         trimmed before pending/evaluated rows so active raw material is kept
         whenever possible.
         """
-
         source = str(source_platform or "").strip()
         cap = max(0, int(max_pending))
         if not source or cap <= 0:
@@ -2356,7 +2353,6 @@ class Database:
         max_age_minutes: int = 30,
     ) -> int:
         """Release evaluator claims left behind by a crashed process."""
-
         minutes = max(1, int(max_age_minutes))
         cursor = self._execute_write(
             """
@@ -2374,7 +2370,6 @@ class Database:
 
     def claim_discovery_candidates_for_eval(self, *, limit: int) -> list[dict[str, Any]]:
         """Claim a mixed-source batch of pending candidates for evaluation."""
-
         claim_limit = max(0, int(limit))
         if claim_limit <= 0:
             return []
@@ -2452,7 +2447,6 @@ class Database:
         limit: int,
     ) -> list[dict[str, Any]]:
         """Return evaluated candidates still waiting for content-cache admission."""
-
         admission_limit = max(0, int(limit))
         if admission_limit <= 0:
             return []
@@ -2474,7 +2468,6 @@ class Database:
         evaluations: Sequence[Mapping[str, Any]],
     ) -> int:
         """Persist evaluator output back onto claimed candidate rows."""
-
         updated = 0
         for evaluation in evaluations:
             candidate_id = int(evaluation.get("candidate_id") or evaluation.get("id") or 0)
@@ -2527,7 +2520,6 @@ class Database:
         increment_attempts: bool = True,
     ) -> int:
         """Release claimed candidates after a transient evaluator failure."""
-
         ids = [int(candidate_id) for candidate_id in candidate_ids if int(candidate_id) > 0]
         if not ids:
             return 0
@@ -2593,7 +2585,6 @@ class Database:
 
     def mark_discovery_candidate_cached(self, candidate_id: int) -> None:
         """Mark an evaluated candidate as successfully inserted into content_cache."""
-
         self._execute_write(
             """
             UPDATE discovery_candidates
@@ -2616,7 +2607,6 @@ class Database:
         reason: str = "",
     ) -> None:
         """Mark a candidate as rejected before it enters content_cache."""
-
         self._execute_write(
             """
             UPDATE discovery_candidates
@@ -2631,7 +2621,6 @@ class Database:
 
     def count_discovery_candidates_by_status(self) -> dict[str, int]:
         """Return candidate queue counts grouped by lifecycle status."""
-
         self._ensure_fresh_read()
         cursor = self.conn.execute(
             """
@@ -2645,7 +2634,6 @@ class Database:
 
     def get_existing_discovery_candidate_keys(self, candidate_keys: Sequence[str]) -> set[str]:
         """Return candidate keys already present in the raw evaluation queue."""
-
         clean = _unique_clean_strings(candidate_keys)
         if not clean:
             return set()
@@ -2666,7 +2654,6 @@ class Database:
 
     def get_existing_content_cache_ids(self, content_ids: Sequence[str]) -> set[str]:
         """Return BVID/content ids that already exist in the evaluated content cache."""
-
         clean = _unique_clean_strings(content_ids)
         if not clean:
             return set()
@@ -2694,7 +2681,6 @@ class Database:
 
     def count_discovery_candidates_by_source_status(self) -> dict[str, dict[str, int]]:
         """Return candidate queue counts grouped by source and lifecycle status."""
-
         self._ensure_fresh_read()
         cursor = self.conn.execute(
             """
@@ -2713,7 +2699,6 @@ class Database:
 
     def count_discovery_pending_raw_material_by_source(self) -> dict[str, int]:
         """Return not-yet-cached raw candidate counts grouped by source."""
-
         self._ensure_fresh_read()
         cursor = self.conn.execute(
             """
@@ -2866,6 +2851,7 @@ class Database:
             would just mint dead links. Tokens get backfilled by the
             MAIN-world sniffer as the user browses xhs; bare rows become
             eligible again once ``_backfill_xhs_tokens`` upgrades them.
+
         """
         self._ensure_fresh_read()
         # Over-fetch widely so the per-group filter still leaves headroom
@@ -3214,7 +3200,7 @@ class Database:
         # 再对剩下的少量行做 viewed 判断——避免对全部 servable 行（数万行）
         # 逐行 Python 判断导致冷算 2~7s 阻塞读接口。
         pending_cursor = self.conn.execute(
-            f"""
+            rf"""
             SELECT bvid, content_id, source, source_platform
             FROM content_cache
             WHERE {_POOL_SERVABLE_STATUS_SQL}
@@ -4229,6 +4215,7 @@ class Database:
 
         Returns:
             Total rows deleted.
+
         """
         if retention_days <= 0 or not low_value_types:
             return 0
@@ -4296,6 +4283,7 @@ class Database:
 
         Returns:
             Mapping of table name -> rows deleted (only non-zero entries).
+
         """
         if retention_days <= 0:
             return {}
@@ -4365,6 +4353,7 @@ class Database:
 
         Returns:
             Total rows deleted.
+
         """
         if retention_days <= 0:
             return 0
@@ -4411,6 +4400,7 @@ class Database:
 
         Returns:
             Total rows deleted.
+
         """
         if retention_days <= 0:
             return 0
@@ -4455,6 +4445,7 @@ class Database:
 
         Returns:
             Number of rows transitioned to ``pool_status = 'purged_by_dislike'``.
+
         """
         clean = [t.strip() for t in topics if t and t.strip()]
         if not clean:
@@ -4511,6 +4502,7 @@ class Database:
 
         Returns:
             Number of rows moved to ``pool_status = 'suppressed'``.
+
         """
         clean = (url or "").strip()
         if not clean:
@@ -4531,6 +4523,7 @@ class Database:
 
         Returns:
             Number of suppressed rows for *url* moved back to ``fresh``.
+
         """
         clean = (url or "").strip()
         if not clean:
@@ -5495,7 +5488,6 @@ class Database:
 
     def _ensure_discovery_candidate_columns(self) -> None:
         """Backfill discovery-candidate lifecycle columns for existing databases."""
-
         existing_columns = {
             str(row["name"])
             for row in self.conn.execute("PRAGMA table_info(discovery_candidates)").fetchall()
@@ -5525,7 +5517,6 @@ class Database:
 
     def _normalize_legacy_style_keys(self) -> None:
         """Rewrite known legacy content-form style keys to viewing-mode keys."""
-
         targets = (
             ("content_cache", "style_key"),
             ("discovery_candidates", "style_key"),
@@ -5559,8 +5550,20 @@ class Database:
         self.conn.executescript("""
             CREATE INDEX IF NOT EXISTS pool.idx_recommendations_created_id ON recommendations (created_at DESC, id DESC);
             CREATE INDEX IF NOT EXISTS pool.idx_recommendations_bvid ON recommendations (bvid);
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_content_id ON content_cache (content_id);
         """)
+        # pool.content_cache 在旧版本/纯 pool 连接中可能没有 content_id 列，
+        # 建索引前先检查列存在性，避免 no such column 阻断整个 initialize。
+        try:
+            pool_cols = {
+                str(row["name"])
+                for row in self.conn.execute("PRAGMA pool.table_info(content_cache)").fetchall()
+            }
+            if "content_id" in pool_cols:
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS pool.idx_content_cache_content_id ON pool.content_cache (content_id)"
+                )
+        except Exception:  # noqa: BLE001 — 索引缺失不阻断启动
+            pass
 
     def _ensure_event_read_indexes(self) -> None:
         """Create indexes for the high-volume ``events`` table.
@@ -5627,17 +5630,38 @@ class Database:
         ``pool_status`` is also heavily used by the recommendation engine
         (``WHERE pool_status = 'fresh'`` etc.), so the index benefits more than
         just the observability page.
+
+        防御性：旧版本/纯 pool 连接的 content_cache 可能缺部分列，逐个创建索引，
+        缺列的跳过而不是阻断整个 initialize。
         """
-        self.conn.executescript("""
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_pool_status ON content_cache (pool_status);
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_source_platform ON content_cache (source_platform, pool_status);
-            -- v0.3.19x: pool 浏览（/api/pool/all?source=…）按 source 过滤时
-            -- 之前全表 SCAN 75244 行取 rowid，1.4s；此索引后走索引查找毫秒级。
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_source ON content_cache (source);
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_topic_group ON content_cache (topic_group);
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_feedback_type ON content_cache (feedback_type);
-            CREATE INDEX IF NOT EXISTS pool.idx_content_cache_style_key ON content_cache (style_key);
-        """)
+        # 先收集 pool.content_cache 的现有列
+        try:
+            pool_cols = {
+                str(row["name"])
+                for row in self.conn.execute("PRAGMA pool.table_info(content_cache)").fetchall()
+            }
+        except Exception:  # noqa: BLE001
+            pool_cols = set()
+
+        index_defs = [
+            ("pool.idx_content_cache_pool_status", ["pool_status"]),
+            ("pool.idx_content_cache_source_platform", ["source_platform", "pool_status"]),
+            # v0.3.19x: pool 浏览（/api/pool/all?source=…）按 source 过滤时
+            # 之前全表 SCAN 75244 行取 rowid，1.4s；此索引后走索引查找毫秒级。
+            ("pool.idx_content_cache_source", ["source"]),
+            ("pool.idx_content_cache_topic_group", ["topic_group"]),
+            ("pool.idx_content_cache_feedback_type", ["feedback_type"]),
+            ("pool.idx_content_cache_style_key", ["style_key"]),
+        ]
+        for idx_name, cols in index_defs:
+            if not all(c in pool_cols for c in cols):
+                continue  # 旧库缺列，跳过该索引
+            try:
+                self.conn.execute(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON pool.content_cache ({', '.join(cols)})"
+                )
+            except Exception:  # noqa: BLE001 — 单个索引失败不阻断启动
+                pass
 
     def _ensure_source_recipes_table(self) -> None:
         """Create the source_recipes table if it does not exist."""
@@ -6937,7 +6961,9 @@ class Database:
         origin; existing rows keep whatever tags they already have.
         """
         import json as _json
-        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
+        from datetime import timezone as _tz
 
         # 北京时间(UTC+8): articles 表所有时间字段统一存本地时间字符串
         cn_tz = _tz(_td(hours=8))
@@ -6956,14 +6982,10 @@ class Database:
             try:
                 from openbiliclaw.knowledge_forge.content_cleaner import ContentCleaner
 
-                cr = ContentCleaner().clean(
-                    content_text, title=title, source_type=source_type
-                )
+                cr = ContentCleaner().clean(content_text, title=title, source_type=source_type)
                 content_cleaned = cr.cleaned_text or None
                 content_clean_score = cr.clean_score
-                content_clean_log = _json.dumps(
-                    cr.operations, ensure_ascii=False, default=str
-                )
+                content_clean_log = _json.dumps(cr.operations, ensure_ascii=False, default=str)
                 content_verified = 1 if cr.verified else 0
                 content_verify_result = _json.dumps(
                     cr.verify_issues, ensure_ascii=False, default=str
@@ -7051,6 +7073,7 @@ class Database:
 
         Args:
             source_platform: Platform identifier, defaults to "rss".
+
         """
         try:
             self.conn.execute(
@@ -8316,7 +8339,8 @@ class Database:
     ) -> bool:
         """Record a like/dislike for a content item.  Returns True if
         inserted, False if the same (bvid, action) already exists
-        (upsert-style: replace the existing row)."""
+        (upsert-style: replace the existing row).
+        """
         existing = self.conn.execute(
             "SELECT id FROM user_feedback WHERE bvid = ? AND action = ?",
             (bvid, action),
@@ -8584,28 +8608,25 @@ class Database:
         """
         # 1. articles 表新增正文清理器字段（3.0.5）+ 分层摘要字段（3.1.3）
         existing_columns = {
-            str(row["name"])
-            for row in self.conn.execute("PRAGMA table_info(articles)").fetchall()
+            str(row["name"]) for row in self.conn.execute("PRAGMA table_info(articles)").fetchall()
         }
         required_columns = {
-            "content_cleaned": "TEXT",           # 清理后的正文
-            "content_clean_score": "REAL",       # 清理质量评分 0-100
-            "content_clean_log": "TEXT",         # 清理日志（JSON）
+            "content_cleaned": "TEXT",  # 清理后的正文
+            "content_clean_score": "REAL",  # 清理质量评分 0-100
+            "content_clean_log": "TEXT",  # 清理日志（JSON）
             "content_verified": "INTEGER DEFAULT 0",  # 是否通过验证 0/1
-            "content_verify_result": "TEXT",     # 验证结果（JSON）
-            "summary_detailed": "TEXT",          # 详细版摘要
-            "summary_compact": "TEXT",           # 精简版摘要
-            "summary_ultra_compact": "TEXT",     # 超精简版摘要
-            "summary_quality": "REAL",           # 摘要质量评分（0-1）
+            "content_verify_result": "TEXT",  # 验证结果（JSON）
+            "summary_detailed": "TEXT",  # 详细版摘要
+            "summary_compact": "TEXT",  # 精简版摘要
+            "summary_ultra_compact": "TEXT",  # 超精简版摘要
+            "summary_quality": "REAL",  # 摘要质量评分（0-1）
             "summary_version": "INTEGER DEFAULT 0",  # 摘要版本号
-            "summary_generated_at": "TEXT",      # 摘要生成时间
+            "summary_generated_at": "TEXT",  # 摘要生成时间
         }
         for column_name, column_type in required_columns.items():
             if column_name in existing_columns:
                 continue
-            self.conn.execute(
-                f"ALTER TABLE articles ADD COLUMN {column_name} {column_type}"
-            )
+            self.conn.execute(f"ALTER TABLE articles ADD COLUMN {column_name} {column_type}")
 
         # 2. 实体表（3.2.2）
         self.conn.executescript("""
@@ -8649,14 +8670,10 @@ class Database:
         # 兼容旧库：entity_relations 补 co_occur 列（幂等）
         _er_columns = {
             str(row["name"])
-            for row in self.conn.execute(
-                "PRAGMA table_info(entity_relations)"
-            ).fetchall()
+            for row in self.conn.execute("PRAGMA table_info(entity_relations)").fetchall()
         }
         if "co_occur" not in _er_columns:
-            self.conn.execute(
-                "ALTER TABLE entity_relations ADD COLUMN co_occur INTEGER DEFAULT 1"
-            )
+            self.conn.execute("ALTER TABLE entity_relations ADD COLUMN co_occur INTEGER DEFAULT 1")
 
         # 3. 文章间关联（3.3.2）
         self.conn.executescript("""

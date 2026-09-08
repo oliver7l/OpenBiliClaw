@@ -20,7 +20,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ..llm.embedding import EmbeddingService, cosine_similarity
@@ -68,7 +68,7 @@ _RAG_SYSTEM_PROMPT = (
     "你需要基于提供的日记内容来回答。\n\n"
     "回答规则：\n"
     "1. **必须基于提供的日记内容回答**，不要编造日记中没有的信息\n"
-    "2. 如果日记内容不足以回答问题，诚实地说\"根据现有日记，无法确定...\"\n"
+    '2. 如果日记内容不足以回答问题，诚实地说"根据现有日记，无法确定..."\n'
     "3. 引用日记时，用 [日期] 格式标注来源，例如 [2024-03-15]\n"
     "4. 回答要客观、有洞察力，不要过度解读\n"
     "5. 如果涉及情绪分析，要基于日记中的具体描述，不要凭空猜测\n"
@@ -137,6 +137,7 @@ class DiaryRAGService:
 
         Returns:
             [{"index": 0, "text": "str", "start": 0, "end": 100}, ...]
+
         """
         if not content:
             return [{"index": 0, "text": content, "start": 0, "end": 0}]
@@ -177,12 +178,14 @@ class DiaryRAGService:
             if len(current_chunk) + len(para) <= CHUNK_MAX_SIZE:
                 current_chunk += "\n\n" + para
             else:
-                chunks.append({
-                    "index": chunk_index,
-                    "text": current_chunk,
-                    "start": start_pos,
-                    "end": start_pos + len(current_chunk),
-                })
+                chunks.append(
+                    {
+                        "index": chunk_index,
+                        "text": current_chunk,
+                        "start": start_pos,
+                        "end": start_pos + len(current_chunk),
+                    }
+                )
                 # 保留部分重叠
                 if len(current_chunk) > CHUNK_OVERLAP * 2:
                     overlap = current_chunk[-CHUNK_OVERLAP:]
@@ -194,12 +197,14 @@ class DiaryRAGService:
                 chunk_index += 1
 
         if current_chunk:
-            chunks.append({
-                "index": chunk_index,
-                "text": current_chunk,
-                "start": start_pos,
-                "end": start_pos + len(current_chunk),
-            })
+            chunks.append(
+                {
+                    "index": chunk_index,
+                    "text": current_chunk,
+                    "start": start_pos,
+                    "end": start_pos + len(current_chunk),
+                }
+            )
 
         return chunks
 
@@ -321,6 +326,7 @@ class DiaryRAGService:
 
         Returns:
             统计信息 {total, success, failed, skipped, total_chunks}
+
         """
         if self._embedding_service is None:
             raise RuntimeError("EmbeddingService 未设置，无法生成向量")
@@ -329,7 +335,10 @@ class DiaryRAGService:
             entries = self.store.get_unembedded_chunks(limit=limit)
             if not entries:
                 # 全量更新已有 embedding 为 chunk 模式
-                entries = [(self.store.get_entry(eid), 0) for eid, _ in self.store.get_all_embeddings()[:limit]]
+                entries = [
+                    (self.store.get_entry(eid), 0)
+                    for eid, _ in self.store.get_all_embeddings()[:limit]
+                ]
 
             logger.info("开始为 %d 篇日记生成 chunk embedding", len(entries))
             success = 0
@@ -338,20 +347,29 @@ class DiaryRAGService:
 
             for i in range(0, len(entries), batch_size):
                 batch = entries[i : i + batch_size]
-                tasks = [self._generate_chunk_embeddings(entry, entry_title) for entry, entry_title in batch]
+                tasks = [
+                    self._generate_chunk_embeddings(entry, entry_title)
+                    for entry, entry_title in batch
+                ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 for j, result in enumerate(results):
                     if isinstance(result, Exception):
                         failed += 1
-                        logger.warning("生成 chunk embedding 失败 entry_id=%d: %s", batch[j][0].id, result)
+                        logger.warning(
+                            "生成 chunk embedding 失败 entry_id=%d: %s", batch[j][0].id, result
+                        )
                     elif result:
                         success += 1
                         total_chunks += result
 
                 logger.info(
                     "已处理 %d/%d，成功 %d，失败 %d，chunk 数 %d",
-                    i + len(batch), len(entries), success, failed, total_chunks,
+                    i + len(batch),
+                    len(entries),
+                    success,
+                    failed,
+                    total_chunks,
                 )
 
             return {
@@ -365,7 +383,13 @@ class DiaryRAGService:
             # 旧模式：全篇 embedding（兼容）
             entries = self.store.get_unembedded_entries(limit=limit)
             if not entries:
-                return {"total": 0, "success": 0, "failed": 0, "skipped": 0, "message": "所有日记都已有向量"}
+                return {
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "message": "所有日记都已有向量",
+                }
 
             logger.info("开始为 %d 篇日记生成全篇 embedding", len(entries))
             success = 0
@@ -383,7 +407,9 @@ class DiaryRAGService:
                     elif result:
                         success += 1
 
-                logger.info("已处理 %d/%d，成功 %d，失败 %d", i + len(batch), len(entries), success, failed)
+                logger.info(
+                    "已处理 %d/%d，成功 %d，失败 %d", i + len(batch), len(entries), success, failed
+                )
 
             return {"total": len(entries), "success": success, "failed": failed, "skipped": 0}
 
@@ -412,6 +438,7 @@ class DiaryRAGService:
 
         Returns:
             生成的 chunk 数量
+
         """
         if self._embedding_service is None:
             return 0
@@ -425,8 +452,11 @@ class DiaryRAGService:
             if not vector:
                 continue
             self.store.upsert_chunk_embedding(
-                entry.id, chunk["index"], chunk["text"],
-                vector, model=self._embedding_service._model,
+                entry.id,
+                chunk["index"],
+                chunk["text"],
+                vector,
+                model=self._embedding_service._model,
             )
             chunk_count += 1
 
@@ -457,6 +487,7 @@ class DiaryRAGService:
 
         Returns:
             按调整后分数降序排列的搜索结果列表
+
         """
         if self._embedding_service is None:
             raise RuntimeError("EmbeddingService 未设置，无法进行语义搜索")
@@ -527,9 +558,14 @@ class DiaryRAGService:
             # 生成高亮（优先用 chunk 文本）
             highlight = chunk_text if chunk_text else self._extract_highlight(entry.content, query)
 
-            results.append(SearchResult(
-                entry=entry, score=adjusted_score, highlight=highlight, chunk_index=chunk_index,
-            ))
+            results.append(
+                SearchResult(
+                    entry=entry,
+                    score=adjusted_score,
+                    highlight=highlight,
+                    chunk_index=chunk_index,
+                )
+            )
             seen_ids.add(entry_id)
             if len(results) >= top_k:
                 break
@@ -539,10 +575,15 @@ class DiaryRAGService:
         return results
 
     async def _semantic_search_legacy(
-        self, query: str, query_vector: list[float],
-        top_k: int, min_score: float,
-        start_date: str | None, end_date: str | None,
-        source: str | None, use_time_decay: bool,
+        self,
+        query: str,
+        query_vector: list[float],
+        top_k: int,
+        min_score: float,
+        start_date: str | None,
+        end_date: str | None,
+        source: str | None,
+        use_time_decay: bool,
     ) -> list[SearchResult]:
         """降级到全篇 embedding 搜索（无 chunk 时的回退）。"""
         all_embeddings = self.store.get_all_embeddings()
@@ -611,14 +652,19 @@ class DiaryRAGService:
 
         Returns:
             按融合分数降序排列的搜索结果
+
         """
         if self._embedding_service is None:
             raise RuntimeError("EmbeddingService 未设置，无法进行混合搜索")
 
         # 1. 语义搜索
         semantic_results = await self.semantic_search(
-            query, top_k=top_k * 2, min_score=min_score,
-            start_date=start_date, end_date=end_date, use_time_decay=use_time_decay,
+            query,
+            top_k=top_k * 2,
+            min_score=min_score,
+            start_date=start_date,
+            end_date=end_date,
+            use_time_decay=use_time_decay,
         )
 
         # 2. FTS5 全文检索
@@ -697,6 +743,7 @@ class DiaryRAGService:
 
         Returns:
             按相似度降序排列的相似日记列表
+
         """
         if self._embedding_service is None:
             raise RuntimeError("EmbeddingService 未设置")
@@ -772,6 +819,7 @@ class DiaryRAGService:
 
         Returns:
             RAGAnswer 包含回答、引用来源和相关问题
+
         """
         if self._llm_service is None:
             raise RuntimeError("LLMService 未设置，无法进行问答")
@@ -794,7 +842,9 @@ class DiaryRAGService:
         sources = []
         for i, result in enumerate(search_results, 1):
             entry = result.entry
-            snippet = result.highlight or (entry.content[:500] if len(entry.content) > 500 else entry.content)
+            snippet = result.highlight or (
+                entry.content[:500] if len(entry.content) > 500 else entry.content
+            )
             context_parts.append(
                 f"【日记 {i}】\n"
                 f"日期：{entry.entry_date}\n"
@@ -802,13 +852,15 @@ class DiaryRAGService:
                 f"相似度：{result.score:.2f}\n"
                 f"内容：{snippet}\n"
             )
-            sources.append({
-                "id": entry.id,
-                "date": entry.entry_date,
-                "title": entry.title or "",
-                "snippet": snippet[:200] + ("..." if len(snippet) > 200 else ""),
-                "score": round(result.score, 4),
-            })
+            sources.append(
+                {
+                    "id": entry.id,
+                    "date": entry.entry_date,
+                    "title": entry.title or "",
+                    "snippet": snippet[:200] + ("..." if len(snippet) > 200 else ""),
+                    "score": round(result.score, 4),
+                }
+            )
 
         context = "\n---\n".join(context_parts)
 
@@ -863,6 +915,8 @@ class DiaryRAGService:
             "chunk_count": chunk_count,
             "entries_with_chunks": self.store.conn.execute(
                 "SELECT COUNT(DISTINCT entry_id) FROM diary_embedding_chunks"
-            ).fetchone()[0] if total_entries > 0 else 0,
+            ).fetchone()[0]
+            if total_entries > 0
+            else 0,
             "coverage": round(embedded_count / total_entries * 100, 1) if total_entries > 0 else 0,
         }

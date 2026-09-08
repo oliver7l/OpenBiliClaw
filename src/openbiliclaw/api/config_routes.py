@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import shutil
-import time
 from contextlib import suppress
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -19,8 +16,6 @@ from openbiliclaw.api.models import (
     BilibiliSourceConfigOut,
     ConfigIssueOut,
     ConfigResponse,
-    ConfigServiceProbeIn,
-    ConfigServiceProbeResponse,
     ConfigUpdateIn,
     ConfigUpdateResponse,
     DiscoveryConfigOut,
@@ -31,16 +26,20 @@ from openbiliclaw.api.models import (
     LoggingConfigOut,
     ModuleLLMConfigOut,
     SchedulerConfigOut,
-    SourceShareSuggestionIn,
-    SourceShareSuggestionResponse,
     SourcesBrowserConfigOut,
     SourcesConfigOut,
+    SourceShareSuggestionIn,
+    SourceShareSuggestionResponse,
     StorageConfigOut,
     TwitterSourceConfigOut,
     XiaohongshuSourceConfigOut,
     YoutubeSourceConfigOut,
     ZhihuSourceConfigOut,
 )
+from openbiliclaw.sources.x_auth import XCookieManager, resolve_x_cookie
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,7 @@ _RESETTABLE_CONFIG_FIELDS = {
 
 
 # ── Config file snapshot helpers ─────────────────────────────────
+
 
 def _config_backup_path(config_path: Path) -> Path:
     return config_path.with_name(f"{config_path.name}.bak")
@@ -97,22 +97,27 @@ def _validate_llm_buildable(cfg: Any, base_issues: list[Any]) -> list[Any]:
 
 # ── Lazy imports for shared helpers (avoid circular imports) ─────
 
+
 def _get_source_share_order() -> tuple[str, ...]:
     from openbiliclaw.api.app import _SOURCE_SHARE_ORDER
+
     return _SOURCE_SHARE_ORDER
 
 
 def _get_count_events_by_source_platform(database: Any) -> dict[str, int]:
     from openbiliclaw.api.app import _count_events_by_source_platform
+
     return _count_events_by_source_platform(database)
 
 
 def _get_x_required_cookie_names() -> tuple[str, ...]:
     from openbiliclaw.api.app import _X_REQUIRED_COOKIE_NAMES
+
     return _X_REQUIRED_COOKIE_NAMES
 
 
 # ── Route registration ───────────────────────────────────────────
+
 
 def register_config_routes(
     app: FastAPI,
@@ -122,7 +127,6 @@ def register_config_routes(
     init_active_now: Any = None,
 ) -> None:
     """Register configuration management endpoints on the FastAPI app."""
-
 
     def _config_to_response(
         cfg: Any,
@@ -507,8 +511,8 @@ def register_config_routes(
 
     # ── Service probe（已提取到 probe_routes.py）──
     from openbiliclaw.api.probe_routes import register_probe_routes
-    register_probe_routes(app, apply_llm_update=_apply_llm_update)
 
+    register_probe_routes(app, apply_llm_update=_apply_llm_update)
 
     @app.put("/api/config", response_model=ConfigUpdateResponse)
     async def update_config(payload: ConfigUpdateIn) -> ConfigUpdateResponse | JSONResponse:

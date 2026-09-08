@@ -6,6 +6,29 @@
 
 from __future__ import annotations
 
+from .advanced_memory import (
+    AdvancedMemoryService,
+    Belief,
+    BeliefConflict,
+    ConsolidationResult,
+    DreamStateReview,
+    MemoryLayer,
+)
+from .emotion import (
+    BurnoutAssessment,
+    EmotionAnalyzer,
+    EmotionForecast,
+    EmotionTrendPoint,
+    ValenceArousal,
+)
+from .insight_engine import (
+    InsightEngineService,
+    InsightReport,
+    MemoryOnThisDay,
+    MorningBriefing,
+    OpenLoop,
+    PatternInsight,
+)
 from .insights import (
     DiaryInsightsService,
     MoodAnalyzer,
@@ -20,6 +43,12 @@ from .knowledge_graph import (
     KnowledgeGraphService,
     KnowledgeNodeDetail,
     PersonRelation,
+)
+from .memory_system import (
+    MemoryCompressionResult,
+    MemoryEntry,
+    MemoryStats,
+    MemorySystemService,
 )
 from .models import (
     DiaryAnalysis,
@@ -37,20 +66,6 @@ from .models import (
     TagType,
 )
 from .rag import DiaryRAGService, RAGAnswer, SearchResult
-from .insight_engine import (
-    InsightEngineService,
-    InsightReport,
-    MemoryOnThisDay,
-    MorningBriefing,
-    OpenLoop,
-    PatternInsight,
-)
-from .memory_system import (
-    MemoryCompressionResult,
-    MemoryEntry,
-    MemoryStats,
-    MemorySystemService,
-)
 from .reflection import (
     Milestone,
     MonthlyReflection,
@@ -65,27 +80,12 @@ from .self_evolution import (
     TagOptimization,
     UserProfile,
 )
-from .emotion import (
-    BurnoutAssessment,
-    EmotionAnalyzer,
-    EmotionForecast,
-    EmotionTrendPoint,
-    ValenceArousal,
-)
-from .advanced_memory import (
-    AdvancedMemoryService,
-    Belief,
-    BeliefConflict,
-    ConsolidationResult,
-    DreamStateReview,
-    MemoryLayer,
-)
+from .service import DiaryService
 from .timeline import (
     TimelineCard,
     TimelineService,
     TimelineStats,
 )
-from .service import DiaryService
 
 __all__ = [
     "DiaryAnalysis",

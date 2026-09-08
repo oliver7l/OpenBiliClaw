@@ -48,6 +48,7 @@ class SspaiProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Sspai article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -145,6 +146,7 @@ class SspaiProcessor(BaseProcessor):
     def _parse_date(self, date_text: str) -> str | None:
         """Parse date string to ISO format."""
         import re
+
         patterns = [
             (r"(\d{4})-(\d{1,2})-(\d{1,2})", "%Y-%m-%d"),
             (r"(\d{4})年(\d{1,2})月(\d{1,2})日", "%Y-%m-%d"),

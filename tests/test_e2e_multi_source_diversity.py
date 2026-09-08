@@ -232,7 +232,6 @@ def _seed_bilibili_content(db: Database) -> None:
 
 def _ingest_xhs_notes(db: Database) -> int:
     """Simulate XHS extension sending notes — raw, no classification."""
-
     xhs_notes = [
         ("xhs_001", "莫氏鸡煲在家轻松复刻", "美食博主A"),
         ("xhs_002", "顺德美食探店攻略", "美食博主B"),
@@ -282,7 +281,8 @@ class TestMultiSourceDiversityE2E:
     @pytest.mark.asyncio
     async def test_xhs_classification_fills_metadata(self) -> None:
         """XHS content gets style_key / topic_group / relevance_score
-        after classify_pool_backlog runs."""
+        after classify_pool_backlog runs.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()

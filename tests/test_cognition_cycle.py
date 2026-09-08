@@ -182,7 +182,8 @@ async def test_awareness_double_failure_preserves_schedule(
 async def test_awareness_failure_does_not_block_subsequent_retry(tmp_path: Path) -> None:
     """After a failed cycle, the next run_if_due call still tries awareness
     even when the throttle window has not elapsed (because last_awareness_at
-    was never advanced)."""
+    was never advanced).
+    """
     memory = _seed_memory(tmp_path)
 
     # First call: persistent failure.

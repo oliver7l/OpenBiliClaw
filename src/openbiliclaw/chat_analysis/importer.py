@@ -53,6 +53,7 @@ class ChatImporter:
             db_path: SQLite 数据库路径
             max_sessions: 最大导入会话数（0=全部）
             max_messages_per_session: 每会话最大消息数（0=全部）
+
         """
         db_path = Path(db_path)
         if not db_path.exists():
@@ -131,12 +132,12 @@ class ChatImporter:
                         batch = messages[i : i + batch_size]
                         msg_creates = []
                         for m in batch:
-                            mt = m["message_type"] if "message_type" in m else "text"
+                            mt = m.get("message_type", "text")
                             msg_creates.append(
                                 ChatMessageCreate(
                                     session_id=session.id,
                                     timestamp=m["timestamp"] if m["timestamp"] else "",
-                                    sender=m["sender"] if "sender" in m else "",
+                                    sender=m.get("sender", ""),
                                     content=m["content"] if m["content"] else "",
                                     message_type=self._map_message_type(mt),
                                 )
@@ -176,6 +177,7 @@ class ChatImporter:
 
         Args:
             analysis_dir: deepseek-analysis 目录路径
+
         """
         if analysis_dir is None:
             raise ValueError("analysis_dir 不能为空，请指定 DeepSeek 分析目录路径")
@@ -260,6 +262,7 @@ class ChatImporter:
 
         Args:
             db_path: openbiliclaw.db 路径
+
         """
         db_path = Path(db_path)
         if not db_path.exists():
@@ -355,6 +358,7 @@ class ChatImporter:
             openbiliclaw_db: openbiliclaw.db 路径（必填）
             max_sessions: 最大导入会话数（0=全部）
             max_messages: 每会话最大消息数（0=全部）
+
         """
         base = Path(mindback_root)
         results: dict[str, Any] = {}

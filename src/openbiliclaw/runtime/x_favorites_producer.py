@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import sqlite3
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -124,9 +122,11 @@ def _parse_tweets(tweets: list[dict[str, Any]], source: str) -> list[dict[str, A
         reply_count = int(metrics.get("replies", 0) or 0)
         quote_count = int(metrics.get("quotes", 0) or 0)
         bookmark_count = int(metrics.get("bookmarks", 0) or 0)
-        view_count = int(metrics.get("views", 0) or 0)
+        int(metrics.get("views", 0) or 0)
 
-        created_at = str(tweet.get("createdAtLocal", "") or tweet.get("createdAt", "") or "").strip()
+        created_at = str(
+            tweet.get("createdAtLocal", "") or tweet.get("createdAt", "") or ""
+        ).strip()
         lang = str(tweet.get("lang", "") or "").strip()
         is_retweet = bool(tweet.get("isRetweet", False))
         retweeted_by = str(tweet.get("retweetedBy", "") or "").strip()
@@ -266,7 +266,14 @@ def _run_once(
             len(all_rows),
             len(unique_rows),
         )
-        return {"ok": True, **stats, "total_fetched": len(all_rows), "unique": len(unique_rows), "inserted": 0, "dry_run": True}
+        return {
+            "ok": True,
+            **stats,
+            "total_fetched": len(all_rows),
+            "unique": len(unique_rows),
+            "inserted": 0,
+            "dry_run": True,
+        }
 
     conn = _obc_connect(DB_PATH)
     try:
@@ -344,7 +351,9 @@ def run_forever(
 
 
 def _main() -> None:
-    parser = argparse.ArgumentParser(description="X/Twitter personal content producer (likes/bookmarks)")
+    parser = argparse.ArgumentParser(
+        description="X/Twitter personal content producer (likes/bookmarks)"
+    )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run forever (24h interval)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch + parse but skip DB writes")
@@ -352,7 +361,9 @@ def _main() -> None:
     parser.add_argument("--bookmarks", action="store_true", help="Fetch bookmarked tweets")
     parser.add_argument("--all", action="store_true", help="Fetch all modes (likes + bookmarks)")
     parser.add_argument("--limit", type=int, default=100, help="Max items per mode (default: 100)")
-    parser.add_argument("--interval", type=int, default=24, help="Loop interval in hours (default: 24)")
+    parser.add_argument(
+        "--interval", type=int, default=24, help="Loop interval in hours (default: 24)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -383,7 +394,9 @@ def _main() -> None:
         return
 
     if args.loop:
-        run_forever(likes=likes, bookmarks=bookmarks, limit=args.limit, interval_hours=args.interval)
+        run_forever(
+            likes=likes, bookmarks=bookmarks, limit=args.limit, interval_hours=args.interval
+        )
         return
 
     parser.print_help()

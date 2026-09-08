@@ -470,7 +470,8 @@ class TestDatabase:
     def test_trim_topic_group_overflow_suppresses_cross_source_excess(self) -> None:
         """A hot topic_group accumulated from multiple sources gets capped down
         to max_per_group, keeping the highest-scored items regardless of
-        source."""
+        source.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -558,7 +559,8 @@ class TestDatabase:
         another shot. Without this, slow-churning sources like B站 trending
         get bottlenecked because hot BVIDs cached as 'suppressed' never
         recover. 'shown' / 'feedbacked' / 'purged_by_dislike' must NOT
-        re-fresh — those reflect user-facing state."""
+        re-fresh — those reflect user-facing state.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -621,7 +623,8 @@ class TestDatabase:
     def test_trim_pool_share_quotas_protect_under_target_sources(self) -> None:
         """When trim is given platform quotas, over-quota platforms get
         suppressed first even if they have higher scores than under-quota
-        platforms."""
+        platforms.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -776,7 +779,8 @@ class TestDatabase:
     def test_trim_pool_legacy_score_only_when_no_quotas(self) -> None:
         """Without source_share_quotas, the trim must keep its old score-first
         behavior — that's the path used by callers that don't care about
-        per-source diversity."""
+        per-source diversity.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -815,7 +819,8 @@ class TestDatabase:
         pushing total > target. The trim must suppress untracked items before
         cutting under-quota tracked sources (Douyin). Without this guard,
         sum(in_quota) > target leads to score-based cuts that hit Douyin
-        first because trending scores are systematically lower."""
+        first because trending scores are systematically lower.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -1819,7 +1824,8 @@ class TestDatabase:
 
     def test_count_pool_candidates_respects_precompute_gate(self) -> None:
         """v0.3.57+: count_pool_candidates must align with get_pool_candidates,
-        otherwise popup '还有 N 条' would be misleading."""
+        otherwise popup '还有 N 条' would be misleading.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -2019,7 +2025,8 @@ class TestDatabase:
 
     def test_update_pool_copy_makes_row_visible_in_pool(self) -> None:
         """v0.3.57+: round-trip — empty-copy row stays hidden until
-        update_pool_copy fills both fields, then becomes visible."""
+        update_pool_copy fills both fields, then becomes visible.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             db = Database(Path(tmpdir) / "test.db")
             db.initialize()
@@ -3046,7 +3053,8 @@ class TestEventSatisfactionPersistence:
 
     def test_pre_migration_database_is_additively_upgraded(self, tmp_path: Path) -> None:
         """A v0.3.71 database (events table without the two new columns)
-        must boot cleanly after the migration; existing rows get NULL."""
+        must boot cleanly after the migration; existing rows get NULL.
+        """
         path = tmp_path / "legacy.db"
         legacy = sqlite3.connect(str(path))
         legacy.executescript(
@@ -3083,7 +3091,8 @@ class TestEventSatisfactionPersistence:
 
     def test_insert_event_persists_classification(self, tmp_path: Path) -> None:
         """insert_event runs classify_event_satisfaction exactly once and
-        stores the result alongside the event fields."""
+        stores the result alongside the event fields.
+        """
         db = Database(tmp_path / "classified.db")
         db.initialize()
 
@@ -3137,7 +3146,8 @@ class TestEventSatisfactionPersistence:
     def test_query_events_unknown_mode_includes_null_rows(self, tmp_path: Path) -> None:
         """Legacy rows have inferred_satisfaction = NULL. Requesting
         `unknown` must include them so the consumer can opt in to
-        unclassified history."""
+        unclassified history.
+        """
         path = tmp_path / "legacy-then-modern.db"
         legacy = sqlite3.connect(str(path))
         legacy.executescript(

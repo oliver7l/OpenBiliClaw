@@ -102,7 +102,8 @@ class InitCoordinator:
 
         ``next-task`` consults this so the extension is only handed init's own
         bootstrap work while a run is active — never a stale pending task that
-        would otherwise starve the run's collectors (gui-init review)."""
+        would otherwise starve the run's collectors (gui-init review).
+        """
         if not self.init_active():
             return set()
         return set(self._enqueued_task_ids)
@@ -113,7 +114,8 @@ class InitCoordinator:
 
     async def cancel_current_run(self, run_id: str) -> bool:
         """Request cancellation of the running task. The wrapper's ``finally``
-        persists the ``cancelled`` status (single-writer; spec §5f)."""
+        persists the ``cancelled`` status (single-writer; spec §5f).
+        """
         task = self._current_task
         if task is None or task.done():
             return False

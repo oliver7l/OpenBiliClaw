@@ -5,6 +5,18 @@ obc-soul package. All existing imports continue to work unchanged.
 """
 
 # Core engine
+# Config
+from obc_soul._config import SoulConfig
+
+# Protocols (main project implements these)
+from obc_soul._protocols import (
+    EventNormalizer,
+    MemoryStore,
+    PoolStore,
+)
+
+# Dialogue system
+from obc_soul.dialogue import SocraticDialogue
 from obc_soul.engine import SoulEngine, SoulProfileNotInitializedError
 
 # Data models
@@ -14,21 +26,8 @@ from obc_soul.profile import (
     SoulProfile,
 )
 
-# Dialogue system
-from obc_soul.dialogue import SocraticDialogue
-
 # Taxonomy
 from obc_soul.taxonomy import CATEGORY_VOCAB
-
-# Config
-from obc_soul._config import SoulConfig
-
-# Protocols (main project implements these)
-from obc_soul._protocols import (
-    MemoryStore,
-    PoolStore,
-    EventNormalizer,
-)
 
 __all__ = [
     "SoulConfig",

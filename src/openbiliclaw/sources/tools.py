@@ -59,6 +59,7 @@ class SourceToolDispatcher:
 
         Returns:
             Result message suitable for feeding back to the LLM.
+
         """
         name = tool_call.get("name", "")
         args = tool_call.get("arguments", {})

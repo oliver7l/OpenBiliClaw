@@ -67,7 +67,8 @@ def test_filter_preserves_order() -> None:
 
 def test_filter_rows_without_field_treated_as_none() -> None:
     """Defensive: a row that somehow lacks the field is treated as None
-    (i.e. requesting `unknown` keeps it, requesting `positive` drops it)."""
+    (i.e. requesting `unknown` keeps it, requesting `positive` drops it).
+    """
     events = [{"id": 99, "event_type": "view"}]
     keeps_with_unknown = filter_events_by_satisfaction(events, modes=frozenset({"unknown"}))
     assert keeps_with_unknown == events

@@ -86,6 +86,7 @@ class EmbeddingStore:
         - ``"exact"``: title == text_key (low coverage, ~16%)
         - ``"prefix"``: text_key starts with title (high coverage, ~98%, default)
         - ``"contains"``: text_key contains title (same as prefix for most cases)
+
     """
 
     def __init__(

@@ -20,7 +20,7 @@ import logging
 import re
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -86,13 +86,31 @@ class AutoTopicGenerator:
     Args:
         db_path: SQLite 数据库路径。
         llm_service: LLM 服务（用于生成专题综述）。
+
     """
 
     # 排除的噪声实体（太泛化或非主题性的）
     _NOISE_ENTITIES = {
-        "分析", "实验", "EE", "Insights", "V2EX", "模型", "录分析",
-        "聊天记录", "转化", "狄胖胖", "问题", "方法", "系统", "技术",
-        "工作", "学习", "生活", "时间", "东西", "事情", "东西",
+        "分析",
+        "实验",
+        "EE",
+        "Insights",
+        "V2EX",
+        "模型",
+        "录分析",
+        "聊天记录",
+        "转化",
+        "狄胖胖",
+        "问题",
+        "方法",
+        "系统",
+        "技术",
+        "工作",
+        "学习",
+        "生活",
+        "时间",
+        "东西",
+        "事情",
     }
 
     # 平台名称映射
@@ -131,6 +149,7 @@ class AutoTopicGenerator:
 
         Returns:
             候选专题列表，按质量评分排序。
+
         """
         candidates: list[TopicCandidate] = []
 
@@ -149,7 +168,8 @@ class AutoTopicGenerator:
 
             # 过滤噪声实体，按出现次数排序
             valid_entities = [
-                e for e in entities
+                e
+                for e in entities
                 if e.get("name", "") not in self._NOISE_ENTITIES
                 and len(e.get("name", "")) >= 2
                 and e.get("mention_count", 0) >= min_mentions
@@ -192,11 +212,14 @@ class AutoTopicGenerator:
 
         # 按质量评分排序
         candidates.sort(key=lambda x: x.quality_score, reverse=True)
-        logger.info("Discovered %d topic candidates (min_mentions=%d)", len(candidates), min_mentions)
+        logger.info(
+            "Discovered %d topic candidates (min_mentions=%d)", len(candidates), min_mentions
+        )
         return candidates
 
-    def generate_topic(self, candidate: TopicCandidate, max_articles: int = 50,
-                       use_llm: bool = True) -> GeneratedTopic | None:
+    def generate_topic(
+        self, candidate: TopicCandidate, max_articles: int = 50, use_llm: bool = True
+    ) -> GeneratedTopic | None:
         """为候选主题生成完整专题。
 
         Args:
@@ -206,6 +229,7 @@ class AutoTopicGenerator:
 
         Returns:
             生成的专题，如果失败返回 None。
+
         """
         with sqlite3.connect(self.db_path) as conn:
             # 搜索相关文章
@@ -239,8 +263,8 @@ class AutoTopicGenerator:
             for platform, arts in platform_articles.items():
                 platform_name = self._PLATFORM_NAMES.get(platform, platform)
                 sample_titles = [a["title"][:50] for a in arts[:3]]
-                platform_perspectives[platform] = (
-                    f"{platform_name}（{len(arts)}篇）：" + "；".join(sample_titles)
+                platform_perspectives[platform] = f"{platform_name}（{len(arts)}篇）：" + "；".join(
+                    sample_titles
                 )
 
             # 用 LLM 生成专题综述
@@ -282,7 +306,7 @@ class AutoTopicGenerator:
                 platform_count=len(platforms),
             )
 
-            created_at = datetime.now(timezone.utc).isoformat()
+            created_at = datetime.now(UTC).isoformat()
 
             return GeneratedTopic(
                 name=candidate.name,
@@ -301,8 +325,13 @@ class AutoTopicGenerator:
                 created_at=created_at,
             )
 
-    def auto_generate(self, min_mentions: int = 30, max_topics: int = 3,
-                      max_articles_per_topic: int = 50, use_llm: bool = True) -> list[GeneratedTopic]:
+    def auto_generate(
+        self,
+        min_mentions: int = 30,
+        max_topics: int = 3,
+        max_articles_per_topic: int = 50,
+        use_llm: bool = True,
+    ) -> list[GeneratedTopic]:
         """自动发现并生成专题。
 
         Args:
@@ -313,6 +342,7 @@ class AutoTopicGenerator:
 
         Returns:
             生成的专题列表。
+
         """
         # 发现候选
         candidates = self.discover_candidates(min_mentions=min_mentions, limit=max_topics * 3)
@@ -321,16 +351,22 @@ class AutoTopicGenerator:
         existing_slugs = self._get_existing_topic_slugs()
         new_candidates = [c for c in candidates if c.slug not in existing_slugs]
 
-        logger.info("Found %d new candidates (out of %d total)", len(new_candidates), len(candidates))
+        logger.info(
+            "Found %d new candidates (out of %d total)", len(new_candidates), len(candidates)
+        )
 
         # 生成专题
         generated: list[GeneratedTopic] = []
         for candidate in new_candidates[:max_topics]:
             try:
-                topic = self.generate_topic(candidate, max_articles=max_articles_per_topic, use_llm=use_llm)
+                topic = self.generate_topic(
+                    candidate, max_articles=max_articles_per_topic, use_llm=use_llm
+                )
                 if topic:
                     generated.append(topic)
-                    logger.info("Generated topic: %s (%d articles)", topic.name, topic.article_count)
+                    logger.info(
+                        "Generated topic: %s (%d articles)", topic.name, topic.article_count
+                    )
             except Exception as e:
                 logger.exception("Failed to generate topic for %s: %s", candidate.name, e)
 
@@ -341,11 +377,13 @@ class AutoTopicGenerator:
     def _slugify(self, name: str) -> str:
         """将名称转换为 slug。"""
         # 中文直接用拼音或原名称
-        slug = re.sub(r'[^\w\u4e00-\u9fff-]', '-', name.lower())
-        slug = re.sub(r'-+', '-', slug).strip('-')
+        slug = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name.lower())
+        slug = re.sub(r"-+", "-", slug).strip("-")
         return slug or "topic"
 
-    def _count_related_articles(self, conn: sqlite3.Connection, keywords: list[str]) -> tuple[int, list[str]]:
+    def _count_related_articles(
+        self, conn: sqlite3.Connection, keywords: list[str]
+    ) -> tuple[int, list[str]]:
         """统计相关文章数量和涉及的平台。"""
         if not keywords:
             return 0, []
@@ -378,8 +416,9 @@ class AutoTopicGenerator:
             logger.warning("Failed to count related articles: %s", e)
             return 0, []
 
-    def _search_related_articles(self, conn: sqlite3.Connection, keywords: list[str],
-                                  limit: int = 50) -> list[dict[str, Any]]:
+    def _search_related_articles(
+        self, conn: sqlite3.Connection, keywords: list[str], limit: int = 50
+    ) -> list[dict[str, Any]]:
         """搜索相关文章。"""
         if not keywords:
             return []
@@ -405,25 +444,28 @@ class AutoTopicGenerator:
 
             articles = []
             for row in rows:
-                articles.append({
-                    "id": row[0],
-                    "title": row[1] or "",
-                    "url": row[2] or "",
-                    "author": row[3] or "",
-                    "summary": row[4] or "",
-                    "source_type": row[5] or "",
-                    "source_name": row[6] or "",
-                    "published_at": row[7] or "",
-                    "tags": row[8] or "[]",
-                    "created_at": row[9] or "",
-                })
+                articles.append(
+                    {
+                        "id": row[0],
+                        "title": row[1] or "",
+                        "url": row[2] or "",
+                        "author": row[3] or "",
+                        "summary": row[4] or "",
+                        "source_type": row[5] or "",
+                        "source_name": row[6] or "",
+                        "published_at": row[7] or "",
+                        "tags": row[8] or "[]",
+                        "created_at": row[9] or "",
+                    }
+                )
             return articles
         except Exception as e:
             logger.warning("Failed to search related articles: %s", e)
             return []
 
-    def _calc_quality_score(self, mention_count: int, article_count: int,
-                             platform_count: int) -> float:
+    def _calc_quality_score(
+        self, mention_count: int, article_count: int, platform_count: int
+    ) -> float:
         """计算专题质量评分（0-100）。"""
         # 实体出现次数（权重 30%）
         mention_score = min(mention_count / 100.0, 1.0) * 30
@@ -433,8 +475,9 @@ class AutoTopicGenerator:
         platform_score = min(platform_count / 5.0, 1.0) * 30
         return round(mention_score + article_score + platform_score, 1)
 
-    def _get_related_entities(self, graph: dict[str, Any], entity_name: str,
-                               max_related: int = 5) -> list[str]:
+    def _get_related_entities(
+        self, graph: dict[str, Any], entity_name: str, max_related: int = 5
+    ) -> list[str]:
         """获取与指定实体相关的其他实体。"""
         relations = graph.get("relations", [])
         related = set()
@@ -455,19 +498,24 @@ class AutoTopicGenerator:
         for art in articles:
             pub_date = art.get("published_at", "")
             if pub_date and len(pub_date) >= 10:
-                timeline.append({
-                    "date": pub_date[:10],
-                    "title": art["title"][:60],
-                    "platform": self._PLATFORM_NAMES.get(art["source_type"], art["source_type"]),
-                    "article_id": art["id"],
-                })
+                timeline.append(
+                    {
+                        "date": pub_date[:10],
+                        "title": art["title"][:60],
+                        "platform": self._PLATFORM_NAMES.get(
+                            art["source_type"], art["source_type"]
+                        ),
+                        "article_id": art["id"],
+                    }
+                )
 
         # 按日期排序
         timeline.sort(key=lambda x: x["date"])
         return timeline[:20]  # 最多20条
 
-    def _extract_key_insights(self, articles: list[dict[str, Any]],
-                               max_insights: int = 8) -> list[str]:
+    def _extract_key_insights(
+        self, articles: list[dict[str, Any]], max_insights: int = 8
+    ) -> list[str]:
         """从文章摘要/标题中提取核心观点。"""
         insights = []
         seen = set()
@@ -489,40 +537,45 @@ class AutoTopicGenerator:
 
         return insights
 
-    def _generate_ai_summary(self, topic_name: str, articles: list[dict[str, Any]],
-                                  key_insights: list[str],
-                                  platform_perspectives: dict[str, str]) -> str:
-            """用 LLM 生成专题综述。"""
-            try:
-                if self.llm_service is None:
-                    return self._fallback_summary(topic_name, articles, key_insights)
+    def _generate_ai_summary(
+        self,
+        topic_name: str,
+        articles: list[dict[str, Any]],
+        key_insights: list[str],
+        platform_perspectives: dict[str, str],
+    ) -> str:
+        """用 LLM 生成专题综述。"""
+        try:
+            if self.llm_service is None:
+                return self._fallback_summary(topic_name, articles, key_insights)
 
-                # 构建提示词
-                article_summaries = "\n".join(
-                    f"- [{self._PLATFORM_NAMES.get(a['source_type'], a['source_type'])}] {a['title']}"
-                    for a in articles[:15]
-                )
+            # 构建提示词
+            article_summaries = "\n".join(
+                f"- [{self._PLATFORM_NAMES.get(a['source_type'], a['source_type'])}] {a['title']}"
+                for a in articles[:15]
+            )
 
-                system_instruction = "你是一个专题综述撰写专家。请根据提供的文章列表和核心观点，生成一篇综合专题综述。要求：1. 概括主题核心内容和发展脉络；2. 总结不同平台的视角差异；3. 提炼3-5个核心观点；4. 语言简洁专业，300-500字。"
+            system_instruction = "你是一个专题综述撰写专家。请根据提供的文章列表和核心观点，生成一篇综合专题综述。要求：1. 概括主题核心内容和发展脉络；2. 总结不同平台的视角差异；3. 提炼3-5个核心观点；4. 语言简洁专业，300-500字。"
 
-                user_input = f"""专题名称：{topic_name}
+            user_input = f"""专题名称：{topic_name}
 
 相关文章（{len(articles)}篇）：
 {article_summaries}
 
 核心观点：
-{chr(10).join(f'- {i}' for i in key_insights[:5])}
+{chr(10).join(f"- {i}" for i in key_insights[:5])}
 
 各平台视角：
-{chr(10).join(f'- {v}' for v in platform_perspectives.values())}
+{chr(10).join(f"- {v}" for v in platform_perspectives.values())}
 
 请生成综述（300-500字）："""
 
-                # 调用 LLM（统一使用 generate_structured）
-                from openbiliclaw.llm.generation import generate_structured
-                from openbiliclaw.self_evolution.insight_report import _run_async
+            # 调用 LLM（统一使用 generate_structured）
+            from openbiliclaw.llm.generation import generate_structured
+            from openbiliclaw.self_evolution.insight_report import _run_async
 
-                result = _run_async(generate_structured(
+            result = _run_async(
+                generate_structured(
                     self.llm_service,
                     system_instruction=system_instruction,
                     user_input=user_input,
@@ -530,20 +583,22 @@ class AutoTopicGenerator:
                     label="auto_topic_summary",
                     temperature=0.3,
                     max_tokens=800,
-                ))
+                )
+            )
 
-                text = str(result).strip()
-                if text:
-                    return text
+            text = str(result).strip()
+            if text:
+                return text
 
-                return self._fallback_summary(topic_name, articles, key_insights)
+            return self._fallback_summary(topic_name, articles, key_insights)
 
-            except Exception as e:
-                logger.warning("LLM summary generation failed, using fallback: %s", e)
-                return self._fallback_summary(topic_name, articles, key_insights)
+        except Exception as e:
+            logger.warning("LLM summary generation failed, using fallback: %s", e)
+            return self._fallback_summary(topic_name, articles, key_insights)
 
-    def _fallback_summary(self, topic_name: str, articles: list[dict[str, Any]],
-                           key_insights: list[str]) -> str:
+    def _fallback_summary(
+        self, topic_name: str, articles: list[dict[str, Any]], key_insights: list[str]
+    ) -> str:
         """LLM 不可用时的降级综述。"""
         platforms = set(a["source_type"] for a in articles)
         platform_names = [self._PLATFORM_NAMES.get(p, p) for p in platforms]
@@ -556,19 +611,34 @@ class AutoTopicGenerator:
         summary += f"\n通过跨平台内容的融合，可以更全面地理解「{topic_name}」这一主题的发展脉络和多元视角。"
         return summary
 
-    def _create_topic(self, conn: sqlite3.Connection, name: str, slug: str,
-                      description: str, keywords: list[str], platforms: list[str],
-                      ai_summary: str) -> int:
+    def _create_topic(
+        self,
+        conn: sqlite3.Connection,
+        name: str,
+        slug: str,
+        description: str,
+        keywords: list[str],
+        platforms: list[str],
+        ai_summary: str,
+    ) -> int:
         """创建专题。"""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         cursor = conn.execute(
             """INSERT INTO topics
                (name, slug, description, keywords, platforms, status, item_count,
                 created_at, updated_at, last_collected_at)
                VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?, ?)""",
-            (name, slug, description, json.dumps(keywords, ensure_ascii=False),
-             json.dumps(platforms, ensure_ascii=False), now, now, now),
+            (
+                name,
+                slug,
+                description,
+                json.dumps(keywords, ensure_ascii=False),
+                json.dumps(platforms, ensure_ascii=False),
+                now,
+                now,
+                now,
+            ),
         )
         topic_id = cursor.lastrowid
 
@@ -584,10 +654,11 @@ class AutoTopicGenerator:
         logger.info("Created topic: %s (id=%d)", name, topic_id)
         return topic_id
 
-    def _add_topic_item(self, conn: sqlite3.Connection, topic_id: int,
-                         article: dict[str, Any], topic_label: str) -> None:
+    def _add_topic_item(
+        self, conn: sqlite3.Connection, topic_id: int, article: dict[str, Any], topic_label: str
+    ) -> None:
         """添加文章到专题。"""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         content_key = f"article_{article['id']}"
 
         # 检查是否已存在
@@ -604,9 +675,17 @@ class AutoTopicGenerator:
                (topic_id, content_key, title, url, source_platform, source_name,
                 summary, topic_label, collected_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (topic_id, content_key, article["title"][:200], article["url"],
-             article["source_type"], article["source_name"],
-             article["summary"][:500], topic_label, now),
+            (
+                topic_id,
+                content_key,
+                article["title"][:200],
+                article["url"],
+                article["source_type"],
+                article["source_name"],
+                article["summary"][:500],
+                topic_label,
+                now,
+            ),
         )
 
         # 更新专题文章计数

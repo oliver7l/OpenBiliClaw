@@ -36,6 +36,7 @@ def _run_async(coro: Any) -> Any:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(asyncio.run, coro).result()
         return loop.run_until_complete(coro)
@@ -146,42 +147,228 @@ class InsightReport:
 
 # Common stopwords for Chinese topic extraction
 _STOPWORDS = {
-    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
-    "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有",
-    "看", "好", "自己", "这", "那", "他", "她", "它", "们", "什么", "怎么",
-    "为什么", "可以", "这个", "那个", "因为", "所以", "但是", "如果", "虽然",
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "need", "dare",
-    "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
-    "into", "through", "during", "before", "after", "above", "below",
-    "and", "but", "or", "nor", "not", "so", "yet", "both", "either",
-    "neither", "each", "every", "all", "any", "few", "more", "most",
-    "other", "some", "such", "no", "only", "own", "same", "than", "too",
-    "very", "just", "about", "up", "out", "then", "here", "there", "when",
-    "where", "why", "how", "which", "who", "whom", "whose", "what",
+    "的",
+    "了",
+    "在",
+    "是",
+    "我",
+    "有",
+    "和",
+    "就",
+    "不",
+    "人",
+    "都",
+    "一",
+    "一个",
+    "上",
+    "也",
+    "很",
+    "到",
+    "说",
+    "要",
+    "去",
+    "你",
+    "会",
+    "着",
+    "没有",
+    "看",
+    "好",
+    "自己",
+    "这",
+    "那",
+    "他",
+    "她",
+    "它",
+    "们",
+    "什么",
+    "怎么",
+    "为什么",
+    "可以",
+    "这个",
+    "那个",
+    "因为",
+    "所以",
+    "但是",
+    "如果",
+    "虽然",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "can",
+    "need",
+    "dare",
+    "to",
+    "of",
+    "in",
+    "for",
+    "on",
+    "with",
+    "at",
+    "by",
+    "from",
+    "as",
+    "into",
+    "through",
+    "during",
+    "before",
+    "after",
+    "above",
+    "below",
+    "and",
+    "but",
+    "or",
+    "nor",
+    "not",
+    "so",
+    "yet",
+    "both",
+    "either",
+    "neither",
+    "each",
+    "every",
+    "all",
+    "any",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "no",
+    "only",
+    "own",
+    "same",
+    "than",
+    "too",
+    "very",
+    "just",
+    "about",
+    "up",
+    "out",
+    "then",
+    "here",
+    "there",
+    "when",
+    "where",
+    "why",
+    "how",
+    "which",
+    "who",
+    "whom",
+    "whose",
+    "what",
 }
 
 # Known high-value topics (predefined for better signal)
 _KNOWN_TOPICS = [
-    "广告算法", "推荐系统", "程序化广告", "RTB", "DSP", "SSP", "ADX",
-    "CTR", "CVR", "归因", "转化率", "点击率", "出价", "竞价", "拍卖",
-    "大模型", "LLM", "GPT", "Agent", "多智能体", "RAG", "检索增强",
-    "深度学习", "机器学习", "强化学习", "神经网络", "Transformer",
-    "短剧", "短剧创业", "短剧商业化", "微短剧",
-    "面试", "面经", "求职", "跳槽", "简历", "offer",
-    "数据分析", "数据科学", "SQL", "Python", "算法题", "LeetCode",
-    "产品经理", "产品设计", "用户增长", "增长黑客", "留存", "活跃",
-    "积分运营", "用户运营", "内容运营",
-    "订阅制", "SaaS", "商业化", "变现",
-    "生成式推荐", "生成式AI", "AIGC",
-    "知识图谱", "Embedding", "向量检索",
-    "冷启动", "探索利用", "EE", "多臂老虎机",
-    "粗排", "精排", "召回", "排序", "重排",
-    "DIN", "DIEN", "DSIN", "multi-head", "注意力机制",
-    "用户画像", "标签体系", "特征工程",
-    "AB测试", "实验", "因果推断",
-    "边际收益", "频控", "曝光", "点击", "转化",
+    "广告算法",
+    "推荐系统",
+    "程序化广告",
+    "RTB",
+    "DSP",
+    "SSP",
+    "ADX",
+    "CTR",
+    "CVR",
+    "归因",
+    "转化率",
+    "点击率",
+    "出价",
+    "竞价",
+    "拍卖",
+    "大模型",
+    "LLM",
+    "GPT",
+    "Agent",
+    "多智能体",
+    "RAG",
+    "检索增强",
+    "深度学习",
+    "机器学习",
+    "强化学习",
+    "神经网络",
+    "Transformer",
+    "短剧",
+    "短剧创业",
+    "短剧商业化",
+    "微短剧",
+    "面试",
+    "面经",
+    "求职",
+    "跳槽",
+    "简历",
+    "offer",
+    "数据分析",
+    "数据科学",
+    "SQL",
+    "Python",
+    "算法题",
+    "LeetCode",
+    "产品经理",
+    "产品设计",
+    "用户增长",
+    "增长黑客",
+    "留存",
+    "活跃",
+    "积分运营",
+    "用户运营",
+    "内容运营",
+    "订阅制",
+    "SaaS",
+    "商业化",
+    "变现",
+    "生成式推荐",
+    "生成式AI",
+    "AIGC",
+    "知识图谱",
+    "Embedding",
+    "向量检索",
+    "冷启动",
+    "探索利用",
+    "EE",
+    "多臂老虎机",
+    "粗排",
+    "精排",
+    "召回",
+    "排序",
+    "重排",
+    "DIN",
+    "DIEN",
+    "DSIN",
+    "multi-head",
+    "注意力机制",
+    "用户画像",
+    "标签体系",
+    "特征工程",
+    "AB测试",
+    "实验",
+    "因果推断",
+    "边际收益",
+    "频控",
+    "曝光",
+    "点击",
+    "转化",
 ]
 
 
@@ -270,6 +457,7 @@ class InsightReportGenerator:
     Args:
         db_path: Path to the SQLite database.
         llm_service: Optional LLM service for natural-language generation.
+
     """
 
     def __init__(self, db_path: str, *, llm_service: Any | None = None) -> None:
@@ -299,6 +487,7 @@ class InsightReportGenerator:
 
         Returns:
             An InsightReport with all stats and recommendations.
+
         """
         if end_date is None:
             end_date = datetime.now()
@@ -372,9 +561,7 @@ class InsightReportGenerator:
                 stats.like_count += 1
                 report.total_likes += 1
 
-        report.platform_stats = sorted(
-            platform_map.values(), key=lambda s: -s.engagement_score
-        )
+        report.platform_stats = sorted(platform_map.values(), key=lambda s: -s.engagement_score)
 
     def _collect_topic_stats(
         self, conn: Any, report: InsightReport, start: datetime, end: datetime
@@ -398,7 +585,9 @@ class InsightReportGenerator:
 
         for row in rows:
             text = " ".join(
-                filter(None, [row["title"] or "", row["tags"] or "", (row["content_text"] or "")[:500]])
+                filter(
+                    None, [row["title"] or "", row["tags"] or "", (row["content_text"] or "")[:500]]
+                )
             )
             topics = extract_topics(text, top_k=3)
             is_favorite = row["event_type"] == "favorite"
@@ -490,7 +679,9 @@ class InsightReportGenerator:
                     )
                 )
 
-        report.interest_drifts = sorted(drifts, key=lambda d: -d.change_ratio if d.direction == "rising" else d.change_ratio)
+        report.interest_drifts = sorted(
+            drifts, key=lambda d: -d.change_ratio if d.direction == "rising" else d.change_ratio
+        )
 
     def _find_deep_dive_candidates(
         self, conn: Any, report: InsightReport, start: datetime, end: datetime
@@ -530,9 +721,9 @@ class InsightReportGenerator:
         # 2. High-quality unread content in top topics
         top_topics = [t.topic for t in report.topic_stats[:5]]
         if top_topics:
-            placeholders = ",".join(["?"] * len(top_topics))
+            ",".join(["?"] * len(top_topics))
             # Build LIKE conditions
-            like_conditions = " OR ".join([f"(a.title LIKE ? OR a.tags LIKE ?)" for _ in top_topics])
+            like_conditions = " OR ".join(["(a.title LIKE ? OR a.tags LIKE ?)" for _ in top_topics])
             params = [f"%{t}%" for t in top_topics for _ in range(2)]
             params.extend([start.isoformat()])
 
@@ -556,7 +747,7 @@ class InsightReportGenerator:
                         title=row["title"] or "无标题",
                         url=row["url"] or "",
                         platform=row["source_type"] or infer_platform_from_url(row["url"] or ""),
-                        reason=f"与你近期关注的主题相关，内容较长值得深读",
+                        reason="与你近期关注的主题相关，内容较长值得深读",
                         source="related_deep",
                     )
                 )
@@ -570,8 +761,8 @@ class InsightReportGenerator:
         if not top_topics:
             return
 
-        placeholders = ",".join(["?"] * len(top_topics))
-        like_conditions = " OR ".join([f"(title LIKE ? OR tags LIKE ?)" for _ in top_topics])
+        ",".join(["?"] * len(top_topics))
+        like_conditions = " OR ".join(["(title LIKE ? OR tags LIKE ?)" for _ in top_topics])
         params = [f"%{t}%" for t in top_topics for _ in range(2)]
 
         rows = conn.execute(
@@ -619,11 +810,13 @@ class InsightReportGenerator:
             ],
             "rising_interests": [
                 {"topic": d.topic, "change": f"{d.previous_count}→{d.current_count}"}
-                for d in report.interest_drifts if d.direction == "rising"
+                for d in report.interest_drifts
+                if d.direction == "rising"
             ][:5],
             "declining_interests": [
                 {"topic": d.topic, "change": f"{d.previous_count}→{d.current_count}"}
-                for d in report.interest_drifts if d.direction == "declining"
+                for d in report.interest_drifts
+                if d.direction == "declining"
             ][:5],
             "deep_dive_count": len(report.deep_dive_candidates),
         }
@@ -638,15 +831,17 @@ class InsightReportGenerator:
         user_input = f"用户阅读数据：\n{json.dumps(data_summary, ensure_ascii=False, indent=2)}"
 
         try:
-            result = _run_async(generate_structured(
-                self.llm_service,
-                system_instruction=system_instruction,
-                user_input=user_input,
-                parse=lambda x: x,
-                label="insight_report_summary",
-                temperature=0.7,
-                max_tokens=500,
-            ))
+            result = _run_async(
+                generate_structured(
+                    self.llm_service,
+                    system_instruction=system_instruction,
+                    user_input=user_input,
+                    parse=lambda x: x,
+                    label="insight_report_summary",
+                    temperature=0.7,
+                    max_tokens=500,
+                )
+            )
             report.natural_language_summary = str(result).strip()
         except Exception:
             logger.exception("LLM summary generation failed")
@@ -654,18 +849,20 @@ class InsightReportGenerator:
 
         # Generate key takeaways
         try:
-            takeaway_result = _run_async(generate_structured(
-                self.llm_service,
-                system_instruction=(
-                    "根据用户阅读数据，提取3-5条关键洞察，每条不超过30字。"
-                    "格式：每行一条，用数字编号。只基于数据，不要编造。"
-                ),
-                user_input=f"用户阅读数据：\n{json.dumps(data_summary, ensure_ascii=False)}",
-                parse=lambda x: x,
-                label="insight_report_takeaways",
-                temperature=0.5,
-                max_tokens=200,
-            ))
+            takeaway_result = _run_async(
+                generate_structured(
+                    self.llm_service,
+                    system_instruction=(
+                        "根据用户阅读数据，提取3-5条关键洞察，每条不超过30字。"
+                        "格式：每行一条，用数字编号。只基于数据，不要编造。"
+                    ),
+                    user_input=f"用户阅读数据：\n{json.dumps(data_summary, ensure_ascii=False)}",
+                    parse=lambda x: x,
+                    label="insight_report_takeaways",
+                    temperature=0.5,
+                    max_tokens=200,
+                )
+            )
             text = str(takeaway_result).strip()
             report.key_takeaways = [
                 line.strip().lstrip("0123456789.、) ")
@@ -705,19 +902,31 @@ class InsightReportGenerator:
         takeaways: list[str] = []
 
         if report.topic_stats:
-            takeaways.append(f"最关注：{report.topic_stats[0].topic}（{report.topic_stats[0].count}次）")
+            takeaways.append(
+                f"最关注：{report.topic_stats[0].topic}（{report.topic_stats[0].count}次）"
+            )
 
-        rising = [d for d in report.interest_drifts if d.direction == "rising" and d.significance == "high"]
+        rising = [
+            d
+            for d in report.interest_drifts
+            if d.direction == "rising" and d.significance == "high"
+        ]
         if rising:
-            takeaways.append(f"新兴趣：{rising[0].topic}（从{rising[0].previous_count}升到{rising[0].current_count}）")
+            takeaways.append(
+                f"新兴趣：{rising[0].topic}（从{rising[0].previous_count}升到{rising[0].current_count}）"
+            )
 
         if report.deep_dive_candidates:
-            unfinished = [c for c in report.deep_dive_candidates if c.source == "favorited_unfinished"]
+            unfinished = [
+                c for c in report.deep_dive_candidates if c.source == "favorited_unfinished"
+            ]
             if unfinished:
                 takeaways.append(f"待深读：{len(unfinished)}条收藏还没读完")
 
         if report.total_favorites > 0:
-            takeaways.append(f"收藏率：{report.total_favorites}/{report.total_views} = {report.total_favorites/max(report.total_views,1)*100:.1f}%")
+            takeaways.append(
+                f"收藏率：{report.total_favorites}/{report.total_views} = {report.total_favorites / max(report.total_views, 1) * 100:.1f}%"
+            )
 
         return takeaways[:5]
 

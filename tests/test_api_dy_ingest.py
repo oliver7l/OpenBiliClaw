@@ -160,7 +160,8 @@ class TestDyTaskResult:
         dy_task_client: tuple[TestClient, Database, RecordingMemoryManager],
     ) -> None:
         """status=ok with bootstrap_profile videos: marks task complete and
-        propagates events through memory."""
+        propagates events through memory.
+        """
         client, db, memory = dy_task_client
         task_id = _enqueue_dy_bootstrap_task(db)
 
@@ -278,7 +279,8 @@ class TestDyTaskResult:
         dy_task_client: tuple[TestClient, Database, RecordingMemoryManager],
     ) -> None:
         """Mirror the live dispatcher flow: per-scope partials carry videos,
-        then the final ok payload carries only accumulated counts."""
+        then the final ok payload carries only accumulated counts.
+        """
         import json
 
         client, db, memory = dy_task_client
@@ -399,7 +401,8 @@ class TestDyTaskResult:
         dy_task_client: tuple[TestClient, Database, RecordingMemoryManager],
     ) -> None:
         """A later bootstrap task must only propagate source items that
-        have not already fed the profile update path."""
+        have not already fed the profile update path.
+        """
         client, db, memory = dy_task_client
 
         for _ in range(2):
@@ -432,7 +435,8 @@ class TestDyTaskResult:
 class TestDyTaskKick:
     """`POST /api/sources/dy/kick` broadcasts `dy_task_available` over
     the runtime-stream so the extension dispatcher polls immediately
-    instead of waiting up to 60s for the next chrome.alarms tick."""
+    instead of waiting up to 60s for the next chrome.alarms tick.
+    """
 
     def test_kick_broadcasts_dy_task_available_event(
         self,
@@ -512,7 +516,8 @@ class TestDyTaskKick:
     ) -> None:
         """If the daemon was started without an event hub (degraded
         config) the kick endpoint must still return 200 — it's a
-        best-effort wake-up, not a critical path."""
+        best-effort wake-up, not a critical path.
+        """
         from types import SimpleNamespace
 
         from openbiliclaw.storage.database import Database

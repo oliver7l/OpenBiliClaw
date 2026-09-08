@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 @pytest.fixture(autouse=True)
 def _isolate_runtime_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep create_app() route tests independent from local credentials."""
-
     from openbiliclaw.config import Config, save_config
 
     project_root = tmp_path / "runtime"

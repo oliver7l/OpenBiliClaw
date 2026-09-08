@@ -179,6 +179,7 @@ def cleanup_image_cache(
 
     Returns:
         A :class:`CleanupResult` with counts and freed bytes.
+
     """
     directory = cache_dir if cache_dir is not None else image_cache_dir()
     result = CleanupResult()

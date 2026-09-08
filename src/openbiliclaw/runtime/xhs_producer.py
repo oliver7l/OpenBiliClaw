@@ -18,6 +18,7 @@ Two responsibilities live in this module:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -39,10 +40,8 @@ def _obc_connect(db_path):
     from pathlib import Path as _Path
 
     _conn = _sqlite3.connect(db_path)
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 
@@ -144,6 +143,7 @@ class XhsTaskProducer:
                 directly and the internal ``generate_xhs_keywords`` LLM call is
                 skipped. When ``None``, the producer generates its own keywords
                 from the profile as before.
+
         """
         if not self.enabled:
             return self._skip("disabled")
@@ -207,7 +207,6 @@ class XhsTaskProducer:
 
     def _enqueue_keywords(self, keywords: list[str]) -> dict[str, object]:
         """Enqueue one ``search`` task per keyword, stopping when budget is hit."""
-
         enqueued = 0
         for keyword in keywords:
             ok = self.task_queue.enqueue(

@@ -67,9 +67,7 @@ class CrossPlatformInsight:
             "total_articles": self.total_articles,
             "complementary_score": round(self.complementary_score, 2),
             "insight": self.insight,
-            "platform_articles": {
-                p: arts[:3] for p, arts in self.platform_articles.items()
-            },
+            "platform_articles": {p: arts[:3] for p, arts in self.platform_articles.items()},
         }
 
 
@@ -102,6 +100,7 @@ class ContentInsightsAnalyzer:
     Args:
         db_path: Path to the SQLite database.
         llm_service: Optional LLM service for generating natural-language insights.
+
     """
 
     def __init__(self, db_path: str, *, llm_service: Any | None = None) -> None:
@@ -133,6 +132,7 @@ class ContentInsightsAnalyzer:
 
         Returns:
             An InsightsReport with knowledge gaps and cross-platform insights.
+
         """
         report = InsightsReport(generated_at=datetime.now().isoformat())
 
@@ -217,17 +217,13 @@ class ContentInsightsAnalyzer:
             if len(articles) < min_articles:
                 continue
 
-            avg_reading = sum(
-                (a.get("reading_percent") or 0) for a in articles
-            ) / len(articles)
+            avg_reading = sum((a.get("reading_percent") or 0) for a in articles) / len(articles)
             favorited_count = sum(1 for a in articles if a.get("favorited", 0) > 0)
             favorited_ratio = favorited_count / len(articles) if articles else 0
 
             # Gap score: more articles + lower reading + fewer favorites = bigger gap
             gap_score = (
-                len(articles) * 0.3
-                + (100 - avg_reading) * 0.4
-                + (1 - favorited_ratio) * 100 * 0.3
+                len(articles) * 0.3 + (100 - avg_reading) * 0.4 + (1 - favorited_ratio) * 100 * 0.3
             )
 
             # Find high-quality articles to suggest for deep reading
@@ -242,7 +238,9 @@ class ContentInsightsAnalyzer:
 
             # Generate suggestion
             if avg_reading < 30:
-                suggestion = f"收集了{len(articles)}篇但平均只读了{avg_reading:.0f}%，建议深读高质量长文"
+                suggestion = (
+                    f"收集了{len(articles)}篇但平均只读了{avg_reading:.0f}%，建议深读高质量长文"
+                )
             elif favorited_count == 0:
                 suggestion = f"{len(articles)}篇内容无一收藏，建议筛选出最有价值的收藏"
             else:

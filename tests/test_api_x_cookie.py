@@ -55,7 +55,8 @@ class TestXCookieEndpoint:
     ) -> None:
         """A valid cookie sync must lift a missing_cookie / expired_cookie block
         so discovery's is_ready() gate reopens — otherwise the producer stays
-        dead-locked even after the user re-logs in on x.com."""
+        dead-locked even after the user re-logs in on x.com.
+        """
         from fastapi.testclient import TestClient
 
         from openbiliclaw.api.app import create_app
@@ -202,7 +203,8 @@ class TestXCookieReader:
 class TestSourcesStatusCookieGating:
     """The unified status chip must not report a logged-in source without a
     credential actually present (the x_source_health row defaults to ``ok``
-    before any fetch has run)."""
+    before any fetch has run).
+    """
 
     def _client(self, monkeypatch, tmp_path: Path):
         from fastapi.testclient import TestClient
@@ -246,7 +248,8 @@ class TestSourcesStatusCookieGating:
 
     def test_bilibili_status_falls_back_to_cookie_file(self, monkeypatch, tmp_path: Path) -> None:
         """CLI QR login writes only data/bilibili_cookie.json; the status
-        chip must count that as ready even with config.toml cookie empty."""
+        chip must count that as ready even with config.toml cookie empty.
+        """
         from openbiliclaw.bilibili.auth import AuthManager
 
         AuthManager(data_dir=tmp_path / "data").set_cookie("SESSDATA=s; bili_jct=j; DedeUserID=1")

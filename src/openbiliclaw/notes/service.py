@@ -210,6 +210,7 @@ class NoteService:
 
         Returns:
             VideoToNoteResult 结果对象。
+
         """
         pipeline = VideoToNotePipeline(
             bilibili_client=self._bilibili_client,

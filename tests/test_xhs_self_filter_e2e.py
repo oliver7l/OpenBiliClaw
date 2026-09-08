@@ -317,7 +317,8 @@ class TestXhsSelfContentFilterE2E:
         e2e_env: tuple[TestClient, Database, _RecordingMemoryManager],
     ) -> None:
         """When the user changes their XHS nickname, the new nickname
-        triggers a fresh purge pass."""
+        triggers a fresh purge pass.
+        """
         client, db, _ = e2e_env
 
         # Row under old nickname — will be caught by first self_info

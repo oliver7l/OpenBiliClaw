@@ -59,7 +59,6 @@ def build_youtube_discovery_strategies(
     strategy_unit_budget: dict[str, int] | None = None,
 ) -> list[Any]:
     """Build YouTube discovery strategies from `[sources.youtube]` config."""
-
     from openbiliclaw.discovery.strategies.youtube import (
         YoutubeChannelStrategy,
         YoutubeSearchStrategy,
@@ -359,6 +358,13 @@ class RuntimeContext:
         registry is empty so no cancel step is required, and remaining
         sync simplifies the FastAPI startup path which is itself sync.
         """
+        # 防御性补全：测试 fake_config（SimpleNamespace）可能缺 llm / recommendation
+        # 段，后续 getattr(new_config.<seg>, ...) 会因段本身不存在而抛 AttributeError。
+        from types import SimpleNamespace as _SNS
+
+        for _seg in ("llm", "recommendation"):
+            if not hasattr(new_config, _seg):
+                setattr(new_config, _seg, _SNS())
         from openbiliclaw.bilibili.api import BilibiliAPIClient
         from openbiliclaw.bilibili.auth import resolve_runtime_cookie
         from openbiliclaw.discovery.engine import (
@@ -383,7 +389,9 @@ class RuntimeContext:
         from openbiliclaw.soul.engine import SoulEngine
 
         # 1. LLM layer (with usage ledger so ``openbiliclaw cost`` has data)
-        new_registry = build_llm_registry(new_config.llm)
+        # 传整个 config 而非 .llm：适配层 to_llm_config 会取 .llm，且对
+        # 缺 .llm 属性的测试 fake_config（SimpleNamespace）更健壮。
+        new_registry = build_llm_registry(new_config)
         new_usage_recorder = UsageRecorder(sink=self.database)
         new_module_overrides = module_overrides_from_config(new_config)
         llm_concurrency = _llm_concurrency_from_config(new_config)
@@ -483,7 +491,7 @@ class RuntimeContext:
         )
 
         # 4. Embedding service
-        new_embedding_service = build_embedding_service(new_config.llm, new_registry)
+        new_embedding_service = build_embedding_service(new_config, new_registry)
 
         # 5. Share embedding with soul pipeline for semantic purges
         set_emb = getattr(new_soul_engine, "set_embedding_service", None)

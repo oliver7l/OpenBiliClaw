@@ -95,7 +95,7 @@ def test_build_llm_registry_registers_openai_with_codex_oauth(
     )
 
     monkeypatch.setattr(
-        "openbiliclaw.llm.codex_auth.load_codex_credentials",
+        "obc_llm.codex_auth.load_codex_credentials",
         lambda: CodexCredentials("access-token", "refresh-token", 9999999999),
     )
 
@@ -127,7 +127,8 @@ def test_build_llm_registry_registers_openrouter() -> None:
 
 def test_build_llm_registry_registers_openai_compatible() -> None:
     """v0.3.32+ — openai_compatible is a first-class registered provider,
-    distinct from openai. Both can coexist in the same registry."""
+    distinct from openai. Both can coexist in the same registry.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="openai_compatible",
@@ -161,7 +162,8 @@ def test_build_llm_registry_refuses_openai_compatible_without_base_url() -> None
     """A Groq / Together / vLLM provider WITHOUT a base_url is just an
     expensive way of mistyping ``openai`` — it would hit api.openai.com
     with the wrong api_key and 401. Refuse to register so the failure is
-    surfaced at startup, not on the first chat request."""
+    surfaced at startup, not on the first chat request.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="openai",
@@ -181,7 +183,8 @@ def test_openai_compatible_can_serve_as_embedding_provider(tmp_path) -> None:
     """Most OpenAI-compat backends (Together, vLLM, Azure) expose
     /v1/embeddings. ``openai_compatible`` must therefore be valid as
     [llm.embedding].provider — the embedding service builds a dedicated
-    instance pointing at the user-supplied base_url."""
+    instance pointing at the user-supplied base_url.
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -335,7 +338,8 @@ def test_build_embedding_service_picks_bge_m3_default_for_ollama(
 ) -> None:
     """When [llm.embedding] provider=ollama and model is empty, the service
     must use bge-m3 — not the gemini-embedding-001 default — so the
-    install-time wizard's choice actually takes effect."""
+    install-time wizard's choice actually takes effect.
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -382,7 +386,7 @@ def test_ollama_embedding_with_empty_credentials_uses_local_default_without_warn
     import logging
 
     from openbiliclaw.config import EmbeddingConfig
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(
@@ -416,7 +420,7 @@ def test_ollama_embedding_without_base_url_uses_local_default(
     import logging
 
     from openbiliclaw.config import EmbeddingConfig
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(
@@ -454,7 +458,8 @@ def test_build_embedding_service_falls_back_when_claude_is_default(
     [llm.embedding] section is empty, embedding must transparently fall
     back to a registered provider that can actually embed (Ollama in this
     fixture). Previously this returned None and the recommendation
-    pipeline silently lost diversity / dedup."""
+    pipeline silently lost diversity / dedup.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="claude",
@@ -477,7 +482,8 @@ def test_build_embedding_service_falls_back_when_deepseek_is_default(
 ) -> None:
     """DeepSeek inherits ``embed`` from OpenAIProvider but its backend has
     no embeddings route. ``supports_embedding=False`` makes the fallback
-    chain skip it instead of letting the call 404 at runtime."""
+    chain skip it instead of letting the call 404 at runtime.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="deepseek",
@@ -498,7 +504,8 @@ def test_build_embedding_service_returns_none_with_no_capable_provider(
 ) -> None:
     """When no registered provider can actually embed (e.g. Claude only),
     the service returns None — but logs a warning so the failure mode is
-    observable, not silent."""
+    observable, not silent.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="claude",
@@ -552,7 +559,8 @@ def test_ollama_base_url_normalised_to_v1_suffix() -> None:
     (no /v1). The OpenAI SDK then calls ``/chat/completions`` directly,
     which Ollama 404s — its OpenAI-compat shim lives at /v1. The
     registry must auto-append /v1 so users with stale configs still work
-    after upgrade. Regression for v0.3.20.1."""
+    after upgrade. Regression for v0.3.20.1.
+    """
     config = Config(
         llm=LLMConfig(
             default_provider="ollama",
@@ -574,7 +582,8 @@ def test_openai_primary_with_default_embedding_model_uses_correct_default(
     For OpenAI / Ollama / DeepSeek primaries that string was wrong —
     OpenAI's embeddings endpoint 404s on it. After the fix
     config.example.toml ships ``model = ""`` so the registry's
-    per-provider defaults kick in (text-embedding-3-small for OpenAI)."""
+    per-provider defaults kick in (text-embedding-3-small for OpenAI).
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -610,7 +619,8 @@ def test_embedding_uses_dedicated_credentials_over_chat_block(
 ) -> None:
     """When [llm.embedding] supplies its own api_key/base_url, those win
     over [llm.<provider>]. The chat block's api_key must NOT leak into
-    the embedding provider — they are different connections."""
+    the embedding provider — they are different connections.
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -649,7 +659,8 @@ def test_embedding_provider_independent_from_chat_provider(
     fully self-contained Gemini config. Neither block borrows from the
     other — DeepSeek doesn't carry an embedding-capable backend, and
     Gemini chat is not configured at all. Embedding must still build
-    against the dedicated [llm.embedding] credentials."""
+    against the dedicated [llm.embedding] credentials.
+    """
     if not gemini_sdk_available():
         pytest.skip("gemini SDK not installed in this environment")
     from openbiliclaw.config import EmbeddingConfig
@@ -686,7 +697,8 @@ def test_embedding_back_compat_falls_back_to_chat_block(tmp_path) -> None:
     api_key transparently.
 
     Fixture: user explicitly chose openai for embedding but did NOT fill
-    [llm.embedding].api_key. Backend must borrow from [llm.openai]."""
+    [llm.embedding].api_key. Backend must borrow from [llm.openai].
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -740,7 +752,7 @@ def test_gemini_embedding_uses_independent_dimension_config(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     class StubGeminiProvider:
         supports_embedding = True
@@ -798,7 +810,7 @@ def test_openai_embedding_uses_independent_dimension_config(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     class StubOpenAIProvider:
         supports_embedding = True
@@ -985,7 +997,7 @@ def test_openai_embedding_chat_credential_fallback_still_warns_once(
     import logging
 
     from openbiliclaw.config import EmbeddingConfig
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(
@@ -1071,7 +1083,8 @@ def test_build_embedding_service_openrouter_requires_explicit_model(
     """OpenRouter routes embeddings by ``<vendor>/<model>`` slug — there
     is no safe default. Refuse to build (and log the standard "no
     embedding-capable provider" WARNING) instead of 404ing at first
-    embed call."""
+    embed call.
+    """
     from openbiliclaw.config import EmbeddingConfig
 
     config = Config(
@@ -1098,10 +1111,11 @@ def test_emit_embedding_compat_warning_fires_once_per_provider(
 ) -> None:
     """The migration WARNING must fire exactly once per provider per
     process — runtime_context rebuilds embedding on every PUT
-    /api/config, and we don't want to spam the log on each save."""
+    /api/config, and we don't want to spam the log on each save.
+    """
     import logging
 
-    from openbiliclaw.llm import registry as registry_mod
+    import obc_llm.registry as registry_mod
 
     registry_mod._embedding_compat_warned.clear()
 
@@ -1120,7 +1134,8 @@ def test_openai_provider_supports_embedding_flag_is_set() -> None:
     """``supports_embedding`` must be True for providers with a working
     embeddings endpoint and False for those that don't. This is the
     canonical signal used by ``build_embedding_service`` — replacing the
-    fragile ``hasattr(provider, "embed")`` check."""
+    fragile ``hasattr(provider, "embed")`` check.
+    """
     from openbiliclaw.llm.claude_provider import ClaudeProvider
     from openbiliclaw.llm.gemini_provider import gemini_sdk_available
     from openbiliclaw.llm.ollama_provider import OllamaProvider

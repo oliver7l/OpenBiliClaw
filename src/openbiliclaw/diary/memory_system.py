@@ -487,6 +487,7 @@ class MemorySystemService:
             tier: 记忆层级过滤（hot/warm/cold）
             limit: 返回数量上限
             min_importance: 最低重要性评分
+
         """
         conn = self.store.conn
 

@@ -274,6 +274,7 @@ class SoulEngine:
                 of this size and analyse each chunk in parallel. Useful
                 for the init bootstrap where a single max-thinking call
                 on ~800 events would block for ~6 minutes.
+
         """
         import time as _time
 
@@ -309,6 +310,7 @@ class SoulEngine:
 
         Returns:
             Initial OnionProfile.
+
         """
         import time as _time
 
@@ -407,6 +409,7 @@ class SoulEngine:
             The OnionProfile from the soul memory layer with user overrides
             merged on top. Active speculative interests are attached as
             ``_active_speculations``.
+
         """
         soul_data = self._memory.get_layer("soul").data
         if not soul_data:
@@ -672,6 +675,7 @@ class SoulEngine:
         Returns:
             A result dict describing whether a hypothesis matched and its
             post-update state — consumed by the API endpoint.
+
         """
         logger.info("Updating soul from feedback...")
         await self._memory.propagate_event(
@@ -1166,6 +1170,7 @@ class SoulEngine:
 
         Returns:
             Natural language awareness note.
+
         """
         events = self._memory.query_events(limit=50)
         notes = await self._awareness_analyzer.analyze(
@@ -1189,6 +1194,7 @@ class SoulEngine:
 
         Returns:
             Natural language insight.
+
         """
         awareness_notes = self._load_awareness_notes()
         insights = await self._insight_analyzer.analyze(

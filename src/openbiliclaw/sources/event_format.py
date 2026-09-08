@@ -334,6 +334,7 @@ def format_event_context(
 
     The output is intentionally terse — LLM prompts pack many of these
     end-to-end, so verbose phrasing wastes context window.
+
     """
     platform_label = _PLATFORM_LABELS.get(source_platform, source_platform or "")
     action_label = _EVENT_TYPE_LABELS.get(event_type, "记录了")
@@ -402,6 +403,7 @@ def build_event(
     dict
         The unified event ready for ``MemoryManager.propagate_event``,
         ``SoulEngine.analyze_events``, etc.
+
     """
     final_metadata: dict[str, Any] = dict(metadata) if metadata else {}
     final_metadata.setdefault("source_platform", source_platform)

@@ -2,7 +2,8 @@
 
 ``packaging/patch_pe_subsystem.py`` flips bundled ollama / llama-server from a
 console subsystem to GUI so they never pop a console window. Verify the patch on
-crafted minimal PE buffers (no real exe needed)."""
+crafted minimal PE buffers (no real exe needed).
+"""
 
 from __future__ import annotations
 

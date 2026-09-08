@@ -14,17 +14,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .models import (
+    _SYNTHESIS_SYSTEM_PROMPT,
+    _SYNTHESIS_USER_PROMPT_TEMPLATE,
     CrossModulePattern,
-    DiarySynthesisResult,
     SynthesisConfig,
     SynthesisState,
     SynthesisVersion,
-    _SYNTHESIS_SYSTEM_PROMPT,
-    _SYNTHESIS_USER_PROMPT_TEMPLATE,
 )
 from .store import SynthesisStore
 
@@ -63,6 +62,7 @@ class SynthesisEngine:
 
         Returns:
             新生成的合成版本，若无新数据或无 LLM 则返回 None。
+
         """
         if self._llm_service is None:
             logger.warning("synthesis: LLM service not configured, skipping")
@@ -134,7 +134,7 @@ class SynthesisEngine:
         new_version = SynthesisVersion(
             version=prev_ver + 1,
             parent_version=prev_ver if prev_ver > 0 else None,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             new_diary_count=len(diary_analyses),
             new_chat_insight_count=len(chat_insights),
             new_chat_topic_count=len(chat_topics),
@@ -143,10 +143,7 @@ class SynthesisEngine:
             insights=result.get("insights", []),
             themes=result.get("themes", []),
             concerns=result.get("concerns", []),
-            cross_patterns=[
-                CrossModulePattern(**p)
-                for p in result.get("cross_patterns", [])
-            ],
+            cross_patterns=[CrossModulePattern(**p) for p in result.get("cross_patterns", [])],
         )
 
         # 6. 持久化

@@ -5,14 +5,17 @@ from __future__ import annotations
 import asyncio
 import time
 from copy import deepcopy
-from typing import Any, Callable
-
-from fastapi import FastAPI
+from typing import TYPE_CHECKING, Any
 
 from openbiliclaw.api.models import (
     ConfigServiceProbeIn,
     ConfigServiceProbeResponse,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from fastapi import FastAPI
 
 
 def register_probe_routes(
@@ -135,8 +138,6 @@ def register_probe_routes(
     @app.post("/api/config/probe-service", response_model=ConfigServiceProbeResponse)
     async def probe_config_service(payload: ConfigServiceProbeIn) -> ConfigServiceProbeResponse:
         """Probe submitted LLM / embedding settings without saving config.toml."""
-        from copy import deepcopy
-
         from openbiliclaw.config import load_config
 
         cfg = deepcopy(load_config())

@@ -725,6 +725,7 @@ def test_build_openclaw_adapter_services_reuses_shared_database(monkeypatch) -> 
             database: object,
             curator: object = None,
             embedding_service: object = None,
+            **kwargs: object,
         ) -> None:
             self.llm = llm
             self.database = database

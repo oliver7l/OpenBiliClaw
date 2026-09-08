@@ -48,7 +48,8 @@ from openbiliclaw.discovery.engine import DiscoveredContent
 def test_migrates_existing_v0317_database_in_place(tmp_path: Path) -> None:
     """A user upgrading from v0.3.17 has a content_cache without
     franchise_key. Re-opening with v0.3.18 must run the ALTER TABLE
-    migration and preserve every existing row + column."""
+    migration and preserve every existing row + column.
+    """
     db_path = tmp_path / "openbiliclaw.db"
 
     # Recreate a v0.3.17-era schema using raw sqlite3 (no franchise_key).
@@ -116,7 +117,8 @@ def test_cache_content_roundtrip_persists_and_protects_franchise_key(
     """Write franchise_key, read back. Then re-cache the same bvid
     with empty franchise_key — the original tag must survive (COALESCE
     NULLIF rule). Without that protection a re-ingest from raw
-    sources would silently wipe the LLM's classification."""
+    sources would silently wipe the LLM's classification.
+    """
     from openbiliclaw.storage.database import Database
 
     db = Database(tmp_path / "test.db")

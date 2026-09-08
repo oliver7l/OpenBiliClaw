@@ -47,6 +47,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -66,10 +67,8 @@ def _obc_connect(db_path):
     from pathlib import Path as _Path
 
     _conn = _sqlite3.connect(db_path)
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 
@@ -190,6 +189,7 @@ def _fetch_bxj_page(page_num: int) -> str:
         page_num: 1-based page number (page 1 = /bxj, page 2 = /bxj-2).
 
     Returns the HTML string, or ``""`` on failure.
+
     """
     url = BXJ_BASE_URL if page_num <= 1 else f"{BXJ_BASE_URL}-{page_num}"
     req = urllib.request.Request(url, headers={"User-Agent": BXJ_USER_AGENT})
@@ -363,6 +363,7 @@ def _fetch_search_page(keyword: str, sortby: str = "general", page: int = 1) -> 
         page: 1-based page number.
 
     Returns the HTML string, or ``""`` on failure.
+
     """
     from urllib.parse import quote
 
@@ -456,6 +457,7 @@ def _fetch_search(
         limit: Maximum total posts to return across all keywords.
 
     Returns a list of normalized post dicts, deduplicated by post id.
+
     """
     all_posts: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -665,6 +667,7 @@ def _run_once(
         search_mode: If True, search Hupu by keyword(s) instead of hot list.
         keywords: Search keywords (only used when search_mode=True).
         sortby: Search sort order (only used when search_mode=True).
+
     """
     if search_mode:
         kw_list = keywords or list(SEARCH_DEFAULT_KEYWORDS)

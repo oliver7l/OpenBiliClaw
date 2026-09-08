@@ -26,7 +26,6 @@ def canonical_source_platform(value: str) -> str:
 
 def is_native_save_local_only(value: str) -> bool:
     """Return whether a platform intentionally has no upstream save action."""
-
     return canonical_source_platform(value) in _LOCAL_ONLY_NATIVE_SAVE_PLATFORMS
 
 

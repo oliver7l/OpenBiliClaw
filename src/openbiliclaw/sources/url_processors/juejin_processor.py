@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC
 from typing import Any
 
 from openbiliclaw.sources.url_processors.base import (
@@ -46,6 +47,7 @@ class JuejinProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Juejin article content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -74,7 +76,9 @@ class JuejinProcessor(BaseProcessor):
             data = response.json()
 
             if data.get("err_no") != 0:
-                return self._failed_result(url, f"Juejin API error: {data.get('err_msg', 'unknown')}")
+                return self._failed_result(
+                    url, f"Juejin API error: {data.get('err_msg', 'unknown')}"
+                )
 
             article_info = data.get("data", {}).get("article_info", {})
             author_info = data.get("data", {}).get("author_user_info", {})
@@ -104,8 +108,9 @@ class JuejinProcessor(BaseProcessor):
 
             published_at = None
             if ctime:
-                from datetime import datetime, timezone
-                published_at = datetime.fromtimestamp(int(ctime), tz=timezone.utc).isoformat()
+                from datetime import datetime
+
+                published_at = datetime.fromtimestamp(int(ctime), tz=UTC).isoformat()
 
             summary = brief or f"{view_count}阅读 · {digg_count}点赞 · {comment_count}评论"
 
@@ -141,6 +146,7 @@ class JuejinProcessor(BaseProcessor):
 
         Returns:
             Plain text content.
+
         """
         text = markdown
         # Remove code blocks

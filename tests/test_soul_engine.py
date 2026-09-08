@@ -1629,8 +1629,8 @@ def test_effective_disliked_topics_honors_specific_removal(tmp_path: Path) -> No
 def test_llm_ask_calls_complete_structured_task_with_valid_kwargs() -> None:
     """回归：llm_ask 曾以 task_id/system_prompt/override 等不存在的关键字调用
     complete_structured_task，每次抛 TypeError 被上层 suppress 吞掉 → LLM 意图
-    抽取静默永久失效。锁死正确参数名，防止退化。"""
-
+    抽取静默永久失效。锁死正确参数名，防止退化。
+    """
     captured: dict[str, object] = {}
 
     class _FakeService:

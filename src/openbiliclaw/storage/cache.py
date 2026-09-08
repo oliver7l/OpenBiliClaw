@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -35,14 +36,17 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 # 全局缓存实例
-_cache_instance: "TwoLevelCache | None" = None
+_cache_instance: TwoLevelCache | None = None
 _cache_lock = threading.Lock()
 
 
@@ -121,6 +125,7 @@ class TwoLevelCache:
             cache_dir: 磁盘缓存目录
             l1_max_size: L1 内存缓存最大条目数
             l2_size_limit: L2 磁盘缓存最大字节数
+
         """
         import diskcache
 
@@ -190,6 +195,7 @@ class TwoLevelCache:
             value: 缓存值（必须可 JSON 序列化）
             ttl: 过期时间（秒），0 表示不过期
             namespace: 命名空间
+
         """
         full_key = self._make_key(key, namespace)
 
@@ -259,9 +265,7 @@ class TwoLevelCache:
         """获取缓存统计信息。"""
         total = self._stats["hits_l1"] + self._stats["hits_l2"] + self._stats["misses"]
         hit_rate = (
-            (self._stats["hits_l1"] + self._stats["hits_l2"]) / total * 100
-            if total > 0
-            else 0
+            (self._stats["hits_l1"] + self._stats["hits_l2"]) / total * 100 if total > 0 else 0
         )
         return {
             "l1_size": len(self._l1),
@@ -290,6 +294,7 @@ class TwoLevelCache:
             @cache.cached(ttl=300, namespace="diary")
             def get_diary_stats(diary_id: int):
                 ...
+
         """
 
         def decorator(func: Callable[..., T]) -> Callable[..., T]:
@@ -326,10 +331,8 @@ class TwoLevelCache:
 
     def close(self) -> None:
         """关闭缓存（主要是关闭 L2 diskcache）。"""
-        try:
+        with contextlib.suppress(Exception):
             self._l2.close()
-        except Exception:
-            pass
 
 
 def get_cache(
@@ -344,6 +347,7 @@ def get_cache(
 
     Returns:
         TwoLevelCache 实例
+
     """
     global _cache_instance
 

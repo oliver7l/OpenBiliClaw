@@ -146,14 +146,17 @@ class ExtensionNativeSaveBroker:
             return False
 
     def submit_result(self, platform_slug: str, result: ExtensionNativeSaveResultIn) -> bool:
-        return cast("bool", self._database.complete_extension_native_save_job(
-            result.task_id,
-            platform_slug,
-            result.item_key,
-            result.status,
-            result.error_code,
-            result.error_message,
-        ))
+        return cast(
+            "bool",
+            self._database.complete_extension_native_save_job(
+                result.task_id,
+                platform_slug,
+                result.item_key,
+                result.status,
+                result.error_code,
+                result.error_message,
+            ),
+        )
 
     async def _wake_before_deadline(self, platform_slug: str, deadline_at: float) -> None:
         try:

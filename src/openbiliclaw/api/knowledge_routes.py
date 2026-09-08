@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -125,21 +127,25 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
                 site = r[3] or "unknown"
                 if site not in by_source:
                     by_source[site] = []
-                by_source[site].append({
-                    "article_id": r[0],
-                    "title": r[1],
-                    "url": r[2],
-                    "summary": r[5] or "",
-                    "tags": json.loads(r[6]) if r[6] else [],
-                })
+                by_source[site].append(
+                    {
+                        "article_id": r[0],
+                        "title": r[1],
+                        "url": r[2],
+                        "summary": r[5] or "",
+                        "tags": json.loads(r[6]) if r[6] else [],
+                    }
+                )
 
-            return JSONResponse({
-                "ok": True,
-                "concept": concept_name,
-                "type": concept_type,
-                "total": len(rows),
-                "by_source": by_source,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "concept": concept_name,
+                    "type": concept_type,
+                    "total": len(rows),
+                    "by_source": by_source,
+                }
+            )
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -154,9 +160,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             total_concepts = conn.execute(
                 "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
             ).fetchone()[0]
-            total_backlinks = conn.execute(
-                "SELECT COUNT(*) FROM knowledge_backlinks"
-            ).fetchone()[0]
+            total_backlinks = conn.execute("SELECT COUNT(*) FROM knowledge_backlinks").fetchone()[0]
 
             sources = conn.execute(
                 "SELECT source_site, COUNT(*) as cnt FROM knowledge_backlinks "
@@ -164,12 +168,14 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             ).fetchall()
             source_stats = {r[0]: r[1] for r in sources}
 
-            return JSONResponse({
-                "ok": True,
-                "total_concepts": total_concepts,
-                "total_backlinks": total_backlinks,
-                "sources": source_stats,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "total_concepts": total_concepts,
+                    "total_backlinks": total_backlinks,
+                    "sources": source_stats,
+                }
+            )
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -214,10 +220,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
                 ),
                 node_names + node_names,
             ).fetchall()
-            edges = [
-                {"source": r[0], "target": r[1], "weight": r[2]}
-                for r in edges_raw
-            ]
+            edges = [{"source": r[0], "target": r[1], "weight": r[2]} for r in edges_raw]
 
             return JSONResponse({"ok": True, "nodes": nodes, "edges": edges})
         except Exception as e:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC
 from typing import Any
 
 from openbiliclaw.sources.url_processors.base import (
@@ -51,6 +52,7 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Bilibili content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -93,9 +95,11 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             Resolved full URL.
+
         """
         try:
             import requests
+
             resp = requests.head(url, allow_redirects=True, timeout=10)
             return resp.url
         except Exception:
@@ -113,6 +117,7 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with video metadata and subtitle content.
+
         """
         import requests
 
@@ -160,8 +165,9 @@ class BilibiliProcessor(BaseProcessor):
 
         published_at = None
         if pubdate:
-            from datetime import datetime, timezone
-            published_at = datetime.fromtimestamp(pubdate, tz=timezone.utc).isoformat()
+            from datetime import datetime
+
+            published_at = datetime.fromtimestamp(pubdate, tz=UTC).isoformat()
 
         # Format duration
         duration_str = f"{duration // 60}:{duration % 60:02d}" if duration > 0 else ""
@@ -205,6 +211,7 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with article content.
+
         """
         import requests
 
@@ -230,8 +237,9 @@ class BilibiliProcessor(BaseProcessor):
 
         published_at = None
         if publish_time:
-            from datetime import datetime, timezone
-            published_at = datetime.fromtimestamp(publish_time, tz=timezone.utc).isoformat()
+            from datetime import datetime
+
+            published_at = datetime.fromtimestamp(publish_time, tz=UTC).isoformat()
 
         views = self._format_number(stats.get("view", 0))
         likes = self._format_number(stats.get("like", 0))
@@ -264,6 +272,7 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             Subtitle text, or None if not available.
+
         """
         try:
             import requests
@@ -333,6 +342,7 @@ class BilibiliProcessor(BaseProcessor):
 
         Returns:
             Formatted string (e.g., 1.2万, 3.4亿).
+
         """
         if num >= 100000000:
             return f"{num / 100000000:.1f}亿"
@@ -346,6 +356,7 @@ class BilibiliProcessor(BaseProcessor):
             return ""
         try:
             from bs4 import BeautifulSoup
+
             soup = BeautifulSoup(html, "lxml")
             for br in soup.find_all("br"):
                 br.replace_with("\n")
@@ -353,7 +364,9 @@ class BilibiliProcessor(BaseProcessor):
                 p.insert_after("\n\n")
             text = soup.get_text(separator="\n", strip=True)
             import re as _re
+
             return _re.sub(r"\n{3,}", "\n\n", text).strip()
         except Exception:
             import re as _re
+
             return _re.sub(r"<[^>]+>", "", html).strip()

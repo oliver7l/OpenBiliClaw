@@ -655,7 +655,7 @@ async def test_multimodal_evaluation_sends_prepared_cover_images(monkeypatch) ->
         ]
 
     monkeypatch.setattr(
-        "openbiliclaw.discovery.multimodal.prepare_cover_image_inputs",
+        "obc_discovery.multimodal.prepare_cover_image_inputs",
         fake_prepare_cover_image_inputs,
     )
     llm_service = _RecordingMultimodalBatchLLMService()
@@ -710,6 +710,9 @@ async def test_multimodal_evaluation_e2e_binds_cached_cover_to_content_id(
     buffer = BytesIO()
     image.save(buffer, format="JPEG", quality=92)
     image_cache.save_image_bytes(cover_url, buffer.getvalue(), "image/jpeg")
+    # 抽取后 cover 获取走 obc_discovery.multimodal._image_cache 注入，
+    # 测试需把真实 image_cache 模块注入进去。
+    monkeypatch.setattr("obc_discovery.multimodal._image_cache", image_cache)
 
     class _VisionProvider:
         _model = "gpt-4o-mini"
@@ -2745,7 +2748,8 @@ async def test_evaluate_batch_sends_metrics_and_tags() -> None:
 @pytest.mark.asyncio
 async def test_evaluate_batch_includes_negative_exemplars_in_user_prompt() -> None:
     """When the event store has negative rows, the eval batch user
-    message must include the <negative_examples> block."""
+    message must include the <negative_examples> block.
+    """
     db = _StubNegativeExemplarsDatabase(rows=[_negative_row(1, "震惊！我刚发现的神器")])
     llm = _RecordingBatchLLMService()
     engine = ContentDiscoveryEngine(llm_service=llm, database=db)

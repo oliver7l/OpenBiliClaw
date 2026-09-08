@@ -48,6 +48,7 @@ class HupuProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with Hupu post content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")

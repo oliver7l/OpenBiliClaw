@@ -360,7 +360,8 @@ async def test_due_creators_are_fetched_and_marked(tmp_path: Path) -> None:
 
 def test_clear_relogin_block_recovers_missing_cookie(tmp_path: Path) -> None:
     """A re-login state has no timed recovery, so clear_relogin_block is the
-    only path back to is_ready()=True after a fresh cookie syncs."""
+    only path back to is_ready()=True after a fresh cookie syncs.
+    """
     from openbiliclaw.sources.x_client import XMissingCookieError
 
     db = _db(tmp_path)

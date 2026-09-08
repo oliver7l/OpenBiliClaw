@@ -1,10 +1,5 @@
 """Discovery strategies — re-export from obc_discovery.strategies."""
 
-from obc_discovery.strategies._utils import (
-    SupportsSearchClient,
-    _gather_bounded,
-    build_profile_summary,
-)
 from obc_discovery.strategies import (
     ALL_STRATEGIES,
     DouyinDirectStrategy,
@@ -15,6 +10,11 @@ from obc_discovery.strategies import (
     XStrategy,
     YoutubeStrategy,
     get_strategy,
+)
+from obc_discovery.strategies._utils import (
+    SupportsSearchClient,
+    _gather_bounded,
+    build_profile_summary,
 )
 
 __all__ = [

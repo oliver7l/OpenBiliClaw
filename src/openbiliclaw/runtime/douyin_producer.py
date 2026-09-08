@@ -62,11 +62,10 @@ def _obc_connect(db_path):
     """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
     import sqlite3 as _sqlite3
     from pathlib import Path as _Path
+
     _conn = _sqlite3.connect(db_path)
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 
@@ -992,6 +991,7 @@ def _fetch_user_list(
         limit: Maximum number of videos to fetch.
 
     Returns a list of normalized video dicts, or ``[]`` on failure.
+
     """
     sync_playwright = _require_playwright()
     videos: list[dict[str, Any]] = []
@@ -1373,6 +1373,7 @@ def _run_once(
     Args:
         user_list_mode: ``"like"``, ``"favorite"``, or ``None`` (default
             recommend feed).
+
     """
     if login_mode:
         _fetch_feed(limit=1, headless=False, cdp_port=cdp_port, login_mode=True)

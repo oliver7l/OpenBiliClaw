@@ -134,7 +134,8 @@ def dy_bootstrap_videos_to_events(
 
 def _video_key(video: dict[str, Any]) -> str:
     """Identity key for dedup. Includes scope so the same aweme_id can
-    legitimately appear in two scopes (e.g. user posted AND collected)."""
+    legitimately appear in two scopes (e.g. user posted AND collected).
+    """
     scope = str(video.get("scope", "")).strip()
     aweme_id = str(video.get("aweme_id", "")).strip()
     creator_sec_uid = str(video.get("creator_sec_uid", "")).strip()

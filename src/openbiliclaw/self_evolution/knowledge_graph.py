@@ -316,7 +316,9 @@ class KnowledgeGraph:
             },
         }
 
-    def get_subgraph(self, entity_id: str, *, depth: int = 2, max_nodes: int = 50) -> dict[str, Any]:
+    def get_subgraph(
+        self, entity_id: str, *, depth: int = 2, max_nodes: int = 50
+    ) -> dict[str, Any]:
         """Get a subgraph around a specific entity."""
         if entity_id not in self.entities:
             return {"entities": [], "relationships": [], "error": "Entity not found"}
@@ -355,7 +357,9 @@ class KnowledgeGraph:
         """Get the most mentioned entities."""
         return sorted(self.entities.values(), key=lambda e: -e.mention_count)[:limit]
 
-    def get_related_entities(self, entity_id: str, *, limit: int = 10) -> list[tuple[Entity, float]]:
+    def get_related_entities(
+        self, entity_id: str, *, limit: int = 10
+    ) -> list[tuple[Entity, float]]:
         """Get entities most related to a given entity."""
         related: dict[str, float] = defaultdict(float)
 
@@ -383,6 +387,7 @@ class KnowledgeGraphBuilder:
 
     Args:
         db_path: Path to the SQLite database.
+
     """
 
     def __init__(self, db_path: str) -> None:
@@ -411,6 +416,7 @@ class KnowledgeGraphBuilder:
 
         Returns:
             A KnowledgeGraph with entities and relationships.
+
         """
         if entity_types is None:
             entity_types = ["person", "org", "concept", "tech", "product", "topic"]
@@ -436,13 +442,16 @@ class KnowledgeGraphBuilder:
 
             for row in rows:
                 text = " ".join(
-                    filter(None, [
-                        row["title"] or "",
-                        row["tags"] or "",
-                        row["ai_summary"] or "",
-                        (row["content_text"] or "")[:1000],
-                        row["author"] or "",
-                    ])
+                    filter(
+                        None,
+                        [
+                            row["title"] or "",
+                            row["tags"] or "",
+                            row["ai_summary"] or "",
+                            (row["content_text"] or "")[:1000],
+                            row["author"] or "",
+                        ],
+                    )
                 )
 
                 # Extract entities (simplified: use topic extraction + known entity patterns)
@@ -477,11 +486,13 @@ class KnowledgeGraphBuilder:
                             entity.last_seen = row["created_at"]
 
                 # Track co-occurrences within this article (use canonical IDs)
-                entity_ids = list(set([self._entity_id(_canonicalize_name(name)) for name, _ in entities]))
+                entity_ids = list(
+                    set([self._entity_id(_canonicalize_name(name)) for name, _ in entities])
+                )
                 article_entities.append(entity_ids)
 
                 for i, e1 in enumerate(entity_ids):
-                    for e2 in entity_ids[i + 1:]:
+                    for e2 in entity_ids[i + 1 :]:
                         key = tuple(sorted([e1, e2]))
                         co_occurrence[key] += 1
 
@@ -501,12 +512,12 @@ class KnowledgeGraphBuilder:
             # Filter out entities with too few mentions
             if min_mentions > 1:
                 graph.entities = {
-                    eid: e for eid, e in graph.entities.items()
-                    if e.mention_count >= min_mentions
+                    eid: e for eid, e in graph.entities.items() if e.mention_count >= min_mentions
                 }
                 # Also filter relationships
                 graph.relationships = [
-                    r for r in graph.relationships
+                    r
+                    for r in graph.relationships
                     if r.source_id in graph.entities and r.target_id in graph.entities
                 ]
 
@@ -515,9 +526,7 @@ class KnowledgeGraphBuilder:
 
         return graph
 
-    def _extract_entities(
-        self, text: str, entity_types: list[str]
-    ) -> list[tuple[str, str]]:
+    def _extract_entities(self, text: str, entity_types: list[str]) -> list[tuple[str, str]]:
         """Extract entities from text.
 
         Simplified extraction using:
@@ -527,6 +536,7 @@ class KnowledgeGraphBuilder:
 
         Returns:
             List of (entity_name, entity_type) tuples.
+
         """
         entities: list[tuple[str, str]] = []
         seen: set[str] = set()
@@ -542,6 +552,7 @@ class KnowledgeGraphBuilder:
         # 2. Extract capitalized English terms (orgs, products, tech)
         if any(t in entity_types for t in ["org", "product", "tech"]):
             import re
+
             # Acronyms and CamelCase terms
             for match in re.findall(r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)*\b", text):
                 if len(match) >= 2 and match.lower() not in seen:
@@ -561,6 +572,7 @@ class KnowledgeGraphBuilder:
     def _entity_id(self, name: str) -> str:
         """Generate a stable entity ID from name."""
         import hashlib
+
         return "ent-" + hashlib.md5(name.lower().encode()).hexdigest()[:12]
 
     def save_graph(self, graph: KnowledgeGraph) -> None:

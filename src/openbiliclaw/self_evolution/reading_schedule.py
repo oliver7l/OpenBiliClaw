@@ -21,13 +21,13 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class ReviewRating(str, Enum):
+class ReviewRating(StrEnum):
     """阅读反馈评级。"""
 
     again = "again"  # 忘记了，需要重新学
@@ -36,7 +36,7 @@ class ReviewRating(str, Enum):
     easy = "easy"  # 很简单
 
 
-class ArticleState(str, Enum):
+class ArticleState(StrEnum):
     """文章学习状态。"""
 
     new = "new"  # 新文章，未开始阅读
@@ -73,9 +73,9 @@ class ReadingScheduleItem:
         """从数据库行创建对象。"""
         return cls(
             article_id=row["article_id"],
-            title=row["title"] if "title" in row.keys() else "",
-            url=row["url"] if "url" in row.keys() else "",
-            source_type=row["source_type"] if "source_type" in row.keys() else "",
+            title=row.get("title", ""),
+            url=row.get("url", ""),
+            source_type=row.get("source_type", ""),
             stability=row["stability"],
             difficulty=row["difficulty"],
             retrievability=row["retrievability"],
@@ -119,6 +119,7 @@ class ReadingScheduler:
 
     Args:
         db_path: SQLite 数据库路径。
+
     """
 
     # 评级对应的稳定性乘数和难度变化
@@ -173,6 +174,7 @@ class ReadingScheduler:
 
         Returns:
             True 如果注册成功，False 如果已存在。
+
         """
         now = datetime.now(UTC).isoformat()
         next_review = (datetime.now(UTC) + timedelta(days=initial_delay_days)).isoformat()
@@ -192,8 +194,9 @@ class ReadingScheduler:
             logger.exception("Failed to register article %s: %s", article_id, e)
             return False
 
-    def review_article(self, article_id: int, rating: ReviewRating,
-                       reading_percent: float | None = None) -> ReadingScheduleItem | None:
+    def review_article(
+        self, article_id: int, rating: ReviewRating, reading_percent: float | None = None
+    ) -> ReadingScheduleItem | None:
         """对一篇文章进行阅读反馈，更新调度状态。
 
         Args:
@@ -203,6 +206,7 @@ class ReadingScheduler:
 
         Returns:
             更新后的 ReadingScheduleItem，如果文章不存在则返回 None。
+
         """
         now = datetime.now(UTC)
 
@@ -258,10 +262,17 @@ class ReadingScheduler:
                        reading_percent=?, last_read_at=?, updated_at=?
                    WHERE article_id=?""",
                 (
-                    item.stability, item.difficulty, item.retrievability,
-                    item.reps, item.lapses, item.state,
-                    item.last_review_at, item.next_review_at,
-                    item.reading_percent, item.last_read_at, item.updated_at,
+                    item.stability,
+                    item.difficulty,
+                    item.retrievability,
+                    item.reps,
+                    item.lapses,
+                    item.state,
+                    item.last_review_at,
+                    item.next_review_at,
+                    item.reading_percent,
+                    item.last_read_at,
+                    item.updated_at,
                     article_id,
                 ),
             )
@@ -282,12 +293,17 @@ class ReadingScheduler:
 
             logger.info(
                 "Reviewed article %s: rating=%s, reps=%d, stability=%.1fd, next=%s",
-                article_id, rating.value, item.reps, item.stability, item.next_review_at,
+                article_id,
+                rating.value,
+                item.reps,
+                item.stability,
+                item.next_review_at,
             )
             return item
 
-    def get_daily_queue(self, limit: int = 20, include_new: bool = True,
-                        new_count: int = 5) -> list[ReadingScheduleItem]:
+    def get_daily_queue(
+        self, limit: int = 20, include_new: bool = True, new_count: int = 5
+    ) -> list[ReadingScheduleItem]:
         """获取今日阅读队列。
 
         包含：
@@ -301,6 +317,7 @@ class ReadingScheduler:
 
         Returns:
             阅读队列列表，按优先级排序（到期复习优先，然后新文章）。
+
         """
         now = datetime.now(UTC).isoformat()
         items: list[ReadingScheduleItem] = []
@@ -350,6 +367,7 @@ class ReadingScheduler:
 
         Returns:
             ReadingScheduleItem，如果不存在则返回 None。
+
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -370,6 +388,7 @@ class ReadingScheduler:
 
         Returns:
             包含各状态文章数量、今日到期数等统计的字典。
+
         """
         now = datetime.now(UTC).isoformat()
 
@@ -386,9 +405,15 @@ class ReadingScheduler:
             ).fetchone()[0]
 
             mastered = by_state.get("mastered", 0)
-            total_reps = conn.execute("SELECT COALESCE(SUM(reps), 0) FROM reading_schedule").fetchone()[0]
-            total_lapses = conn.execute("SELECT COALESCE(SUM(lapses), 0) FROM reading_schedule").fetchone()[0]
-            avg_stability = conn.execute("SELECT COALESCE(AVG(stability), 0) FROM reading_schedule").fetchone()[0]
+            total_reps = conn.execute(
+                "SELECT COALESCE(SUM(reps), 0) FROM reading_schedule"
+            ).fetchone()[0]
+            total_lapses = conn.execute(
+                "SELECT COALESCE(SUM(lapses), 0) FROM reading_schedule"
+            ).fetchone()[0]
+            avg_stability = conn.execute(
+                "SELECT COALESCE(AVG(stability), 0) FROM reading_schedule"
+            ).fetchone()[0]
 
         return {
             "total_articles": total,
@@ -410,6 +435,7 @@ class ReadingScheduler:
 
         Returns:
             实际注册的文章数量。
+
         """
         now = datetime.now(UTC).isoformat()
         next_review = (datetime.now(UTC) + timedelta(days=1)).isoformat()

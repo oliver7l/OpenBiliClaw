@@ -16,9 +16,7 @@ import hashlib
 import json
 import logging
 import sqlite3
-import time
 from datetime import datetime
-from typing import Any
 
 logger = logging.getLogger("self_evolution.content_filler")
 
@@ -144,7 +142,8 @@ class ContentFiller:
     # ═══════════════════════════════════════════════════════════════
 
     async def fetch_youtube_transcripts(
-        self, limit: int = _YT_TRANSCRIPT_BATCH,
+        self,
+        limit: int = _YT_TRANSCRIPT_BATCH,
     ) -> dict[str, int]:
         """提取 YouTube 视频字幕作为 content_text。
 
@@ -183,9 +182,7 @@ class ContentFiller:
                 self._increment_attempts(row["id"])
                 results["failed"] += 1
 
-        logger.info(
-            "content_filler: yt_transcript %d/%d", results["fetched"], results["total"]
-        )
+        logger.info("content_filler: yt_transcript %d/%d", results["fetched"], results["total"])
         return results
 
     async def _fetch_youtube_transcript(self, url: str) -> str | None:
@@ -218,6 +215,7 @@ class ContentFiller:
                             )
                             if entry:
                                 import requests
+
                                 resp = requests.get(
                                     entry.get("url") or (entry if isinstance(entry, str) else ""),
                                     timeout=30,
@@ -235,6 +233,7 @@ class ContentFiller:
                             url_entry = entry.get("url")
                             if url_entry:
                                 import requests
+
                                 resp = requests.get(url_entry, timeout=30)
                                 if resp.status_code == 200:
                                     return resp.text[:50000]
@@ -252,7 +251,8 @@ class ContentFiller:
     # ═══════════════════════════════════════════════════════════════
 
     async def fetch_bilibili_subtitles(
-        self, limit: int = _BILI_SUBTITLE_BATCH,
+        self,
+        limit: int = _BILI_SUBTITLE_BATCH,
     ) -> dict[str, int]:
         """提取 Bilibili 视频字幕作为 content_text。"""
         conn = self._conn()
@@ -305,14 +305,13 @@ class ContentFiller:
                 self._increment_attempts(row["id"])
                 results["failed"] += 1
 
-        logger.info(
-            "content_filler: bili_subtitle %d/%d", results["fetched"], results["total"]
-        )
+        logger.info("content_filler: bili_subtitle %d/%d", results["fetched"], results["total"])
         return results
 
     @staticmethod
     def _extract_bvid(url: str) -> str | None:
         import re
+
         m = re.search(r"BV[a-zA-Z0-9]{10,}", url)
         return m.group(0) if m else None
 
@@ -321,7 +320,8 @@ class ContentFiller:
     # ═══════════════════════════════════════════════════════════════
 
     async def generate_ai_summaries(
-        self, limit: int = _AI_SUMMARY_BATCH,
+        self,
+        limit: int = _AI_SUMMARY_BATCH,
     ) -> dict[str, int]:
         """对有正文但无 AI 摘要的文章批量生成总结/讲解。
 
@@ -376,7 +376,7 @@ class ContentFiller:
         prompt = (
             "你是一位内容总结专家。请为以下文章生成结构化总结。\n\n"
             f"标题：{title}\n\n"
-            f"正文：\n\"\"\"\n{content}\n\"\"\"\n\n"
+            f'正文：\n"""\n{content}\n"""\n\n'
             "请输出 JSON 格式：\n"
             "{\n"
             '  "core": "一句话核心（30字以内）",\n'
@@ -419,7 +419,8 @@ class ContentFiller:
     # ═══════════════════════════════════════════════════════════════
 
     async def fetch_via_getnote(
-        self, limit: int = _GETNOTE_BATCH,
+        self,
+        limit: int = _GETNOTE_BATCH,
     ) -> dict[str, int]:
         """通过 getnote save 让平台自动抓取正文并生成摘要，再读回写入项目数据库。
 
@@ -457,7 +458,6 @@ class ContentFiller:
 
         import asyncio
         import json
-        import re
         import subprocess
 
         results = {"fetched": 0, "total": len(rows), "summarized": 0}
@@ -470,16 +470,28 @@ class ContentFiller:
             try:
                 # Step 1: getnote save <url>
                 save_cmd = [
-                    "getnote", "save", url,
-                    "--title", title[:200],
-                    "--tag", "AI摘要",
-                    "--tag", "自动填充",
+                    "getnote",
+                    "save",
+                    url,
+                    "--title",
+                    title[:200],
+                    "--tag",
+                    "AI摘要",
+                    "--tag",
+                    "自动填充",
                 ]
                 save_proc = subprocess.run(
-                    save_cmd, capture_output=True, text=True, timeout=60,
+                    save_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if save_proc.returncode != 0:
-                    logger.debug("getnote: save failed for article %d: %s", article_id, save_proc.stderr[:200])
+                    logger.debug(
+                        "getnote: save failed for article %d: %s",
+                        article_id,
+                        save_proc.stderr[:200],
+                    )
                     self._increment_attempts(article_id)
                     results["fetched"] -= 1  # won't be negative since we start from 0
                     continue
@@ -505,10 +517,15 @@ class ContentFiller:
 
                 note_cmd = ["getnote", "note", note_id, "-o", "json"]
                 note_proc = subprocess.run(
-                    note_cmd, capture_output=True, text=True, timeout=30,
+                    note_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 if note_proc.returncode != 0:
-                    logger.debug("getnote: note fetch failed for %s: %s", note_id, note_proc.stderr[:200])
+                    logger.debug(
+                        "getnote: note fetch failed for %s: %s", note_id, note_proc.stderr[:200]
+                    )
                     self._increment_attempts(article_id)
                     continue
 
@@ -544,6 +561,8 @@ class ContentFiller:
 
         logger.info(
             "content_filler: getnote %d/%d (summarized: %d)",
-            results["fetched"], results["total"], results["summarized"],
+            results["fetched"],
+            results["total"],
+            results["summarized"],
         )
         return results

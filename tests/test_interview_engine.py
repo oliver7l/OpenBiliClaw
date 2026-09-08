@@ -442,7 +442,7 @@ def test_doctor_detects_broken_reference(kb: Path) -> None:
 
 
 def test_doctor_full_fix_rebuilds_index(kb: Path) -> None:
-    """full + fix：索引缺失时自动重建。"""
+    """Full + fix：索引缺失时自动重建。"""
     eng = InterviewEngine(kb)
     # 删除索引 db 与 CSV 后，full 检查应发现过期并可修复
     db = kb / "_系统_知识库引擎" / "数据" / "knowledge.db"

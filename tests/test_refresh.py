@@ -130,7 +130,8 @@ async def test_run_init_backfill_releases_lock_on_cancel() -> None:
 
 def test_llm_work_gate_blocks_while_init_active() -> None:
     """gui-init D1: the controller's background loops pause while a guided init
-    is active (account_sync already gates on the same predicate)."""
+    is active (account_sync already gates on the same predicate).
+    """
     ctrl = _ctrl(_FakeDB([0]), _FakeDisc())
     baseline = ctrl._llm_work_allowed()  # no init check wired → underlying gate
 

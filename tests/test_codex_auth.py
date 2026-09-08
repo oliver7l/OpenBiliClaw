@@ -156,7 +156,7 @@ async def test_get_valid_codex_token_refreshes_expired_credentials(
 
     token_path_value = token_path
     monkeypatch.setattr(
-        "openbiliclaw.llm.codex_auth.refresh_codex_token",
+        "obc_llm.codex_auth.refresh_codex_token",
         fake_refresh,
     )
 

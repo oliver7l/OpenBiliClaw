@@ -8,7 +8,6 @@ Handles:
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from openbiliclaw.sources.url_processors.base import (
@@ -47,6 +46,7 @@ class XiaoyuzhouProcessor(BaseProcessor):
 
         Returns:
             ProcessorResult with podcast episode content.
+
         """
         if not is_safe_url(url):
             return self._failed_result(url, "URL is not safe (internal network)")
@@ -129,7 +129,9 @@ class XiaoyuzhouProcessor(BaseProcessor):
             if not title:
                 return self._failed_result(url, "Could not extract episode title")
 
-            summary = description[:200] + "..." if description and len(description) > 200 else description
+            summary = (
+                description[:200] + "..." if description and len(description) > 200 else description
+            )
 
             return ProcessorResult(
                 title=title,
@@ -160,6 +162,7 @@ class XiaoyuzhouProcessor(BaseProcessor):
 
         Returns:
             Episode data dict or None.
+
         """
         import json
 

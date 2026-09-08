@@ -105,6 +105,7 @@ class BilibiliBrowser:
 
         Returns:
             Parsed JSON output from agent-browser.
+
         """
         cmd = [self._executable, "--session", self._session_name, *args]
         if self._headed:
@@ -138,6 +139,7 @@ class BilibiliBrowser:
 
         Returns:
             Page info.
+
         """
         try:
             return await self._run_command("open", url)
@@ -154,6 +156,7 @@ class BilibiliBrowser:
 
         Returns:
             Page text content.
+
         """
         await self.navigate(url)
         snapshot = await self._run_command("snapshot", "-i", "--json")
@@ -186,6 +189,7 @@ class BilibiliBrowser:
 
         Returns:
             Path to the saved screenshot.
+
         """
         result = await self._run_command("screenshot", url, "-o", output_path)
         return str(result.get("output", output_path))

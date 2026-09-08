@@ -9,6 +9,7 @@ from the bili CLI credential store, and inserts new videos into
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import logging
@@ -36,10 +37,8 @@ def _obc_connect(db_path):
     from pathlib import Path as _Path
 
     _conn = _sqlite3.connect(db_path)
-    try:
+    with contextlib.suppress(_sqlite3.OperationalError):
         _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    except _sqlite3.OperationalError:
-        pass
     return _conn
 
 
@@ -283,7 +282,6 @@ async def generate_bili_search_keywords(
     count: int = 5,
 ) -> list[str]:
     """Generate Bilibili search queries for extension fallback tasks."""
-
     try:
         messages = build_search_queries_prompt(profile_summary=build_profile_summary(profile))
         response = await llm_service.complete_structured_task(
@@ -332,7 +330,6 @@ class BilibiliExtensionSearchProducer:
         keywords: list[str] | None = None,
     ) -> dict[str, object]:
         """Run one fallback cycle if Bilibili API search needs DOM help."""
-
         if not self.enabled:
             return self._skip("disabled")
         if not self._api_search_fallback_needed():

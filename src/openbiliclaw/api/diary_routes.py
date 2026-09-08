@@ -7,6 +7,7 @@
 """
 
 import logging
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from openbiliclaw.api.runtime_context import RuntimeContext
-from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService
+from openbiliclaw.diary import DiaryEntryCreate, DiaryEntryUpdate, DiaryService, MoodLevel
 from openbiliclaw.diary.importer import DiaryImporter
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         if svc.llm_service is None:
             return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
-        results = await svc.analyze_unanalyzed(limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10)))
+        results = await svc.analyze_unanalyzed(
+            limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10))
+        )
         success = sum(1 for v in results.values() if v is not None)
         return JSONResponse(
             {
@@ -220,7 +223,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 "total": len(results),
                 "success": success,
                 "failed": len(results) - success,
-                "results": {str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()},
+                "results": {
+                    str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()
+                },
             }
         )
 
@@ -244,11 +249,17 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         importer = DiaryImporter(svc)
         try:
             if fmt == "lele" or (fmt == "auto" and "lele" in file_path.lower()):
-                count, entries = importer.import_lele_diary(file_path, source=source or "import_lele")
+                count, entries = importer.import_lele_diary(
+                    file_path, source=source or "import_lele"
+                )
             elif fmt == "markdown" or (fmt == "auto" and file_path.lower().endswith(".md")):
-                count, entries = importer.import_markdown_file(file_path, source=source or "import_markdown")
+                count, entries = importer.import_markdown_file(
+                    file_path, source=source or "import_markdown"
+                )
             else:
-                count, entries = importer.import_text_file(file_path, source=source or "import_text")
+                count, entries = importer.import_text_file(
+                    file_path, source=source or "import_text"
+                )
         except FileNotFoundError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
         except Exception as exc:
@@ -278,6 +289,7 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             granularity: month / year
             start_date: 起始日期 YYYY-MM-DD
             end_date: 结束日期 YYYY-MM-DD
+
         """
         svc = _get_diary_service()
         if svc is None:
@@ -411,7 +423,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         return JSONResponse({"ok": True, "data": report.__dict__})
 
     @app.post("/api/diary/reflection/weekly/generate")
-    async def diary_reflection_weekly_generate(payload: dict[str, Any] | None = None) -> JSONResponse:
+    async def diary_reflection_weekly_generate(
+        payload: dict[str, Any] | None = None,
+    ) -> JSONResponse:
         """生成 AI 周报。
 
         请求体（可选）：
@@ -431,11 +445,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         prompt = reflection.build_weekly_report_prompt(report)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": report.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": report.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("周报生成失败")
             return JSONResponse(
@@ -466,16 +482,20 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         reflection = ReflectionService(svc.store)
         result = reflection.generate_monthly_reflection(year, month)
         if result.entry_count == 0:
-            return JSONResponse({"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404)
+            return JSONResponse(
+                {"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404
+            )
 
         prompt = reflection.build_monthly_reflection_prompt(result)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": result.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": result.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("月度反思生成失败")
             return JSONResponse(
@@ -511,11 +531,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         prompt = reflection.build_yearly_review_prompt(result)
         try:
             ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({
-                "ok": True,
-                "data": result.__dict__,
-                "ai_result": ai_result,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": result.__dict__,
+                    "ai_result": ai_result,
+                }
+            )
         except Exception as exc:
             logger.exception("年度回顾生成失败")
             return JSONResponse(
@@ -544,11 +566,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         reflection = ReflectionService(svc.store)
         milestones = reflection.detect_milestones(start_date, end_date)
         milestones = milestones[:limit]
-        return JSONResponse({
-            "ok": True,
-            "data": [m.__dict__ for m in milestones],
-            "total": len(milestones),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [m.__dict__ for m in milestones],
+                "total": len(milestones),
+            }
+        )
 
     # ─── 知识图谱 API（标签关联+人物关系+知识网络） ─────────────────
 
@@ -689,11 +713,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         kg = KnowledgeGraphService(svc.store)
         relations = kg.analyze_person_relations(person_name, start_date, end_date)
-        return JSONResponse({
-            "ok": True,
-            "data": [r.__dict__ for r in relations],
-            "total": len(relations),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [r.__dict__ for r in relations],
+                "total": len(relations),
+            }
+        )
 
     # ─── 自进化 API（夜间自我改进循环） ─────────────────────────────
 
@@ -714,7 +740,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         se = SelfEvolutionService(svc.store)
         profile = se.get_user_profile(target_date)
         if profile is None:
-            return JSONResponse({"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404)
+            return JSONResponse(
+                {"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404
+            )
         return JSONResponse({"ok": True, "data": profile.to_dict()})
 
     @app.get("/api/diary/self-evolution/profile/history")
@@ -757,11 +785,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         se = SelfEvolutionService(svc.store)
         drifts = se.get_drifts(drift_type, severity, status, limit)
-        return JSONResponse({
-            "ok": True,
-            "data": [d.to_dict() for d in drifts],
-            "total": len(drifts),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [d.to_dict() for d in drifts],
+                "total": len(drifts),
+            }
+        )
 
     @app.get("/api/diary/self-evolution/nightly-logs")
     def diary_se_nightly_logs(
@@ -817,11 +847,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         se = SelfEvolutionService(svc.store)
         nightly_log = se.run_nightly_cycle(target_date)
-        return JSONResponse({
-            "ok": True,
-            "message": "夜间循环完成",
-            "data": nightly_log.to_dict(),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": "夜间循环完成",
+                "data": nightly_log.to_dict(),
+            }
+        )
 
     @app.get("/api/diary/self-evolution/tag-optimizations")
     def diary_se_tag_optimizations(
@@ -881,11 +913,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         engine = InsightEngineService(svc.store)
         patterns = engine.discover_patterns(lookback_days)
-        return JSONResponse({
-            "ok": True,
-            "data": [asdict(p) for p in patterns],
-            "total": len(patterns),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [asdict(p) for p in patterns],
+                "total": len(patterns),
+            }
+        )
 
     @app.get("/api/diary/insights/morning-briefing")
     def diary_insights_morning_briefing(
@@ -948,11 +982,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         engine = InsightEngineService(svc.store)
         loops = engine.get_open_loops(status, loop_type, priority, limit)
-        return JSONResponse({
-            "ok": True,
-            "data": [l.to_dict() for l in loops],
-            "total": len(loops),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [l.to_dict() for l in loops],
+                "total": len(loops),
+            }
+        )
 
     @app.post("/api/diary/insights/open-loops/scan")
     def diary_insights_scan_open_loops(
@@ -970,12 +1006,14 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         engine = InsightEngineService(svc.store)
         loops = engine.scan_open_loops(lookback_days)
-        return JSONResponse({
-            "ok": True,
-            "data": [l.to_dict() for l in loops],
-            "total": len(loops),
-            "message": f"扫描完成，发现 {len(loops)} 个开放循环",
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": [l.to_dict() for l in loops],
+                "total": len(loops),
+                "message": f"扫描完成，发现 {len(loops)} 个开放循环",
+            }
+        )
 
     @app.put("/api/diary/insights/open-loops/{loop_id}/status")
     def diary_insights_update_open_loop_status(
@@ -1043,7 +1081,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         memory = MemorySystemService(svc.store)
         updated = memory.update_memory_tiers()
-        return JSONResponse({"ok": True, "updated": updated, "message": f"更新了 {updated} 个记忆条目的层级"})
+        return JSONResponse(
+            {"ok": True, "updated": updated, "message": f"更新了 {updated} 个记忆条目的层级"}
+        )
 
     @app.post("/api/diary/memory/compress-cold")
     def diary_memory_compress_cold() -> JSONResponse:
@@ -1091,11 +1131,13 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
 
         memory = MemorySystemService(svc.store)
         results = memory.search_memories(query, tier, limit, min_importance)
-        return JSONResponse({
-            "ok": True,
-            "data": results,
-            "total": len(results),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": results,
+                "total": len(results),
+            }
+        )
 
     @app.get("/api/diary/memory/{diary_id}")
     def diary_memory_get_by_id(diary_id: int) -> JSONResponse:
@@ -1277,7 +1319,9 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         from openbiliclaw.diary import AdvancedMemoryService
 
         am = AdvancedMemoryService(svc.store)
-        results = am.search_memories(query=query, layer=layer, min_importance=min_importance, limit=limit)
+        results = am.search_memories(
+            query=query, layer=layer, min_importance=min_importance, limit=limit
+        )
         return JSONResponse({"ok": True, "data": results})
 
     # ─── 智能时间线卡片 API ───────────────────────────────────────────
@@ -1496,13 +1540,16 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             from openbiliclaw.diary.models import TagType
+
             tag_type = TagType(type) if type else None
             tags = svc.get_tags(tag_type=tag_type, limit=limit, min_count=min_count)
-            return JSONResponse({
-                "ok": True,
-                "data": [t.model_dump(mode="json") for t in tags],
-                "total": len(tags),
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": [t.model_dump(mode="json") for t in tags],
+                    "total": len(tags),
+                }
+            )
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -1523,12 +1570,16 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            persons = svc.get_persons(relation=relation, limit=limit, min_appearances=min_appearances)
-            return JSONResponse({
-                "ok": True,
-                "data": [p.model_dump(mode="json") for p in persons],
-                "total": len(persons),
-            })
+            persons = svc.get_persons(
+                relation=relation, limit=limit, min_appearances=min_appearances
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": [p.model_dump(mode="json") for p in persons],
+                    "total": len(persons),
+                }
+            )
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -1653,7 +1704,10 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if rag is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         if rag.embedding_service is None:
-            return JSONResponse({"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"}, status_code=400)
+            return JSONResponse(
+                {"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"},
+                status_code=400,
+            )
         payload = payload or {}
         try:
             stats = await rag.batch_generate_embeddings(
@@ -1699,24 +1753,27 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 end_date=end_date,
                 source=source,
             )
-            return JSONResponse({
-                "ok": True,
-                "query": q,
-                "count": len(results),
-                "results": [
-                    {
-                        "id": r.entry.id,
-                        "date": r.entry.entry_date,
-                        "title": r.entry.title,
-                        "content": r.entry.content[:500] + ("..." if len(r.entry.content) > 500 else ""),
-                        "source": r.entry.source,
-                        "mood": r.entry.mood.value,
-                        "score": round(r.score, 4),
-                        "highlight": r.highlight,
-                    }
-                    for r in results
-                ],
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "query": q,
+                    "count": len(results),
+                    "results": [
+                        {
+                            "id": r.entry.id,
+                            "date": r.entry.entry_date,
+                            "title": r.entry.title,
+                            "content": r.entry.content[:500]
+                            + ("..." if len(r.entry.content) > 500 else ""),
+                            "source": r.entry.source,
+                            "mood": r.entry.mood.value,
+                            "score": round(r.score, 4),
+                            "highlight": r.highlight,
+                        }
+                        for r in results
+                    ],
+                }
+            )
         except Exception as exc:
             logger.exception("语义搜索失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -1735,21 +1792,24 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             results = rag.find_similar_entries(entry_id=entry_id, top_k=top_k, min_score=min_score)
-            return JSONResponse({
-                "ok": True,
-                "entry_id": entry_id,
-                "count": len(results),
-                "results": [
-                    {
-                        "id": r.entry.id,
-                        "date": r.entry.entry_date,
-                        "title": r.entry.title,
-                        "content": r.entry.content[:300] + ("..." if len(r.entry.content) > 300 else ""),
-                        "score": round(r.score, 4),
-                    }
-                    for r in results
-                ],
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "entry_id": entry_id,
+                    "count": len(results),
+                    "results": [
+                        {
+                            "id": r.entry.id,
+                            "date": r.entry.entry_date,
+                            "title": r.entry.title,
+                            "content": r.entry.content[:300]
+                            + ("..." if len(r.entry.content) > 300 else ""),
+                            "score": round(r.score, 4),
+                        }
+                        for r in results
+                    ],
+                }
+            )
         except Exception as exc:
             logger.exception("相似日记查询失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -1775,15 +1835,15 @@ def register_diary_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 question=question,
                 top_k=payload.get("top_k", 8),
             )
-            return JSONResponse({
-                "ok": True,
-                "question": question,
-                "answer": answer.answer,
-                "sources": answer.sources,
-                "related_questions": answer.related_questions,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "question": question,
+                    "answer": answer.answer,
+                    "sources": answer.sources,
+                    "related_questions": answer.related_questions,
+                }
+            )
         except Exception as exc:
             logger.exception("RAG 问答失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-

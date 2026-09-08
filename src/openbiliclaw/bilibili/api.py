@@ -438,6 +438,7 @@ class BilibiliAPIClient:
 
         Returns:
             VideoInfo dataclass.
+
         """
         resp = await self._client.get(
             f"{self._BASE_URL}/x/web-interface/view",
@@ -493,6 +494,7 @@ class BilibiliAPIClient:
 
         Raises:
             BilibiliAPIError: 接口调用失败或被风控。
+
         """
         img_key, sub_key = await self._get_wbi_keys()
         params = self._sign_wbi_params(
@@ -534,6 +536,7 @@ class BilibiliAPIClient:
 
         Returns:
             包含 best_stream_url、quality_id、quality_desc、all_audio_streams 等的字典。
+
         """
         data = await self.get_playurl(bvid, cid)
         dash = data.get("dash")
@@ -610,6 +613,7 @@ class BilibiliAPIClient:
 
         Returns:
             List of search result dicts.
+
         """
         cooldown_remaining = self.search_cooldown_remaining()
         if cooldown_remaining > 0:
@@ -736,6 +740,7 @@ class BilibiliAPIClient:
 
         Returns:
             List of history item dicts.
+
         """
         if not self.is_authenticated:
             logger.warning("Cannot fetch history without authentication.")
@@ -780,6 +785,7 @@ class BilibiliAPIClient:
 
         Returns:
             List of favorite item dicts.
+
         """
         item_limit = max(0, int(max_items))
         if item_limit <= 0:
@@ -894,6 +900,7 @@ class BilibiliAPIClient:
 
         Returns:
             List of related video dicts.
+
         """
         resp = await self._client.get(
             f"{self._BASE_URL}/x/web-interface/archive/related",
@@ -911,6 +918,7 @@ class BilibiliAPIClient:
 
         Returns:
             List of ranking item dicts.
+
         """
         resp = await self._client.get(
             f"{self._BASE_URL}/x/web-interface/ranking/v2",

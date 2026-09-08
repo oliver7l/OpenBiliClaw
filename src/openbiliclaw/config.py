@@ -1957,6 +1957,7 @@ def load_config_with_diagnostics(
 
     Returns:
         Populated Config instance with diagnostics.
+
     """
     diagnostics = ConfigDiagnostics()
     raw: dict[str, Any] = {}

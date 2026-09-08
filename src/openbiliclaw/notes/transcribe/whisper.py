@@ -43,6 +43,7 @@ class AudioTranscriber:
 
         Raises:
             RuntimeError: faster-whisper 未安装时抛出。
+
         """
         try:
             from faster_whisper import WhisperModel
@@ -95,6 +96,7 @@ class AudioTranscriber:
         Raises:
             FileNotFoundError: 音频文件不存在。
             RuntimeError: faster-whisper 未安装。
+
         """
         path_obj = Path(audio_path).resolve()
         if not path_obj.exists():

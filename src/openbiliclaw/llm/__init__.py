@@ -4,7 +4,7 @@ This is a compatibility stub that re-exports everything from the extracted
 obc-llm package. All existing imports continue to work unchanged.
 """
 
-from obc_llm._config import LLMConfig, EmbeddingConfig, LLMProviderConfig
+from obc_llm._config import EmbeddingConfig, LLMConfig, LLMProviderConfig
 from obc_llm.base import (
     HealthCheckResult,
     LLMFallbackError,
@@ -20,18 +20,19 @@ from obc_llm.gemini_provider import GeminiProvider
 from obc_llm.ollama_provider import OllamaProvider
 from obc_llm.openai_provider import DeepSeekProvider, OpenAIProvider
 from obc_llm.openrouter_provider import OpenRouterProvider
-from obc_llm.registry import (
-    RegistryBuildError,
-    RegistrySummary,
-    build_llm_registry,
-    summarize_registry,
-)
 from obc_llm.service import (
     LLMProviderExecutionError,
     LLMResponseContentError,
     LLMService,
     LLMServiceError,
     is_llm_rate_limit_error,
+)
+
+from openbiliclaw.llm.registry import (
+    RegistryBuildError,
+    RegistrySummary,
+    build_llm_registry,
+    summarize_registry,
 )
 
 __all__ = [
