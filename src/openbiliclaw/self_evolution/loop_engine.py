@@ -476,7 +476,41 @@ class SelfEvolutionLoopEngine:
                 # processed articles
                 self._update_last_id(conn)
 
-        # ── Step 3: TL;DR (batch) ───────────────────────────────────────────
+        # ── Step 3: Content filler (body, subtitle, ai_summary) ──────────
+        if self._quota_ok():
+            # Body fetch: every tick, up to 30 articles
+            await self._run_if_due(
+                "content_filler_body",
+                1,
+                results,
+                lambda: self._do_content_filler_body(),
+            )
+            # YouTube subtitle: every tick, up to 10 videos
+            if self._quota_ok():
+                await self._run_if_due(
+                    "content_filler_yt",
+                    1,
+                    results,
+                    lambda: self._do_content_filler_yt(),
+                )
+            # Bilibili subtitle: every tick, up to 10 videos
+            if self._quota_ok():
+                await self._run_if_due(
+                    "content_filler_bili",
+                    1,
+                    results,
+                    lambda: self._do_content_filler_bili(),
+                )
+            # AI summary: every tick, up to 20 articles (LLM heavy)
+            if self._quota_ok():
+                await self._run_if_due(
+                    "content_filler_ai",
+                    1,
+                    results,
+                    lambda: self._do_content_filler_ai(),
+                )
+
+        # ── Step 4: TL;DR (batch) ───────────────────────────────────────────
         if candidate_ids and self._quota_ok():
             try:
                 from openbiliclaw.self_evolution.tldr import TLDRGenerator
@@ -733,6 +767,62 @@ class SelfEvolutionLoopEngine:
             "gaps": len(report.knowledge_gaps),
             "cross_platform": len(report.cross_platform_insights),
         }
+
+    async def _do_content_filler_body(self) -> dict[str, int] | None:
+        """增量拉取 RSS/Web 文章正文。"""
+        try:
+            from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+            filler = ContentFiller(self._db_path)
+            result = await filler.fetch_bodies()
+            if result and result.get("fetched"):
+                logger.info("content_filler: body_fetch done: %s", result)
+            return result
+        except Exception:
+            logger.debug("content_filler: body_fetch failed", exc_info=True)
+            return None
+
+    async def _do_content_filler_yt(self) -> dict[str, int] | None:
+        """增量提取 YouTube 视频字幕。"""
+        try:
+            from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+            filler = ContentFiller(self._db_path)
+            result = await filler.fetch_youtube_transcripts()
+            if result and result.get("fetched"):
+                logger.info("content_filler: yt_transcript done: %s", result)
+            return result
+        except Exception:
+            logger.debug("content_filler: yt_transcript failed", exc_info=True)
+            return None
+
+    async def _do_content_filler_bili(self) -> dict[str, int] | None:
+        """增量提取 Bilibili 视频字幕。"""
+        try:
+            from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+            filler = ContentFiller(self._db_path)
+            result = await filler.fetch_bilibili_subtitles()
+            if result and result.get("fetched"):
+                logger.info("content_filler: bili_subtitle done: %s", result)
+            return result
+        except Exception:
+            logger.debug("content_filler: bili_subtitle failed", exc_info=True)
+            return None
+
+    async def _do_content_filler_ai(self) -> dict[str, int] | None:
+        """批量生成 AI 摘要（LLM 密集型）。"""
+        try:
+            from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+            filler = ContentFiller(self._db_path, llm_service=self._llm_service)
+            result = await filler.generate_ai_summaries()
+            if result and result.get("summarized"):
+                logger.info("content_filler: ai_summary done: %s", result)
+            return result
+        except Exception:
+            logger.debug("content_filler: ai_summary failed", exc_info=True)
+            return None
 
     async def _do_diary_analysis(self) -> dict[str, Any] | None:
         """增量分析未分析的日记，每 tick 最多处理 20 篇。"""

@@ -4,6 +4,15 @@
 
 ---
 
+## v0.3.207: 离线内容填充管线（2026-09-08）
+
+- **新增 `content_filler.py` 模块**：四条离线内容处理管线，统一在自进化循环中调度。
+- **正文提取管线**：对 41,709 篇 RSS/Web 文章增量拉取正文，使用 URL 处理器（GenericURLProcessor），每次 tick 最多 30 篇，`body_fetch_attempts` 追踪重试次数。
+- **YouTube 字幕提取管线**：使用 yt-dlp 提取 21,036 个视频的字幕写入 `content_text`，优先中文/英文字幕，降级到自动生成字幕和 description，每次 tick 最多 10 个。
+- **Bilibili 字幕提取管线**：复用 `bilibili/subtitle.py` 提取 2,943 个视频的字幕，无字幕时保存 description 作为内容，每次 tick 最多 10 个。
+- **AI 摘要生成管线**：对有正文无 `ai_summary` 的 ~20,000 篇文章批量生成结构化总结（core + key_points + explanation），使用 LLM 每条 3 并发，每次 tick 最多 20 篇。
+- **自进化循环步骤更新**：扩展为 15 步，内容填充 4 条管线作为 Step 3 系列（body_fetch / yt_transcript / bili_subtitle / ai_summary）。
+
 ## v0.3.206: 自进化循环统一调度（2026-09-08）
 
 - **日记分析收归自进化循环**：`_do_diary_analysis()` 每 1 小时增量分析未分析日记，最多 20 篇/次，通过 `diary_analyses` 表状态追踪已分析。
