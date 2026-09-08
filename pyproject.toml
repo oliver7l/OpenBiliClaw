@@ -258,6 +258,15 @@ module = [
 ]
 disable_error_code = ["arg-type"]
 
+# self_evolution/eval/notes 模块：访问其他模块提供的属性
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.self_evolution.*",
+    "openbiliclaw.eval.*",
+    "openbiliclaw.notes.*",
+]
+disable_error_code = ["attr-defined"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
