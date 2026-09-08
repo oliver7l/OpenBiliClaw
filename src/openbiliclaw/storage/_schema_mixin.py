@@ -382,3 +382,179 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_watch_later_added
                 ON watch_later(added_at DESC);
         """)
+
+    # ── Table creation (favorites / articles / read_archive) ─────
+
+    def _ensure_favorites_table(self) -> None:
+        """Create the favorites (收藏夹) table for existing databases."""
+        from contextlib import suppress
+        import logging
+
+        logger = logging.getLogger(__name__)
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS favorites (
+                bvid     TEXT PRIMARY KEY,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                note     TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_favorites_added
+                ON favorites(added_at DESC);
+            CREATE TABLE IF NOT EXISTS articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL,
+                source_name TEXT DEFAULT '',
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                author TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                published_at TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'unread',
+                reading_percent REAL DEFAULT 0,
+                reading_progress TEXT DEFAULT '',
+                favorited INTEGER DEFAULT 0,
+                ai_summary TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_articles_published_at
+                ON articles(published_at);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type
+                ON articles(source_type);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type_status
+                ON articles(source_type, status);
+            CREATE INDEX IF NOT EXISTS idx_articles_source_type_published
+                ON articles(source_type, published_at);
+
+            CREATE TABLE IF NOT EXISTS read_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL,
+                source_name TEXT DEFAULT '',
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                author TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                published_at TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_readarchive_published_at
+                ON read_archive(published_at);
+            CREATE INDEX IF NOT EXISTS idx_readarchive_source_type
+                ON read_archive(source_type);
+            CREATE INDEX IF NOT EXISTS idx_readarchive_published
+                ON read_archive(published_at);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS read_archive_fts USING fts5(
+                title, content_text, tags, author, summary,
+                content='read_archive', content_rowid='id', tokenize='trigram'
+            );
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_ai AFTER INSERT ON read_archive BEGIN
+                INSERT INTO read_archive_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_ad AFTER DELETE ON read_archive BEGIN
+                INSERT INTO read_archive_fts(read_archive_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS read_archive_fts_au AFTER UPDATE ON read_archive BEGIN
+                INSERT INTO read_archive_fts(read_archive_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+                INSERT INTO read_archive_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+                title, content_text, tags, author, summary,
+                content='articles', content_rowid='id', tokenize='trigram'
+            );
+            CREATE TRIGGER IF NOT EXISTS articles_fts_ai AFTER INSERT ON articles BEGIN
+                INSERT INTO articles_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS articles_fts_ad AFTER DELETE ON articles BEGIN
+                INSERT INTO articles_fts(articles_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+            END;
+            CREATE TRIGGER IF NOT EXISTS articles_fts_au AFTER UPDATE ON articles BEGIN
+                INSERT INTO articles_fts(articles_fts, rowid, title, content_text, tags, author, summary)
+                VALUES ('delete', old.id, old.title, old.content_text, old.tags, old.author, old.summary);
+                INSERT INTO articles_fts(rowid, title, content_text, tags, author, summary)
+                VALUES (new.id, new.title, new.content_text, new.tags, new.author, new.summary);
+            END;
+        """)
+        for col, typ, default in [
+            ("tags", "TEXT", "'[]'"),
+            ("status", "TEXT", "'unread'"),
+            ("body_fetch_attempts", "INTEGER", "0"),
+            ("reading_percent", "REAL", "0"),
+            ("reading_progress", "TEXT", "''"),
+            ("favorited", "INTEGER", "0"),
+            ("ai_summary", "TEXT", "''"),
+        ]:
+            with suppress(Exception):
+                self.conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typ} DEFAULT {default}")
+
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS article_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                quote TEXT DEFAULT '',
+                note TEXT DEFAULT '',
+                color TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_article_notes_article
+                ON article_notes(article_id);
+
+            CREATE TABLE IF NOT EXISTS article_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                url TEXT NOT NULL,
+                content_html TEXT DEFAULT '',
+                content_text TEXT DEFAULT '',
+                fetch_source TEXT DEFAULT 'url_extractor',
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_snapshots_article
+                ON article_snapshots(article_id);
+            CREATE INDEX IF NOT EXISTS idx_snapshots_url
+                ON article_snapshots(url);
+        """)
+
+        try:
+            if self.conn.execute("SELECT count(*) FROM articles_fts").fetchone()[0] == 0:
+                self.conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')")
+                self.conn.commit()
+        except Exception:
+            logger.exception("Failed to rebuild articles FTS")
+
+    def _ensure_auth_state_table(self) -> None:
+        """Create the auth_state key/value table."""
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS auth_state (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        """)
+
+    def _ensure_init_runs_table(self) -> None:
+        """Create the init_runs table backing guided (GUI) initialization."""
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS init_runs (
+                run_id          TEXT PRIMARY KEY,
+                status          TEXT NOT NULL,
+                stage           INTEGER NOT NULL DEFAULT 0,
+                stages_json     TEXT,
+                partial_success INTEGER NOT NULL DEFAULT 0,
+                error_reason    TEXT,
+                sequence        INTEGER NOT NULL DEFAULT 0,
+                started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                finished_at     TIMESTAMP
+            );
+        """)
