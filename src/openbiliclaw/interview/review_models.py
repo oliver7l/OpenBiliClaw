@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class InterviewResult(str, Enum):
+class InterviewResult(str, Enum):  # noqa: UP042
     """面试结果。"""
 
     PASS = "pass"
@@ -23,7 +23,7 @@ class InterviewResult(str, Enum):
     NO_OFFER = "no_offer"
 
 
-class InterviewRound(str, Enum):
+class InterviewRound(str, Enum):  # noqa: UP042
     """面试轮次。"""
 
     PHONE_SCREEN = "phone_screen"
@@ -35,7 +35,7 @@ class InterviewRound(str, Enum):
     ONSITE = "onsite"
 
 
-class EmotionLevel(str, Enum):
+class EmotionLevel(str, Enum):  # noqa: UP042
     """面试时情绪状态。"""
 
     CALM = "calm"
