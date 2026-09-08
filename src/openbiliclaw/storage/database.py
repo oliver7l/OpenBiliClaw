@@ -24,6 +24,7 @@ from openbiliclaw.storage._chat_turn_mixin import ChatTurnMixin
 from openbiliclaw.storage._content_cache_mixin import ContentCacheMixin
 from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidatesMixin
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
+from openbiliclaw.storage._native_sync_mixin import NativeSyncMixin
 from openbiliclaw.storage._watch_later_mixin import WatchLaterMixin
 from openbiliclaw.storage._delight_mixin import DelightMixin
 from openbiliclaw.storage._source_recipe_mixin import SourceRecipeMixin
@@ -553,7 +554,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(NativeSyncMixin, WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -1205,72 +1206,6 @@ class Database(WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, Art
         finally:
             conn.close()
         self._ensure_fresh_read()
-
-    def release_stale_pending_native_sync_tasks(
-        self,
-        list_kind: str,
-        item_keys: Sequence[str] | None,
-    ) -> None:
-        pass
-
-    def reconcile_stale_native_save_claims_for_list(
-        self,
-        list_kind: str,
-        item_keys: Sequence[str] | None,
-    ) -> None:
-        conn = self.open_connection()
-        try:
-            conn.commit()
-        finally:
-            conn.close()
-
-    def create_native_sync_task_snapshot(
-        self,
-        list_kind: str,
-        selected_keys: Sequence[str] | None,
-        task_id: str,
-        trigger: str,
-    ) -> list[dict[str, Any]]:
-        return []
-
-    def has_sync_task(self, task_id: str) -> bool:
-        row = self.conn.execute(
-            "SELECT 1 FROM native_save_task_items WHERE task_id = ? AND is_live = 1",
-            (task_id,),
-        ).fetchone()
-        return bool(row)
-
-    def get_sync_task(self, task_id: str) -> dict[str, Any]:
-        rows = self.conn.execute(
-            "SELECT task_id, item_key, list_kind, status, is_live FROM native_save_task_items WHERE task_id = ? AND is_live = 1",
-            (task_id,),
-        ).fetchall()
-        return {
-            "task_id": task_id,
-            "items": [dict(row) for row in rows],
-        }
-
-    def release_native_sync_task(self, task_id: str) -> None:
-        conn = self.open_connection()
-        try:
-            conn.execute(
-                "UPDATE native_save_task_items SET is_live = 0, updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                (task_id,),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-    def discard_native_sync_task(self, task_id: str) -> None:
-        conn = self.open_connection()
-        try:
-            conn.execute(
-                "DELETE FROM native_save_task_items WHERE task_id = ? AND is_live = 0",
-                (task_id,),
-            )
-            conn.commit()
-        finally:
-            conn.close()
 
     def count_favorites_legacy(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])
