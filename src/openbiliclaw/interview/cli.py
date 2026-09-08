@@ -202,10 +202,24 @@ def interview_direction(
 def interview_index(
     keyword: str | None = typer.Argument(None, help="关键词过滤"),
     layer: str | None = typer.Option(None, "--layer", "-L", help="按层过滤: 01/02/03"),
+    rebuild: bool = typer.Option(False, "--rebuild", help="重建全库文件索引（覆盖）"),
 ) -> None:
-    """全库文件索引查询（knowledge.db / 06_全库文件索引.csv）。"""
+    """全库文件索引查询 / 重建（--rebuild）。"""
     engine = _engine()
     if engine is None:
+        return
+    if rebuild:
+        result = engine.rebuild_index()
+        console.print(
+            Panel.fit(
+                f"全库索引重建完成: 共 {result['total']} 个文件\n"
+                + "\n".join(
+                    f"  {layer}: {n} 个" for layer, n in result["per_layer"].items()
+                ),
+                title="interview index --rebuild",
+                border_style="green",
+            )
+        )
         return
     rows = engine.index(keyword, layer)
     if not rows:
@@ -218,6 +232,31 @@ def interview_index(
             f"  [{r.get('层', '')[:2]}] {r.get('类型', ''):<4} "
             f"{layer_name:<8} {r.get('子层', '')}  {r.get('路径', '')}"
         )
+
+
+@interview_app.command("doctor")
+def interview_doctor(
+    fix: bool = typer.Option(False, "--fix", help="索引过期时自动重建索引"),
+    full: bool = typer.Option(False, "--full", help="含全库文件数核对（较慢）"),
+) -> None:
+    """知识库健康检查（C1 题索引 / C2 岗位目录 / C3 日志对齐 / C4 数字表 / C5 索引新鲜度）。"""
+    engine = _engine()
+    if engine is None:
+        return
+    result = engine.doctor(fix=fix, full=full)
+    for c in result["checks"]:
+        status = "[green]PASS[/green]" if c["passed"] else "[red]FAIL[/red]"
+        console.print(f"  {status} {c['id']} {c['name']}")
+        for issue in c["issues"]:
+            console.print(f"      - {issue}")
+    if result["passed"]:
+        console.print("[bold green]全部检查通过 ✅[/bold green]")
+    else:
+        console.print(f"[bold red]发现 {sum(len(c['issues']) for c in result['checks'])} 个问题[/bold red]")
+        if result["fixed"]:
+            console.print("[green]已自动重建索引，请重跑 doctor 复核。[/green]")
+        elif full:
+            console.print("[yellow]提示: 索引类问题可加 --fix 自动修复。[/yellow]")
 
 
 @interview_app.command("logs")

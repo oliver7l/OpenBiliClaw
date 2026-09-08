@@ -24,6 +24,7 @@ import csv
 import os
 import re
 import sqlite3
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -204,6 +205,237 @@ class InterviewEngine:
         return out
 
     # ── 全库索引（knowledge.db，缺失时回退 CSV） ───────────────
+    INDEX_LAYERS = ("01_原始资料库", "02_方向知识库", "03_岗位弹药库")
+    INDEX_FIELDS = [
+        "路径",
+        "层",
+        "子层",
+        "类型",
+        "文件名",
+        "扩展名",
+        "大小KB",
+        "修改日期",
+    ]
+    EXT_TYPE = {
+        ".md": "文档",
+        ".markdown": "文档",
+        ".txt": "文本",
+        ".doc": "Word",
+        ".docx": "Word",
+        ".pdf": "PDF",
+        ".xls": "表格",
+        ".xlsx": "表格",
+        ".csv": "表格",
+        ".ppt": "PPT",
+        ".pptx": "PPT",
+        ".png": "图片",
+        ".jpg": "图片",
+        ".jpeg": "图片",
+        ".gif": "图片",
+        ".webp": "图片",
+        ".zip": "压缩包",
+        ".rar": "压缩包",
+        ".7z": "压缩包",
+        ".html": "网页",
+        ".htm": "网页",
+        ".json": "数据",
+        ".py": "脚本",
+        ".sh": "脚本",
+        ".mp4": "视频",
+        ".mov": "视频",
+        ".mp3": "音频",
+        ".wav": "音频",
+    }
+
+    @staticmethod
+    def _is_junk(fn: str) -> bool:
+        return fn.startswith("._") or fn == ".DS_Store" or fn.startswith("~$")
+
+    def rebuild_index(self) -> dict[str, Any]:
+        """重建全库文件索引：扫描三层 → 06_全库文件索引.csv + knowledge.db。
+
+        移植自知识库 ``_系统_知识库引擎/scripts/build_index.py``，
+        root 可配置、返回结构化统计；覆盖重建，不动原始文件。
+        """
+        self._require_configured()
+        rows: list[dict[str, str]] = []
+        for layer in self.INDEX_LAYERS:
+            base = self.root / layer
+            if not base.is_dir():
+                continue
+            for root_dir, dirs, files in os.walk(base):
+                dirs[:] = [d for d in dirs if not d.startswith(".")]
+                parts = Path(root_dir).relative_to(self.root).parts
+                sub = parts[1] if len(parts) > 1 else (parts[0] if len(parts) == 1 else "")
+                for fn in sorted(files):
+                    if self._is_junk(fn):
+                        continue
+                    fp = os.path.join(root_dir, fn)
+                    rel = os.path.relpath(fp, self.root)
+                    try:
+                        size = os.path.getsize(fp)
+                        mtime = time.strftime(
+                            "%Y-%m-%d", time.localtime(os.path.getmtime(fp))
+                        )
+                    except OSError:
+                        size, mtime = 0, ""
+                    ext = os.path.splitext(fn)[1].lower()
+                    rows.append(
+                        {
+                            "路径": rel,
+                            "层": layer,
+                            "子层": sub,
+                            "类型": self.EXT_TYPE.get(ext, "其他"),
+                            "文件名": fn,
+                            "扩展名": ext,
+                            "大小KB": round(size / 1024, 1),
+                            "修改日期": mtime,
+                        }
+                    )
+
+        # 写 CSV
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = self.data_dir / "06_全库文件索引.csv"
+        fields = self.INDEX_FIELDS
+        with csv_path.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows(rows)
+
+        # 写 SQLite（覆盖重建）
+        db_path = self.data_dir / "knowledge.db"
+        if db_path.exists():
+            db_path.unlink()
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"""CREATE TABLE file_index(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    {','.join('"{c}" TEXT' for c in fields)})"""
+            )
+            cur.execute('CREATE INDEX idx_layer ON file_index("层")')
+            cur.execute('CREATE INDEX idx_sub ON file_index("子层")')
+            cur.execute('CREATE INDEX idx_type ON file_index("类型")')
+            cur.executemany(
+                f'INSERT INTO file_index({",".join(fieldnames)})\n'
+                f"    VALUES({','.join(':' + f for f in fields)})",
+                rows,
+            )
+            cur.execute(
+                """CREATE VIEW layer_stats AS
+                SELECT "层" AS 层, COUNT(*) AS 文件数,
+                    SUM(CASE WHEN 类型='文档' OR 类型='文本' THEN 1 ELSE 0 END) AS 可检索文本
+                FROM file_index GROUP BY 层"""
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        return {
+            "total": len(rows),
+            "per_layer": {
+                layer: sum(1 for r in rows if r["层"] == layer) for layer in self.INDEX_LAYERS
+            },
+            "csv": str(csv_path),
+            "db": str(db_path),
+        }
+
+    def doctor(self, *, fix: bool = False, full: bool = False) -> dict[str, Any]:
+        """知识库健康检查（移植自 scripts/doctor.py）。
+
+        C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 /
+        C5 索引新鲜度（仅 full）。``fix=True`` 且索引过期时自动重建索引。
+        """
+        self._require_configured()
+        checks: list[dict[str, Any]] = []
+
+        def _check(cid: str, name: str, issues: list[str]) -> None:
+            checks.append({"id": cid, "name": name, "passed": not issues, "issues": issues})
+
+        # C1 题索引引用
+        issues: list[str] = []
+        for i, r in enumerate(self._read_csv("05_面试题索引.csv"), start=2):
+            loc = (r.get("答案位置") or "").strip()
+            if not loc:
+                issues.append(f"第{i}行 答案位置为空: {(r.get('题目') or '')[:30]}")
+                continue
+            target = Path(loc) if os.path.isabs(loc) else self.root / loc
+            if not target.exists():
+                issues.append(f"第{i}行 答案位置不存在: {loc}")
+        _check("C1", "题索引引用", issues)
+
+        # C2 岗位目录
+        issues = []
+        job_names: list[str] = []
+        for i, r in enumerate(self._read_csv("01_岗位表.csv"), start=2):
+            name = (r.get("公司") or "").strip()
+            if name:
+                job_names.append(name)
+            d = (r.get("备战目录") or "").strip()
+            if not d:
+                issues.append(f"第{i}行 备战目录为空: {name}")
+                continue
+            target = Path(d) if os.path.isabs(d) else self.root / d
+            if not target.is_dir():
+                issues.append(f"第{i}行 备战目录不存在: {d}")
+        _check("C2", "岗位目录", issues)
+
+        # C3 日志岗位对齐
+        issues = []
+        for i, r in enumerate(self._read_csv("04_面试日志.csv"), start=2):
+            c = (r.get("公司") or "").strip()
+            if c and c not in job_names:
+                issues.append(f"第{i}行 公司未登记在岗位表: {c}")
+        _check("C3", "日志岗位对齐", issues)
+
+        # C4 数字表完整
+        issues = []
+        for i, r in enumerate(self._read_csv("03_真实数字表.csv"), start=2):
+            if not (r.get("数字") or "").strip():
+                issues.append(f"第{i}行 数字为空")
+            if not (r.get("口径") or "").strip():
+                issues.append(f"第{i}行 口径为空: {(r.get('数字') or '')}")
+            if not (r.get("来源") or "").strip():
+                issues.append(f"第{i}行 来源为空: {(r.get('数字') or '')}")
+        _check("C4", "数字表完整", issues)
+
+        # C5 索引新鲜度（仅 full）
+        fixed = False
+        if full:
+            issues = []
+            db_count = 0
+            db_path = self.data_dir / "knowledge.db"
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                    db_count = conn.execute("SELECT COUNT(*) FROM file_index").fetchone()[0]
+                    conn.close()
+                except sqlite3.Error:
+                    db_count = -1
+            actual = 0
+            for layer in self.INDEX_LAYERS:
+                base = self.root / layer
+                if base.is_dir():
+                    for root_dir, _dirs, files in os.walk(base):
+                        actual += sum(
+                            1 for fn in files if not self._is_junk(fn)
+                        )
+            if db_count != actual:
+                issues.append(f"knowledge.db={db_count} 实际文件={actual}，需重建索引")
+                if fix:
+                    self.rebuild_index()
+                    fixed = True
+            _check("C5", "索引新鲜度", issues)
+
+        passed = all(c["passed"] for c in checks)
+        return {
+            "passed": passed,
+            "checks": checks,
+            "fixed": fixed,
+            "fix_available": full,
+        }
+
     def index(
         self, keyword: str | None = None, layer: str | None = None, limit: int = 50
     ) -> list[dict[str, str]]:
