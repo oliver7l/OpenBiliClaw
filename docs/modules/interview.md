@@ -40,7 +40,9 @@
 | 面试日志 | ✅ | 列表（最新在前）/ 追加（当天日期 + 待复盘，不修改历史） |
 | 新岗位建档 | ✅ | 按统一规范创建 `01_岗位与公司信息 / 02_面试备战资料 / 03_速成包` 三件套，幂等不覆盖 |
 | 系统总览 | ✅ | 岗位/项目/数字/题/日志统计 + 方向清单 + **规范清单**（岗位匹配评估/录入规范/新增岗位流程）+ 配置状态 |
-| CLI 命令 | ✅ | `interview search/job/card/numbers/projects/direction/index/logs/log/scaffold/status/root` |
+| 全库索引重建 | ✅ | `rebuild_index()` 扫描三层 → 覆盖写 `06_全库文件索引.csv` + `knowledge.db`（`file_index` + `layer_stats`），不动原始文件 |
+| 健康检查 | ✅ | `doctor()`：C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（full）；`--fix` 自动重建过期索引 |
+| CLI 命令 | ✅ | `interview search/job/card/numbers/projects/direction/index/logs/log/scaffold/status/root/doctor`；`index --rebuild` |
 | API 路由 | ✅ | `GET/POST /api/interview/*`（见公开 API） |
 
 ## 模块结构
@@ -65,7 +67,8 @@ openbiliclaw interview card <公司>                  # 速记卡
 openbiliclaw interview numbers [关键词]             # 真实数字
 openbiliclaw interview projects [关键词]            # 项目库
 openbiliclaw interview direction <方向>             # 方向文档
-openbiliclaw interview index [关键词] [--layer 01|02|03]
+openbiliclaw interview index [关键词] [--layer 01|02|03] [--rebuild]
+openbiliclaw interview doctor [--fix] [--full]      # 健康检查（C1-C5）
 openbiliclaw interview logs                         # 面试日志
 openbiliclaw interview log <公司> <轮次> <要点>     # 追加日志
 openbiliclaw interview scaffold <公司> <岗位> [--yes]
@@ -105,6 +108,8 @@ eng.scaffold("新公司", "广告算法")   # 新岗位建档
 | GET | `/api/interview/card/{company}` | 速记卡（未登记 404） |
 | GET | `/api/interview/directions` | 方向知识库清单 |
 | GET | `/api/interview/index?keyword=&layer=` | 全库索引（layer 仅 01/02/03） |
+| POST | `/api/interview/index/rebuild` | 重建全库索引（覆盖 06 CSV + knowledge.db） |
+| GET | `/api/interview/doctor?fix=&full=` | 健康检查（C1-C5，fix 自动重建过期索引） |
 | GET | `/api/interview/logs` | 面试日志（最新在前） |
 | POST | `/api/interview/logs` | 追加日志 `{company, round, points}` |
 | POST | `/api/interview/scaffold` | 新岗位建档 `{company, role}` |

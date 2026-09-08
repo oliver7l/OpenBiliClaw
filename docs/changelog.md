@@ -4,6 +4,16 @@
 
 ---
 
+## v0.3.218: 求职知识库整体并入 interview 模块（2026-09-08）
+
+- **知识库整体纳入版本控制**：三层求职知识库（02 方向 58 文件 / 03 岗位弹药 217 文件 / 系统引擎 14 文件 + 总索引）并入仓库；`01_原始资料库`（13G 工作资料等）按 .gitignore 保持本地不入库。原外部目录 `006-正式项目/8月27日-找工作` 已整体迁入项目内 `求职知识库/`，引擎脚本改为按脚本位置推导 root，可随项目整体迁移。
+- **引擎新增全库索引重建**：`InterviewEngine.rebuild_index()` 移植 `build_index.py`——扫描三层 → 覆盖写 `06_全库文件索引.csv` + `knowledge.db`（`file_index` 表 + `layer_stats` 视图）；CLI `interview index --rebuild`、API `POST /api/interview/index/rebuild`。
+- **引擎新增健康检查**：`InterviewEngine.doctor()` 移植 `doctor.py`——C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（`--full`）；CLI `interview doctor [--fix|--full]`、API `GET /api/interview/doctor`，`--fix` 自动重建过期索引。
+- **架构登记**：`docs/architecture.md` 新增「Interview Prep」模块职责、`docs/spec.md` 新增 §2.6 模块与技术选型表行。
+- **测试**：+4 引擎用例 +2 API 用例（重建索引、健康检查、破损引用检测、fix 重建），共 169 通过；ruff/mypy 零错误。
+
+---
+
 ## v0.3.217: 求职面试备战模块 interview（2026-09-08）
 
 - **新模块 `interview`**：把外部「三层求职知识库」（01_原始资料库 → 02_方向知识库 → 03_岗位弹药库 + _系统_知识库引擎）接入 OpenBiliClaw——岗位总览、全文检索、真实数字、项目库、面试题索引、方向文档、全库索引、面试速记卡、面试日志、新岗位建档，CLI 与 API 双通道复用同一引擎。

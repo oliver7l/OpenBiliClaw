@@ -73,6 +73,25 @@ def test_index_routes(client: TestClient) -> None:
     assert client.get("/api/interview/index", params={"layer": "99"}).status_code == 422
 
 
+def test_index_rebuild_and_doctor(client: TestClient) -> None:
+    """重建索引 + 健康检查路由。"""
+    resp = client.post("/api/interview/index/rebuild")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] >= 8
+    assert body["per_layer"]["02_方向知识库"] >= 2
+    # 健康检查 C1-C4 通过
+    resp = client.get("/api/interview/doctor")
+    assert resp.status_code == 200
+    doc = resp.json()
+    assert doc["passed"] is True
+    assert [c["id"] for c in doc["checks"]] == ["C1", "C2", "C3", "C4"]
+    # full + fix 也正常
+    resp = client.get("/api/interview/doctor", params={"full": "true", "fix": "true"})
+    assert resp.status_code == 200
+    assert resp.json()["passed"] is True
+
+
 def test_logs_roundtrip(client: TestClient) -> None:
     assert client.get("/api/interview/logs").json()["total"] == 1
     resp = client.post(

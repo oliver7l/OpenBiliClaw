@@ -449,7 +449,7 @@ def test_doctor_full_fix_rebuilds_index(kb: Path) -> None:
     csv_path = kb / "_系统_知识库引擎" / "数据" / "06_全库文件索引.csv"
     db.unlink()
     csv_path.unlink()
-    result = eng.doctor(full=True, fix=True)
+    eng.doctor(full=True, fix=True)
     # 重建后索引文件恢复
     assert db.exists()
     assert csv_path.exists()

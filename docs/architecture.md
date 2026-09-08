@@ -189,6 +189,15 @@ X 是第六个内容源，分两条独立通路：
 - `chat_turns` 持久化 side panel durable chat turn，字段包含 `turn_id/session/scope/subject/message/status/reply/error/created_at/updated_at`；`scope` 支持 `chat`、`delight`、`probe` 和 `avoidance_probe`
 - `auth_state(key, value)` 单行表持久化局域网密码门禁的撤销纪元 `auth_epoch` 与稳定密码指纹 `password_fingerprint`（非会话表，仅全局计数 + 指纹）；跨进程事务原子自增，验签实时读
 
+### Interview Prep (`interview/`) — 求职面试备战模块 (v0.3.217+)
+- 数据源：项目内「三层求职知识库」（`求职知识库/`，01 原始资料 → 02 方向方法论 → 03 岗位弹药库 + `_系统_知识库引擎`），只读检索、只追加写入（日志/建档）
+- 引擎 `InterviewEngine`：岗位/全文检索/真实数字/项目/面试题索引/方向/全库索引/面试日志/速记卡/总览/新岗位建档/重建索引/健康检查；`resolve_root` 按 配置 → `OPENBILICLAW_INTERVIEW_ROOT` → 默认路径 三级解析
+- 全文检索覆盖三层 + 腾讯文档资料/解码文本/工作资料（腾讯、微视）+ 系统层规范；每文件首个命中行、限 2MB 内文本
+- 面试速记卡 = 数据表（岗位/数字/项目/题库）⊕ 岗位定制弹药（`03_速成包` 速记卡全文 + 预测题库/速成问答清单 + `02_面试备战资料` 清单）
+- 全库索引：`knowledge.db`（`file_index` + `layer_stats` 视图）优先，回退 `06_全库文件索引.csv`；`--rebuild` / POST `/index/rebuild` 覆盖重建
+- 健康检查 `doctor`：C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（`--full`，`--fix` 自动重建索引）
+- 对外接口：CLI `openbiliclaw interview <子命令>`（12+ 命令）+ API `/api/interview/*`（13 路由）+ Web「面试」tab
+
 ## 运行时数据库约束
 
 本地 API 与 CLI 的高频运行路径现在遵循两条约束：

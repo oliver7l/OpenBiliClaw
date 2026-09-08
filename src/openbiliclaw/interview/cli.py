@@ -213,9 +213,7 @@ def interview_index(
         console.print(
             Panel.fit(
                 f"全库索引重建完成: 共 {result['total']} 个文件\n"
-                + "\n".join(
-                    f"  {layer}: {n} 个" for layer, n in result["per_layer"].items()
-                ),
+                + "\n".join(f"  {layer}: {n} 个" for layer, n in result["per_layer"].items()),
                 title="interview index --rebuild",
                 border_style="green",
             )
@@ -252,7 +250,8 @@ def interview_doctor(
     if result["passed"]:
         console.print("[bold green]全部检查通过 ✅[/bold green]")
     else:
-        console.print(f"[bold red]发现 {sum(len(c['issues']) for c in result['checks'])} 个问题[/bold red]")
+        n_issues = sum(len(c["issues"]) for c in result["checks"])
+        console.print(f"[bold red]发现 {n_issues} 个问题[/bold red]")
         if result["fixed"]:
             console.print("[green]已自动重建索引，请重跑 doctor 复核。[/green]")
         elif full:

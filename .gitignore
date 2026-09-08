@@ -97,8 +97,9 @@ extension/dist-firefox/
 # 克隆系统运行时生成的站点数据（勿提交）
 src/openbiliclaw/web/clone/sites/
 
-# 求职面试知识库（13G 本地数据，不进版本控制）
-求职知识库/
+# 求职面试知识库：01 原始资料（13G）保持本地不入库，
+# 其余（02 方向/03 岗位弹药/系统引擎脚本·CSV·规范·总索引）纳入版本控制
+求职知识库/01_原始资料库/
 # 参考项目（含嵌套 .git，本地保留，不进版本控制）
 references/agent-interview-hub/
 references/my-interview/

@@ -258,7 +258,7 @@ class InterviewEngine:
         root 可配置、返回结构化统计；覆盖重建，不动原始文件。
         """
         self._require_configured()
-        rows: list[dict[str, str]] = []
+        rows: list[dict[str, Any]] = []
         for layer in self.INDEX_LAYERS:
             base = self.root / layer
             if not base.is_dir():
@@ -274,9 +274,7 @@ class InterviewEngine:
                     rel = os.path.relpath(fp, self.root)
                     try:
                         size = os.path.getsize(fp)
-                        mtime = time.strftime(
-                            "%Y-%m-%d", time.localtime(os.path.getmtime(fp))
-                        )
+                        mtime = time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(fp)))
                     except OSError:
                         size, mtime = 0, ""
                     ext = os.path.splitext(fn)[1].lower()
@@ -312,13 +310,13 @@ class InterviewEngine:
             cur.execute(
                 f"""CREATE TABLE file_index(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    {','.join('"{c}" TEXT' for c in fields)})"""
+                    {",".join(f'"{c}" TEXT' for c in fields)})"""
             )
             cur.execute('CREATE INDEX idx_layer ON file_index("层")')
             cur.execute('CREATE INDEX idx_sub ON file_index("子层")')
             cur.execute('CREATE INDEX idx_type ON file_index("类型")')
             cur.executemany(
-                f'INSERT INTO file_index({",".join(fieldnames)})\n'
+                f"INSERT INTO file_index({','.join(fields)})\n"
                 f"    VALUES({','.join(':' + f for f in fields)})",
                 rows,
             )
@@ -417,10 +415,8 @@ class InterviewEngine:
             for layer in self.INDEX_LAYERS:
                 base = self.root / layer
                 if base.is_dir():
-                    for root_dir, _dirs, files in os.walk(base):
-                        actual += sum(
-                            1 for fn in files if not self._is_junk(fn)
-                        )
+                    for _root_dir, _dirs, files in os.walk(base):
+                        actual += sum(1 for fn in files if not self._is_junk(fn))
             if db_count != actual:
                 issues.append(f"knowledge.db={db_count} 实际文件={actual}，需重建索引")
                 if fix:
