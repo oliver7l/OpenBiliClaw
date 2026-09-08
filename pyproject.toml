@@ -141,11 +141,6 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-exclude = [
-    # web/clone 目录含第三方克隆站点生成代码与 node_modules，会阻断 mypy 全量检查；
-    # 阶段 1（K4）把 clone sites 数据移出 src 后移除本条。
-    "^src/openbiliclaw/web/clone/",
-]
 
 [[tool.mypy.overrides]]
 module = [
