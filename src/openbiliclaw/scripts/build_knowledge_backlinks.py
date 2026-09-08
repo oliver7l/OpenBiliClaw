@@ -93,7 +93,7 @@ def _learnbuffett_articles(conn: sqlite3.Connection) -> dict[str, dict]:
 def _extract_learnbuffett_wikilinks(html: str) -> list[dict]:
     """从 learnbuffett HTML 中提取 wikilink。"""
     links = []
-    if not BeautifulSoup:
+    if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
     for a in soup.find_all("a", class_="wikilink"):
@@ -121,7 +121,7 @@ def _extract_learnbuffett_wikilinks(html: str) -> list[dict]:
 def _extract_mungermodels_wikilinks(html: str) -> list[dict]:
     """从 mungermodels HTML 中提取 wikilink。"""
     links = []
-    if not BeautifulSoup:
+    if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
     for a in soup.find_all("a", class_="wl"):
@@ -164,7 +164,7 @@ def _aichainmap_articles(conn: sqlite3.Connection) -> dict[str, dict]:
 def _extract_aichainmap_wikilinks(html: str) -> list[dict]:
     """从 aichainmap HTML 正文中提取 wikilink。"""
     links = []
-    if not BeautifulSoup:
+    if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
     for a in soup.find_all("a", class_=lambda c: c and "wikilink" in c):
@@ -458,7 +458,7 @@ def main() -> None:
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s %(message)s")
 
-    if not BeautifulSoup:
+    if BeautifulSoup is None:
         logger.error("需要安装 BeautifulSoup: pip install beautifulsoup4")
         return
 
