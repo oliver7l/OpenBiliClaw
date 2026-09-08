@@ -1112,6 +1112,7 @@ def create_app(
     from openbiliclaw.api._system_routes import register_system_routes
     from openbiliclaw.api._image_proxy_routes import register_image_proxy_routes
     from openbiliclaw.api._cookie_routes import register_cookie_routes
+    from openbiliclaw.api._activity_feed_routes import register_activity_feed_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -3379,61 +3380,6 @@ def create_app(
                         }
                     )
         return EventIngestResponse(accepted=accepted, rejected=rejected)
-
-    @app.get("/api/activity-feed", response_model=ActivityFeedResponse)
-    async def activity_feed(
-        limit: int = 10,
-        before: str = "",
-    ) -> ActivityFeedResponse:
-        from openbiliclaw.runtime.activity_feed import ActivityFeedBuilder
-
-        # All of the input collection (runtime counts + cognition updates +
-        # feed query) hits SQLite synchronously; keep it off the event loop.
-        def _collect_feed_inputs() -> dict[str, object]:
-            runtime_status: dict[str, object] = {}
-            get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
-            if callable(get_runtime_status):
-                runtime_status = dict(get_runtime_status())
-            get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
-            if callable(get_account_sync_status):
-                runtime_status.update(get_account_sync_status())
-
-            cognition_updates: list[dict[str, object]] = []
-            load_cognition_updates = getattr(ctx.memory_manager, "load_cognition_updates", None)
-            if callable(load_cognition_updates):
-                cognition_updates = [
-                    item for item in load_cognition_updates() if isinstance(item, dict)
-                ]
-
-            builder = ActivityFeedBuilder(database=ctx.database)
-            return builder.build(
-                runtime_status=runtime_status,
-                cognition_updates=cognition_updates,
-                limit=limit,
-                before=before,
-            )
-
-        payload = await asyncio.get_running_loop().run_in_executor(None, _collect_feed_inputs)
-        payload_items = payload.get("items", [])
-        item_dicts = payload_items if isinstance(payload_items, list) else []
-        return ActivityFeedResponse(
-            live_summary=str(payload.get("live_summary", "")),
-            headline=str(payload.get("headline", "")),
-            items=[
-                ActivityFeedItemOut(
-                    id=str(item.get("id", "")),
-                    kind=str(item.get("kind", "")),
-                    summary=str(item.get("summary", "")),
-                    detail=str(item.get("detail", "")),
-                    created_at=str(item.get("created_at", "")),
-                    tone=str(item.get("tone", "info")),
-                )
-                for item in item_dicts
-                if isinstance(item, dict)
-            ],
-            has_more=bool(payload.get("has_more", False)),
-            next_cursor=str(payload.get("next_cursor", "")),
-        )
 
     async def _classify_new_pool_items() -> None:
         """Legacy recovery for content_cache rows that lack content features.
@@ -13158,6 +13104,9 @@ def create_app(
 
     # ── Cookie management routes (douyin/x) ─────────────────────
     register_cookie_routes(app, ctx, config=config)
+
+    # ── Activity feed routes ────────────────────────────────────
+    register_activity_feed_routes(app, ctx)
 
     # ── 拆分后未接线的路由注册（K3 孤儿路由修复）──────────────────
     for _mod_name, _fn_name in [
