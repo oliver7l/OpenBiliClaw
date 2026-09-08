@@ -4559,23 +4559,6 @@ def create_app(
             return f"[关于避雷方向「{label}」的反馈] {turn.message}"
         return turn.message
 
-    async def start_chat_turn(payload: ChatTurnIn) -> ChatTurnOut:
-        message = payload.message.strip()
-        if not message:
-            raise HTTPException(status_code=422, detail="Chat message is required.")
-        raw_turn_id = payload.turn_id.strip()
-        turn_id = raw_turn_id or f"turn-{uuid.uuid4().hex}"
-        existing = _get_chat_turn_row(turn_id)
-        if existing is not None:
-            turn = _normalize_chat_turn(existing)
-            if turn.status == "pending":
-                asyncio.create_task(_complete_durable_chat_turn(turn.turn_id))
-            return turn
-        row = _create_chat_turn_row(payload, turn_id=turn_id)
-        asyncio.create_task(_complete_durable_chat_turn(turn_id))
-        return _normalize_chat_turn(row)
-
-    @app.get("/api/chat/turns", response_model=ChatTurnListResponse)
     async def list_chat_turns(
         session: str = "popup",
         scope: str = "",
@@ -4598,22 +4581,6 @@ def create_app(
         if turn.status == "pending":
             asyncio.create_task(_complete_durable_chat_turn(turn.turn_id))
         return turn
-
-    @app.post("/api/interest-probes/trigger")
-    async def trigger_interest_probe() -> dict[str, Any]:
-        """Manually trigger an interest probe push via WebSocket.
-
-        Useful when ``run_forever`` is blocked by a long refresh cycle
-        and the probe wouldn't fire on its own for several minutes.
-        """
-        controller = ctx.runtime_controller
-        if controller is None:
-            raise HTTPException(status_code=503, detail="Runtime controller not available")
-        publish = getattr(controller, "_publish_interest_probe_if_available", None)
-        if not callable(publish):
-            raise HTTPException(status_code=503, detail="Probe publisher not available")
-        await publish()
-        return {"ok": True, "action": "probe_triggered"}
 
     async def trigger_avoidance_probe() -> dict[str, Any]:
         """Manually trigger an avoidance probe push via WebSocket."""
@@ -4795,23 +4762,6 @@ def create_app(
         """Update fields of an existing source recipe."""
         updated = ctx.database.update_recipe(recipe_id, **payload)
         if not updated:
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=404, detail="Recipe not found")
-        return {"ok": True, "id": recipe_id}
-
-    @app.delete("/api/sources/{recipe_id}")
-    def delete_source(recipe_id: str) -> dict[str, Any]:
-        """Delete a source recipe (system recipes cannot be deleted)."""
-        # Check if it's a system recipe
-        all_recipes = ctx.database.get_all_recipes()
-        target = next((r for r in all_recipes if r["id"] == recipe_id), None)
-        if target and target.get("created_by") == "system":
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=403, detail="System recipes cannot be deleted")
-        deleted = ctx.database.delete_recipe(recipe_id)
-        if not deleted:
             from fastapi import HTTPException
 
             raise HTTPException(status_code=404, detail="Recipe not found")
@@ -5150,26 +5100,6 @@ def create_app(
     if hasattr(ctx.database, "conn"):
         _bili_task_queue = BiliTaskQueue(ctx.database)
 
-    @app.get("/api/sources/bili/next-task")
-    def bili_next_task(response: Any = None) -> Any:
-        """Claim and return the oldest runnable Bilibili extension task."""
-        from starlette.responses import Response
-
-        if _bili_task_queue is None:
-            return Response(status_code=204)
-        task = _bili_task_queue.next_pending()
-        if task is None:
-            return Response(status_code=204)
-
-        import json as _json
-
-        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
-        return {
-            "id": task["id"],
-            "type": task["type"],
-            **payload,
-        }
-
     async def bili_task_kick() -> dict[str, Any]:
         """Broadcast `bili_task_available` over runtime-stream."""
         publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
@@ -5260,23 +5190,6 @@ def create_app(
     # Surfaces the persisted health state machine so the settings UI can
     # show login / rate-limit / block status (rendered in Task 12).
 
-    @app.get("/api/sources/x/status", response_model=XStatusResponse)
-    def x_source_status() -> XStatusResponse:
-        """Return the current X source health (ok / cookie / rate-limit / block)."""
-        if not hasattr(ctx.database, "conn"):
-            return XStatusResponse()
-        from openbiliclaw.storage.x_health import XSourceHealthStore
-
-        health = XSourceHealthStore(ctx.database).get()
-        return XStatusResponse(
-            state=str(health.get("state", "ok")),
-            consecutive_failures=int(health.get("consecutive_failures", 0)),
-            feed_paused=bool(health.get("feed_paused", False)),
-            cooldown_until=str(health.get("cooldown_until", "")),
-            detail=str(health.get("detail", "")),
-            updated_at=str(health.get("updated_at", "")),
-        )
-
     # Window for treating synced 小红书 access tokens as fresh. xsec_tokens
     # die well within a day, so /api/sources/status only reports "ready" when
     # token activity happened inside this window — older-only rows degrade to
@@ -5320,26 +5233,6 @@ def create_app(
     _dy_task_queue: DyTaskQueue | None = None
     if hasattr(ctx.database, "conn"):
         _dy_task_queue = DyTaskQueue(ctx.database)
-
-    @app.get("/api/sources/dy/next-task")
-    def dy_next_task(response: Any = None) -> Any:
-        """Return the oldest pending dy task, or 204 if none."""
-        from starlette.responses import Response
-
-        if _dy_task_queue is None:
-            return Response(status_code=204)
-        task = _dy_task_queue.next_pending(only_ids=_init_owned_ids_filter())
-        if task is None:
-            return Response(status_code=204)
-
-        import json as _json
-
-        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
-        return {
-            "id": task["id"],
-            "type": task["type"],
-            **payload,
-        }
 
     # ── Wake-up kick endpoints ──────────────────────────────────────
     #
@@ -5404,26 +5297,6 @@ def create_app(
     db_conn = getattr(ctx.database, "conn", None)
     if hasattr(db_conn, "executescript"):
         _zhihu_task_queue = ZhihuTaskQueue(ctx.database)
-
-    @app.get("/api/sources/zhihu/next-task")
-    def zhihu_next_task(response: Any = None) -> Any:
-        """Return the oldest pending Zhihu task, or 204 if none."""
-        from starlette.responses import Response
-
-        if _zhihu_task_queue is None:
-            return Response(status_code=204)
-        task = _zhihu_task_queue.next_pending(only_ids=_init_owned_ids_filter())
-        if task is None:
-            return Response(status_code=204)
-
-        import json as _json
-
-        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
-        return {
-            "id": task["id"],
-            "type": task["type"],
-            **payload,
-        }
 
     async def zhihu_task_kick() -> dict[str, Any]:
         """Broadcast `zhihu_task_available` over runtime-stream."""
@@ -6040,26 +5913,6 @@ def create_app(
             issues=issue_list,
         )
 
-    @app.get("/api/config", response_model=ConfigResponse)
-    def get_config(reveal_keys: bool = False) -> ConfigResponse:
-        """Return the current configuration (API keys masked by default)."""
-        from openbiliclaw.config import (
-            _collect_config_issues,
-            load_config,
-        )
-
-        cfg = load_config()
-        issues = list(_collect_config_issues(cfg))
-        if bool(getattr(ctx, "degraded", False)):
-            issues.extend(getattr(ctx, "degraded_issues", []))
-        return _config_to_response(
-            cfg,
-            issues,
-            mask_keys=not reveal_keys,
-            degraded=bool(getattr(ctx, "degraded", False)),
-            degraded_reason=str(getattr(ctx, "degraded_reason", "")),
-        )
-
     def _as_bool(value: object) -> bool:
         if isinstance(value, bool):
             return value
@@ -6306,21 +6159,6 @@ def create_app(
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         ok = database.delete_article_note(note_id)
         return JSONResponse({"ok": ok, "id": note_id})
-
-    def daily_reading_suggestions(limit: int = 5) -> JSONResponse:
-        """Today's reading picks: unread articles ranked by interest fit."""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        limit = max(1, min(int(limit), 20))
-        items = _rank_unread_by_interest(database, limit=limit)
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": items,
-                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        )
 
     async def reading_intent_search(
         q: str = "",
@@ -6634,58 +6472,6 @@ def create_app(
         stats = svc.get_stats()
         return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
 
-    @app.get("/api/diary/timeline")
-    def diary_timeline(year: int | None = None, month: int | None = None) -> JSONResponse:
-        """获取日记时间线视图。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        entries = svc.get_timeline(year=year, month=month)
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [e.model_dump(mode="json") for e in entries],
-                "year": year,
-                "month": month,
-            }
-        )
-
-    @app.get("/api/diary/search")
-    def diary_search(q: str, limit: int = 50) -> JSONResponse:
-        """全文搜索日记。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        entries = svc.search_entries(q, limit=max(1, min(int(limit), 200)))
-        return JSONResponse(
-            {
-                "ok": True,
-                "query": q,
-                "items": [e.model_dump(mode="json") for e in entries],
-                "total": len(entries),
-            }
-        )
-
-    @app.get("/api/diary/{entry_id:int}")
-    def diary_get(entry_id: int) -> JSONResponse:
-        """获取单篇日记详情（含分析结果）。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            entry = svc.get_entry(entry_id)
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        analysis = svc.get_analysis(entry_id)
-        return JSONResponse(
-            {
-                "ok": True,
-                "entry": entry.model_dump(mode="json"),
-                "analysis": analysis.model_dump(mode="json") if analysis else None,
-            }
-        )
-
-    @app.post("/api/diary")
     def diary_create(payload: dict[str, Any]) -> JSONResponse:
         """创建一篇日记。"""
         svc = _get_diary_service()
@@ -6698,23 +6484,6 @@ def create_app(
         entry = svc.create_entry(data)
         return JSONResponse({"ok": True, "entry": entry.model_dump(mode="json")}, status_code=201)
 
-    @app.put("/api/diary/{entry_id}")
-    def diary_update(entry_id: int, payload: dict[str, Any]) -> JSONResponse:
-        """更新日记。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = DiaryEntryUpdate(**payload)
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": f"invalid payload: {exc}"}, status_code=400)
-        try:
-            entry = svc.update_entry(entry_id, data)
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        return JSONResponse({"ok": True, "entry": entry.model_dump(mode="json")})
-
-    @app.delete("/api/diary/{entry_id}")
     def diary_delete(entry_id: int) -> JSONResponse:
         """删除日记。"""
         svc = _get_diary_service()
@@ -6735,22 +6504,6 @@ def create_app(
         analysis = svc.get_analysis(entry_id)
         if analysis is None:
             return JSONResponse({"ok": True, "analysis": None, "message": "未分析"})
-        return JSONResponse({"ok": True, "analysis": analysis.model_dump(mode="json")})
-
-    @app.post("/api/diary/{entry_id}/analyze")
-    async def diary_analyze(entry_id: int, force: bool = False) -> JSONResponse:
-        """分析单篇日记（调用 LLM）。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
-        try:
-            analysis = await svc.analyze_entry(entry_id, force=force)
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        if analysis is None:
-            return JSONResponse({"ok": False, "error": "分析失败"}, status_code=500)
         return JSONResponse({"ok": True, "analysis": analysis.model_dump(mode="json")})
 
     # ─── 日记数据洞察 API ───────────────────────────────────────────
@@ -6838,23 +6591,6 @@ def create_app(
 
     # ─── 日记反思 API（周报/月度反思/年度回顾/里程碑） ─────────────────
 
-    @app.get("/api/diary/reflection/weekly")
-    def diary_reflection_weekly(week_start: str | None = None) -> JSONResponse:
-        """获取周报统计数据。
-
-        Query:
-        - week_start: 周开始日期（YYYY-MM-DD），默认本周一
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import ReflectionService
-
-        reflection = ReflectionService(svc.store)
-        report = reflection.generate_weekly_report(week_start)
-        return JSONResponse({"ok": True, "data": report.__dict__})
-
-    @app.post("/api/diary/reflection/weekly/generate")
     async def diary_reflection_weekly_generate(
         payload: dict[str, Any] | None = None,
     ) -> JSONResponse:
@@ -7507,24 +7243,6 @@ def create_app(
             }
         )
 
-    @app.get("/api/diary/memory/{diary_id}")
-    def diary_memory_get_by_id(diary_id: int) -> JSONResponse:
-        """根据 ID 获取记忆条目。
-
-        Path:
-        - diary_id: 日记 ID
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import MemorySystemService
-
-        memory = MemorySystemService(svc.store)
-        entry = memory.get_memory_by_id(diary_id)
-        if entry is None:
-            return JSONResponse({"ok": False, "error": "记忆条目不存在"}, status_code=404)
-        return JSONResponse({"ok": True, "data": entry.to_dict()})
-
     # ─── 情绪系统（效价/唤醒二维模型）API ────────────────────────────
 
     @app.get("/api/diary/emotion/stats")
@@ -7791,39 +7509,6 @@ def create_app(
         ok = svc.delete_fragment(fragment_id)
         return JSONResponse({"ok": ok, "id": fragment_id})
 
-    @app.post("/api/diary/fragments/{fragment_id}/auto-tag")
-    async def diary_fragments_auto_tag(fragment_id: int) -> JSONResponse:
-        """对单条碎片执行 AI 自动标签和情绪识别。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            fragment = await svc.auto_tag_fragment(fragment_id)
-            if fragment is None:
-                return JSONResponse({"ok": False, "error": "碎片不存在"}, status_code=404)
-            return JSONResponse({"ok": True, "data": fragment.model_dump(mode="json")})
-        except Exception as exc:
-            logger.exception(f"碎片 {fragment_id} 自动标签失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.post("/api/diary/fragments/auto-tag-batch")
-    async def diary_fragments_auto_tag_batch(payload: dict[str, Any] | None = None) -> JSONResponse:
-        """批量对未标注的碎片执行自动标签和情绪识别。
-
-        请求体（可选）：
-        - limit: 处理数量上限（默认 50）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        payload = payload or {}
-        try:
-            stats = await svc.batch_auto_tag_fragments(limit=payload.get("limit", 50))
-            return JSONResponse({"ok": True, "data": stats})
-        except Exception as exc:
-            logger.exception("碎片批量自动标签失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
     # ── 日记标签与人物提取 API ────────────────────────────────
 
     @app.get("/api/diary/tags")
@@ -8072,22 +7757,6 @@ def create_app(
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
 
-    @app.put("/api/health/patients/{patient_id}")
-    def health_patients_update(patient_id: int, payload: dict[str, Any]) -> JSONResponse:
-        """更新患者档案。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = PatientUpdate(**payload)
-            patient = svc.update_patient(patient_id, data)
-            return JSONResponse({"ok": True, "data": patient.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/patients/{patient_id}")
     def health_patients_delete(patient_id: int) -> JSONResponse:
         """删除患者档案。"""
         svc = _get_health_service()
@@ -8159,22 +7828,6 @@ def create_app(
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
 
-    @app.put("/api/health/encounters/{encounter_id}")
-    def health_encounters_update(encounter_id: int, payload: dict[str, Any]) -> JSONResponse:
-        """更新就诊记录。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = EncounterUpdate(**payload)
-            encounter = svc.update_encounter(encounter_id, data)
-            return JSONResponse({"ok": True, "data": encounter.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/encounters/{encounter_id}")
     def health_encounters_delete(encounter_id: int) -> JSONResponse:
         """删除就诊记录。"""
         svc = _get_health_service()
@@ -8530,25 +8183,6 @@ def create_app(
 
     # ── 生命体征 ──
 
-    @app.get("/api/health/vitals")
-    def health_vitals_list(patient_id: int, limit: int = 100, offset: int = 0) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_vitals(
-            patient_id=patient_id,
-            limit=max(1, min(int(limit), 500)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [v.model_dump(mode="json") for v in items],
-                "total": total,
-            }
-        )
-
-    @app.post("/api/health/vitals")
     def health_vitals_create(payload: dict[str, Any]) -> JSONResponse:
         svc = _get_health_service()
         if svc is None:
@@ -8787,26 +8421,6 @@ def create_app(
 
     # ── 健康时间线 ──
 
-    @app.get("/api/health/timeline")
-    def health_timeline(patient_id: int, limit: int = 100, offset: int = 0) -> JSONResponse:
-        """获取患者健康时间线，聚合所有类型的健康事件。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        events = svc.get_timeline(
-            patient_id=patient_id,
-            limit=max(1, min(int(limit), 500)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "patient_id": patient_id,
-                "items": [e.model_dump(mode="json") for e in events],
-                "total": len(events),
-            }
-        )
-
     # ── 预约 / 复诊 ──
 
     @app.get("/api/health/appointments")
@@ -8952,61 +8566,7 @@ def create_app(
 
     # ── 药物相互作用检查 ──
 
-    @app.post("/api/health/check-drug-interactions")
-    def health_check_drug_interactions(drug_name: str, existing_drugs: str) -> JSONResponse:
-        """检查新药与现有药物的相互作用。existing_drugs 用逗号分隔。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        drugs = [d.strip() for d in existing_drugs.split(",") if d.strip()]
-        interactions = svc.check_drug_interactions(drug_name, drugs)
-        return JSONResponse(
-            {
-                "ok": True,
-                "drug_name": drug_name,
-                "existing_drugs": drugs,
-                "interactions": [i.model_dump(mode="json") for i in interactions],
-                "has_interaction": len(interactions) > 0,
-            }
-        )
-
     # ── AI 报告解读 ──
-
-    @app.post("/api/health/lab-results/{lab_result_id}/interpret")
-    async def health_lab_interpret(lab_result_id: int) -> JSONResponse:
-        """使用 AI 解读化验报告。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
-        try:
-            insight = await svc.interpret_lab_result(lab_result_id)
-            if insight is None:
-                return JSONResponse(
-                    {"ok": False, "error": "interpretation failed"}, status_code=500
-                )
-            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    @app.post("/api/health/procedures/{procedure_id}/interpret")
-    async def health_procedure_interpret(procedure_id: int) -> JSONResponse:
-        """使用 AI 解读检查报告。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
-        try:
-            insight = await svc.interpret_procedure(procedure_id)
-            if insight is None:
-                return JSONResponse(
-                    {"ok": False, "error": "interpretation failed"}, status_code=500
-                )
-            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
 
     # ── Notes CRUD routes ──────────────────────────────────────
     register_notes_routes(app, ctx)
