@@ -926,19 +926,19 @@ def _normalize_cognition_update(item: dict[str, object]) -> CognitionUpdateSumma
 from openbiliclaw.api.utils import (  # noqa: E402
     coerce_e2e_event_rows as _coerce_e2e_event_rows,
 )
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     event_row_id as _event_row_id,
 )
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     event_row_metadata as _event_row_metadata,
 )
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     infer_source_platform_from_url as _infer_source_platform_from_url,
 )
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     normalize_source_platform as _normalize_source_platform,
 )
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     select_init_platforms as _select_init_platforms,
 )
 from openbiliclaw.storage.cache import get_cache as _get_cache  # noqa: E402
