@@ -1104,3 +1104,29 @@ class PoolCandidateMixin:
             """,
             (expression, topic_label, bvid),
         )
+
+    # ── Pool admission policy ──────────────────────────────────────
+
+    def _pool_admission_min_score(self) -> float:
+        from openbiliclaw.storage.database import _normalize_admission_min_score
+
+        return _normalize_admission_min_score(self._admission_min_score)
+
+    def _admission_predicate_sql(
+        self,
+        score_expr: str = "COALESCE(relevance_score, 0.0)",
+    ) -> tuple[str, tuple[Any, ...]]:
+        """Return a SQL predicate and params for the shared admission policy."""
+        from openbiliclaw.storage.database import _EXPLORE_STRATEGY, _EXPLORE_ADMISSION_MIN_SCORE
+
+        predicate = f"""
+            {score_expr} >= CASE
+                WHEN LOWER(TRIM(COALESCE(source, ''))) = ? THEN ?
+                ELSE ?
+            END
+        """
+        return predicate, (
+            _EXPLORE_STRATEGY,
+            _EXPLORE_ADMISSION_MIN_SCORE,
+            self._pool_admission_min_score(),
+        )

@@ -822,33 +822,6 @@ class Database(SavedMembershipsMixin, ViewHistoryMixin, QualityMixin, PruneMixin
             self._thread_local.conn = local_conn
         return local_conn
 
-    def _pool_admission_min_score(self) -> float:
-        return _normalize_admission_min_score(self._admission_min_score)
-
-    def _admission_predicate_sql(
-        self,
-        score_expr: str = "COALESCE(relevance_score, 0.0)",
-    ) -> tuple[str, tuple[Any, ...]]:
-        """Return a SQL predicate and params for the shared admission policy.
-
-        ``explore``-source candidates get a lower floor (``_EXPLORE_STRATEGY``
-        content is intentionally far from the profile, so its relevance score
-        runs systematically low — a uniform floor would bar the whole explore
-        pool from service). Everything else keeps the configured admission
-        score. Mirrors upstream ``_pool_admission_sql``.
-        """
-        predicate = f"""
-            {score_expr} >= CASE
-                WHEN LOWER(TRIM(COALESCE(source, ''))) = ? THEN ?
-                ELSE ?
-            END
-        """
-        return predicate, (
-            _EXPLORE_STRATEGY,
-            _EXPLORE_ADMISSION_MIN_SCORE,
-            self._pool_admission_min_score(),
-        )
-
     def open_connection(self) -> sqlite3.Connection:
         """Open a short-lived connection to the initialized database.
 
