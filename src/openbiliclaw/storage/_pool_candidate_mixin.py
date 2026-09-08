@@ -20,6 +20,14 @@ class PoolCandidateMixin:
     get_recent_viewed_content_keys: Any  # 由 Database 提供
     _balance_pool_rows: Any  # 由 Database 提供
     _is_viewed_row: Any  # 由 Database 提供
+    _execute_write: Any  # 由 Database 提供
+    _pool_readiness_cache: Any  # 由 Database 提供
+    _pool_readiness_cache_ttl: Any  # 由 Database 提供
+    _pool_readiness_refreshing: Any  # 由 Database 提供
+    _count_pending_discovery_raw_material: Any  # 由其他 mixin 提供
+    count_discovery_candidates_by_status: Any  # 由其他 mixin 提供
+    _extract_bvid_from_view_event: Any  # 由其他 mixin 提供
+    _extract_content_keys_from_view_event: Any  # 由其他 mixin 提供
 
     def get_pool_candidates(
         self,

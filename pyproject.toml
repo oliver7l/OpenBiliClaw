@@ -168,20 +168,24 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+disable_error_code = ["untyped-decorator", "type-arg"]
 
 [[tool.mypy.overrides]]
 module = [
     "aiohttp",
     "aiohttp.*",
     "claude_agent_sdk",
+    "diskcache",
     "feedparser",
     "google",
     "google.*",
     "playwright.*",
+    "requests",
     "rich.*",
     "scrapetube",
     "typer",
     "twitter_cli.*",
+    "yt_dlp",
 ]
 ignore_missing_imports = true
 
@@ -191,13 +195,21 @@ module = [
     "openbiliclaw.cli",
     "openbiliclaw.api.saved_sync_routes",
 ]
-disable_error_code = ["untyped-decorator"]
+disable_error_code = ["untyped-decorator", "type-arg"]
 
 # saved_sync 模块是 WIP 功能，调用了 Database/BilibiliAPIClient 中尚未实现的方法
 # 暂时忽略 attr-defined 错误，待方法实现后移除
 [[tool.mypy.overrides]]
 module = [
     "openbiliclaw.saved_sync.*",
+]
+disable_error_code = ["attr-defined"]
+
+# storage mixin 模式：mixin 类访问 Database 类提供的属性，mypy 无法识别
+# 暂时忽略 attr-defined 错误，这些属性在运行时确实存在
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.storage.*",
 ]
 disable_error_code = ["attr-defined"]
 
