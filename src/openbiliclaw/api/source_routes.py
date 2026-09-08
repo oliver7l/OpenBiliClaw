@@ -14,6 +14,7 @@ import re
 import secrets
 import time
 import uuid
+from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -38,6 +39,9 @@ from openbiliclaw.api.models import (
     ExtensionE2ERunStatus,
     SourceCredentialItem,
     SourcesCredentialsResponse,
+    LLMUsageSummary,
+    ObservabilityResponse,
+    PoolPipelineStats,
     SourcesStatusResponse,
     SourceStatusItem,
     XStatusResponse,
@@ -1773,6 +1777,432 @@ def register_source_routes(
             twitter=twitter,
             zhihu=zhihu,
         )
+
+
+    @app.get("/api/observability", response_model=ObservabilityResponse)
+    async def observability() -> ObservabilityResponse:
+        """Aggregate observability data for the dashboard page."""
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return ObservabilityResponse(
+                pipeline=PoolPipelineStats(
+                    total_items=0,
+                    fresh=0,
+                    shown=0,
+                    stale=0,
+                    suppressed=0,
+                    feedbacked=0,
+                    pending=0,
+                    discovery_candidates_pending=0,
+                    discovery_candidates_evaluated=0,
+                    items_with_quality_score=0,
+                    items_without_quality_score=0,
+                ),
+                platforms=[],
+                score_distribution=[],
+                topic_groups=[],
+                llm_usage=LLMUsageSummary(),
+                discovery_candidates=[],
+            )
+
+        def _query() -> ObservabilityResponse:
+            # ── 1. Master content_cache aggregate (single query replaces 9+ separate queries) ──
+            master = db.conn.execute("""
+                SELECT
+                  COUNT(*) AS total,
+                  AVG(CASE WHEN quality_score > 0.0 THEN quality_score END) AS avg_score,
+                  SUM(CASE WHEN quality_score > 0.0 THEN 1 ELSE 0 END) AS scored_count,
+                  SUM(CASE WHEN pool_status = 'fresh' THEN 1 ELSE 0 END) AS fresh,
+                  SUM(CASE WHEN pool_status = 'shown' THEN 1 ELSE 0 END) AS shown,
+                  SUM(CASE WHEN pool_status = 'stale' THEN 1 ELSE 0 END) AS stale,
+                  SUM(CASE WHEN pool_status = 'suppressed' THEN 1 ELSE 0 END) AS suppressed,
+                  SUM(CASE WHEN pool_status = 'feedbacked' THEN 1 ELSE 0 END) AS feedbacked,
+                  SUM(CASE WHEN pool_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                  SUM(CASE WHEN COALESCE(pool_expression, '') != '' THEN 1 ELSE 0 END) AS with_expr,
+                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,
+                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,
+                  SUM(CASE WHEN delight_score > 0.0 THEN 1 ELSE 0 END) AS delight_candidates,
+                  SUM(CASE WHEN delight_notified = 1 THEN 1 ELSE 0 END) AS delight_notified,
+                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,
+                  SUM(CASE WHEN quality_score <= 0.0 THEN 1 ELSE 0 END) AS bucket_0,
+                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,
+                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,
+                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,
+                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,
+                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10
+                FROM content_cache
+            """).fetchone()
+            m_total = int(master["total"]) if master else 0
+            m_avg = (
+                float(master["avg_score"]) if master and master["avg_score"] is not None else 0.0
+            )
+            m_scored = int(master["scored_count"]) if master else 0
+
+            pipeline = PoolPipelineStats(
+                total_items=m_total,
+                fresh=int(master["fresh"]) if master else 0,
+                shown=int(master["shown"]) if master else 0,
+                stale=int(master["stale"]) if master else 0,
+                suppressed=int(master["suppressed"]) if master else 0,
+                feedbacked=int(master["feedbacked"]) if master else 0,
+                pending=int(master["pending"]) if master else 0,
+                discovery_candidates_pending=0,
+                discovery_candidates_evaluated=0,
+                items_with_quality_score=m_scored,
+                items_without_quality_score=m_total - m_scored,
+                avg_quality_score=round(m_avg, 4),
+            )
+
+            # ── 2. Per-platform breakdown ──
+            plat_rows = db.conn.execute("""
+                SELECT source_platform, pool_status, COUNT(*) AS c
+                FROM content_cache
+                GROUP BY source_platform, pool_status
+                ORDER BY source_platform
+            """).fetchall()
+            plat_map: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+            for r in plat_rows:
+                plat = str(r["source_platform"]) or "unknown"
+                status = str(r["pool_status"]) or "unknown"
+                plat_map[plat][status] += int(r["c"])
+            platforms = [
+                PlatformPoolStats(
+                    platform=plat,
+                    total=sum(s.values()),
+                    fresh=s.get("fresh", 0),
+                    shown=s.get("shown", 0),
+                    stale=s.get("stale", 0),
+                    suppressed=s.get("suppressed", 0),
+                    feedbacked=s.get("feedbacked", 0),
+                    pending=s.get("pending", 0),
+                )
+                for plat, s in sorted(plat_map.items())
+            ]
+
+            # ── 3. Score distribution (from master) ──
+            score_buckets = [
+                ("0 (未评分)", "bucket_0"),
+                ("0~0.2", "bucket_02"),
+                ("0.2~0.4", "bucket_04"),
+                ("0.4~0.6", "bucket_06"),
+                ("0.6~0.8", "bucket_08"),
+                ("0.8~1.0", "bucket_10"),
+            ]
+            score_dist = [
+                ScoreDistribution(bucket=b, count=int(master[col]) if master else 0)
+                for b, col in score_buckets
+            ]
+
+            # ── 4. Topic groups ──
+            topic_rows = db.conn.execute("""
+                SELECT topic_group, COUNT(*) AS c
+                FROM content_cache
+                WHERE topic_group != '' AND topic_group IS NOT NULL
+                GROUP BY topic_group ORDER BY c DESC LIMIT 30
+            """).fetchall()
+            topic_groups = [
+                TopicGroupStats(topic=str(r["topic_group"]), count=int(r["c"])) for r in topic_rows
+            ]
+
+            # ── 5. Discovery candidates ──
+            disc_rows = db.conn.execute("""
+                SELECT status, COUNT(*) AS c
+                FROM discovery_candidates GROUP BY status ORDER BY c DESC
+            """).fetchall()
+            disc_stats = [
+                DiscoveryCandidateStats(status=str(r["status"]), count=int(r["c"]))
+                for r in disc_rows
+            ]
+
+            # Discovery candidates pipeline counts (from disc_rows)
+            disc_pending = 0
+            disc_evaluated = 0
+            for r in disc_rows:
+                st = str(r["status"])
+                if st in ("pending_eval", "evaluating"):
+                    disc_pending += int(r["c"])
+                elif st == "evaluated":
+                    disc_evaluated += int(r["c"])
+            pipeline.discovery_candidates_pending = disc_pending
+            pipeline.discovery_candidates_evaluated = disc_evaluated
+
+            # ── 6. LLM usage (combined: by_caller covers all 7d, derive today from it) ──
+            caller_rows = db.conn.execute("""
+                SELECT caller, COUNT(*) AS calls,
+                       COALESCE(SUM(estimated_cost_cny), 0) AS cost_cny,
+                       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost
+                FROM llm_usage
+                WHERE timestamp >= datetime('now', '-7 day', 'localtime')
+                GROUP BY caller ORDER BY cost_cny DESC LIMIT 20
+            """).fetchall()
+            by_caller: list[dict[str, object]] = []
+            total_7d_calls = 0
+            total_7d_cost = 0.0
+            total_today_calls = 0
+            total_today_cost = 0.0
+            for r in caller_rows:
+                calls = int(r["calls"])
+                cost = float(r["cost_cny"])
+                t_calls = int(r["today_calls"])
+                t_cost = float(r["today_cost"])
+                total_7d_calls += calls
+                total_7d_cost += cost
+                total_today_calls += t_calls
+                total_today_cost += t_cost
+                by_caller.append(
+                    {
+                        "caller": str(r["caller"] or "unknown"),
+                        "calls": calls,
+                        "cost_cny": round(cost, 4),
+                        "prompt_tokens": int(r["prompt_tokens"]),
+                        "completion_tokens": int(r["completion_tokens"]),
+                    }
+                )
+            llm_usage = LLMUsageSummary(
+                today_calls=total_today_calls,
+                today_cost_cny=round(total_today_cost, 4),
+                total_calls_7d=total_7d_calls,
+                total_cost_7d=round(total_7d_cost, 4),
+                by_caller=by_caller,
+            )
+
+            # ── 7. Runtime snapshot ──
+            runtime: dict[str, object] = {}
+            get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
+            if callable(get_runtime_status):
+                with suppress(Exception):
+                    st = get_runtime_status()
+                    if isinstance(st, dict):
+                        for k in (
+                            "last_refresh_at",
+                            "last_discovered_count",
+                            "last_replenished_count",
+                            "pool_available_count",
+                            "pool_raw_count",
+                            "pool_target_count",
+                            "recommendation_count",
+                            "recent_pool_topics",
+                            "pending_delight_count",
+                            "last_delight_notification_at",
+                            "manual_refresh_state",
+                            "pending_signal_events",
+                        ):
+                            if k in st:
+                                runtime[k] = st[k]
+
+            # ── 8. Keywords stats ──
+            kw_rows = db.conn.execute("""
+                SELECT platform, status, COUNT(*) AS c
+                FROM discovery_keywords GROUP BY platform, status ORDER BY platform, status
+            """).fetchall()
+            keywords = [
+                {
+                    "platform": str(r["platform"] or "unknown"),
+                    "status": str(r["status"] or "unknown"),
+                    "count": int(r["c"]),
+                }
+                for r in kw_rows
+            ]
+
+            # ── 9. Eval stats (combined single query) ──
+            eval_row = db.conn.execute("""
+                SELECT COUNT(*) AS total, COALESCE(SUM(eval_attempts), 0) AS attempts
+                FROM discovery_candidates
+            """).fetchone()
+            eval_total_c = int(eval_row["total"]) if eval_row else 0
+            eval_stats: dict[str, object] = {
+                "total_candidates": eval_total_c,
+                "total_eval_attempts": int(eval_row["attempts"]) if eval_row else 0,
+                "candidates_accepted": int(master["candidates_accepted"]) if master else 0,
+                "acceptance_rate": round(
+                    int(master["candidates_accepted"]) / max(eval_total_c, 1) * 100, 1
+                )
+                if eval_total_c
+                else 0,
+            }
+
+            # ── 10. Event stats (combined single query) ──
+            event_rows = db.conn.execute("""
+                SELECT event_type, source_platform, inferred_satisfaction, COUNT(*) AS c
+                FROM events
+                GROUP BY event_type, source_platform, inferred_satisfaction
+            """).fetchall()
+            event_types: dict[str, int] = defaultdict(int)
+            event_platforms: dict[str, int] = defaultdict(int)
+            sat_map: dict[str, int] = defaultdict(int)
+            for r in event_rows:
+                et = str(r["event_type"] or "unknown")
+                sp = str(r["source_platform"]) or None
+                sat = str(r["inferred_satisfaction"]) or None
+                c = int(r["c"])
+                event_types[et] += c
+                if sp:
+                    event_platforms[sp] += c
+                if sat:
+                    sat_map[sat] += c
+            event_total = sum(event_types.values())
+            event_stats = {
+                "total_events": event_total,
+                "by_type": dict(event_types),
+                "by_platform": dict(event_platforms),
+            }
+            satisfaction_distribution = [
+                {"satisfaction": k, "count": v}
+                for k, v in sorted(sat_map.items(), key=lambda x: -x[1])
+            ]
+
+            # ── 11. Feedback stats ──
+            fb_rows = db.conn.execute("""
+                SELECT feedback_type, COUNT(*) AS c FROM content_cache
+                WHERE feedback_type != '' AND feedback_type IS NOT NULL
+                GROUP BY feedback_type ORDER BY c DESC
+            """).fetchall()
+            fb_types = {str(r["feedback_type"]): int(r["c"]) for r in fb_rows}
+            feedback_stats = {"total_feedback": sum(fb_types.values()), "by_type": fb_types}
+
+            # ── 12. Expression / Delight (from master) ──
+            expression_coverage = {
+                "with_expression": int(master["with_expr"]) if master else 0,
+                "without_expression": int(master["without_expr"]) if master else 0,
+                "with_topic_group": int(master["with_topic"]) if master else 0,
+                "with_quality_score": m_scored,
+            }
+            delight_stats = {
+                "delight_candidates": int(master["delight_candidates"]) if master else 0,
+                "delight_notified": int(master["delight_notified"]) if master else 0,
+                "pending_delight": runtime.get("pending_delight_count", 0),
+                "last_delight_notification": runtime.get("last_delight_notification_at", ""),
+            }
+
+            # ── 13. Soul profile (pre-fetched) ──
+            soul_profile = _soul_profile_cache
+
+            # ── 14. Scheduler loop health ──
+            scheduler_loops: list[dict[str, object]] = []
+            try:
+                controller = getattr(ctx, "runtime_controller", None)
+                if controller is not None and hasattr(controller, "get_loop_health"):
+                    scheduler_loops = controller.get_loop_health()
+            except Exception:
+                pass
+
+            # ── 15. Auth sources ──
+            auth_sources: list[dict[str, object]] = []
+            try:
+                ss_resp = sources_status()
+                if isinstance(ss_resp, SourcesStatusResponse):
+                    for s in cast("Any", ss_resp).sources:
+                        auth_sources.append(
+                            {
+                                "platform": s.platform,
+                                "label": s.label,
+                                "status": s.status,
+                                "last_ok_at": s.last_ok_at or "",
+                                "error": s.error or "",
+                                "cookie_age_hours": s.cookie_age_hours,
+                            }
+                        )
+            except Exception:
+                pass
+
+            # ── 16. Style distribution ──
+            style_rows = db.conn.execute("""
+                SELECT style_key, COUNT(*) AS c FROM content_cache
+                WHERE style_key != '' AND style_key IS NOT NULL
+                GROUP BY style_key ORDER BY c DESC LIMIT 20
+            """).fetchall()
+            style_distribution = [
+                {"style": str(r["style_key"]), "count": int(r["c"])} for r in style_rows
+            ]
+
+            # ── 17. Suppressed (quota-managed) qualification breakdown ──
+            # One GROUP BY over source_platform × qualification bucket so the
+            # dashboard can explain WHY items sit outside the rotation pool:
+            # qualified = passed admission line + full precompute + linkable
+            # (could re-enter if reactivated), below_threshold = LLM scored
+            # them below the 0.60 admission line, unevaluated = no score yet.
+            suppressed_rows = db.conn.execute("""
+                SELECT
+                    source_platform AS platform,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) >= 0.60
+                              AND COALESCE(pool_expression, '') != ''
+                              AND COALESCE(pool_topic_label, '') != ''
+                              AND COALESCE(style_key, '') != ''
+                              AND COALESCE(topic_group, '') != ''
+                              AND COALESCE(content_url, '') != ''
+                        THEN 1 ELSE 0 END) AS qualified,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) > 0
+                              AND COALESCE(relevance_score, 0.0) < 0.60
+                        THEN 1 ELSE 0 END) AS below_threshold,
+                    SUM(CASE WHEN COALESCE(relevance_score, 0.0) = 0
+                        THEN 1 ELSE 0 END) AS unevaluated,
+                    COUNT(*) AS total
+                FROM content_cache
+                WHERE pool_status = 'suppressed'
+                GROUP BY source_platform
+                ORDER BY total DESC
+            """).fetchall()
+            suppressed_breakdown = [
+                {
+                    "platform": str(r["platform"] or "unknown"),
+                    "qualified": int(r["qualified"]),
+                    "below_threshold": int(r["below_threshold"]),
+                    "unevaluated": int(r["unevaluated"]),
+                    "total": int(r["total"]),
+                }
+                for r in suppressed_rows
+            ]
+
+            return ObservabilityResponse(
+                pipeline=pipeline,
+                platforms=platforms,
+                score_distribution=score_dist,
+                topic_groups=topic_groups,
+                llm_usage=llm_usage,
+                discovery_candidates=disc_stats,
+                runtime=runtime,
+                keywords=keywords,
+                eval_stats=eval_stats,
+                event_stats=event_stats,
+                feedback_stats=feedback_stats,
+                expression_coverage=expression_coverage,
+                delight_stats=delight_stats,
+                soul_profile=soul_profile,
+                scheduler_loops=scheduler_loops,
+                auth_sources=auth_sources,
+                style_distribution=style_distribution,
+                satisfaction_distribution=satisfaction_distribution,
+                suppressed_breakdown=suppressed_breakdown,
+            )
+
+        # Pre-fetch soul profile in async context (not inside thread pool executor)
+        _soul_profile_cache: dict[str, object] = {}
+        try:
+            soul_engine = getattr(ctx, "soul_engine", None)
+            if soul_engine is not None and hasattr(soul_engine, "get_profile"):
+                profile = await soul_engine.get_profile()
+                if profile is not None:
+                    interest_tags = (
+                        len(getattr(profile.interest, "likes", []))
+                        if hasattr(profile, "interest")
+                        else 0
+                    )
+                    awareness_count = len(getattr(profile, "recent_awareness", []))
+                    insights_count = len(getattr(profile, "active_insights", []))
+                    portrait = getattr(profile, "personality_portrait", "")[:100]
+                    _soul_profile_cache = {
+                        "interest_tags_count": interest_tags,
+                        "awareness_notes_count": awareness_count,
+                        "insight_hypotheses_count": insights_count,
+                        "personality_traits": portrait,
+                    }
+        except Exception:
+            _soul_profile_cache = {"error": "profile unavailable"}
+
+        return await asyncio.get_running_loop().run_in_executor(None, _query)
 
     def _mask_source_credential(value: str, *, reveal: bool) -> str:
         if reveal or not value:
