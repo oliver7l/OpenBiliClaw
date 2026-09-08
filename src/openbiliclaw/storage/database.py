@@ -26,6 +26,7 @@ from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidates
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
 from openbiliclaw.storage._pool_candidate_mixin import PoolCandidateMixin
 from openbiliclaw.storage._prune_mixin import PruneMixin
+from openbiliclaw.storage._quality_mixin import QualityMixin
 from openbiliclaw.storage._topic_mixin import TopicMixin
 from openbiliclaw.storage._native_sync_mixin import NativeSyncMixin
 from openbiliclaw.storage._watch_later_mixin import WatchLaterMixin
@@ -557,7 +558,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(PruneMixin, PoolCandidateMixin, TopicMixin, NativeSyncMixin, WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(QualityMixin, PruneMixin, PoolCandidateMixin, TopicMixin, NativeSyncMixin, WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -1451,63 +1452,6 @@ class Database(PruneMixin, PoolCandidateMixin, TopicMixin, NativeSyncMixin, Watc
             [after_event_id, *event_types],
         )
         return [dict(row) for row in cursor.fetchall()]
-
-    def update_content_quality_score(
-        self, bvid: str, *, quality_score: float, quality_reason: str
-    ) -> None:
-        """Update LLM quality score and recommendation reason for a content item."""
-        self._execute_write(
-            """
-            UPDATE content_cache
-            SET quality_score = ?,
-                quality_reason = ?,
-                last_scored_at = CURRENT_TIMESTAMP
-            WHERE bvid = ?
-            """,
-            (quality_score, quality_reason, bvid),
-        )
-
-    def batch_update_content_quality_scores(self, scores: list[tuple[str, float, str]]) -> None:
-        """Batch update quality scores for multiple content items."""
-        cursor = self.conn.cursor()
-        try:
-            cursor.executemany(
-                """
-                UPDATE content_cache
-                SET quality_score = ?,
-                    quality_reason = ?,
-                    last_scored_at = CURRENT_TIMESTAMP
-                WHERE bvid = ?
-                """,
-                [(score, reason, bvid) for bvid, score, reason in scores],
-            )
-            self.conn.commit()
-        except Exception:
-            logger.exception("Failed to batch update quality scores")
-            self.conn.rollback()
-
-    def batch_get_quality_scores(self, bvids: list[str]) -> list[dict[str, object]]:
-        """Fetch quality scores for a batch of bvids.
-
-        Returns list of dicts with bvid and quality_score.
-        """
-        if not bvids:
-            return []
-        placeholders = ",".join("?" for _ in bvids)
-        try:
-            cursor = self.conn.execute(
-                f"""
-                SELECT bvid, quality_score, quality_reason
-                FROM content_cache
-                WHERE bvid IN ({placeholders})
-                AND quality_score > 0.0
-                """,
-                bvids,
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception:
-            logger.exception("Failed to batch get quality scores")
-            return []
 
     def close(self) -> None:
         """Close the database connection(s)."""
