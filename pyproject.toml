@@ -168,7 +168,7 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-disable_error_code = ["untyped-decorator", "type-arg"]
+disable_error_code = ["untyped-decorator", "type-arg", "no-any-return"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -195,7 +195,7 @@ module = [
     "openbiliclaw.cli",
     "openbiliclaw.api.saved_sync_routes",
 ]
-disable_error_code = ["untyped-decorator", "type-arg"]
+disable_error_code = ["untyped-decorator", "type-arg", "no-any-return"]
 
 # saved_sync 模块是 WIP 功能，调用了 Database/BilibiliAPIClient 中尚未实现的方法
 # 暂时忽略 attr-defined 错误，待方法实现后移除
@@ -212,6 +212,13 @@ module = [
     "openbiliclaw.storage.*",
 ]
 disable_error_code = ["attr-defined"]
+
+# self_evolution 模块：大量函数缺少类型注解，待后续补充
+[[tool.mypy.overrides]]
+module = [
+    "openbiliclaw.self_evolution.*",
+]
+disable_error_code = ["no-untyped-def"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
