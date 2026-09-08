@@ -24,6 +24,7 @@ from openbiliclaw.storage._chat_turn_mixin import ChatTurnMixin
 from openbiliclaw.storage._content_cache_mixin import ContentCacheMixin
 from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidatesMixin
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
+from openbiliclaw.storage._cover_mixin import CoverMixin
 from openbiliclaw.storage._article_mixin import ArticleMixin
 from openbiliclaw.storage._favorites_mixin import FavoritesMixin
 from openbiliclaw.storage._user_feedback_mixin import UserFeedbackMixin
@@ -549,7 +550,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -5069,63 +5070,6 @@ class Database(ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMi
             conn.close()
 
     # ── Favorites CRUD ───────────────────────────────────────────
-
-    def iter_cover_lifecycle(self) -> list[tuple[str, str, bool]]:
-        """Return ``(cover_url, pool_status, is_saved)`` for every cached-cover candidate.
-
-        ``is_saved`` is True when the bvid is in favorites or watch_later. Consumed
-        by the image-cache cleanup (:mod:`openbiliclaw.runtime.image_cache`) to decide
-        which cached cover files are safe to evict: covers of saved or still-pending
-        content are kept; covers of consumed, unsaved content are eligible for removal.
-        """
-        cursor = self.conn.execute(
-            """
-            SELECT
-                COALESCE(cc.cover_url, '') AS cover_url,
-                COALESCE(cc.pool_status, 'fresh') AS pool_status,
-                CASE WHEN f.bvid IS NOT NULL OR w.bvid IS NOT NULL THEN 1 ELSE 0 END AS is_saved
-            FROM content_cache AS cc
-            LEFT JOIN favorites AS f ON f.bvid = cc.bvid
-            LEFT JOIN watch_later AS w ON w.bvid = cc.bvid
-            WHERE COALESCE(cc.cover_url, '') <> ''
-            """
-        )
-        return [
-            (str(row["cover_url"]), str(row["pool_status"]), bool(row["is_saved"]))
-            for row in cursor.fetchall()
-        ]
-
-    def iter_servable_cover_urls(self, *, recent_hours: int = 12, limit: int = 300) -> list[str]:
-        """Recent, still-servable cover URLs (newest first) for discovery-time prefetch.
-
-        Returns covers of content that may still be shown — ``pool_status`` in
-        ``fresh / shown / suppressed``, or saved (favorites / watch_later) — limited
-        to the last ``recent_hours`` of discoveries and ordered newest-first, so the
-        prefetch sweep (:mod:`openbiliclaw.runtime.image_cache`) caches the freshest
-        CDN tokens (notably XHS) before they expire. The recency window also keeps the
-        sweep from endlessly retrying old content whose signed token is already dead.
-        """
-        cursor = self.conn.execute(
-            """
-            SELECT cc.cover_url
-            FROM content_cache AS cc
-            LEFT JOIN favorites AS f ON f.bvid = cc.bvid
-            LEFT JOIN watch_later AS w ON w.bvid = cc.bvid
-            WHERE COALESCE(cc.cover_url, '') <> ''
-              AND cc.discovered_at >= datetime('now', ?)
-              AND (
-                COALESCE(cc.pool_status, 'fresh') IN ('fresh', 'shown', 'suppressed')
-                OR f.bvid IS NOT NULL
-                OR w.bvid IS NOT NULL
-              )
-            ORDER BY cc.discovered_at DESC
-            LIMIT ?
-            """,
-            (f"-{int(recent_hours)} hours", limit),
-        )
-        return [str(row["cover_url"]) for row in cursor.fetchall()]
-
-    # ── XHS observed URL ingest ───────────────────────────────────
 
     def save_xhs_observed_urls(self, urls: list[str], page_type: str) -> int:
         """Insert observed xhs URLs, skipping duplicates. Returns count inserted."""
