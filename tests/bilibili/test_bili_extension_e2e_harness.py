@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.test_bili_extension_browser_e2e import (
+from tests.bilibili.test_bili_extension_browser_e2e import (
     choose_bili_service_worker_target,
     find_free_port,
     is_bili_extension_e2e_candidate,
