@@ -1111,6 +1111,7 @@ def create_app(
     from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
     from openbiliclaw.api._system_routes import register_system_routes
     from openbiliclaw.api._image_proxy_routes import register_image_proxy_routes
+    from openbiliclaw.api._cookie_routes import register_cookie_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -2600,108 +2601,6 @@ def create_app(
                 "Cookie synced and runtime refreshed."
                 if runtime_refreshed
                 else "Cookie already synced; runtime unchanged."
-            ),
-        )
-
-    @app.post("/api/sources/dy/cookie", response_model=DouyinCookieResponse)
-    async def sync_douyin_cookie(payload: DouyinCookieIn) -> DouyinCookieResponse:
-        """Receive a Douyin cookie from the browser extension.
-
-        Unlike Bilibili, Douyin direct-cookie discovery currently has no
-        stable nav endpoint that cleanly distinguishes "logged out" from
-        "soft anti-bot returned HTTP 200 with empty data". We therefore
-        persist the browser-provided Cookie header as-is and let discovery
-        smoke surface whether search / hot / feed calls return content.
-        """
-        from openbiliclaw.sources.douyin_auth import DouyinCookieManager
-        from openbiliclaw.sources.douyin_direct import parse_cookie_header
-
-        cookie_value = payload.cookie.strip()
-        if not cookie_value:
-            return DouyinCookieResponse(
-                ok=False,
-                has_cookie=False,
-                message="cookie payload is empty",
-                error_code="empty_cookie",
-            )
-
-        runtime_config = getattr(ctx, "config", None) or config
-        manager = DouyinCookieManager(runtime_config.data_path)
-        manager.set_cookie(cookie_value, source=payload.source)
-        cookie_names = sorted(parse_cookie_header(cookie_value).keys())
-
-        with suppress(Exception):
-            await ctx.event_hub.publish(
-                {
-                    "type": "douyin_cookie_synced",
-                    "source": payload.source,
-                    "cookie_names": cookie_names,
-                }
-            )
-
-        return DouyinCookieResponse(
-            ok=True,
-            has_cookie=True,
-            cookie_names=cookie_names,
-            message="Douyin Cookie synced.",
-        )
-
-    @app.post("/api/sources/x/cookie", response_model=XCookieResponse)
-    async def sync_x_cookie(payload: XCookieIn) -> XCookieResponse:
-        """Receive an X (Twitter) cookie from the browser extension.
-
-        The browser extension already gates on ``auth_token`` + ``ct0`` before
-        posting, but we persist whatever header arrives and recompute
-        ``has_cookie`` server-side so the env-override path and the file stay
-        consistent. ``has_cookie`` is true only when BOTH required cookies are
-        present — twitter-cli 401s without either.
-        """
-        from openbiliclaw.sources.douyin_direct import parse_cookie_header
-
-        cookie_value = payload.cookie.strip()
-        if not cookie_value:
-            return XCookieResponse(
-                ok=False,
-                has_cookie=False,
-                message="cookie payload is empty",
-                error_code="empty_cookie",
-            )
-
-        runtime_config = getattr(ctx, "config", None) or config
-        XCookieManager(runtime_config.data_path).set_cookie(cookie_value, source=payload.source)
-        cookie_pairs = parse_cookie_header(cookie_value)
-        cookie_names = sorted(cookie_pairs.keys())
-        has_cookie = all(name in cookie_pairs for name in _X_REQUIRED_COOKIE_NAMES)
-
-        # A freshly synced valid cookie is the external re-login signal that
-        # clears a missing_cookie / expired_cookie / blocked health block.
-        # Without this the producer's is_ready() gate stays False forever, so
-        # discovery never retries even though auth is now fixed (the cookie
-        # handler is the only place a re-login state can be lifted).
-        if has_cookie:
-            with suppress(Exception):
-                from openbiliclaw.storage.x_health import XSourceHealthStore
-
-                XSourceHealthStore(ctx.database).clear_relogin_block()
-
-        with suppress(Exception):
-            await ctx.event_hub.publish(
-                {
-                    "type": "x_cookie_synced",
-                    "source": payload.source,
-                    "has_cookie": has_cookie,
-                    "cookie_names": cookie_names,
-                }
-            )
-
-        return XCookieResponse(
-            ok=True,
-            has_cookie=has_cookie,
-            cookie_names=cookie_names,
-            message=(
-                "X Cookie synced."
-                if has_cookie
-                else "X Cookie stored but missing auth_token / ct0."
             ),
         )
 
@@ -13256,6 +13155,9 @@ def create_app(
 
     # ── Image proxy routes ───────────────────────────────────────
     register_image_proxy_routes(app, ctx)
+
+    # ── Cookie management routes (douyin/x) ─────────────────────
+    register_cookie_routes(app, ctx, config=config)
 
     # ── 拆分后未接线的路由注册（K3 孤儿路由修复）──────────────────
     for _mod_name, _fn_name in [
