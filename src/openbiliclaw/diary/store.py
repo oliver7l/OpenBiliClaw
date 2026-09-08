@@ -283,7 +283,9 @@ class DiaryStore:
             ),
         )
         self.conn.commit()
-        return self.get_entry(cursor.lastrowid)  # type: ignore[arg-type]
+        entry = self.get_entry(cursor.lastrowid)
+        assert entry is not None
+        return entry
 
     def get_entry(self, entry_id: int) -> DiaryEntry:
         """根据 ID 获取日记。"""
@@ -431,7 +433,9 @@ class DiaryStore:
             (analysis_id, analysis.get("mood_score", 0.0), diary_id),
         )
         self.conn.commit()
-        return self.get_analysis(analysis_id)  # type: ignore[arg-type]
+        saved_analysis = self.get_analysis(analysis_id)
+        assert saved_analysis is not None
+        return saved_analysis
 
     def get_analysis(self, analysis_id: int) -> DiaryAnalysis:
         """获取分析记录。"""
@@ -631,7 +635,9 @@ class DiaryStore:
             ),
         )
         self.conn.commit()
-        return self.get_fragment(cursor.lastrowid)
+        fragment = self.get_fragment(cursor.lastrowid)
+        assert fragment is not None
+        return fragment
 
     def get_fragment(self, fragment_id: int) -> DiaryFragment | None:
         """根据 ID 获取碎片。"""
@@ -766,7 +772,9 @@ class DiaryStore:
             (name, tag_type.value),
         )
         self.conn.commit()
-        return self.get_tag(cursor.lastrowid)
+        tag = self.get_tag(cursor.lastrowid)
+        assert tag is not None
+        return tag
 
     def get_tag(self, tag_id: int) -> DiaryTag | None:
         """根据 ID 获取标签。"""
@@ -887,7 +895,9 @@ class DiaryStore:
             (name, relation),
         )
         self.conn.commit()
-        return self.get_person(cursor.lastrowid)
+        person = self.get_person(cursor.lastrowid)
+        assert person is not None
+        return person
 
     def get_person(self, person_id: int) -> DiaryPerson | None:
         """根据 ID 获取人物。"""

@@ -399,7 +399,7 @@ class InsightEngineService:
             "社交": ["朋友", "聚会", "吃饭", "聊天", "闺蜜", "哥们"],
         }
 
-        topic_counts: dict[str, int] = Counter()
+        topic_counts: Counter[str] = Counter()
         for entry in entries:
             content = (entry.get("content") or "") + (entry.get("title") or "")
             for topic, keywords in topic_keywords.items():
@@ -450,7 +450,7 @@ class InsightEngineService:
             "同事",
         ]
 
-        person_counts: dict[str, int] = Counter()
+        person_counts: Counter[str] = Counter()
         for entry in entries:
             content = (entry.get("content") or "") + (entry.get("title") or "")
             for person in common_people:

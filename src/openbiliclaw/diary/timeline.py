@@ -484,7 +484,7 @@ class TimelineService:
 
     def _classify_card_type(self, text: str) -> str:
         """分类卡片类型。"""
-        scores = defaultdict(int)
+        scores: dict[str, int] = defaultdict(int)
 
         for card_type, keywords in CARD_TYPE_KEYWORDS.items():
             for kw in keywords:

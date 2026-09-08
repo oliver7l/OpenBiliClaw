@@ -92,7 +92,7 @@ def _learnbuffett_articles(conn: sqlite3.Connection) -> dict[str, dict]:
 
 def _extract_learnbuffett_wikilinks(html: str) -> list[dict]:
     """从 learnbuffett HTML 中提取 wikilink。"""
-    links = []
+    links: list[dict] = []
     if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
@@ -120,7 +120,7 @@ def _extract_learnbuffett_wikilinks(html: str) -> list[dict]:
 
 def _extract_mungermodels_wikilinks(html: str) -> list[dict]:
     """从 mungermodels HTML 中提取 wikilink。"""
-    links = []
+    links: list[dict] = []
     if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
@@ -163,7 +163,7 @@ def _aichainmap_articles(conn: sqlite3.Connection) -> dict[str, dict]:
 
 def _extract_aichainmap_wikilinks(html: str) -> list[dict]:
     """从 aichainmap HTML 正文中提取 wikilink。"""
-    links = []
+    links: list[dict] = []
     if BeautifulSoup is None:
         return links
     soup = BeautifulSoup(html, "html.parser")
@@ -171,7 +171,8 @@ def _extract_aichainmap_wikilinks(html: str) -> list[dict]:
         href = a.get("href", "")
         text = a.get_text(strip=True)
         # 从 class 中提取类型
-        classes = a.get("class", []) or []
+        classes: list[str] = list(a.get("class") or [])
+        classes = classes if isinstance(classes, list) else [classes]
         link_type = "concept"
         for cls_val in classes:
             if "companies" in cls_val:

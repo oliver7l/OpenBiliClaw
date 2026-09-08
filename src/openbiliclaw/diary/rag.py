@@ -26,6 +26,9 @@ from typing import TYPE_CHECKING
 from ..llm.embedding import EmbeddingService, cosine_similarity
 from .store import DiaryStore
 
+__all__ = ["SearchResult", "RAGAnswer", "DiaryRAGService", "cosine_similarity"]
+
+
 if TYPE_CHECKING:
     from ..llm.service import LLMService
     from ..storage.database import Database
@@ -358,7 +361,7 @@ class DiaryRAGService:
                         logger.warning(
                             "生成 chunk embedding 失败 entry_id=%d: %s", batch[j][0].id, result
                         )
-                    elif result:
+                    elif isinstance(result, int) and result:
                         success += 1
                         total_chunks += result
 
@@ -380,8 +383,8 @@ class DiaryRAGService:
             }
         else:
             # 旧模式：全篇 embedding（兼容）
-            entries = self.store.get_unembedded_entries(limit=limit)
-            if not entries:
+            entry_rows = self.store.get_unembedded_entries(limit=limit)
+            if not entry_rows:
                 return {
                     "total": 0,
                     "success": 0,
@@ -390,27 +393,33 @@ class DiaryRAGService:
                     "message": "所有日记都已有向量",
                 }
 
-            logger.info("开始为 %d 篇日记生成全篇 embedding", len(entries))
+            logger.info("开始为 %d 篇日记生成全篇 embedding", len(entry_rows))
             success = 0
             failed = 0
 
-            for i in range(0, len(entries), batch_size):
-                batch = entries[i : i + batch_size]
-                tasks = [self._generate_single_embedding(entry) for entry in batch]
+            for i in range(0, len(entry_rows), batch_size):
+                row_batch = entry_rows[i : i + batch_size]
+                tasks = [self._generate_single_embedding(entry) for entry in row_batch]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 for j, result in enumerate(results):
                     if isinstance(result, Exception):
                         failed += 1
-                        logger.warning("生成 embedding 失败 entry_id=%d: %s", batch[j].id, result)
+                        logger.warning(
+                            "生成 embedding 失败 entry_id=%d: %s", row_batch[j].id, result
+                        )
                     elif result:
                         success += 1
 
                 logger.info(
-                    "已处理 %d/%d，成功 %d，失败 %d", i + len(batch), len(entries), success, failed
+                    "已处理 %d/%d，成功 %d，失败 %d",
+                    i + len(row_batch),
+                    len(entry_rows),
+                    success,
+                    failed,
                 )
 
-            return {"total": len(entries), "success": success, "failed": failed, "skipped": 0}
+            return {"total": len(entry_rows), "success": success, "failed": failed, "skipped": 0}
 
     async def _generate_single_embedding(self, entry: DiaryEntry) -> bool:
         """为单篇日记生成全篇 embedding（兼容旧模式）。"""
@@ -864,11 +873,20 @@ class DiaryRAGService:
 
         # 3. 调用 LLM 生成回答
         prompt = _RAG_SYSTEM_PROMPT.format(question=question, context=context)
-        try:
-            answer = await self._llm_service.complete(prompt)
-        except Exception as e:
-            logger.error("RAG 问答生成失败: %s", e)
-            answer = f"回答生成失败：{str(e)}"
+        if self._llm_service is None:
+            answer = "回答生成失败：LLM 服务未配置"
+        else:
+            try:
+                resp = await self._llm_service.complete_with_core_memory(
+                    system_instruction="你是一位专业的个人日记分析助手，基于用户提供的日记内容客观回答。",
+                    user_input=prompt,
+                    caller="diary.rag",
+                    inject_core_memory=False,
+                )
+                answer = resp.content
+            except Exception as e:
+                logger.error("RAG 问答生成失败: %s", e)
+                answer = f"回答生成失败：{str(e)}"
 
         # 4. 生成相关问题
         related_questions = await self._generate_related_questions(question, answer[:300])
@@ -889,10 +907,15 @@ class DiaryRAGService:
             answer_summary=answer_summary,
         )
         try:
-            result = await self._llm_service.complete(prompt)
+            resp = await self._llm_service.complete_with_core_memory(
+                system_instruction="基于用户的问题和已有的回答，生成相关问题的列表。",
+                user_input=prompt,
+                caller="diary.rag",
+                inject_core_memory=False,
+            )
             questions = [
                 line.strip().lstrip("0123456789.、- ")
-                for line in result.strip().split("\n")
+                for line in resp.content.strip().split("\n")
                 if line.strip()
             ]
             return questions[:3]

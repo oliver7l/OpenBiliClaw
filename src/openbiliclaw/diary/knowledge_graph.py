@@ -147,8 +147,8 @@ class KnowledgeGraphService:
             # 统计共现（两两组合）
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
-                    pair = tuple(sorted([tags[i], tags[j]]))
-                    co_occurrence[pair] += 1
+                    a, b = sorted([tags[i], tags[j]])
+                    co_occurrence[(a, b)] += 1
 
         # 筛选高频标签
         top_tags = [tag for tag, count in tag_counter.most_common(max_nodes) if count >= min_count]
@@ -241,8 +241,8 @@ class KnowledgeGraphService:
             # 统计共现
             for i in range(len(found_persons)):
                 for j in range(i + 1, len(found_persons)):
-                    pair = tuple(sorted([found_persons[i], found_persons[j]]))
-                    co_occurrence[pair] += 1
+                    a, b = sorted([found_persons[i], found_persons[j]])
+                    co_occurrence[(a, b)] += 1
 
         # 筛选高频人物
         top_persons = [

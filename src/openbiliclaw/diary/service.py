@@ -317,7 +317,7 @@ class DiaryService:
                     target_vec = self.store.get_embedding(entry_id)
                     if target_vec:
                         all_embs = self.store.get_all_embeddings()
-                        similar = []
+                        similar_pairs: list[tuple[int, float]] = []
                         for eid, vec in all_embs:
                             if eid == entry_id:
                                 continue
@@ -325,10 +325,11 @@ class DiaryService:
                                 continue
                             score = cosine_similarity(target_vec, vec)
                             if score >= 0.5:
-                                similar.append((eid, score))
-                        similar.sort(key=lambda x: x[1], reverse=True)
+                                similar_pairs.append((eid, score))
+                        similar_pairs.sort(key=lambda x: x[1], reverse=True)
                         result["similar_entries"] = [
-                            {"id": eid, "score": round(score, 4)} for eid, score in similar[:5]
+                            {"id": eid, "score": round(score, 4)}
+                            for eid, score in similar_pairs[:5]
                         ]
                 else:
                     all_chunks = self.store.get_all_chunk_embeddings()
