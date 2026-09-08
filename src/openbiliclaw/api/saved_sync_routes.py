@@ -6,13 +6,24 @@ Registered from ``app.py`` during ``create_app()``.
 
 import time
 import unicodedata
+from contextlib import suppress
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from openbiliclaw.api.models import (
+    FavoriteAddIn,
+    FavoriteItem,
+    FavoriteListResponse,
+    FavoriteStateResponse,
+    WatchLaterAddIn,
+    WatchLaterItem,
+    WatchLaterListResponse,
+    WatchLaterStateResponse,
+)
 from openbiliclaw.api.runtime_context import RuntimeContext
 from openbiliclaw.saved_sync.models import (
     NATIVE_SAVE_STATUSES,
@@ -361,3 +372,123 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
             tag=tag,
         )
         return JSONResponse(items)
+
+    # ── Watch-later (稍后再看) ────────────────────────────────────
+
+    def _watch_later_state(bvid: str) -> WatchLaterStateResponse:
+        return WatchLaterStateResponse(
+            saved=ctx.database.is_in_watch_later(bvid),
+            total=ctx.database.count_watch_later(),
+        )
+
+    @app.post("/api/watch-later", response_model=WatchLaterStateResponse)
+    async def watch_later_add(payload: WatchLaterAddIn) -> WatchLaterStateResponse:
+        bvid = payload.bvid.strip()
+        if not bvid:
+            raise HTTPException(status_code=422, detail="bvid is required")
+        ctx.database.add_to_watch_later(bvid, note=payload.note.strip())
+        return _watch_later_state(bvid)
+
+    @app.delete("/api/watch-later/{bvid}", response_model=WatchLaterStateResponse)
+    async def watch_later_remove(bvid: str) -> WatchLaterStateResponse:
+        normalized = bvid.strip()
+        ctx.database.remove_from_watch_later(normalized)
+        return _watch_later_state(normalized)
+
+    @app.get("/api/watch-later/{bvid}", response_model=WatchLaterStateResponse)
+    async def watch_later_status(bvid: str) -> WatchLaterStateResponse:
+        return _watch_later_state(bvid.strip())
+
+    @app.get("/api/watch-later", response_model=WatchLaterListResponse)
+    async def watch_later_list(
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> WatchLaterListResponse:
+        rows = ctx.database.list_watch_later(limit=limit, offset=offset)
+        return WatchLaterListResponse(
+            items=[
+                WatchLaterItem(
+                    bvid=str(row.get("bvid", "")),
+                    title=str(row.get("title", "")),
+                    up_name=str(row.get("up_name", "")),
+                    cover_url=str(row.get("cover_url", "")),
+                    content_url=str(row.get("content_url", "")),
+                    source_platform=str(row.get("source_platform", "") or "bilibili"),
+                    added_at=str(row.get("added_at", "")),
+                )
+                for row in rows
+            ],
+            total=ctx.database.count_watch_later(),
+        )
+
+    # ── Favorites (收藏夹) ────────────────────────────────────────
+
+    def _favorite_state(bvid: str) -> FavoriteStateResponse:
+        return FavoriteStateResponse(
+            saved=ctx.database.is_in_favorites(bvid),
+            total=ctx.database.count_favorites(),
+        )
+
+    @app.post("/api/favorites", response_model=FavoriteStateResponse)
+    async def favorite_add(payload: FavoriteAddIn) -> FavoriteStateResponse:
+        bvid = payload.bvid.strip()
+        if not bvid:
+            raise HTTPException(status_code=422, detail="bvid is required")
+        ctx.database.add_to_favorites(bvid, note=payload.note.strip())
+        return _favorite_state(bvid)
+
+    @app.delete("/api/favorites/{bvid}", response_model=FavoriteStateResponse)
+    async def favorite_remove(bvid: str) -> FavoriteStateResponse:
+        normalized = bvid.strip()
+        ctx.database.remove_from_favorites(normalized)
+        return _favorite_state(normalized)
+
+    @app.get("/api/favorites/{bvid}", response_model=FavoriteStateResponse)
+    async def favorite_status(bvid: str) -> FavoriteStateResponse:
+        return _favorite_state(bvid.strip())
+
+    @app.get("/api/saved-status")
+    async def saved_status_bulk(bvids: str = Query(...)) -> dict[str, dict[str, bool]]:
+        """批量查询收藏 / 稍后看状态（v0.3.193）。"""
+        raw = [b.strip() for b in bvids.split(",") if b.strip()]
+        raw = list(dict.fromkeys(raw))[:500]
+        if not raw:
+            return {}
+        fav_set: set[str] = set()
+        wl_set: set[str] = set()
+        placeholders = ",".join("?" * len(raw))
+        with suppress(Exception):
+            for r in ctx.database.conn.execute(
+                f"SELECT bvid FROM favorites WHERE bvid IN ({placeholders})",
+                raw,
+            ).fetchall():
+                fav_set.add(str(r["bvid"]))
+        with suppress(Exception):
+            for r in ctx.database.conn.execute(
+                f"SELECT bvid FROM watch_later WHERE bvid IN ({placeholders})",
+                raw,
+            ).fetchall():
+                wl_set.add(str(r["bvid"]))
+        return {b: {"saved": b in fav_set, "watch_later": b in wl_set} for b in raw}
+
+    @app.get("/api/favorites", response_model=FavoriteListResponse)
+    async def favorite_list(
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> FavoriteListResponse:
+        rows = ctx.database.list_favorites(limit=limit, offset=offset)
+        return FavoriteListResponse(
+            items=[
+                FavoriteItem(
+                    bvid=str(row.get("bvid", "")),
+                    title=str(row.get("title", "")),
+                    up_name=str(row.get("up_name", "")),
+                    cover_url=str(row.get("cover_url", "")),
+                    content_url=str(row.get("content_url", "")),
+                    source_platform=str(row.get("source_platform", "") or "bilibili"),
+                    added_at=str(row.get("added_at", "")),
+                )
+                for row in rows
+            ],
+            total=ctx.database.count_favorites(),
+        )
