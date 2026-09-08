@@ -3651,6 +3651,7 @@ def create_app(
         ]
         return {"items": items}
 
+    @app.post("/api/delight/respond")
     async def respond_to_delight(payload: dict[str, Any]) -> Any:
         """User responds to a delight (surprise) recommendation.
 
