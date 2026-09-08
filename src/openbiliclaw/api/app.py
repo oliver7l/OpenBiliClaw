@@ -14218,4 +14218,9 @@ def create_app(
     _self_evo_db_path = str(getattr(getattr(ctx, "config", None), "storage", None).db_path) if getattr(getattr(ctx, "config", None), "storage", None) else "data/openbiliclaw.db"
     app.include_router(create_self_evolution_router(_self_evo_db_path, getattr(ctx, "llm_service", None)))
 
+    # ── Synthesis (迭代合成) API endpoints ─────────────────────────
+    from openbiliclaw.synthesis.api import create_synthesis_router
+
+    app.include_router(create_synthesis_router(_self_evo_db_path, getattr(ctx, "llm_service", None)))
+
     return app

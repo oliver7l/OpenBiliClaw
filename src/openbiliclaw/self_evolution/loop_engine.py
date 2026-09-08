@@ -565,6 +565,15 @@ class SelfEvolutionLoopEngine:
                 lambda: self._do_content_insights(),
             )
 
+        # ── Step 11: Cross-module synthesis (every 6 hours) ─────────────────
+        if self._quota_ok():
+            await self._run_if_due(
+                "synthesis",
+                6,
+                results,
+                lambda: self._do_synthesis(),
+            )
+
         # Save batch timestamp
         self._state.last_batch_run_at = datetime.now()
 
@@ -706,6 +715,38 @@ class SelfEvolutionLoopEngine:
             "gaps": len(report.knowledge_gaps),
             "cross_platform": len(report.cross_platform_insights),
         }
+
+    async def _do_synthesis(self) -> dict[str, Any] | None:
+        """执行跨模块迭代合成（日记+聊天+文章洞察）。"""
+        try:
+            from openbiliclaw.synthesis.engine import SynthesisEngine
+            from openbiliclaw.synthesis.models import SynthesisConfig
+
+            config = SynthesisConfig(main_db_path=self._db_path)
+            engine = SynthesisEngine(
+                config=config,
+                llm_service=self._llm_service,
+            )
+            result = await engine.run()
+            if result is None:
+                logger.info("self_evolution: synthesis skipped (no new data)")
+                return {"skipped": True}
+            logger.info(
+                "self_evolution: synthesis v%d saved (%d diary, %d insights, %d topics)",
+                result.version,
+                result.new_diary_count,
+                result.new_chat_insight_count,
+                result.new_chat_topic_count,
+            )
+            return {
+                "version": result.version,
+                "diary": result.new_diary_count,
+                "insights": result.new_chat_insight_count,
+                "topics": result.new_chat_topic_count,
+            }
+        except Exception:
+            logger.debug("self_evolution: synthesis failed", exc_info=True)
+            return None
 
 
 # ---------------------------------------------------------------------------
