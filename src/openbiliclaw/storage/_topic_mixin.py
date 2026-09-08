@@ -342,3 +342,115 @@ class TopicMixin:
             ", ".join(f"{g}:{c}" for g, c in top),
         )
         return len(clean_bvids)
+
+    # ── Topic CRUD ─────────────────────────────────────────────────
+
+    def create_topic(
+        self,
+        *,
+        name: str,
+        slug: str,
+        description: str = "",
+        keywords: list[str] | None = None,
+        platforms: list[str] | None = None,
+    ) -> int:
+        """Create a topic; returns its id (raises on duplicate name/slug)."""
+        import json as _json
+
+        cursor = self.conn.execute(
+            """INSERT INTO topics (name, slug, description, keywords, platforms, status)
+               VALUES (?, ?, ?, ?, ?, 'active')""",
+            (
+                name,
+                slug,
+                description,
+                _json.dumps(keywords or [], ensure_ascii=False),
+                _json.dumps(platforms or ["bilibili"], ensure_ascii=False),
+            ),
+        )
+        self.conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    def list_topics(self, *, include_paused: bool = True) -> list[dict[str, Any]]:
+        """Return topics newest-first with item counts."""
+        where = "" if include_paused else "WHERE status = 'active'"
+        rows = self.conn.execute(
+            f"""SELECT t.*,
+                       (SELECT COUNT(*) FROM topic_items i WHERE i.topic_id = t.id) AS item_count
+                FROM topics t {where}
+                ORDER BY t.created_at DESC, t.id DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_topic_by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM topics WHERE slug = ?", (slug,)).fetchone()
+        return dict(row) if row else None
+
+    def get_topic_by_id(self, topic_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM topics WHERE id = ?", (topic_id,)).fetchone()
+        return dict(row) if row else None
+
+    def add_topic_item(self, topic_id: int, item: dict[str, Any]) -> bool:
+        """Insert one collected item (idempotent by topic_id+content_key)."""
+        content_key = str(item.get("content_key") or "").strip()
+        title = str(item.get("title") or "").strip()
+        if not content_key or not title:
+            return False
+        existing = self.conn.execute(
+            "SELECT id FROM topic_items WHERE topic_id = ? AND content_key = ?",
+            (topic_id, content_key),
+        ).fetchone()
+        if existing:
+            return False
+        self.conn.execute(
+            """INSERT INTO topic_items
+               (topic_id, content_key, title, url, source_platform, source_name,
+                cover_url, summary, topic_label)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                topic_id,
+                content_key,
+                title,
+                str(item.get("url") or ""),
+                str(item.get("source_platform") or ""),
+                str(item.get("source_name") or ""),
+                str(item.get("cover_url") or ""),
+                str(item.get("summary") or ""),
+                str(item.get("topic_label") or ""),
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def get_topic_items(
+        self,
+        topic_id: int,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Return a topic's collected items, newest first."""
+        rows = self.conn.execute(
+            """SELECT * FROM topic_items
+               WHERE topic_id = ?
+               ORDER BY collected_at DESC, id DESC
+               LIMIT ? OFFSET ?""",
+            (topic_id, limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_topic_items(self, topic_id: int) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM topic_items WHERE topic_id = ?", (topic_id,)
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+    def mark_topic_collected(self, topic_id: int) -> None:
+        """Stamp last_collected_at and refresh the stored item_count."""
+        count = self.count_topic_items(topic_id)
+        self.conn.execute(
+            "UPDATE topics SET last_collected_at = CURRENT_TIMESTAMP, "
+            "item_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (count, topic_id),
+        )
+        self.conn.commit()
