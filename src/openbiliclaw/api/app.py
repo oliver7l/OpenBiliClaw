@@ -1747,15 +1747,6 @@ def create_app(
             return normalize_source_bootstrap_state(load_state())
         return default_source_bootstrap_state()
 
-    def _save_source_bootstrap_state(state: dict[str, object]) -> None:
-        from openbiliclaw.sources.bootstrap_state import normalize_source_bootstrap_state
-
-        save_state = getattr(ctx.memory_manager, "save_source_bootstrap_state", None)
-        if not callable(save_state):
-            return
-        with suppress(Exception):
-            save_state(normalize_source_bootstrap_state(state))
-
     def _filter_new_source_bootstrap_items(
         source: str,
         items: list[dict[str, Any]],
@@ -4554,15 +4545,6 @@ def create_app(
         recipes = ctx.database.get_all_recipes()
         return {"items": recipes}
 
-    def update_source(recipe_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """Update fields of an existing source recipe."""
-        updated = ctx.database.update_recipe(recipe_id, **payload)
-        if not updated:
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=404, detail="Recipe not found")
-        return {"ok": True, "id": recipe_id}
-
     # ── XHS observed URL ingestion endpoint ─────────────────────────
 
     xhs_max_urls_per_batch = 50
@@ -4869,14 +4851,6 @@ def create_app(
     if hasattr(ctx.database, "conn"):
         _bili_task_queue = BiliTaskQueue(ctx.database)
 
-    async def bili_task_kick() -> dict[str, Any]:
-        """Broadcast `bili_task_available` over runtime-stream."""
-        publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
-        if callable(publish):
-            with suppress(Exception):
-                await publish({"type": "bili_task_available", "source": "task_kick"})
-        return {"ok": True}
-
     # ── XHS task queue endpoints (extension dispatcher) ──────────────
 
     from openbiliclaw.sources.xhs_tasks import (
@@ -5007,27 +4981,10 @@ def create_app(
     if hasattr(db_conn, "executescript"):
         _zhihu_task_queue = ZhihuTaskQueue(ctx.database)
 
-    async def zhihu_task_kick() -> dict[str, Any]:
-        """Broadcast `zhihu_task_available` over runtime-stream."""
-        publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
-        if callable(publish):
-            with suppress(Exception):
-                await publish({"type": "zhihu_task_available", "source": "task_kick"})
-        return {"ok": True}
-
     _yt_task_queue: YtTaskQueue | None = None
     if hasattr(ctx.database, "conn"):
         _yt_task_queue = YtTaskQueue(ctx.database)
 
-    async def yt_task_kick() -> dict[str, Any]:
-        """Broadcast `yt_task_available` over runtime-stream."""
-        publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
-        if callable(publish):
-            with suppress(Exception):
-                await publish({"type": "yt_task_available", "source": "task_kick"})
-        return {"ok": True}
-
-    @app.post("/api/extension/e2e/run", response_model=ExtensionE2ERunOut)
     async def extension_e2e_run(
         request: Request,
         payload: ExtensionE2ERunIn,
@@ -5619,21 +5576,6 @@ def create_app(
             return []
         return [str(item).strip() for item in value if str(item).strip()]
 
-    async def probe_config_service(payload: ConfigServiceProbeIn) -> ConfigServiceProbeResponse:
-        """Probe submitted LLM / embedding settings without saving config.toml."""
-        from copy import deepcopy
-
-        from openbiliclaw.config import load_config
-
-        cfg = deepcopy(load_config())
-        update = payload.config if isinstance(payload.config, dict) else {}
-        llm_data = update.get("llm")
-        if isinstance(llm_data, dict):
-            _apply_llm_update(cfg, llm_data)
-        if payload.kind == "llm":
-            return await _probe_llm_config(cfg)
-        return await _probe_embedding_config(cfg)
-
     def _normalize_enabled_sources_override(
         raw_enabled: dict[str, bool] | None,
         fallback: dict[str, bool],
@@ -5710,76 +5652,6 @@ def create_app(
             )
 
     # ── Subscription management routes ────────────────────────────
-    def list_articles(
-        q: str = "",
-        source_type: str = "",
-        status: str = "",
-        tag: str = "",
-        limit: int = 50,
-        offset: int = 0,
-        random: bool = False,
-        sort: str = "",
-    ) -> JSONResponse:
-        """List reading-library articles, optionally filtered.
-
-        Supports keyword search (``q``) over the full-text index, plus
-        filtering by source type, reading status and tag. When ``q`` is given
-        the results are ranked by FTS relevance (bm25); otherwise they are
-        ordered by recency. ``sort=relevance`` re-ranks by interest-profile
-        fit (each item carries a ``fit_score`` 0-1); the re-rank samples the
-        top ``max(limit*4, 200)`` recent rows so the per-request cost stays
-        tiny while still surfacing the best matches.
-        """
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"items": [], "total": 0})
-        limit = max(1, min(int(limit), 200))
-        offset = max(0, int(offset))
-        if q and q.strip():
-            items = database.search_articles(
-                q=q.strip(),
-                limit=limit,
-                offset=offset,
-                source_type=source_type or None,
-                status=status or None,
-                tag=tag or None,
-            )
-            total = len(items)
-        else:
-            items = database.get_recent_articles(
-                limit=limit,
-                offset=offset,
-                source_type=source_type or None,
-                status=status or None,
-                tag=tag or None,
-                random_order=random,
-            )
-            total = database.count_articles(
-                source_type=source_type or None,
-                status=status or None,
-                tag=tag or None,
-            )
-            if sort and sort.strip().lower() == "relevance" and not random:
-                candidate_limit = max(limit * 4, 200)
-                cands = database.get_recent_articles(
-                    limit=candidate_limit,
-                    offset=0,
-                    source_type=source_type or None,
-                    status=status or None,
-                    tag=tag or None,
-                )
-                for item in cands:
-                    text = " ".join(
-                        [
-                            str(item.get("title") or ""),
-                            str(item.get("summary") or ""),
-                            str(item.get("tags") or ""),
-                        ]
-                    )
-                    item["fit_score"] = _article_fit_score(text)
-                cands.sort(key=lambda it: it.get("fit_score", 0.0), reverse=True)
-                items = cands[offset : offset + limit]
-        return JSONResponse({"items": items, "total": total, "query": q})
 
     def get_article(article_id: int) -> JSONResponse:
         """Fetch a single article with its full body text for reading."""
@@ -6079,15 +5951,6 @@ def create_app(
         llm_service = getattr(ctx, "llm_service", None)
         _diary_service = DiaryService(database=database, llm_service=llm_service)
         return _diary_service
-
-    @app.get("/api/diary/stats")
-    def diary_stats() -> JSONResponse:
-        """获取日记统计信息。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        stats = svc.get_stats()
-        return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
 
     # ─── 日记数据洞察 API ───────────────────────────────────────────
 
@@ -6752,35 +6615,6 @@ def create_app(
 
     # ─── 智能时间线卡片 API ───────────────────────────────────────────
 
-    @app.get("/api/diary/timeline/cards")
-    def diary_timeline_cards(
-        card_type: str | None = None,
-        entity: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        min_importance: float = 0.0,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> JSONResponse:
-        """查询时间线卡片。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import TimelineService
-
-        tl = TimelineService(svc.store)
-        cards = tl.get_cards(
-            card_type=card_type,
-            entity=entity,
-            start_date=start_date,
-            end_date=end_date,
-            min_importance=min_importance,
-            limit=limit,
-            offset=offset,
-        )
-        return JSONResponse({"ok": True, "data": [c.to_dict() for c in cards]})
-
-    # ─── 碎片（随手记）API ───────────────────────────────────────────
 
     @app.get("/api/diary/fragments")
     def diary_fragments_list(
@@ -6804,14 +6638,6 @@ def create_app(
                 "offset": offset,
             }
         )
-
-    def diary_fragments_delete(fragment_id: int) -> JSONResponse:
-        """删除一条碎片。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        ok = svc.delete_fragment(fragment_id)
-        return JSONResponse({"ok": ok, "id": fragment_id})
 
     # ── 日记标签与人物提取 API ────────────────────────────────
 
@@ -6879,14 +6705,6 @@ def create_app(
     # ─── RAG 语义搜索与问答 API ─────────────────────────────────────
 
     _diary_rag_service = None
-
-    def diary_rag_stats() -> JSONResponse:
-        """获取向量生成统计信息。"""
-        rag = _get_diary_rag_service()
-        if rag is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        stats = rag.get_embedding_stats()
-        return JSONResponse({"ok": True, "data": stats})
 
     async def diary_rag_search(
         q: str,
@@ -6964,15 +6782,6 @@ def create_app(
 
     # ── 统计概览 ──
 
-    @app.get("/api/health/stats")
-    def health_stats() -> JSONResponse:
-        """获取健康档案统计概览。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        stats = svc.get_stats()
-        return JSONResponse({"ok": True, "stats": stats.model_dump(mode="json")})
-
     # ── 患者档案 ──
 
     @app.get("/api/health/patients")
@@ -6984,64 +6793,8 @@ def create_app(
         patients = svc.list_patients()
         return JSONResponse({"ok": True, "items": [p.model_dump(mode="json") for p in patients]})
 
-    def health_patients_get(patient_id: int) -> JSONResponse:
-        """获取患者档案详情（含各模块统计）。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            summary = svc.get_patient_summary(patient_id)
-            return JSONResponse({"ok": True, "data": summary})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
     # ── 就诊记录 ──
 
-    @app.get("/api/health/encounters")
-    def health_encounters_list(
-        patient_id: int | None = None,
-        limit: int = 50,
-        offset: int = 0,
-        encounter_type: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        search: str | None = None,
-    ) -> JSONResponse:
-        """列就诊记录，支持筛选与搜索。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_encounters(
-            patient_id=patient_id,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-            encounter_type=encounter_type,
-            start_date=start_date,
-            end_date=end_date,
-            search=search,
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [e.model_dump(mode="json") for e in items],
-                "total": total,
-                "limit": limit,
-                "offset": offset,
-            }
-        )
-
-    def health_encounters_get(encounter_id: int) -> JSONResponse:
-        """获取单条就诊记录详情。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            encounter = svc.get_encounter(encounter_id)
-            return JSONResponse({"ok": True, "data": encounter.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    # ── 健康问题 ──
 
     @app.get("/api/health/conditions")
     def health_conditions_list(
@@ -7119,14 +6872,6 @@ def create_app(
                 "total": total,
             }
         )
-
-    def health_lab_trend(patient_id: int, test_name: str, limit: int = 50) -> JSONResponse:
-        """获取某个化验项目的历史趋势。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        trend = svc.get_lab_trend(patient_id=patient_id, test_name=test_name, limit=limit)
-        return JSONResponse({"ok": True, "test_name": test_name, "items": trend})
 
     # ── 检查 / 手术 ──
 
