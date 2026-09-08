@@ -24,6 +24,7 @@ from openbiliclaw.storage._chat_turn_mixin import ChatTurnMixin
 from openbiliclaw.storage._content_cache_mixin import ContentCacheMixin
 from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidatesMixin
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
+from openbiliclaw.storage._source_recipe_mixin import SourceRecipeMixin
 from openbiliclaw.storage._cover_mixin import CoverMixin
 from openbiliclaw.storage._article_mixin import ArticleMixin
 from openbiliclaw.storage._favorites_mixin import FavoritesMixin
@@ -550,7 +551,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -5070,119 +5071,6 @@ class Database(CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, Reco
             conn.close()
 
     # ── Favorites CRUD ───────────────────────────────────────────
-
-    def save_xhs_observed_urls(self, urls: list[str], page_type: str) -> int:
-        """Insert observed xhs URLs, skipping duplicates. Returns count inserted."""
-        inserted = 0
-        for url in urls:
-            # Skip if we've already seen this URL
-            existing = self.conn.execute(
-                "SELECT 1 FROM xhs_observed_urls WHERE url = ?", (url,)
-            ).fetchone()
-            if existing:
-                continue
-            self._execute_write(
-                "INSERT INTO xhs_observed_urls (url, page_type) VALUES (?, ?)",
-                (url, page_type),
-            )
-            inserted += 1
-        return inserted
-
-    # ── Source recipe CRUD ──────────────────────────────────────────
-
-    def save_source_recipe(self, recipe: dict[str, Any]) -> None:
-        """Insert or update a source recipe."""
-        import json as _json
-
-        self._execute_write(
-            """
-            INSERT INTO source_recipes (id, source_type, name, strategy, config,
-                                        target_share, enabled, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
-            ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                strategy = excluded.strategy,
-                config = excluded.config,
-                target_share = excluded.target_share,
-                enabled = excluded.enabled
-            """,
-            (
-                str(recipe["id"]),
-                str(recipe["source_type"]),
-                str(recipe["name"]),
-                str(recipe["strategy"]),
-                _json.dumps(recipe.get("config", {}), ensure_ascii=False),
-                int(recipe.get("target_share", 4)),
-                int(recipe.get("enabled", True)),
-                str(recipe.get("created_by", "system")),
-                recipe.get("created_at") or None,
-            ),
-        )
-
-    def get_all_recipes(self) -> list[dict[str, Any]]:
-        """Return all source recipes."""
-        self._ensure_fresh_read()
-        rows = self.conn.execute("SELECT * FROM source_recipes ORDER BY created_at").fetchall()
-        return [self._row_to_recipe(row) for row in rows]
-
-    def get_enabled_recipes(self) -> list[dict[str, Any]]:
-        """Return only enabled source recipes."""
-        self._ensure_fresh_read()
-        rows = self.conn.execute(
-            "SELECT * FROM source_recipes WHERE enabled = 1 ORDER BY created_at"
-        ).fetchall()
-        return [self._row_to_recipe(row) for row in rows]
-
-    def update_recipe(self, recipe_id: str, **fields: Any) -> bool:
-        """Update specific fields of a recipe. Returns True if a row was updated."""
-        import json as _json
-
-        allowed = {"name", "strategy", "config", "target_share", "enabled", "last_fetched_at"}
-        updates = {k: v for k, v in fields.items() if k in allowed}
-        if not updates:
-            return False
-        if "config" in updates and not isinstance(updates["config"], str):
-            updates["config"] = _json.dumps(updates["config"], ensure_ascii=False)
-        if "enabled" in updates:
-            updates["enabled"] = int(updates["enabled"])
-
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        values = list(updates.values()) + [recipe_id]
-        cursor = self._execute_write(
-            f"UPDATE source_recipes SET {set_clause} WHERE id = ?",
-            tuple(values),
-        )
-        return cursor.rowcount > 0
-
-    def delete_recipe(self, recipe_id: str) -> bool:
-        """Delete a recipe by id. Returns True if a row was deleted."""
-        cursor = self._execute_write(
-            "DELETE FROM source_recipes WHERE id = ?",
-            (recipe_id,),
-        )
-        return cursor.rowcount > 0
-
-    @staticmethod
-    def _row_to_recipe(row: Any) -> dict[str, Any]:
-        import json as _json
-
-        config_raw = row["config"] if row["config"] else "{}"
-        try:
-            config = _json.loads(config_raw)
-        except (ValueError, TypeError):
-            config = {}
-        return {
-            "id": str(row["id"]),
-            "source_type": str(row["source_type"]),
-            "name": str(row["name"]),
-            "strategy": str(row["strategy"]),
-            "config": config,
-            "target_share": int(row["target_share"]),
-            "enabled": bool(row["enabled"]),
-            "created_by": str(row["created_by"]),
-            "created_at": str(row["created_at"] or ""),
-            "last_fetched_at": str(row["last_fetched_at"] or ""),
-        }
 
     def get_delight_candidate(
         self,
