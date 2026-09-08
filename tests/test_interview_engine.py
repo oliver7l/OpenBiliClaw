@@ -212,6 +212,10 @@ def build_kb(root: Path, *, with_db: bool = True) -> Path:
     (root / "02_方向知识库" / "广告算法" / "README.md").write_text(
         "oCPX 机制：按转化目标出价。", encoding="utf-8"
     )
+    (root / "02_方向知识库" / "数据科学").mkdir()
+    (root / "02_方向知识库" / "数据科学" / "06_因果推断方法论.md").write_text(
+        "因果推断：潜在结果框架。", encoding="utf-8"
+    )
     pos_dir = root / "03_岗位弹药库" / "测试公司-推荐算法-面试准备"
     (pos_dir / "02_面试备战资料").mkdir(parents=True)
     (pos_dir / "02_面试备战资料" / "攻略.md").write_text(
@@ -398,6 +402,57 @@ def test_overview_specs(kb: Path) -> None:
     """总览应列出系统层规范文档。"""
     eng = InterviewEngine(kb)
     assert "岗位匹配评估.md" in eng.overview()["specs"]
+
+
+def test_rebuild_index(kb: Path) -> None:
+    """重建全库索引：覆盖 06 CSV + knowledge.db，返回分层统计。"""
+    eng = InterviewEngine(kb)
+    result = eng.rebuild_index()
+    assert result["total"] >= 8
+    assert result["per_layer"]["02_方向知识库"] >= 2
+    assert result["per_layer"]["03_岗位弹药库"] >= 3
+    # 索引可查
+    rows = eng.index(keyword="README")
+    assert rows
+    # 重建后再查 DB 正常
+    assert eng.index(layer="03")
+
+
+def test_doctor_passes_on_healthy_kb(kb: Path) -> None:
+    """健康知识库：C1-C4 全过（C5 需 full 才查）。"""
+    eng = InterviewEngine(kb)
+    result = eng.doctor()
+    assert result["passed"] is True
+    ids = [c["id"] for c in result["checks"]]
+    assert ids == ["C1", "C2", "C3", "C4"]
+
+
+def test_doctor_detects_broken_reference(kb: Path) -> None:
+    """题索引答案位置指向不存在文件 → C1 FAIL。"""
+    eng = InterviewEngine(kb)
+    # 初始知识库健康
+    assert eng.doctor()["passed"] is True
+    # 破坏：删除题索引指向的答案文件
+    target = kb / "02_方向知识库" / "数据科学" / "06_因果推断方法论.md"
+    target.unlink()
+    result = eng.doctor()
+    assert result["passed"] is False
+    c1 = next(c for c in result["checks"] if c["id"] == "C1")
+    assert any("答案位置不存在" in i for i in c1["issues"])
+
+
+def test_doctor_full_fix_rebuilds_index(kb: Path) -> None:
+    """full + fix：索引缺失时自动重建。"""
+    eng = InterviewEngine(kb)
+    # 删除索引 db 与 CSV 后，full 检查应发现过期并可修复
+    db = kb / "_系统_知识库引擎" / "数据" / "knowledge.db"
+    csv_path = kb / "_系统_知识库引擎" / "数据" / "06_全库文件索引.csv"
+    db.unlink()
+    csv_path.unlink()
+    result = eng.doctor(full=True, fix=True)
+    # 重建后索引文件恢复
+    assert db.exists()
+    assert csv_path.exists()
 
 
 def test_scaffold_creates_and_idempotent(kb: Path) -> None:

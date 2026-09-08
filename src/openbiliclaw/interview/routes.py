@@ -114,6 +114,24 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         rows = engine.index(keyword, layer)
         return {"total": len(rows), "items": rows}
 
+    @router.post("/index/rebuild")
+    def interview_index_rebuild() -> dict[str, Any]:
+        """重建全库文件索引（覆盖 06 CSV + knowledge.db，不动原始文件）。"""
+        _ready()
+        try:
+            return engine.rebuild_index()
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=500, detail=f"重建索引失败: {exc}") from exc
+
+    @router.get("/doctor")
+    def interview_doctor(fix: bool = False, full: bool = False) -> dict[str, Any]:
+        """知识库健康检查（C1-C4 常规；C5 索引新鲜度仅 full；fix 可自动重建索引）。"""
+        _ready()
+        try:
+            return engine.doctor(fix=fix, full=full)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=500, detail=f"健康检查失败: {exc}") from exc
+
     @router.get("/logs")
     def interview_logs() -> dict[str, Any]:
         """面试日志列表（最新在前）。"""
