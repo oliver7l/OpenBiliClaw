@@ -40,6 +40,8 @@
 | YouTube 接入 | [modules/youtube.md](modules/youtube.md) | `src/openbiliclaw/youtube/` + `src/openbiliclaw/sources/yt_tasks.py` | ✅ init / fetch smoke / Google Takeout 导入 |
 | 记忆系统 | [modules/memory.md](modules/memory.md) | `src/openbiliclaw/memory/` | ✅ 完成 |
 | 日记系统 | [modules/diary.md](modules/diary.md) | `src/openbiliclaw/diary/` | ✅ v0.3.173 完整日记记录 + AI 分析 + 多格式导入 + 桌面端页面 |
+| 笔记系统 | [modules/notes.md](modules/notes.md) | `src/openbiliclaw/notes/` | ✅ v0.3.201 视频转笔记管线 + FTS 搜索 + 已读库导入 + CLI/API |
+| 聊天记录分析系统 | [modules/chat_analysis.md](modules/chat_analysis.md) | `src/openbiliclaw/chat_analysis/` | ✅ 独立数据库，801 会话，360 万消息，832 分析片段，13 个 API 端点 |
 | 灵魂引擎 | [modules/soul.md](modules/soul.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
 | 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `src/openbiliclaw/discovery/` | ✅ v0.3.x 多源 + 统一待评估池 + 跨源跨轮 topic 配额 |
 | 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |

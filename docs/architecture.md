@@ -7,8 +7,9 @@ OpenBiliClaw 采用分层架构设计，从上到下依次为：
 1. **用户交互层** — Chrome 浏览器插件（B 站 + 小红书 + 抖音 + YouTube + X (Twitter) + 知乎通过统一 `PlatformAdapter` 做页面行为采集，click 在 capture 阶段记录、scroll 覆盖内部 feed 容器 · 视频停留满意度信号 · 推荐展示与真实可换库存状态 · 文字卡（推文 / thread / 知乎回答）· 正向兴趣 / 避雷探针确认 · durable 对话交互 · 后台 LLM 暂停开关 · 开机自启动开关 · 配置离线缓存 / 降级修复 UI · bili/xhs/dy/yt/zhihu 任务调度 / 初始化画像导入 / 多路 discovery · B 站 / 抖音 / X Cookie 自动同步 · 本机扩展驱动 E2E 捕捉自检）+ 移动 Web（`/m`）+ 桌面 Web（`/web`）。所有 `/api/*` 前置一道**可选密码门禁**（HTTP 中间件，见下方「API Auth Gateway」）：本机 / 扩展默认免登录，局域网 / 远程设备需密码。
 2. **外部集成层** — OpenClaw adapter / skill wrappers / 本地 API / Codex CLI 凭据导入等对外接入边界
 3. **Agent 核心层** — 自研编排器 + Soul Engine + Discovery Engine + Recommendation Engine + Skill System
-4. **多源适配层（v0.3.0+）** — `SourceAdapter` 协议下的 B 站 / 小红书 / 抖音 / YouTube / X (Twitter) / 知乎 / 通用 Web 源
-5. **多层网状记忆存储** — Core / Episodic / Semantic / Working Memory（SQLite + 向量索引 + JSON）
+4. **知识沉淀层** — Notes System（视频转笔记管线 + FTS 全文搜索 + 已读库导入）
+5. **多源适配层（v0.3.0+）** — `SourceAdapter` 协议下的 B 站 / 小红书 / 抖音 / YouTube / X (Twitter) / 知乎 / 通用 Web 源
+6. **多层网状记忆存储** — Core / Episodic / Semantic / Working Memory（SQLite + 向量索引 + JSON）
 
 详见 [项目 Spec](spec.md) 中的架构图。模块级可视化图放在 `docs/diagrams/`：
 
@@ -48,6 +49,18 @@ OpenBiliClaw 采用分层架构设计，从上到下依次为：
 - 五层网状记忆管理
 - 跨层关联和双向修正
 - 自我编辑和遗忘机制
+
+### Notes System (`notes/`) — 知识沉淀层 (v0.3.201+)
+- 把消费过的内容（B 站视频、专栏、已读库文章等）转化为结构化笔记入库，形成可检索、可回顾的私有知识库
+- **视频转笔记管线（P2）**：字幕优先（B 站 CC 字幕零下载零风控）→ 音频兜底（playurl + 防盗链下载 + ffmpeg 转封装 + 10 分钟均衡切片 + faster-whisper 本地转录）→ 非破坏性文本清洗 → LLM ASR 校对 → 结构化笔记生成 → 入库
+- **转写子模块** `transcribe/`：`TextCleaner`（保留成语/叠词，仅折叠标点空白）、`AudioChunker`（FFmpeg stream copy 无损切片）、`AudioTranscriber`（faster-whisper 可选依赖）、`AudioDownloader`（防盗链头下载 + ffmpeg 转封装 m4a）
+- **合成子模块** `synthesis/`：4 套 Prompt 模板（精读长文 / 学习笔记 / 资讯速报 / 通用笔记）+ `NoteGenerator`（对接 LLMService.complete()）
+- **存储**：`notes` + `note_tasks` + `notes_fts`（FTS5 trigram 分词，支持中文全文搜索）；唯一约束 `(source_platform, source_ref)` 防止重复创建
+- **导入**：从 `notes/已读库/` 四件套目录（meta.json/raw.html/content.md/reading.html）批量导入
+- **任务管理**：`note_tasks` 表 + resume_key checkpoint 模型，支持断点续跑（借鉴 wandao 设计思想，自行实现）
+- **临时文件策略**：音频/切片等中间产物走系统临时目录，管线结束即清理，不保留原始音视频
+- **对外接口**：CLI `note` 命令组（list/get/create/delete/search/stats/video/import/tasks）+ API `/api/notes/*` + `/api/notes/from-video`
+- 代码来源：`transcribe/` 和 `synthesis/prompts.py` 改编自 bili-video2book（MIT License），文件 docstring 保留原版权声明
 
 ### Content Discovery (`discovery/`)
 - 多策略内容发现（B 站 search · trending · related_chain · explore + 小红书 `xiaohongshu` + 抖音 `douyin` + YouTube `yt_search` / `yt_trending` / `yt_channel` + X (Twitter) `search` / `feed`(For-You) / `creator`(账号订阅) + 知乎 `search` / `hot` / `feed` / `creator` / `related` 插件任务），按 `runtime.source_policy` 生成的平台有效配比补池；默认保存的 share 为 B 站 / 小红书 / 抖音 / YouTube / X / 知乎 = 5 / 1 / 1 / 1 / 1 / 1，但默认只启用 B 站，关闭的平台不会占候选池 quota。B 站仍在主 refresh 计划内并行 fan-out；当 B 站 API search 处于冷却且扩展在线时，`BilibiliExtensionSearchProducer` 会作为兜底入队 `bili_tasks` 搜索任务；XHS / 抖音 / YouTube / X / 知乎低于可换 quota 时分别交给独立 producer；补货请求还会受 raw-material ceiling headroom 约束，避免不可服务库存已满时继续消耗 LLM / discovery。

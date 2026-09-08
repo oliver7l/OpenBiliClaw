@@ -283,17 +283,25 @@ Agent：那我理解了。这是一个很有意思的特质——你可能也会
 │  │     Hot reload one-shots: interest/avoidance force_tick │   │
 │  │     Probe arbiter: interest / avoidance 每轮最多推送一条   │   │
 │  │     Interest probes: near 5 + challenge 3 独立 active 额度 │   │
-│  │     Probe memory: domain / axis / distance + exploration buffer │ │
+│  │     Probe memory: domain / axis / distance + exploration buffer │   │
 │  │     AccountSync: B 站账号增量 -> Memory/Soul bootstrap     │   │
-│  │     Guided init: selected sources + LLM/embedding live probe -> run_guided_init + InitCoordinator │ │
+│  │     Guided init: selected sources + LLM/embedding live probe -> run_guided_init + InitCoordinator │   │
 │  │     Pool readiness: servable/raw/pending 统一库存口径       │   │
 │  │     Source bootstrap seen-key guard -> Memory/Profile      │   │
-│  │     Profile overrides overlay: 用户编辑 -> profile_overrides.json │ │
+│  │     Profile overrides overlay: 用户编辑 -> profile_overrides.json │   │
 │  │       -> get_profile()/sync_profile_files 读时叠加（抗画像重建）│ │
 │  └──────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              Skill System (可扩展技能)                 │   │
 │  │  [搜索] [浏览] [评论分析] [UP主追踪] [自定义...]         │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              笔记系统（知识沉淀层，v0.3.201+）           │   │
+│  │  视频转笔记管线：字幕优先 → 音频兜底 → 清洗 → LLM 合成 → 入库 │   │
+│  │  transcribe: cleaner / chunker / whisper / fetcher    │   │
+│  │  synthesis: prompts（4 套模板） / generator            │   │
+│  │  存储：notes + note_tasks + FTS5(trigram) 全文搜索      │   │
+│  │  导入：已读库四件套批量导入 · 跨来源去重                 │   │
 │  └──────────────────────────────────────────────────────┘   │
 ├──────────────────────────────────────────────────────────────┤
 │           多源适配层 (SourceAdapter Protocol, v0.3.0+)         │
@@ -341,6 +349,7 @@ Agent：那我理解了。这是一个很有意思的特质——你可能也会
 │  └───────────┘ └─────────────┘ └────────────┘ └─────────┘  │
 │  SQLite: events(inferred_satisfaction) / discovery_candidates     │
 │          content_cache / recommendations / chat_turns / avoidance_state │
+│          notes / note_tasks / notes_fts (trigram 全文搜索)          │
 └──────────────────────────────────────────────────────────────┘
 ```
 

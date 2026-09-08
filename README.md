@@ -577,6 +577,10 @@ OpenClaw 收到 `interest.probe` 事件（或主动拉取 `next-probe`），发�
 │  Engine  │ System   │  Engine   │     Engine                  │
 │(画像+探针)│ (五层+buffer)│(待评估池+负样本)│ (跨源混排+放大保护)       │
 ├──────────┴──────────┴───────────┴────────────────────────────┤
+│                     笔记系统 (知识沉淀层)                       │
+│   视频转笔记 · 字幕优先/音频兜底 · FTS 搜索 · 已读库导入         │
+│   transcribe(cleaner/chunker/whisper/fetcher) + synthesis     │
+├───────────────────────────────────────────────────────────────┤
 │       LLM 适配层(API Key/Codex OAuth) · B 站 API · 扩展代理发现   │
 │       Runtime: Account Sync + producers + candidate eval + probe arbiter   │
 │       Runtime status: pool_available/raw/pending/eval_count        │
