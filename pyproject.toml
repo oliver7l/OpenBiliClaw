@@ -8,7 +8,7 @@ version = "0.3.152"
 description = "Your local-first, cross-platform AI discovery friend for Bilibili, Zhihu, and more."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [
     { name = "OpenBiliClaw Contributors" },
 ]
@@ -25,6 +25,8 @@ classifiers = [
 ]
 
 dependencies = [
+    "obc-llm>=0.1.0",
+    "obc-discovery>=0.1.0",
     "httpx>=0.27",
     "scrapetube>=2.1",
     "yt-dlp>=2024.1.0",
@@ -113,8 +115,6 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/openbiliclaw/llm/prompts.py" = ["E501"]  # Prompt templates contain long JSON examples
-"src/openbiliclaw/llm/prompts_pipeline.py" = ["E501"]
 "scripts/*.py" = ["E501"]  # Scripts contain long prompt strings
 # Large files pending refactor/split — E501 will be addressed during restructuring
 "src/openbiliclaw/api/app.py" = ["E501"]
@@ -125,6 +125,8 @@ select = [
 "src/openbiliclaw/diary/advanced_memory.py" = ["E501"]
 "src/openbiliclaw/diary/emotion.py" = ["E501"]
 "src/openbiliclaw/diary/timeline.py" = ["E501"]
+# 笔记模块：prompt 模板包含大段中文文本
+"src/openbiliclaw/notes/synthesis/prompts.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
