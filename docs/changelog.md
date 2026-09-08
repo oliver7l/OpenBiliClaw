@@ -8,6 +8,7 @@
 
 - **K2 收口**：`src/openbiliclaw/soul/` 25 个模块由全量真实实现（约 1.36 万行）转为**模块别名 stub**（`sys.modules[__name__] = obc_soul.<mod>`）。diff 归一化确认两份实现无实质漂移后删除 src 侧副本，实现唯一化到 `packages/obc-soul`；`openbiliclaw.soul.*` 全部旧 import 路径继续可用，且与包实现为同一模块对象——SoulEngine 等类身份唯一（K2 的类身份分裂即此），`monkeypatch.setattr(模块对象, ...)` 补丁语义不变，cli.py 等 10+ 处直引零改动。
 - **obc-soul 补 `py.typed`**：包声明内联类型，mypy strict 下 `src/openbiliclaw/soul/` 26 文件零错误（obc-llm / obc-discovery 同样缺 py.typed，后续同法补齐可再降全仓 mypy 噪声）。
+- **K4 仓库卫生（部分）**：`src/openbiliclaw/web/clone/sites`（3.0GB git 未跟踪克隆站数据）迁出 src 至 `data/clone-sites/`，并按规划移除 pyproject 的临时 mypy exclude；src 源码零引用、运行中服务不受影响。
 - **验证**：`tests/soul/` + `tests/misc/test_pipeline_advanced.py` 383/384 通过（唯一失败为预存 fixture 缺失 `tests/soul/fixtures/awareness_singular_note.json`，与本改动无关）；模块别名一致性冒烟 25/25；api 消费链路（app.py → runtime_context → soul）探针测试通过；ruff check/format、mypy strict（soul 范围）通过。
 
 ---
