@@ -544,7 +544,7 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
         Uses ``asyncio.to_thread`` for sync module calls so the async
         loop is never blocked by long LLM calls.
         """
-        _BASE = 3600  # 1-hour base tick
+        _base = 3600  # 1-hour base tick
 
         # Resolve db_path from the database object
         _db_path: str | None = None
@@ -569,7 +569,7 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
 
         while True:
             if not self._llm_work_allowed():
-                await asyncio.sleep(_BASE)
+                await asyncio.sleep(_base)
                 continue
 
             try:
@@ -591,7 +591,7 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
             except Exception:
                 logger.debug("self_evolution: loop tick failed", exc_info=True)
 
-            await asyncio.sleep(_BASE)
+            await asyncio.sleep(_base)
 
     def _pending_signal_events_count(self, state: dict[str, object]) -> int:
         return len(

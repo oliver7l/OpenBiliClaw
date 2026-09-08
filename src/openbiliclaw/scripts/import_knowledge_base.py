@@ -277,7 +277,7 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
         meta.get("events_count", 0),
     )
 
-    LAYER_MAP = {
+    layer_map = {
         "1": "第一层-能源与基础设施",
         "2": "第二层-计算芯片与硬件",
         "3": "第三层-平台与中间件",
@@ -311,7 +311,7 @@ def _import_aichainmap(db: Any, site_path: Path, config: dict, args: argparse.Na
 
                 summary_parts = []
                 if layer:
-                    layer_name = LAYER_MAP.get(layer, f"第{layer}层")
+                    layer_name = layer_map.get(layer, f"第{layer}层")
                     summary_parts.append(f"层级: {layer_name}")
                 if subsector:
                     summary_parts.append(f"子行业: {subsector}")

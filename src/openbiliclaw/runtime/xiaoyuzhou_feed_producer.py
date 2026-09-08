@@ -148,20 +148,20 @@ def _parse_items(
 
 def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     """Insert new rows, skip duplicates by bvid."""
-    _MAX_RETRIES = 3
-    _RETRY_DELAY = 0.5
-    for attempt in range(_MAX_RETRIES):
+    _max_retries = 3
+    _retry_delay = 0.5
+    for attempt in range(_max_retries):
         try:
             return _do_insert(conn, rows)
         except sqlite3.OperationalError as exc:
             msg = str(exc)
             if "locked" not in msg and "busy" not in msg:
                 raise
-            if attempt < _MAX_RETRIES - 1:
-                logger.warning("db locked, retrying (%d/%d): %s", attempt + 1, _MAX_RETRIES, msg)
-                time.sleep(_RETRY_DELAY * (attempt + 1))
+            if attempt < _max_retries - 1:
+                logger.warning("db locked, retrying (%d/%d): %s", attempt + 1, _max_retries, msg)
+                time.sleep(_retry_delay * (attempt + 1))
                 continue
-            logger.error("db locked after %d retries: %s", _MAX_RETRIES, msg)
+            logger.error("db locked after %d retries: %s", _max_retries, msg)
             raise
 
 
