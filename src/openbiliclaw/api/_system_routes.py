@@ -11,6 +11,8 @@ from openbiliclaw.api.models import (
     BackendUpdateStatusOut,
     CognitionUpdateSeenIn,
     CognitionUpdateSeenResponse,
+    NotificationAckIn,
+    NotificationAckResponse,
     PendingCognitionUpdateOut,
     PendingCognitionUpdateResponse,
     PendingNotificationOut,
@@ -163,3 +165,15 @@ def register_system_routes(app: Any, ctx: RuntimeContext) -> None:
     async def ping() -> JSONResponse:
         """Pure liveness probe: no DB, no provider round-trips."""
         return JSONResponse({"status": "ok", "service": "openbiliclaw-api"})
+
+    @app.post("/api/notifications/sent", response_model=NotificationAckResponse)
+    async def mark_notification_sent(payload: NotificationAckIn) -> NotificationAckResponse:
+        bvid = payload.bvid.strip()
+        if not bvid:
+            raise HTTPException(status_code=422, detail="Notification bvid is required.")
+        mark_sent = getattr(ctx.runtime_controller, "mark_notification_sent", None)
+        if callable(mark_sent):
+            mark_sent(bvid)
+        else:
+            ctx.database.mark_notification_sent(bvid)
+        return NotificationAckResponse(ok=True, bvid=bvid)

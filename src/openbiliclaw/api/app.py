@@ -4147,18 +4147,6 @@ def create_app(
         await _publish_probe_event("delight.chat", f"关于「{label}」你说：{raw_message}", bvid)
         return JSONResponse(content={"ok": True, "action": "chat", "bvid": bvid, "reply": reply})
 
-    @app.post("/api/notifications/sent", response_model=NotificationAckResponse)
-    async def mark_notification_sent(payload: NotificationAckIn) -> NotificationAckResponse:
-        bvid = payload.bvid.strip()
-        if not bvid:
-            raise HTTPException(status_code=422, detail="Notification bvid is required.")
-        mark_sent = getattr(ctx.runtime_controller, "mark_notification_sent", None)
-        if callable(mark_sent):
-            mark_sent(bvid)
-        else:
-            ctx.database.mark_notification_sent(bvid)
-        return NotificationAckResponse(ok=True, bvid=bvid)
-
     async def _rag_retrieve(
         message: str, top_k: int = 4
     ) -> tuple[str | None, list[dict[str, Any]]]:
