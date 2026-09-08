@@ -467,6 +467,133 @@ class BilibiliAPIClient:
             pub_date=data.get("pubdate", ""),
         )
 
+    async def get_playurl(
+        self,
+        bvid: str,
+        cid: int,
+        *,
+        fnval: int = 16,
+        fnver: int = 0,
+        fourk: int = 1,
+    ) -> dict[str, Any]:
+        """获取视频播放地址（含音视频流信息）。
+
+        使用 WBI 签名调用 /x/player/wbi/playurl 接口。
+        音频流接口比元数据接口更敏感，建议保守限速。
+
+        Args:
+            bvid: 视频 BV 号。
+            cid: 视频 cid。
+            fnval: 格式标识，16 为 DASH 格式（连播）。
+            fnver: 格式版本。
+            fourk: 是否支持 4K，1 为支持。
+
+        Returns:
+            playurl 接口返回的 data 字段字典，包含 dash/durl 等流信息。
+
+        Raises:
+            BilibiliAPIError: 接口调用失败或被风控。
+        """
+        img_key, sub_key = await self._get_wbi_keys()
+        params = self._sign_wbi_params(
+            {
+                "bvid": bvid,
+                "cid": cid,
+                "fnval": fnval,
+                "fnver": fnver,
+                "fourk": fourk,
+            },
+            img_key=img_key,
+            sub_key=sub_key,
+        )
+        data = await self._get_json(
+            "/x/player/wbi/playurl",
+            params=params,
+            headers={
+                "Referer": f"https://www.bilibili.com/video/{bvid}",
+                "Origin": "https://www.bilibili.com",
+            },
+        )
+        return data
+
+    async def get_audio_streams(
+        self,
+        bvid: str,
+        cid: int,
+        *,
+        prefer_quality: str = "low",
+    ) -> dict[str, Any]:
+        """获取视频的音频流信息并按偏好选择。
+
+        优先选择低码率以适配语音转写场景。
+
+        Args:
+            bvid: 视频 BV 号。
+            cid: 视频 cid。
+            prefer_quality: 偏好质量（low/medium/high）。
+
+        Returns:
+            包含 best_stream_url、quality_id、quality_desc、all_audio_streams 等的字典。
+        """
+        data = await self.get_playurl(bvid, cid)
+        dash = data.get("dash")
+        if not dash:
+            raise BilibiliAPIError("无 DASH 音频流（可能为旧版直连流或被风控）")
+
+        audio_list = dash.get("audio", [])
+        if not audio_list:
+            raise BilibiliAPIError("DASH 清单中无音频流")
+
+        quality_map = {
+            30280: "192kbps (高码率)",
+            30232: "132kbps (普通码率)",
+            30216: "64kbps (低码率)",
+            30250: "杜比全景声 (Dolby Atmos)",
+            30251: "Hi-Res 无损",
+        }
+
+        def sort_key(item: dict[str, Any]) -> int:
+            return int(item.get("bandwidth", 0) or item.get("id", 0))
+
+        prefer = (prefer_quality or "low").lower()
+        if prefer == "low":
+            candidates = [a for a in audio_list if a.get("id") == 30216]
+            selected = candidates[0] if candidates else sorted(audio_list, key=sort_key)[0]
+        elif prefer == "medium":
+            candidates = [a for a in audio_list if a.get("id") == 30232]
+            selected = candidates[0] if candidates else sorted(audio_list, key=sort_key)[0]
+        else:  # high
+            selected = sorted(audio_list, key=sort_key, reverse=True)[0]
+
+        # 取直链（优先主地址，退回备用地址）
+        stream_url = selected.get("base_url") or selected.get("baseUrl")
+        if not stream_url and selected.get("backup_url"):
+            stream_url = selected["backup_url"][0]
+
+        quality_id = selected.get("id", 0)
+        quality_desc = quality_map.get(quality_id, f"Audio ID: {quality_id}")
+
+        sorted_streams = sorted(audio_list, key=sort_key, reverse=True)
+
+        return {
+            "bvid": bvid,
+            "cid": cid,
+            "best_stream_url": stream_url or "",
+            "quality_id": quality_id,
+            "quality_desc": quality_desc,
+            "bandwidth": selected.get("bandwidth"),
+            "codecs": selected.get("codecs"),
+            "all_audio_streams": [
+                {
+                    "id": a.get("id"),
+                    "desc": quality_map.get(a.get("id", 0), f"ID {a.get('id')}"),
+                    "bandwidth": a.get("bandwidth"),
+                    "url": a.get("base_url") or a.get("baseUrl"),
+                }
+                for a in sorted_streams
+            ],
+        }
+
     async def search(
         self,
         keyword: str,
