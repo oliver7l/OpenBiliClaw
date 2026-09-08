@@ -4,6 +4,10 @@
 
 `src/openbiliclaw/runtime/` 负责后端 daemon 的长期运行能力：后台刷新、账号同步、反馈批学习调度、运行时事件流、浏览器插件 presence gate、自动更新和任务生命周期管理。FastAPI 启动后会通过 `RuntimeContext` 持有这些 runtime 服务，配置热重载时重建可替换组件。
 
+> **v0.3.221 重构**：
+> - **数据库连接统一**：新增 `runtime/_db.py`，提供 `connect_main_with_pool(db_path)`（主库+ATTACH pool.db）和 `connect_pool(db_path)`（直接连pool.db）两个公共函数。13 个 producer 文件删除本地重复的 `_obc_connect` 定义改为 import 公共函数，净减 42 行重复代码。
+> - **refresh.py 巨类拆分（进行中）**：`refresh.py` 从 ~3,500 行降至 **1,493 行（-57%）**，采用 mixin 模式拆出 6 个功能组：`_refresh_shared.py`（模块级常量与签名探测工具）、`_refresh_platform_loops_mixin.py`（平台生产者循环）、`_refresh_loop_supervision_mixin.py`（循环监督）、`_refresh_notify_delight_mixin.py`（通知/惊喜投递）、`_refresh_probe_publish_mixin.py`（探针推送）、`_refresh_source_budget_mixin.py`（补货来源配额与预算）。
+
 ## 已实现功能
 
 | 功能 | 状态 | 说明 |

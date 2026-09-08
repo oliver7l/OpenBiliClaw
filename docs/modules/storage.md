@@ -16,6 +16,42 @@
 > `ATTACH pool.db`，推荐流方法中的无前缀 SQL 自然落到子库，与主库其余
 > 表（events / diary / saved 等）锁域隔离。迁移与回滚见 `scripts/migrate_pool_db.py`。
 
+> **v0.3.221 巨类拆分（mixin 架构）**：`database.py` 从 9,064 行降至 **847 行（-91%）**，
+> 拆出 24 个功能 mixin。`Database` 类继承所有 mixin，调用方代码无需修改。
+> 每个 mixin 对应一个功能组，文件命名 `_<group>_mixin.py`，mixin 内对
+> database.py 模块级函数/常量用**方法内部延迟导入**避免循环依赖。
+
+### Mixin 架构（v0.3.221+）
+
+| Mixin 文件 | 功能组 | 方法数 |
+|------------|--------|--------|
+| `_schema_mixin.py` | schema 初始化（23 个表） | ~23 |
+| `_pool_candidate_mixin.py` | 候选池 CRUD（最大） | ~34 |
+| `_discovery_keywords_mixin.py` | discovery 关键词 | ~21 |
+| `_article_mixin.py` | 文章库 | ~20 |
+| `_recommendation_mixin.py` | 推荐流 | ~18 |
+| `_discovery_candidates_mixin.py` | discovery 候选 | ~16 |
+| `_topic_mixin.py` | 专题 | ~17 |
+| `_saved_memberships_mixin.py` | 保存的会员 | ~8 |
+| `_view_history_mixin.py` | 观看历史 | ~15 |
+| `_content_cache_mixin.py` | 内容缓存 | ~3 |
+| `_llm_usage_mixin.py` | LLM 使用统计 | ~7 |
+| `_events_mixin.py` | 行为事件 | ~8 |
+| `_chat_turn_mixin.py` | 聊天轮次 | ~5 |
+| `_user_feedback_mixin.py` | 用户反馈 | ~7 |
+| `_favorites_mixin.py` | 收藏 | ~6 |
+| `_delight_mixin.py` | 惊喜通道 | ~6 |
+| `_watch_later_mixin.py` | 稍后再看 | ~6 |
+| `_native_sync_mixin.py` | 原生同步 | ~7 |
+| `_source_recipe_mixin.py` | 来源配方 | ~7 |
+| `_prune_mixin.py` | 数据清理 | ~4 |
+| `_quality_mixin.py` | 质量审计 | ~3 |
+| `_cover_mixin.py` | 封面 | ~2 |
+| `_init_runs_mixin.py` | 初始化运行 | ~4 |
+| `_auth_mixin.py` | 鉴权 | ~5 |
+
+`database.py` 保留：模块级常量/函数（~560行）+ Database 核心方法（~287行，包括 `__init__`、`initialize`、`close`、`conn property`、`open_connection`、`_execute_write`、`_attach_pool` 等）。
+
 ## 已实现功能
 
 | 功能 | 状态 | 说明 |

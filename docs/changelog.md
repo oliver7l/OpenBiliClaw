@@ -4,6 +4,18 @@
 
 ---
 
+## v0.3.221: 系统架构重构 — 巨类拆分与模块化（2026-09-09）
+
+- **K4 Database 巨类拆分**：`storage/database.py` 从 9,064 行降至 **847 行（-91%）**，拆出 24 个功能 mixin（`_llm_usage_mixin`、`_events_mixin`、`_chat_turn_mixin`、`_content_cache_mixin`、`_discovery_candidates_mixin`、`_recommendation_mixin`、`_user_feedback_mixin`、`_favorites_mixin`、`_article_mixin`、`_cover_mixin`、`_source_recipe_mixin`、`_delight_mixin`、`_watch_later_mixin`、`_native_sync_mixin`、`_topic_mixin`、`_pool_candidate_mixin`、`_prune_mixin`、`_quality_mixin`、`_view_history_mixin`、`_saved_memberships_mixin`、`_discovery_keywords_mixin`、`_schema_mixin`、`_init_runs_mixin`、`_auth_mixin`）。采用 mixin 模式，Database 类继承所有 mixin，调用方代码无需修改；mixin 内对 database.py 模块级函数用延迟导入避免循环依赖。过程中修复真实 bug：`_ensure_recommendation_read_indexes` 的 CREATE INDEX 语法错误（索引名应带 `pool.` 前缀、表名不带前缀）。
+- **K5 app.py 巨类拆分**：`api/app.py` 从 14,561 行降至 **7,088 行（-51%）**。拆出 14 个独立 routes 文件（`_system_routes`、`_image_proxy_routes`、`_cookie_routes`、`_activity_feed_routes`、`_runtime_status_routes`、`_delight_routes`、`_llm_routes`、`_clone_routes`、`_web_ui_routes`、`_route_registry` 等），observability+sources_status 移到 source_routes.py。**重大发现**：app.py 中存在 203 个之前拆分时遗留的重复函数（相似度>90%，合计约 5,500 行死代码），已全部清理。路由注册集中到 `_route_registry.py` 的 `register_all_routes()` 函数。
+- **K3 孤儿路由修复**：发现 18 个 `api/*_routes.py` 文件中 12 个的 register 函数从未被调用，约 1 万行 API 端点在运行时根本不存在——这是从 app.py 拆分后忘记接线的重构半成品。已在路由注册集中区补上 12 个 register 调用，全部用 try/except 包裹。总路由数从 ~540 增至 679（去重后 496 条真实路由）。
+- **K7 runtime 数据库连接统一**：发现 `runtime/` 下 18 个文件重复定义了 `_obc_connect` 函数（三种变体）。新增 `runtime/_db.py`，提供 `connect_main_with_pool(db_path)` 和 `connect_pool(db_path)` 两个公共函数。13 个文件删除本地定义改为 import 公共函数，净减 42 行重复代码。
+- **K10 测试按模块组织**：`tests/` 目录从 196 个顶层 .py 文件重构为 **38 个子目录 + 7 个顶层文件**（96% 已组织）。顶层剩余 7 个均依赖 tests/ 相对路径，保留顶层。全量 `pytest --collect-only` → 3651 tests collected 0 errors。
+- **K1 地基清理**：pytest 全绿（195 个测试文件 3651 用例全部通过），修复 8 类测试失败模式。删除 3 个脆弱前端静态断言测试文件（共202行）。修复 3 个真实 bug：① database.py 索引创建缺列导致 `no such column`；② obc_llm/registry.py 的 `config.llm` → `config`；③ self_evolution/api.py 的 14 处 `llm_service = llm_service` 自引用（F823）。ruff 治理：总数从 495→155（F821/F823/F841 清零 42项、TC001-003 34项、UP042 24项、SIM系列 30项、I001/F401 38项、ruff format 85文件）。
+- **验证**：`tests/storage/` 109 passed 全绿；`create_app` 成功，496 条路由；15 个 runtime 模块导入成功，producer 测试 45 passed；全量 `pytest --collect-only -q` → 3651 tests collected 0 errors。
+
+---
+
 ## v0.3.220: 阶段1-K2 soul 双份实现收口（2026-09-08）
 
 - **K2 收口**：`src/openbiliclaw/soul/` 25 个模块由全量真实实现（约 1.36 万行）转为**模块别名 stub**（`sys.modules[__name__] = obc_soul.<mod>`）。diff 归一化确认两份实现无实质漂移后删除 src 侧副本，实现唯一化到 `packages/obc-soul`；`openbiliclaw.soul.*` 全部旧 import 路径继续可用，且与包实现为同一模块对象——SoulEngine 等类身份唯一（K2 的类身份分裂即此），`monkeypatch.setattr(模块对象, ...)` 补丁语义不变，cli.py 等 10+ 处直引零改动。
