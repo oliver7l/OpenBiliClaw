@@ -2979,19 +2979,6 @@ class Database(ViewHistoryMixin, QualityMixin, PruneMixin, PoolCandidateMixin, T
 
     # ── Favorites CRUD ───────────────────────────────────────────
 
-    def _decode_event_metadata(row: dict[str, Any]) -> dict[str, Any]:
-        metadata_raw = row.get("metadata", "")
-        if isinstance(metadata_raw, str) and metadata_raw:
-            try:
-                metadata = json.loads(metadata_raw)
-            except json.JSONDecodeError:
-                metadata = {}
-            if isinstance(metadata, dict):
-                return metadata
-        if isinstance(metadata_raw, dict):
-            return metadata_raw
-        return {}
-
     # ── user feedback (like / dislike) ─────────────────────────────────
 
     def _ensure_user_feedback_table(self) -> None:
