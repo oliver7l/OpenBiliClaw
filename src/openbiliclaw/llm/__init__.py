@@ -1,6 +1,11 @@
-"""LLM package — multi-model provider support."""
+"""LLM package — multi-model provider support (re-export from obc-llm).
 
-from .base import (
+This is a compatibility stub that re-exports everything from the extracted
+obc-llm package. All existing imports continue to work unchanged.
+"""
+
+from obc_llm._config import LLMConfig, EmbeddingConfig, LLMProviderConfig
+from obc_llm.base import (
     HealthCheckResult,
     LLMFallbackError,
     LLMProvider,
@@ -10,18 +15,18 @@ from .base import (
     LLMResponseError,
     LLMTimeoutError,
 )
-from .claude_provider import ClaudeProvider
-from .gemini_provider import GeminiProvider
-from .ollama_provider import OllamaProvider
-from .openai_provider import DeepSeekProvider, OpenAIProvider
-from .openrouter_provider import OpenRouterProvider
-from .registry import (
+from obc_llm.claude_provider import ClaudeProvider
+from obc_llm.gemini_provider import GeminiProvider
+from obc_llm.ollama_provider import OllamaProvider
+from obc_llm.openai_provider import DeepSeekProvider, OpenAIProvider
+from obc_llm.openrouter_provider import OpenRouterProvider
+from obc_llm.registry import (
     RegistryBuildError,
     RegistrySummary,
     build_llm_registry,
     summarize_registry,
 )
-from .service import (
+from obc_llm.service import (
     LLMProviderExecutionError,
     LLMResponseContentError,
     LLMService,
@@ -32,10 +37,13 @@ from .service import (
 __all__ = [
     "ClaudeProvider",
     "DeepSeekProvider",
+    "EmbeddingConfig",
     "GeminiProvider",
     "HealthCheckResult",
+    "LLMConfig",
     "LLMFallbackError",
     "LLMProvider",
+    "LLMProviderConfig",
     "LLMProviderError",
     "LLMRateLimitError",
     "LLMResponse",
