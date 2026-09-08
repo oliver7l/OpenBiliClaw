@@ -54,6 +54,8 @@
 | 发送者统计 | ✅ | 获取会话中各发送者消息量/字数统计 |
 | 全文搜索 | ✅ | 使用 `LIKE` 模糊搜索，支持全局/会话范围搜索 |
 | AI 分析片段管理 | ✅ | 按会话列出、获取分组统计 |
+| LLM 会话分析 | ✅ | 话题提取 + 洞察生成 + 摘要（走 `complete_structured_task`，异步） |
+| LLM 配额管理 | ✅ | 按调用次数限流：1000 次/5h 滚动窗口（对齐商汤 Token Plan 免费限流策略） |
 | 标签系统 | ✅ | 标签列表（支持按分类筛选） |
 | 全局统计 | ✅ | 总览总数、类型分布 |
 | RESTful API | ✅ | 所有功能都开放 API 端点 |
@@ -99,6 +101,14 @@ from openbiliclaw.chat_analysis import ImportStats
 stats = svc.import_from_sqlite("path/to/chat_data_for_ai.db")
 stats = svc.import_from_deepseek_analysis("path/to/deepseek-analysis")
 results = svc.import_all(mindback_root="/path/to/mindback_data")
+
+# LLM 会话分析（需要传入 llm_service；异步方法）
+import asyncio
+analysis = asyncio.run(svc.analyze_session(session_id=1))
+print(analysis["topic_count"], analysis["insight_count"], analysis["summary"])
+
+# LLM 配额查询（1000 次/5h 滚动窗口）
+print(svc.quota.used, svc.quota.remaining, svc.quota.is_exhausted)
 ```
 
 ## REST API 端点
@@ -116,6 +126,8 @@ results = svc.import_all(mindback_root="/path/to/mindback_data")
 | GET | `/search` | `q`, `session_id`, `limit`, `offset` | 全文搜索 |
 | GET | `/analysis` | `session_title`, `limit`, `offset` | 获取分析片段列表 |
 | GET | `/analysis/groups` | - | 获取已分析分组统计 |
+| POST | `/sessions/{id}/analyze` | - | LLM 完整分析（话题+洞察+摘要，约 3 次调用；配额不足返回 429） |
+| GET | `/quota` | - | 查询 LLM 配额（used_calls / max_calls_per_window / remaining） |
 | POST | `/import/sqlite` | `db_path`, `max_sessions`, `max_messages` | 从 SQLite 导入 |
 | POST | `/import/deepseek` | `analysis_dir` | 从 DeepSeek 分析目录导入 |
 | POST | `/import/all` | `mindback_root`, `max_sessions`, `max_messages` | 批量从所有来源导入 |
@@ -188,6 +200,10 @@ Content-Type: application/json
 4. **自动初始化**：首次访问时自动创建表结构，不需要额外迁移脚本。
 
 5. **跳过已存在**：导入时按标题去重，不会重复导入相同会话。
+
+6. **LLM 配额按调用次数而非 token 计数**：商汤 Token Plan（`token.sensenova.cn`）公测期免费但按调用次数限流（每模型每 5 小时 1500 次），因此 `LLMQuota` 采用 5 小时滚动窗口按次数计数，默认 1000 次/窗口为上游限额留 1/3 余量。实测日常用量（30~130 次/5h）远低于限额。
+
+7. **LLM 调用走 `complete_structured_task`**：项目 `LLMService` 的稳定接口是异步 `complete_structured_task`（JSON mode），分析结果用 `obc_llm.json_utils` 容错解析，可处理 markdown fence 包裹等脏输出。
 
 ## 相关文档
 

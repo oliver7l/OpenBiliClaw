@@ -6936,10 +6936,12 @@ class Database:
         origin; existing rows keep whatever tags they already have.
         """
         import json as _json
-        from datetime import datetime as _dt
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 
+        # 北京时间(UTC+8): articles 表所有时间字段统一存本地时间字符串
+        cn_tz = _tz(_td(hours=8))
         if not published_at:
-            published_at = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            published_at = _dt.now(cn_tz).strftime("%Y-%m-%d %H:%M:%S")
 
         tag_value = _json.dumps(
             tags if tags else ([source_name] if source_name else []),
@@ -6948,8 +6950,10 @@ class Database:
         try:
             cursor = self.conn.execute(
                 """INSERT INTO articles (source_type, source_name, title, url,
-                    author, summary, content_text, published_at, tags)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    author, summary, content_text, published_at, tags,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           datetime('now','localtime'), datetime('now','localtime'))
                    ON CONFLICT(url) DO UPDATE SET
                     title=excluded.title, summary=excluded.summary,
                     content_text=CASE
@@ -6958,7 +6962,7 @@ class Database:
                     tags=CASE
                       WHEN articles.tags IS NULL OR articles.tags IN ('', '[]')
                         THEN excluded.tags ELSE articles.tags END,
-                    updated_at=CURRENT_TIMESTAMP""",
+                    updated_at=datetime('now','localtime')""",
                 (
                     source_type,
                     source_name,
@@ -7388,7 +7392,7 @@ class Database:
 
         try:
             self.conn.execute(
-                "UPDATE articles SET tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE articles SET tags = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (json.dumps(tags, ensure_ascii=False), article_id),
             )
             self.conn.commit()
@@ -7412,7 +7416,7 @@ class Database:
             return False
         try:
             self.conn.execute(
-                "UPDATE articles SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE articles SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (status, article_id),
             )
             self.conn.commit()
@@ -7435,7 +7439,7 @@ class Database:
             percent = max(0.0, min(100.0, float(percent)))
             self.conn.execute(
                 "UPDATE articles SET reading_percent = ?, reading_progress = ?, "
-                "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "updated_at = datetime('now','localtime') WHERE id = ?",
                 (percent, (progress or "")[:4000], article_id),
             )
             self.conn.commit()
@@ -7448,7 +7452,7 @@ class Database:
         """Mark / unmark an article as favorited. Returns True on success."""
         try:
             self.conn.execute(
-                "UPDATE articles SET favorited = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE articles SET favorited = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (1 if favorited else 0, article_id),
             )
             self.conn.commit()
@@ -7504,7 +7508,7 @@ class Database:
         """Store the generated AI summary JSON for an article."""
         try:
             self.conn.execute(
-                "UPDATE articles SET ai_summary = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE articles SET ai_summary = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 ((ai_summary or "")[:6000], article_id),
             )
             self.conn.commit()
@@ -7675,7 +7679,7 @@ class Database:
 
         统计本地时区 ``day``（``YYYY-MM-DD``）内被标记为 finished 的文章：
         读完数、来源分布、主题标签。按 ``date(updated_at)`` 判定——
-        ``update_article_status`` 写 ``CURRENT_TIMESTAMP``，标记读完即归入
+        ``update_article_status`` 写本地时间(北京时间)，标记读完即归入
         当天，与用户感知一致。
         """
         import json as _json

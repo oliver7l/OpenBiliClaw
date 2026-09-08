@@ -31,6 +31,9 @@ from __future__ import annotations
 
 import argparse
 import datetime
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
 import json
 import os
 import re
@@ -46,7 +49,7 @@ H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
 def _now() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _meta(text: str, key: str) -> str:

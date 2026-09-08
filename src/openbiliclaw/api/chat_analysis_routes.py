@@ -25,7 +25,18 @@ _chat_analysis_service: ChatAnalysisService | None = None
 _CHAT_DB_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "chat_analysis.db"
 
 
-def register_chat_analysis_routes(app: FastAPI, ctx: RuntimeContext) -> None:
+def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
+    # Health check endpoint to verify routes are registered
+    @app.get("/api/chat-analysis/health")
+    def chat_analysis_health() -> JSONResponse:
+        import os
+        return JSONResponse({
+            "ok": True,
+            "db_exists": _CHAT_DB_PATH.exists(),
+            "db_path": str(_CHAT_DB_PATH),
+            "cwd": os.getcwd(),
+        })
+
     def _get_svc() -> ChatAnalysisService | None:
         global _chat_analysis_service
         if _chat_analysis_service is not None:
@@ -33,7 +44,8 @@ def register_chat_analysis_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if not _CHAT_DB_PATH.exists():
             logger.warning("聊天分析数据库不存在: %s", _CHAT_DB_PATH)
             return None
-        llm_service = getattr(ctx, "llm_service", None)
+        runtime_ctx = getattr(ctx, "runtime_context", None)
+        llm_service = getattr(runtime_ctx, "llm_service", None) if runtime_ctx else None
         _chat_analysis_service = ChatAnalysisService(
             db_path=_CHAT_DB_PATH, llm_service=llm_service
         )
@@ -218,6 +230,39 @@ def register_chat_analysis_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             }
         )
 
+    # ── LLM 分析 ──
+
+    @app.post("/api/chat-analysis/sessions/{session_id}/analyze")
+    async def chat_analysis_session_analyze(session_id: int) -> JSONResponse:
+        """对会话执行 LLM 完整分析：话题提取 + 洞察生成 + 摘要。
+
+        消耗 LLM 配额（约 3 次调用），配额不足时返回 429。
+        """
+        svc = _get_svc()
+        if svc is None:
+            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
+        if not svc.get_session(session_id):
+            return JSONResponse({"ok": False, "error": "session not found"}, status_code=404)
+        if svc.quota.is_exhausted:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "LLM quota exhausted",
+                    "remaining": svc.quota.remaining,
+                    "max_calls_per_window": svc.quota.max_calls_per_window,
+                },
+                status_code=429,
+            )
+        result = await svc.analyze_session(session_id)
+        return JSONResponse(
+            {
+                "ok": True,
+                "session_id": session_id,
+                "quota_remaining": svc.quota.remaining,
+                "analysis": result,
+            }
+        )
+
     # ── LLM 配额 ──
 
     @app.get("/api/chat-analysis/quota")
@@ -228,8 +273,9 @@ def register_chat_analysis_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         q = svc.quota
         return JSONResponse({
             "ok": True,
-            "used_tokens": q.used,
-            "max_tokens_per_day": q.max_tokens_per_day,
+            "used_calls": q.used,
+            "max_calls_per_window": q.max_calls_per_window,
+            "window_seconds": q.window_seconds,
             "remaining": q.remaining,
             "is_exhausted": q.is_exhausted,
         })

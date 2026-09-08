@@ -38,6 +38,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = dt.timezone(dt.timedelta(hours=8))
 import html
 import json
 import os
@@ -172,7 +175,7 @@ def collect(src: str, *, dry_run: bool) -> dict:
     seen_urls: set[str] = set()
     conn = None if dry_run else sqlite3.connect(DB_PATH)
     cur = None if dry_run else conn.cursor()
-    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = dt.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
     for time, text, urls in _parse_memos(raw):
         # 该 memo 是否整体该剔除(含敏感域名且无阅读域名)

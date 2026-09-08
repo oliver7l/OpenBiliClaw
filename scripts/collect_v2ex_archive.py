@@ -41,6 +41,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = dt.timezone(dt.timedelta(hours=8))
 import json
 import logging
 import os
@@ -65,7 +68,7 @@ def _epoch_to_iso(epoch) -> str | None:
         e = int(epoch)
         if e <= 0:
             return None
-        return dt.datetime.fromtimestamp(e, dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        return dt.datetime.fromtimestamp(e, CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return None
 
@@ -216,7 +219,7 @@ def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool,
     pool_inserted = pool_filled = pool_skipped = 0
     conn = None if dry_run else sqlite3.connect(DB_PATH)
     cur = None if dry_run else conn.cursor()
-    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = dt.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     cutoff = (dt.date.today() - dt.timedelta(days=pool_window)).isoformat()
 
     for topic, date_str in _iter_topics(repo_dir, limit_days):

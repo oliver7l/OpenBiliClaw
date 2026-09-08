@@ -25,6 +25,7 @@ def mod():
 
 
 # 1786700848 秒 == 1786700848000 毫秒 == 1786700848000000 微秒 == 2026-08-14 09:47:28 UTC
+# 入库约定: 所有时间字段统一存北京时间(UTC+8)字符串 -> 09:47:28 UTC = 17:47:28 北京
 @pytest.mark.parametrize(
     "ts",
     [1786700848, 1786700848000, 1786700848000000, "1786700848000"],
@@ -33,7 +34,7 @@ def test_parse_ts_normalizes_units(mod, ts):
     dt = mod._parse_ts(ts)
     assert dt is not None
     assert dt == datetime.datetime(2026, 8, 14, 9, 47, 28, tzinfo=datetime.UTC)
-    assert mod._ts_to_str(ts) == "2026-08-14 09:47:28"
+    assert mod._ts_to_str(ts) == "2026-08-14 17:47:28"
 
 
 @pytest.mark.parametrize("ts", [0, -1, "", None, "abc", [], {}])
@@ -42,10 +43,24 @@ def test_parse_ts_invalid_returns_none(mod, ts):
 
 
 def test_ts_to_str_falls_back_to_now(mod):
-    before = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
+    before = datetime.datetime.now(mod.CN_TZ).replace(microsecond=0)
     out = mod._ts_to_str(0)
-    got = datetime.datetime.strptime(out, mod.TIME_FMT).replace(tzinfo=datetime.UTC)
+    got = datetime.datetime.strptime(out, mod.TIME_FMT).replace(tzinfo=mod.CN_TZ)
     assert before <= got <= before + datetime.timedelta(minutes=5)
+
+
+def test_now_local_is_beijing_time(mod):
+    """_now_local 返回北京时间字符串, 与 UTC now 差 8 小时。"""
+    utc_now = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
+    out = mod._now_local()
+    got = datetime.datetime.strptime(out, mod.TIME_FMT).replace(tzinfo=mod.CN_TZ)
+    delta = abs((got - utc_now).total_seconds())
+    assert delta <= 5
+
+
+def test_to_local_str_converts_utc(mod):
+    dt = datetime.datetime(2026, 8, 14, 9, 47, 28, tzinfo=datetime.UTC)
+    assert mod._to_local_str(dt) == "2026-08-14 17:47:28"
 
 
 def test_is_fallback_ts(mod):

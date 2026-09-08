@@ -27,7 +27,7 @@ class NoteGenerator:
         """初始化笔记生成器。
 
         Args:
-            llm_service: LLMService 实例，需支持 complete() 方法。
+            llm_service: LLMService 实例，需支持 complete_structured_task() 方法。
         """
         self._llm = llm_service
 
@@ -56,7 +56,16 @@ class NoteGenerator:
         )
 
         try:
-            result = await self._llm.complete(prompt)
+            resp = await self._llm.complete_structured_task(
+                system_instruction="",
+                user_input=prompt,
+                temperature=0.3,
+                max_tokens=4096,
+                caller="notes.rectify_asr",
+                reasoning_effort="none",
+                inject_core_memory=False,
+            )
+            result = getattr(resp, "content", "")
             return result.strip()
         except Exception as e:
             logger.warning("ASR 校对失败，使用原始文本: %s", e)
@@ -92,7 +101,16 @@ class NoteGenerator:
         )
 
         try:
-            result = await self._llm.complete(prompt)
+            resp = await self._llm.complete_structured_task(
+                system_instruction="",
+                user_input=prompt,
+                temperature=0.3,
+                max_tokens=4096,
+                caller="notes.generate_note",
+                reasoning_effort="none",
+                inject_core_memory=False,
+            )
+            result = getattr(resp, "content", "")
             return result.strip()
         except Exception as e:
             logger.error("笔记生成失败: %s", e)

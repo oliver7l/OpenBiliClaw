@@ -4,6 +4,23 @@
 
 ---
 
+## v0.3.204: 全局 LLM 调度集成与配额监控（2026-09-08）
+
+- **修复自进化循环 LLM 无效**：`refresh.py` 中 `soul_engine.llm_service` 应为 `_llm_service`（私有属性），修正后 TL;DR、知识卡片、洞察报告、自动专题等全部可用 LLM。
+- **修复 auto_topic_generator 旧 API**：将已废弃的 `llm_service.generate()` 替换为 `generate_structured()`，与其他模块统一。
+- **新增全局配额监控端点**：`GET /api/llm/quota?hours=N` 查询最近 N 小时 LLM 使用量，按模型、模块分组，估算商汤配额占用。
+- **配额感知调度**：`self_evolution/loop_engine.py` 中 LLM 密集型任务（TL;DR、知识卡片、洞察报告、自动专题、内容洞察）在配额 > 80% 时自动暂停。
+- **验证全模块 LLM 调用**：recommendation（116 次/24h）、soul（50 次/24h）、diary（15 次/24h）、chat_analysis（6 次/24h）均正常，商汤配额占用仅 1.9%。
+
+## v0.3.203: 聊天分析系统接入 LLM 与配额改造（2026-09-08）
+
+- **LLM 会话分析上线**：新增 `POST /api/chat-analysis/sessions/{id}/analyze` 端点，走 `LLMService.complete_structured_task`（JSON mode，异步），输出话题提取 + 洞察生成 + 会话摘要并持久化；LLM 结果用 `obc_llm.json_utils` 容错解析。
+- **LLM 配额从按 token/天 改为按次数/5h 滚动窗口**：对齐商汤 Token Plan 公测免费策略（每模型每 5 小时 1500 次调用上限），默认 1000 次/窗口留余量；新增 `GET /api/chat-analysis/quota` 查询端点，分析端点配额不足时返回 429。
+- **修复 LLM 注入断链**：路由层原先直接从 `app.state` 取 `llm_service`（恒为 None），现正确从 `app.state.runtime_context.llm_service` 获取。
+- **修复服务崩溃循环**：安装缺失的 `feedparser` 依赖（`rss_adapter` 导入失败曾导致 PM2 服务重启 568 次）；用 `ensurepip` 恢复 venv 缺失的 pip。
+
+---
+
 ## v0.3.202: 新增聊天记录分析系统模块（2026-09-08）
 
 - **新增聊天记录分析系统**：参考笔记模块架构，新增 `chat_analysis/` 模块，独立数据库 `data/chat_analysis.db`，支持会话/消息/分析片段的持久化、检索与统计。

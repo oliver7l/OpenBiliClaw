@@ -1847,8 +1847,8 @@ class ContinuousRefreshController:
         if not _db_path:
             _db_path = "data/openbiliclaw.db"
 
-        # Get llm_service from soul_engine
-        llm = getattr(self.soul_engine, "llm_service", None)
+        # Get llm_service from soul_engine (stored as _llm_service)
+        llm = getattr(self.soul_engine, "_llm_service", None)
 
         # Import the loop engine (lazy to avoid circular import)
         from openbiliclaw.self_evolution.loop_engine import SelfEvolutionLoopEngine

@@ -31,6 +31,9 @@ from __future__ import annotations
 
 import argparse
 import datetime
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
 import glob
 import json
 import os
@@ -52,7 +55,7 @@ TOPIC_RE = re.compile(r"#([^\s#\[\]]{2,20})\[话题\]")
 
 
 def _now() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _build_media_map(media_root: str) -> tuple[dict[str, list[str]], dict[str, str]]:

@@ -483,7 +483,7 @@ class RuntimeContext:
         )
 
         # 4. Embedding service
-        new_embedding_service = build_embedding_service(new_config, new_registry)
+        new_embedding_service = build_embedding_service(new_config.llm, new_registry)
 
         # 5. Share embedding with soul pipeline for semantic purges
         set_emb = getattr(new_soul_engine, "set_embedding_service", None)
@@ -904,6 +904,7 @@ class RuntimeContext:
         self.config = new_config
         self.llm_registry = new_registry
         self.llm_service = new_llm_service
+        self.embedding_service = new_embedding_service
         self.bilibili_client = new_bilibili_client
         self.soul_engine = new_soul_engine
         self.dialogue = new_dialogue

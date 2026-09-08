@@ -228,18 +228,17 @@ class DiaryService:
             logger.warning("LLM service 未配置，跳过日记分析: id=%s", entry_id)
             return None
 
-        prompt = _DIARY_ANALYSIS_PROMPT.format(
-            entry_date=entry.entry_date,
-            title=entry.title or "(无标题)",
-            content=entry.content[:8000],
-        )
-
         try:
-            response = await self._llm_service.complete_structured_task(
-                prompt=prompt,
-                task_name="diary_analysis",
-                timeout_seconds=60,
+            resp = await self._llm_service.complete_structured_task(
+                system_instruction=_DIARY_ANALYSIS_PROMPT,
+                user_input=f"日期：{entry.entry_date}\n标题：{entry.title or '(无标题)'}\n\n{entry.content[:8000]}",
+                temperature=0.3,
+                max_tokens=4096,
+                caller="diary.analyze_entry",
+                reasoning_effort="none",
+                inject_core_memory=False,
             )
+            response = getattr(resp, "content", "")
             result = self._parse_analysis_response(response)
             if result is None:
                 logger.error("日记分析结果解析失败: id=%s", entry_id)
@@ -657,7 +656,16 @@ class DiaryService:
 
 标签要求：3-5 个，涵盖主题、情绪、人物、地点等。
 mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unknown"""
-                response = await llm.chat(prompt)
+                resp = await llm.complete_structured_task(
+                    system_instruction="",
+                    user_input=prompt,
+                    temperature=0.3,
+                    max_tokens=2048,
+                    caller="diary.auto_tag_fragment",
+                    reasoning_effort="none",
+                    inject_core_memory=False,
+                )
+                response = getattr(resp, "content", "")
                 parsed = self._parse_analysis_response(response)
                 tags = parsed.get("tags", []) if parsed else []
                 mood_str = parsed.get("mood", "unknown") if parsed else "unknown"
@@ -851,7 +859,16 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
             all_tags = list(set(all_tags))[:5]
         else:
             try:
-                response = await llm.chat(prompt)
+                resp = await llm.complete_structured_task(
+                    system_instruction="",
+                    user_input=prompt,
+                    temperature=0.3,
+                    max_tokens=4096,
+                    caller="diary.compose_fragment",
+                    reasoning_effort="none",
+                    inject_core_memory=False,
+                )
+                response = getattr(resp, "content", "")
                 parsed = self._parse_analysis_response(response)
                 if parsed:
                     title = parsed.get("title", f"{fragment_date} 日记")
@@ -929,7 +946,16 @@ mood 可选值：very_happy, happy, neutral, sad, very_sad, angry, anxious, unkn
             result = self._extract_by_rules(entry)
         else:
             try:
-                response = await llm.chat(prompt)
+                resp = await llm.complete_structured_task(
+                    system_instruction="",
+                    user_input=prompt,
+                    temperature=0.3,
+                    max_tokens=4096,
+                    caller="diary.extract_tags",
+                    reasoning_effort="none",
+                    inject_core_memory=False,
+                )
+                response = getattr(resp, "content", "")
                 parsed = self._parse_extraction_response(response)
                 if parsed is None:
                     return None

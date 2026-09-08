@@ -490,23 +490,22 @@ class AutoTopicGenerator:
         return insights
 
     def _generate_ai_summary(self, topic_name: str, articles: list[dict[str, Any]],
-                              key_insights: list[str],
-                              platform_perspectives: dict[str, str]) -> str:
-        """用 LLM 生成专题综述。"""
-        try:
-            # 构建提示词
-            article_summaries = "\n".join(
-                f"- [{self._PLATFORM_NAMES.get(a['source_type'], a['source_type'])}] {a['title']}"
-                for a in articles[:15]
-            )
+                                  key_insights: list[str],
+                                  platform_perspectives: dict[str, str]) -> str:
+            """用 LLM 生成专题综述。"""
+            try:
+                if self.llm_service is None:
+                    return self._fallback_summary(topic_name, articles, key_insights)
 
-            prompt = f"""请为以下专题生成一篇综合综述，要求：
-1. 概括这个主题的核心内容和发展脉络
-2. 总结不同平台的视角差异
-3. 提炼3-5个核心观点
-4. 语言简洁专业，适合作为专题介绍
+                # 构建提示词
+                article_summaries = "\n".join(
+                    f"- [{self._PLATFORM_NAMES.get(a['source_type'], a['source_type'])}] {a['title']}"
+                    for a in articles[:15]
+                )
 
-专题名称：{topic_name}
+                system_instruction = "你是一个专题综述撰写专家。请根据提供的文章列表和核心观点，生成一篇综合专题综述。要求：1. 概括主题核心内容和发展脉络；2. 总结不同平台的视角差异；3. 提炼3-5个核心观点；4. 语言简洁专业，300-500字。"
+
+                user_input = f"""专题名称：{topic_name}
 
 相关文章（{len(articles)}篇）：
 {article_summaries}
@@ -519,20 +518,29 @@ class AutoTopicGenerator:
 
 请生成综述（300-500字）："""
 
-            # 调用 LLM
-            if hasattr(self.llm_service, "generate"):
-                response = self.llm_service.generate(prompt)
-                if isinstance(response, str):
-                    return response.strip()
-                elif isinstance(response, dict):
-                    return response.get("content", "").strip()
+                # 调用 LLM（统一使用 generate_structured）
+                from openbiliclaw.llm.generation import generate_structured
+                from openbiliclaw.self_evolution.insight_report import _run_async
 
-            # 如果 LLM 服务不可用，返回模板化综述
-            return self._fallback_summary(topic_name, articles, key_insights)
+                result = _run_async(generate_structured(
+                    self.llm_service,
+                    system_instruction=system_instruction,
+                    user_input=user_input,
+                    parse=lambda x: x,
+                    label="auto_topic_summary",
+                    temperature=0.3,
+                    max_tokens=800,
+                ))
 
-        except Exception as e:
-            logger.warning("LLM summary generation failed, using fallback: %s", e)
-            return self._fallback_summary(topic_name, articles, key_insights)
+                text = str(result).strip()
+                if text:
+                    return text
+
+                return self._fallback_summary(topic_name, articles, key_insights)
+
+            except Exception as e:
+                logger.warning("LLM summary generation failed, using fallback: %s", e)
+                return self._fallback_summary(topic_name, articles, key_insights)
 
     def _fallback_summary(self, topic_name: str, articles: list[dict[str, Any]],
                            key_insights: list[str]) -> str:

@@ -29,6 +29,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = dt.timezone(dt.timedelta(hours=8))
 import html
 import json
 import os
@@ -166,7 +169,7 @@ def collect(src_dir: str, *, dry_run: bool) -> dict:
     total = inserted = filled = skipped = ignored = 0
     conn = None if dry_run else sqlite3.connect(DB_PATH)
     cur = None if dry_run else conn.cursor()
-    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = dt.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
     for art in _iter_notes(src_dir):
         total += 1

@@ -16,6 +16,9 @@
 """
 import argparse
 import datetime
+
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
 import email.utils
 import json
 import os
@@ -117,7 +120,7 @@ def main():
         collected += _fetch_zhihu(args.keyword, args.limit)
     print(f"候选 (标题含关键词): {len(collected)} 条")
 
-    now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     tag_json = json.dumps([args.keyword], ensure_ascii=False)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()

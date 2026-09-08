@@ -12,11 +12,14 @@ import logging
 import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import UTC
+from datetime import timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# 北京时间(UTC+8): articles 表所有时间字段统一存本地时间字符串
+CN_TZ = timezone(timedelta(hours=8))
 
 # Internal networks to block (SSRF protection)
 _BLOCKED_NETWORKS = [
@@ -113,12 +116,11 @@ class ProcessorResult:
         import hashlib
         import json
         from datetime import datetime
-
         content_hash = ""
         if self.content_text:
             content_hash = hashlib.sha256(self.content_text.encode("utf-8")).hexdigest()[:32]
 
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
         return {
             "source_type": self.source_type,
             "source_name": self.source_name,

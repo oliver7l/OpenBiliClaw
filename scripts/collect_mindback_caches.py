@@ -37,15 +37,19 @@ YT_ID_RE = re.compile(r"[?&]v=([0-9A-Za-z_-]{11})")
 PUBDATE_RE = re.compile(r"youtube_history_(\d{8})")
 
 
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
+
+
 def _now():
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _ts_to_iso(ts, fallback=None):
     try:
         iv = int(ts)
         if iv > 0:
-            return datetime.datetime.fromtimestamp(iv, datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+            return datetime.datetime.fromtimestamp(iv, CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         pass
     return fallback or _now()

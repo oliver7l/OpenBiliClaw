@@ -116,8 +116,9 @@ def main():
             "SELECT url FROM articles WHERE url IS NOT NULL AND url <> ''")}
 
     upsert_sql = """INSERT INTO articles (source_type, source_name, title, url,
-                        author, summary, content_text, published_at, tags)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        author, summary, content_text, published_at, tags,
+                        created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(url) DO UPDATE SET
                     title=excluded.title, summary=excluded.summary,
                     content_text=CASE
@@ -126,7 +127,7 @@ def main():
                     tags=CASE
                       WHEN articles.tags IS NULL OR articles.tags IN ('', '[]')
                         THEN excluded.tags ELSE articles.tags END,
-                    updated_at=CURRENT_TIMESTAMP"""
+                    updated_at=excluded.updated_at"""
 
     done = 0
     skipped = 0
@@ -138,10 +139,12 @@ def main():
         author = r["up_name"] or r["author_name"] or ""
         sname = author or r["source"] or st
         tags = _norm_tags(r["tags"], sname)
+        now_local = datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(upsert_sql, (
             st, sname, r["title"] or "(无标题)", url, author,
             r["description"] or "", r["body_text"] or "",
-            (_norm_pub(r["discovered_at"]) or datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")), tags,
+            (_norm_pub(r["discovered_at"]) or now_local), tags,
+            now_local, now_local,
         ))
         done += 1
         if args.limit and done >= args.limit:

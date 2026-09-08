@@ -3,7 +3,8 @@
 封装 ChatAnalysisStore，提供导入、统计、搜索、LLM 分析等高级操作。
 
 LLM 配额说明：
-- 默认每天最多消耗 100,000 tokens（约 2-3 次会话全量分析）
+- 按调用次数在 5 小时滚动窗口内限流，默认 1000 次/窗口
+  （对齐商汤 Token Plan 上游 1500 次/5h 的免费限流策略，留 1/3 余量）
 - 每次分析默认最多取 100 条消息，可在调用时调整 max_messages
 - 超出配额会返回空结果并记录警告，不自动调用 LLM
 """
@@ -12,11 +13,13 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
+
+from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
 
 from .importer import ChatImporter, DeepseekAnalysisImportResult, ImportStats
 from .models import (
@@ -37,43 +40,45 @@ if TYPE_CHECKING:
 
 
 class LLMQuota:
-    """LLM 调用配额跟踪器，防止意外打爆额度。"""
+    """LLM 调用配额跟踪器，按调用次数在滚动窗口内限流。
 
-    def __init__(self, max_tokens_per_day: int = 100_000):
-        self.max_tokens_per_day = max_tokens_per_day
-        self._today = date.today()
-        self._used_tokens = 0
+    商汤 Token Plan 公测免费，但上游按**调用次数**限流（每模型每 5 小时），
+    因此这里按次数计数对齐上游策略；默认 1000 次/5h，为上游 1500 次留余量。
+    """
 
-    def _reset_if_new_day(self) -> None:
-        today = date.today()
-        if today != self._today:
-            self._today = today
-            self._used_tokens = 0
+    def __init__(self, max_calls_per_window: int = 1000, window_seconds: int = 5 * 3600):
+        self.max_calls_per_window = max_calls_per_window
+        self.window_seconds = window_seconds
+        self._calls: deque[float] = deque()
 
-    def check(self, estimated_tokens: int = 1) -> bool:
-        """检查是否还有配额。返回 True 表示可以调用。"""
-        self._reset_if_new_day()
-        return self._used_tokens + estimated_tokens <= self.max_tokens_per_day
+    def _prune(self) -> None:
+        cutoff = time.monotonic() - self.window_seconds
+        while self._calls and self._calls[0] < cutoff:
+            self._calls.popleft()
 
-    def consume(self, tokens: int) -> None:
-        """记录消耗的 token 数。"""
-        self._reset_if_new_day()
-        self._used_tokens += tokens
+    def check(self) -> bool:
+        """检查窗口内是否还有调用配额。返回 True 表示可以调用。"""
+        self._prune()
+        return len(self._calls) < self.max_calls_per_window
+
+    def consume(self) -> None:
+        """记录一次调用。"""
+        self._prune()
+        self._calls.append(time.monotonic())
 
     @property
     def remaining(self) -> int:
-        self._reset_if_new_day()
-        return max(0, self.max_tokens_per_day - self._used_tokens)
+        self._prune()
+        return max(0, self.max_calls_per_window - len(self._calls))
 
     @property
     def used(self) -> int:
-        self._reset_if_new_day()
-        return self._used_tokens
+        self._prune()
+        return len(self._calls)
 
     @property
     def is_exhausted(self) -> bool:
-        self._reset_if_new_day()
-        return self._used_tokens >= self.max_tokens_per_day
+        return not self.check()
 
 
 class ChatAnalysisService:
@@ -125,11 +130,14 @@ class ChatAnalysisService:
 只返回 JSON 对象，不要其他内容。"""
 
     def __init__(self, database=None, db_path: Path | None = None, llm_service=None,
-                 max_llm_tokens_per_day: int = 100_000):
+                 max_llm_calls_per_window: int = 1000, llm_window_seconds: int = 5 * 3600):
         self.database = database
         self.db_path = db_path
         self._llm_service = llm_service
-        self._quota = LLMQuota(max_tokens_per_day=max_llm_tokens_per_day)
+        self._quota = LLMQuota(
+            max_calls_per_window=max_llm_calls_per_window,
+            window_seconds=llm_window_seconds,
+        )
         self._store: ChatAnalysisStore | None = None
         self._importer: ChatImporter | None = None
 
@@ -346,56 +354,45 @@ class ChatAnalysisService:
     def _get_llm(self):
         if not self._llm_service:
             return None
-        if hasattr(self._llm_service, "complete"):
-            return self._llm_service
-        if hasattr(self._llm_service, "chat"):
+        if hasattr(self._llm_service, "complete_structured_task"):
             return self._llm_service
         return None
 
-    def _estimate_tokens(self, text: str) -> int:
-        """粗略估算 token 数（中文约 1.5 char/token，英文约 4 char/token）。"""
-        chinese = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
-        ascii_chars = len(text) - chinese
-        return int(chinese * 1.5 + ascii_chars / 4) + 50  # +50 系统 prompt 开销
-
-    def _check_llm_quota(self, text: str) -> bool:
+    def _check_llm_quota(self) -> bool:
         """检查 LLM 配额，配额不足时记录警告。"""
-        estimated = self._estimate_tokens(text)
         if self._quota.is_exhausted:
             logger.warning(
-                "LLM 配额已用完（今日已用 %d/%d tokens），"
-                "跳过调用。可通过 max_llm_tokens_per_day 调整，或明天再试。",
-                self._quota.used, self._quota.max_tokens_per_day,
-            )
-            return False
-        if not self._quota.check(estimated):
-            logger.warning(
-                "LLM 配额不足（剩余 %d，需约 %d），跳过调用。",
-                self._quota.remaining, estimated,
+                "LLM 配额已用完（窗口内已用 %d/%d 次），"
+                "跳过调用。可通过 max_llm_calls_per_window 调整，或稍后再试。",
+                self._quota.used, self._quota.max_calls_per_window,
             )
             return False
         return True
 
-    def _call_llm(self, prompt: str, messages_text: str) -> str | None:
+    async def _call_llm(self, prompt: str, messages_text: str) -> str | None:
         llm = self._get_llm()
         if not llm:
             return None
-        full_prompt = f"{prompt}\n\n---\n{messages_text}"
-        if not self._check_llm_quota(full_prompt):
+        if not self._check_llm_quota():
             return None
-        estimated = self._estimate_tokens(full_prompt)
         try:
-            if hasattr(llm, "complete"):
-                resp = llm.complete(full_prompt)
-                self._quota.consume(estimated)
-                return resp if isinstance(resp, str) else getattr(resp, "text", str(resp))
-            elif hasattr(llm, "chat"):
-                resp = llm.chat([{"role": "user", "content": full_prompt}])
-                self._quota.consume(estimated)
-                return resp if isinstance(resp, str) else getattr(resp, "content", str(resp))
+            resp = await llm.complete_structured_task(
+                system_instruction=prompt,
+                user_input=messages_text,
+                temperature=0.3,
+                max_tokens=4096,
+                caller="chat_analysis",
+                reasoning_effort="",
+                inject_core_memory=False,
+            )
+            self._quota.consume()
+            content = getattr(resp, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content
+            return None
         except Exception as e:
             logger.warning("LLM 调用失败: %s", e)
-        return None
+            return None
 
     def _format_messages_for_llm(self, messages: list[ChatMessage], max_len: int = 8000) -> str:
         lines = []
@@ -408,98 +405,92 @@ class ChatAnalysisService:
             lines.append(line)
         return "\n".join(lines)
 
-    def extract_topics(self, session_id: int, max_messages: int = 500) -> list[ChatTopic]:
+    async def extract_topics(self, session_id: int, max_messages: int = 500) -> list[ChatTopic]:
         """使用 LLM 从会话中提取话题。"""
         messages = self.store.get_messages(session_id, limit=max_messages)
         if not messages:
             return []
 
         text = self._format_messages_for_llm(messages)
-        resp = self._call_llm(self.PROMPT_TOPIC_EXTRACT, text)
+        resp = await self._call_llm(self.PROMPT_TOPIC_EXTRACT, text)
         if not resp:
             return []
 
-        try:
-            import json
-            data = json.loads(resp)
-            if not isinstance(data, list):
-                return []
-            topics = []
-            for item in data:
-                topic = self.store.create_topic(
-                    session_id=session_id,
-                    topic_name=item.get("topic_name", "未命名话题"),
-                    keywords=item.get("keywords", []),
-                    summary=item.get("summary", ""),
-                    participant_count=item.get("participant_count", 0),
-                    message_count=item.get("message_count", 0),
-                )
-                topics.append(topic)
-            return topics
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning("解析话题结果失败: %s", e)
+        data = extract_llm_json_list(resp)
+        if data is None:
+            logger.warning("解析话题结果失败：LLM 返回非 JSON 数组")
             return []
+        topics = []
+        for item in data:
+            topic = self.store.create_topic(
+                session_id=session_id,
+                topic_name=str(item.get("topic_name", "未命名话题")),
+                keywords=[str(k) for k in item.get("keywords", [])],
+                summary=str(item.get("summary", "")),
+                participant_count=int(item.get("participant_count", 0) or 0),
+                message_count=int(item.get("message_count", 0) or 0),
+            )
+            topics.append(topic)
+        return topics
 
-    def generate_insights(self, session_id: int, max_messages: int = 500) -> list[ChatInsight]:
+    async def generate_insights(self, session_id: int, max_messages: int = 500) -> list[ChatInsight]:
         """使用 LLM 从会话中生成洞察。"""
         messages = self.store.get_messages(session_id, limit=max_messages)
         if not messages:
             return []
 
         text = self._format_messages_for_llm(messages)
-        resp = self._call_llm(self.PROMPT_INSIGHT_EXTRACT, text)
+        resp = await self._call_llm(self.PROMPT_INSIGHT_EXTRACT, text)
         if not resp:
             return []
 
-        try:
-            import json
-            data = json.loads(resp)
-            if not isinstance(data, list):
-                return []
-            insights = []
-            for item in data:
-                insight = self.store.create_insight(
-                    session_id=session_id,
-                    insight_type=item.get("insight_type", "insight"),
-                    content=item.get("content", ""),
-                    confidence=item.get("confidence", 0.5),
-                )
-                insights.append(insight)
-            return insights
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning("解析洞察结果失败: %s", e)
+        data = extract_llm_json_list(resp)
+        if data is None:
+            logger.warning("解析洞察结果失败：LLM 返回非 JSON 数组")
             return []
+        insights = []
+        for item in data:
+            insight = self.store.create_insight(
+                session_id=session_id,
+                insight_type=str(item.get("insight_type", "insight")),
+                content=str(item.get("content", "")),
+                confidence=float(item.get("confidence", 0.5) or 0.5),
+            )
+            insights.append(insight)
+        return insights
 
-    def summarize_session(self, session_id: int, max_messages: int = 500) -> dict[str, Any] | None:
+    async def summarize_session(self, session_id: int, max_messages: int = 500) -> dict[str, Any] | None:
         """使用 LLM 生成会话摘要。"""
         messages = self.store.get_messages(session_id, limit=max_messages)
         if not messages:
             return None
 
         text = self._format_messages_for_llm(messages)
-        resp = self._call_llm(self.PROMPT_SESSION_SUMMARY, text)
+        resp = await self._call_llm(self.PROMPT_SESSION_SUMMARY, text)
         if not resp:
             return None
 
-        try:
-            import json
-            return json.loads(resp)
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning("解析摘要结果失败: %s", e)
+        data = extract_llm_json_object(resp)
+        if data is None:
+            logger.warning("解析摘要结果失败：LLM 返回非 JSON 对象")
             return None
+        return data
 
-    def analyze_session(self, session_id: int) -> dict[str, Any]:
-        """对会话执行完整分析：话题提取 + 洞察生成 + 摘要。"""
-        result = {}
-        topics = self.extract_topics(session_id)
-        result["topics"] = topics
+    async def analyze_session(self, session_id: int) -> dict[str, Any]:
+        """对会话执行完整分析：话题提取 + 洞察生成 + 摘要。
+
+        返回值均为 JSON 可序列化的 dict/list。
+        """
+        result: dict[str, Any] = {}
+        topics = await self.extract_topics(session_id)
+        result["topics"] = [t.model_dump(mode="json") for t in topics]
         result["topic_count"] = len(topics)
 
-        insights = self.generate_insights(session_id)
-        result["insights"] = insights
+        insights = await self.generate_insights(session_id)
+        result["insights"] = [i.model_dump(mode="json") for i in insights]
         result["insight_count"] = len(insights)
 
-        summary = self.summarize_session(session_id)
+        summary = await self.summarize_session(session_id)
         result["summary"] = summary
 
         return result

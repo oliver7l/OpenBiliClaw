@@ -195,7 +195,13 @@ class LLMConfig:
     # v0.3.32+ generic OpenAI-protocol-compatible provider. Always
     # requires an explicit base_url (otherwise it would just be ``openai``).
     openai_compatible: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    # 国内免费大模型平台（OpenAI协议兼容）
+    zhipu: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    modelscope: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    siliconflow: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    # Data path for embedding cache (mirrors obc_llm._config.LLMConfig.data_path)
+    data_path: str = ""
     # Per-module overrides (empty = use global default)
     soul: ModuleLLMConfig = field(default_factory=ModuleLLMConfig)
     discovery: ModuleLLMConfig = field(default_factory=ModuleLLMConfig)
@@ -794,6 +800,14 @@ def _looks_like_project_root(path: Path) -> bool:
     )
 
 
+def _resolve_data_path(data_dir: str) -> Path:
+    """Resolve data directory to an absolute path (mirrors Config.data_path)."""
+    p = Path(data_dir)
+    if not p.is_absolute():
+        p = _project_root() / p
+    return p
+
+
 def _default_config_path() -> Path:
     """Return the default config.toml path."""
     return _project_root() / "config.toml"
@@ -885,12 +899,14 @@ def _build_config(raw: dict[str, Any]) -> Config:
         travel_raw = {}
 
     embedding_raw = llm_raw.get("embedding", {})
+    data_dir_raw = general.get("data_dir", "data")
     llm = LLMConfig(
         default_provider=llm_raw.get("default_provider", "deepseek"),
         concurrency=_normalize_llm_concurrency(llm_raw.get("concurrency")),
         timeout=_normalize_llm_timeout(llm_raw.get("timeout")),
         fallback_enabled=bool(llm_raw.get("fallback_enabled", False)),
         fallback_provider=llm_raw.get("fallback_provider", ""),
+        data_path=str(_resolve_data_path(data_dir_raw)),
         openai=LLMProviderConfig(**llm_raw.get("openai", {})),
         claude=LLMProviderConfig(**llm_raw.get("claude", {})),
         gemini=LLMProviderConfig(**llm_raw.get("gemini", {})),
@@ -898,6 +914,10 @@ def _build_config(raw: dict[str, Any]) -> Config:
         ollama=LLMProviderConfig(**llm_raw.get("ollama", {})),
         openrouter=LLMProviderConfig(**llm_raw.get("openrouter", {})),
         openai_compatible=LLMProviderConfig(**llm_raw.get("openai_compatible", {})),
+        # 国内免费大模型平台
+        zhipu=LLMProviderConfig(**llm_raw.get("zhipu", {})),
+        modelscope=LLMProviderConfig(**llm_raw.get("modelscope", {})),
+        siliconflow=LLMProviderConfig(**llm_raw.get("siliconflow", {})),
         embedding=EmbeddingConfig(
             **{
                 k: v

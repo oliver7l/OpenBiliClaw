@@ -15,6 +15,12 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 
+# 商汤日日新配额限制（每 5 小时 60,000 点 ≈ 60M tokens）
+_SENSENOVA_QUOTA_LIMIT = 60000
+_SENSENOVA_QUOTA_WINDOW_HOURS = 5
+# 留 20% 余量，超过 80% 时暂停 LLM 密集型任务
+_SENSENOVA_QUOTA_SOFT_LIMIT = 0.8
+
 logger = logging.getLogger("self_evolution.loop_engine")
 
 # ---------------------------------------------------------------------------
@@ -363,6 +369,39 @@ class SelfEvolutionLoopEngine:
         self._batch_max_hours = batch_max_hours
         self._state = SelfEvolutionState(db_path)
 
+    # -- Quota awareness -------------------------------------------------------
+
+    def _quota_ok(self) -> bool:
+        """检查商汤日日新配额是否充足。
+
+        查询最近 5 小时的 token 使用量，如果超过软限制（80%）则暂停
+        LLM 密集型任务，避免触发上游限流。
+        """
+        try:
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            cutoff = (datetime.now() - timedelta(hours=_SENSENOVA_QUOTA_WINDOW_HOURS)).isoformat()
+            total_tokens = conn.execute(
+                "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) "
+                "FROM llm_usage WHERE timestamp >= ?",
+                (cutoff,),
+            ).fetchone()[0]
+            conn.close()
+            # 假设 1 point ≈ 1000 tokens
+            estimated_points = max(1, total_tokens // 1000)
+            usage_pct = estimated_points / _SENSENOVA_QUOTA_LIMIT
+            if usage_pct >= _SENSENOVA_QUOTA_SOFT_LIMIT:
+                logger.info(
+                    "self_evolution: quota usage %.1f%% >= soft limit %.0f%%, "
+                    "skipping LLM-heavy tasks",
+                    usage_pct * 100,
+                    _SENSENOVA_QUOTA_SOFT_LIMIT * 100,
+                )
+                return False
+            return True
+        except Exception:
+            logger.debug("self_evolution: quota check failed", exc_info=True)
+            return True  # 配额检查失败时允许执行，避免误拦
+
     # -- Tick entry point -----------------------------------------------------
 
     async def run_tick(self) -> dict[str, Any]:
@@ -438,7 +477,7 @@ class SelfEvolutionLoopEngine:
                 self._update_last_id(conn)
 
         # ── Step 3: TL;DR (batch) ───────────────────────────────────────────
-        if candidate_ids:
+        if candidate_ids and self._quota_ok():
             try:
                 from openbiliclaw.self_evolution.tldr import TLDRGenerator
 
@@ -454,22 +493,23 @@ class SelfEvolutionLoopEngine:
                 logger.debug("self_evolution: tldr failed", exc_info=True)
 
             # ── Step 4: Knowledge cards (batch) ─────────────────────────────
-            try:
-                from openbiliclaw.self_evolution.knowledge_card import (
-                    KnowledgeCardGenerator,
-                )
+            if self._quota_ok():
+                try:
+                    from openbiliclaw.self_evolution.knowledge_card import (
+                        KnowledgeCardGenerator,
+                    )
 
-                kc = KnowledgeCardGenerator(
-                    self._db_path, llm_service=self._llm_service
-                )
-                cards = await asyncio_to_thread(
-                    kc.generate_cards_batch,
-                    article_ids=candidate_ids,
-                    max_cards_per_article=3,
-                )
-                results["knowledge_cards"] = len(cards) if cards else 0
-            except Exception:
-                logger.debug("self_evolution: knowledge_card failed", exc_info=True)
+                    kc = KnowledgeCardGenerator(
+                        self._db_path, llm_service=self._llm_service
+                    )
+                    cards = await asyncio_to_thread(
+                        kc.generate_cards_batch,
+                        article_ids=candidate_ids,
+                        max_cards_per_article=3,
+                    )
+                    results["knowledge_cards"] = len(cards) if cards else 0
+                except Exception:
+                    logger.debug("self_evolution: knowledge_card failed", exc_info=True)
 
             # Update last processed ID to the highest in this batch
             self._state.last_processed_article_id = max(candidate_ids)
@@ -483,12 +523,13 @@ class SelfEvolutionLoopEngine:
         )
 
         # ── Step 6: Insight report (daily) ──────────────────────────────────
-        await self._run_if_due(
-            "insight_report",
-            24,
-            results,
-            lambda: self._do_insight_report(),
-        )
+        if self._quota_ok():
+            await self._run_if_due(
+                "insight_report",
+                24,
+                results,
+                lambda: self._do_insight_report(),
+            )
 
         # ── Step 7: Topic mining (every 3 days) ─────────────────────────────
         await self._run_if_due(
@@ -507,20 +548,22 @@ class SelfEvolutionLoopEngine:
         )
 
         # ── Step 9: Auto topic (weekly) ─────────────────────────────────────
-        await self._run_if_due(
-            "auto_topic",
-            168,
-            results,
-            lambda: self._do_auto_topic(),
-        )
+        if self._quota_ok():
+            await self._run_if_due(
+                "auto_topic",
+                168,
+                results,
+                lambda: self._do_auto_topic(),
+            )
 
         # ── Step 10: Content insights (weekly) ──────────────────────────────
-        await self._run_if_due(
-            "content_insights",
-            168,
-            results,
-            lambda: self._do_content_insights(),
-        )
+        if self._quota_ok():
+            await self._run_if_due(
+                "content_insights",
+                168,
+                results,
+                lambda: self._do_content_insights(),
+            )
 
         # Save batch timestamp
         self._state.last_batch_run_at = datetime.now()

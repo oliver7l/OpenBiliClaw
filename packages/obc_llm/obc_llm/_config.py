@@ -67,6 +67,12 @@ class LLMConfig:
     ollama: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     openrouter: LLMProviderConfig = field(default_factory=LLMProviderConfig)
     openai_compatible: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    # 国内免费大模型平台
+    zhipu: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    modelscope: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    siliconflow: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    zhipu: LLMProviderConfig = field(default_factory=LLMProviderConfig)
+    modelscope: LLMProviderConfig = field(default_factory=LLMProviderConfig)
 
     # Embedding
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)

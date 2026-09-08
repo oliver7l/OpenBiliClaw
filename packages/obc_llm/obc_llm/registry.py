@@ -56,6 +56,10 @@ def build_llm_registry(
         ("ollama", _maybe_ollama_provider(config, overrides)),
         ("openrouter", _maybe_openrouter_provider(config, overrides)),
         ("openai_compatible", _maybe_openai_compatible_provider(config, overrides)),
+        # 国内免费大模型平台（OpenAI协议兼容）
+        ("zhipu", _maybe_zhipu_provider(config, overrides)),
+        ("modelscope", _maybe_modelscope_provider(config, overrides)),
+        ("siliconflow", _maybe_siliconflow_provider(config, overrides)),
     ]
 
     for _name, provider in provider_specs:
@@ -109,6 +113,8 @@ _EMBEDDING_CAPABLE_PROVIDERS: tuple[str, ...] = (
     # users must opt in by setting ``[llm.embedding].provider =
     # "openrouter"`` with an explicit ``model``.
     "openrouter",
+    # 硅基流动支持 bge-m3 / bge-large-zh 等 embedding 模型
+    "siliconflow",
 )
 _DEFAULT_EMBEDDING_MODEL_BY_PROVIDER: dict[str, str] = {
     "gemini": "gemini-embedding-001",
@@ -117,6 +123,7 @@ _DEFAULT_EMBEDDING_MODEL_BY_PROVIDER: dict[str, str] = {
     # No safe default for openai_compatible — depends entirely on the
     # upstream service. Users must specify an explicit model.
     "openai_compatible": "text-embedding-3-small",
+    "siliconflow": "BAAI/bge-m3",
 }
 # Module-level set so the back-compat WARNING fires once per provider per
 # process (not once per build_embedding_service call — runtime_context
@@ -364,6 +371,22 @@ def _build_dedicated_embedding_provider(
                 base_url=base_url or "https://openrouter.ai/api/v1",
                 http_referer=chat_openrouter.http_referer,
                 x_title=chat_openrouter.x_title,
+            ),
+            effective_model,
+        )
+
+    if candidate == "siliconflow":
+        # 硅基流动：OpenAI 协议兼容，支持 bge-m3 / bge-large-zh 等 embedding
+        # 9B 以下模型免费，embedding 模型都在免费范围内
+        if not api_key or not base_url:
+            return None
+        return (
+            OpenAIProvider(
+                api_key=api_key,
+                model=effective_model,
+                base_url=base_url,
+                provider_name="siliconflow",
+                embedding_output_dimensionality=output_dimensionality,
             ),
             effective_model,
         )
@@ -620,6 +643,76 @@ def _maybe_openai_compatible_provider(
         model=cfg.model or "gpt-4o-mini",
         base_url=cfg.base_url,
         provider_name="openai_compatible",
+        reasoning_effort=cfg.reasoning_effort,
+        timeout=float(config.timeout),
+    )
+
+
+def _maybe_zhipu_provider(
+    config: LLMConfig, overrides: dict[str, LLMProvider]
+) -> LLMProvider | None:
+    """智谱 GLM 开放平台（glm-4-flash / glm-4.7-flash 永久免费）。
+
+    OpenAI 协议兼容，base_url=https://open.bigmodel.cn/api/paas/v4"""
+    if "zhipu" in overrides:
+        return overrides["zhipu"]
+    cfg = getattr(config, "zhipu", None)
+    if cfg is None or not cfg.api_key.strip():
+        return None
+    if not cfg.base_url.strip():
+        return None
+    return OpenAIProvider(
+        api_key=cfg.api_key,
+        model=cfg.model or "glm-4-flash",
+        base_url=cfg.base_url,
+        provider_name="zhipu",
+        reasoning_effort=cfg.reasoning_effort,
+        timeout=float(config.timeout),
+    )
+
+
+def _maybe_modelscope_provider(
+    config: LLMConfig, overrides: dict[str, LLMProvider]
+) -> LLMProvider | None:
+    """阿里 ModelScope 魔搭（Qwen系列免费，API-Inference）。
+
+    OpenAI 协议兼容，base_url=https://api-inference.modelscope.cn/v1"""
+    if "modelscope" in overrides:
+        return overrides["modelscope"]
+    cfg = getattr(config, "modelscope", None)
+    if cfg is None or not cfg.api_key.strip():
+        return None
+    if not cfg.base_url.strip():
+        return None
+    return OpenAIProvider(
+        api_key=cfg.api_key,
+        model=cfg.model or "Qwen/Qwen3.5-35B-A3B",
+        base_url=cfg.base_url,
+        provider_name="modelscope",
+        reasoning_effort=cfg.reasoning_effort,
+        timeout=float(config.timeout),
+    )
+
+
+def _maybe_siliconflow_provider(
+    config: LLMConfig, overrides: dict[str, LLMProvider]
+) -> LLMProvider | None:
+    """硅基流动（9B以下模型免费，支持 bge-m3 embedding）。
+
+    OpenAI 协议兼容，base_url=https://api.siliconflow.cn/v1
+    同时支持 chat completions 和 embeddings。"""
+    if "siliconflow" in overrides:
+        return overrides["siliconflow"]
+    cfg = getattr(config, "siliconflow", None)
+    if cfg is None or not cfg.api_key.strip():
+        return None
+    if not cfg.base_url.strip():
+        return None
+    return OpenAIProvider(
+        api_key=cfg.api_key,
+        model=cfg.model or "Qwen/Qwen2.5-7B-Instruct",
+        base_url=cfg.base_url,
+        provider_name="siliconflow",
         reasoning_effort=cfg.reasoning_effort,
         timeout=float(config.timeout),
     )
