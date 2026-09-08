@@ -30,6 +30,7 @@
 | 统一 admission 分数门 | ✅ | 推荐池读取、raw/headroom 统计、topic/franchise 分布、suppressed 复活、delight 候选和历史推荐读取都会应用统一最低分；初始化会清理旧低分 `content_cache` / `recommendations` 脏数据。 |
 | 惊喜通道占位排除 | ✅ | `get_pool_candidates()` / `count_pool_candidates()` 统一排除被惊喜通道认领的行（`delight_notified=1`，或 delight 分数达阈值且 reason/hook 非空即当前惊喜队列候选），普通推荐与惊喜推荐不再重复出同一条内容；阈值镜像 `DEFAULT_DELIGHT_THRESHOLD`（0.70），由测试锁定两边一致。 |
 | `style_key` 历史值迁移 | ✅ | `Database.initialize()` 会把 `content_cache` / `discovery_candidates` 中已知旧内容风格 key 迁移到新的观看模式 key；写入 `cache_content()` 和 `update_discovery_candidate_evaluations()` 时也会归一化已知旧值。 |
+| Knowledge Forge 表结构 | ✅ | `Database.initialize()` 调用 `_ensure_knowledge_forge_tables()`：`articles` 表幂等新增 11 个字段（正文清理 `content_cleaned/content_clean_score/content_clean_log/content_verified/content_verify_result`，分层摘要 `summary_detailed/summary_compact/summary_ultra_compact/summary_quality/summary_version/summary_generated_at`），并创建 10 张新表（`entities/article_entities/entity_relations/article_relations/audit_tasks/audit_issues/article_quality_scores/audit_config/gap_analysis_tasks/gap_records`）。全部幂等，旧数据与旧字段完全保留，向后兼容。独立可执行脚本：`migrations/001_knowledge_forge.py`。 |
 
 ## 公开 API
 
@@ -121,6 +122,15 @@ db.suppress_low_confidence_recommendations()
 - `suppress_low_score_pool_items()` 会把 `content_cache.relevance_score` 低于阈值且仍可能展示的 `fresh / shown / suppressed` 行标为 `suppressed`。
 - `suppress_low_confidence_recommendations()` 会把低于阈值且尚无用户反馈的历史推荐标为 `feedback_type='suppressed_low_score'`。
 - `Database.initialize()` 会用默认阈值执行一次上述清理，处理旧版本已经入池 / 入历史的低分数据。
+
+### Knowledge Forge 表结构
+
+`Database.initialize()` 会调用 `_ensure_knowledge_forge_tables()`，为 Knowledge Forge（知识锻造炉）模块补齐存储结构，幂等且向后兼容：
+
+- **`articles` 新增 11 个字段**：正文清理 5 个（`content_cleaned` / `content_clean_score` / `content_clean_log` / `content_verified` / `content_verify_result`）+ 分层摘要 6 个（`summary_detailed` / `summary_compact` / `summary_ultra_compact` / `summary_quality` / `summary_version` / `summary_generated_at`）。旧字段与旧数据完全保留，`ai_summary` 作为 compact 兼容字段继续可用。
+- **新增 10 张表**：实体体系（`entities` / `article_entities` / `entity_relations`）、文章关联（`article_relations`）、质量审计（`audit_tasks` / `audit_issues` / `article_quality_scores` / `audit_config`）、缺口分析（`gap_analysis_tasks` / `gap_records`）。`audit_config` 写入 7 条默认阈值配置。
+
+独立可执行迁移脚本：`migrations/001_knowledge_forge.py`（验证新字段与新表就位、报告文章总数）。
 
 ## 配置项
 

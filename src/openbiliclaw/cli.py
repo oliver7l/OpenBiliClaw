@@ -109,6 +109,15 @@ app.add_typer(browser_app, name="browser")
 app.add_typer(autostart_app, name="autostart")
 note_app = typer.Typer(help="笔记管理命令")
 app.add_typer(note_app, name="note")
+
+# Knowledge Forge（知识锻造炉）命令组
+try:
+    from openbiliclaw.knowledge_forge.cli import register as _register_kf
+
+    _register_kf(app)
+except Exception as _kf_import_exc:  # noqa: BLE001 — 可选模块导入失败不阻塞主 CLI
+    _APP_CONTEXT["kf_import_error"] = str(_kf_import_exc)
+
 console = Console()
 _APP_CONTEXT: dict[str, Any] = {}
 

@@ -77,6 +77,7 @@ openbiliclaw [--log-level DEBUG|INFO|WARNING|ERROR] <命令>
 | `interview log <公司> <轮次> <要点>` | 追加一条面试日志（只追加） | ✅ |
 | `interview scaffold <公司> <岗位> [--yes]` | 按统一规范新建岗位备战包目录（01/02/03 三件套） | ✅ |
 | `interview root` | 显示当前求职知识库根目录（含解析来源） | ✅ |
+| `knowledge-forge <子命令>` | 知识锻造炉：`summary/entities/audit/wiki/gap-analysis/clean/contradiction/dead-link/low-quality/auto-fix/backfill/run-scheduled/schedule-show/gap-fill/entity-describe/entity-relations`（16 条） | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli next-avoidance-probe` | OpenClaw JSON bridge：拉取下一条不喜欢领域探针 | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli respond-avoidance-probe` | OpenClaw JSON bridge：确认 / 否认 / 多聊避雷探针 | ✅ |
 
@@ -553,6 +554,32 @@ $ openbiliclaw interview root                         # 显示当前知识库根
 `interview log` 追加的行带当天日期、状态为「待复盘」，只追加不修改历史；
 `interview scaffold` 按统一规范创建 `01_岗位与公司信息 / 02_面试备战资料 / 03_速成包`
 三件套空目录，目录已存在时不会覆盖。
+
+### `openbiliclaw knowledge-forge`（知识锻造炉）
+
+自进化知识网络命令组：入库清理 → 分层摘要 → 实体提取 → 质量审计 → 缺口分析 → 自动修复。
+设计文档见 [docs/knowledge-forge-design.md](knowledge-forge-design.md)。
+
+```bash
+$ openbiliclaw knowledge-forge summary --limit 20         # 增量生成分层摘要
+$ openbiliclaw knowledge-forge entities --limit 200       # 批量实体提取（作者/主题/概念）
+$ openbiliclaw knowledge-forge audit                      # 全量质量审计
+$ openbiliclaw knowledge-forge wiki                       # 构建知识 Wiki
+$ openbiliclaw knowledge-forge gap-analysis               # 缺口分析
+$ openbiliclaw knowledge-forge contradiction              # 观点矛盾检测
+$ openbiliclaw knowledge-forge dead-link                  # 死链检查
+$ openbiliclaw knowledge-forge low-quality                # 低质量内容检测（LLM 抽样）
+$ openbiliclaw knowledge-forge auto-fix --enable          # 自动修复 + 待人工类型写处理建议
+$ openbiliclaw knowledge-forge backfill                   # 批量回填管线
+$ openbiliclaw knowledge-forge run-scheduled --include-gap-fill   # 定时组合任务
+$ openbiliclaw knowledge-forge schedule-show              # 输出推荐 crontab
+$ openbiliclaw knowledge-forge gap-fill                   # 自动补充闭环（缺口→搜索→入库）
+$ openbiliclaw knowledge-forge entity-describe            # LLM 生成/更新实体简介
+$ openbiliclaw knowledge-forge entity-relations           # 实体共现关系持久化
+```
+
+自动修复默认关闭（`--enable` 开启）；死链/低质量等类型只生成处理建议不改数据；
+`entity-relations` 与定时组合任务中的实体共现刷新保持关系网络同步。
 
 ### `openbiliclaw init`
 

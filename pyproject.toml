@@ -133,6 +133,8 @@ select = [
 "src/openbiliclaw/diary/timeline.py" = ["E501"]
 # 笔记模块：prompt 模板包含大段中文文本
 "src/openbiliclaw/notes/synthesis/prompts.py" = ["E501"]
+# Knowledge Forge：prompt 模板包含大段中文文本
+"src/openbiliclaw/knowledge_forge/prompts.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
