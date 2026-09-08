@@ -9,7 +9,6 @@ from the bili CLI credential store, and inserts new videos into
 
 from __future__ import annotations
 
-import contextlib
 import inspect
 import json
 import logging
@@ -28,11 +27,8 @@ from openbiliclaw.discovery.strategies._utils import (
 )
 from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
 from openbiliclaw.llm.prompts import build_search_queries_prompt
-from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BILIBILI
-
-
 from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
+from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BILIBILI
 
 if TYPE_CHECKING:
     from openbiliclaw.llm.service import LLMService

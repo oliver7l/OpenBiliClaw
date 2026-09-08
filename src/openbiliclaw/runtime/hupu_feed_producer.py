@@ -47,7 +47,6 @@ Usage
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import logging
 import os
@@ -60,9 +59,7 @@ import urllib.request
 from datetime import datetime
 from typing import Any
 
-
 from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
 
 logger = logging.getLogger(__name__)
 

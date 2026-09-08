@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openbiliclaw.api.models import DouyinCookieResponse, XCookieResponse
 from openbiliclaw.sources.x_auth import X_REQUIRED_COOKIE_NAMES, XCookieManager

@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 
 if TYPE_CHECKING:
-    from openbiliclaw.config import SchedulerConfig
-    from openbiliclaw.runtime.presence import PresenceTracker
     import asyncio
     from collections.abc import Callable, Coroutine
 
+    from openbiliclaw.config import SchedulerConfig
+    from openbiliclaw.runtime.presence import PresenceTracker
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
 
 _MAX_DISCOVERY_BACKFILL_PER_REFRESH = 60

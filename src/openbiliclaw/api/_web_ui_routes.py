@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, TYPE_CHECKING
 
 from fastapi.responses import FileResponse, RedirectResponse, Response
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def register_web_ui_routes(app: Any, ctx: Any) -> None:

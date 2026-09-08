@@ -18,7 +18,6 @@ Two responsibilities live in this module:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -30,12 +29,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
+from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_XIAOHONGSHU as _PLATFORM_XIAOHONGSHU
 from openbiliclaw.sources.xhs_keyword_gen import generate_xhs_keywords
-
-
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
 
 if TYPE_CHECKING:
     from openbiliclaw.llm.service import LLMService

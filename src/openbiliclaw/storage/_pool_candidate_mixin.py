@@ -1007,7 +1007,10 @@ class PoolCandidateMixin:
         self, limit: int = 20, *, xhs_self_nickname: str = ""
     ) -> list[dict[str, Any]]:
         """Return fresh pool candidates that lack LLM content classification."""
-        from openbiliclaw.storage.database import _xhs_self_author_guard_sql, _xhs_self_author_guard_params
+        from openbiliclaw.storage.database import (
+            _xhs_self_author_guard_params,
+            _xhs_self_author_guard_sql,
+        )
 
         guard_sql = _xhs_self_author_guard_sql()
         guard_params = _xhs_self_author_guard_params(xhs_self_nickname)
@@ -1045,7 +1048,10 @@ class PoolCandidateMixin:
         self, limit: int = 20, *, xhs_self_nickname: str = ""
     ) -> list[dict[str, Any]]:
         """Return fresh pool candidates missing precomputed popup copy."""
-        from openbiliclaw.storage.database import _xhs_self_author_guard_sql, _xhs_self_author_guard_params
+        from openbiliclaw.storage.database import (
+            _xhs_self_author_guard_params,
+            _xhs_self_author_guard_sql,
+        )
 
         min_score = self._pool_admission_min_score()
         guard_sql = _xhs_self_author_guard_sql()
@@ -1117,7 +1123,7 @@ class PoolCandidateMixin:
         score_expr: str = "COALESCE(relevance_score, 0.0)",
     ) -> tuple[str, tuple[Any, ...]]:
         """Return a SQL predicate and params for the shared admission policy."""
-        from openbiliclaw.storage.database import _EXPLORE_STRATEGY, _EXPLORE_ADMISSION_MIN_SCORE
+        from openbiliclaw.storage.database import _EXPLORE_ADMISSION_MIN_SCORE, _EXPLORE_STRATEGY
 
         predicate = f"""
             {score_expr} >= CASE

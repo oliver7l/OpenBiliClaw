@@ -58,9 +58,7 @@ from typing import Any, cast
 
 import feedparser
 
-
 from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
 
 logger = logging.getLogger(__name__)
 

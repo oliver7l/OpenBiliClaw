@@ -28,6 +28,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib import error, request
 
+from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_ZHIHU
 from openbiliclaw.sources.zhihu_tasks import (
     ZhihuTaskQueue,
@@ -35,10 +36,6 @@ from openbiliclaw.sources.zhihu_tasks import (
     recent_zhihu_related_urls,
     zhihu_discovery_items_to_contents,
 )
-
-
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
 
 logger = logging.getLogger(__name__)
 

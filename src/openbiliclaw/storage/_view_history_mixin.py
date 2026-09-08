@@ -172,8 +172,8 @@ class ViewHistoryMixin:
     @classmethod
     def _extract_content_keys_from_view_event(cls, row: dict[str, Any]) -> set[str]:
         from openbiliclaw.storage.database import (
-            _VIEW_CONTENT_ID_METADATA_KEYS,
             _BILIBILI_SOURCE_FAMILY,
+            _VIEW_CONTENT_ID_METADATA_KEYS,
             _normalize_source_platform_key,
         )
 
@@ -215,10 +215,10 @@ class ViewHistoryMixin:
 
         from openbiliclaw.storage.database import (
             _BILIBILI_SOURCE_FAMILY,
-            _XHS_SOURCE_FAMILY,
             _DOUYIN_SOURCE_FAMILY,
-            _YOUTUBE_SOURCE_FAMILY,
             _TWITTER_SOURCE_FAMILY,
+            _XHS_SOURCE_FAMILY,
+            _YOUTUBE_SOURCE_FAMILY,
         )
 
         if not url:
@@ -243,14 +243,14 @@ class ViewHistoryMixin:
 
     @staticmethod
     def _extract_content_id_from_url(platform: str, url: str) -> str:
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
 
         from openbiliclaw.storage.database import (
-            _XHS_SOURCE_FAMILY,
-            _DOUYIN_SOURCE_FAMILY,
-            _YOUTUBE_SOURCE_FAMILY,
             _BILIBILI_SOURCE_FAMILY,
             _BVID_PATTERN,
+            _DOUYIN_SOURCE_FAMILY,
+            _XHS_SOURCE_FAMILY,
+            _YOUTUBE_SOURCE_FAMILY,
         )
 
         if not url:
@@ -285,7 +285,7 @@ class ViewHistoryMixin:
 
     @staticmethod
     def _extract_bvid_from_view_event(row: dict[str, Any]) -> str:
-        from openbiliclaw.storage.database import Database, _BVID_PATTERN
+        from openbiliclaw.storage.database import _BVID_PATTERN, Database
 
         metadata = Database._decode_event_metadata(row)
         bvid = str(metadata.get("bvid", "")).strip()
@@ -300,7 +300,10 @@ class ViewHistoryMixin:
 
     @staticmethod
     def _content_row_view_keys(row: dict[str, Any]) -> set[str]:
-        from openbiliclaw.storage.database import _normalize_source_platform_key, _pool_source_family
+        from openbiliclaw.storage.database import (
+            _normalize_source_platform_key,
+            _pool_source_family,
+        )
 
         platform = _normalize_source_platform_key(row.get("source_platform", ""))
         if not platform:

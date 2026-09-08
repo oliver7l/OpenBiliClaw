@@ -387,8 +387,8 @@ class SchemaMixin:
 
     def _ensure_favorites_table(self) -> None:
         """Create the favorites (收藏夹) table for existing databases."""
-        from contextlib import suppress
         import logging
+        from contextlib import suppress
 
         logger = logging.getLogger(__name__)
         self.conn.executescript("""

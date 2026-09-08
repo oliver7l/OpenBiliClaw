@@ -12,7 +12,6 @@ available in the recommendation pool.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import re
@@ -25,11 +24,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from openbiliclaw.runtime.keyword_fetch import PLATFORM_YOUTUBE as _PLATFORM_YOUTUBE
-
-
 from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
-
+from openbiliclaw.runtime.keyword_fetch import PLATFORM_YOUTUBE as _PLATFORM_YOUTUBE
 
 logger = logging.getLogger(__name__)
 

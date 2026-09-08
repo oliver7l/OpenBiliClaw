@@ -25,8 +25,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 from openbiliclaw.runtime._db import connect_pool as _obc_connect
+from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
 logger = logging.getLogger(__name__)
 

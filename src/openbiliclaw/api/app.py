@@ -925,10 +925,20 @@ def _normalize_cognition_update(item: dict[str, object]) -> CognitionUpdateSumma
 # ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
 from openbiliclaw.api.utils import (  # noqa: E402
     coerce_e2e_event_rows as _coerce_e2e_event_rows,
+)
+from openbiliclaw.api.utils import (
     event_row_id as _event_row_id,
+)
+from openbiliclaw.api.utils import (
     event_row_metadata as _event_row_metadata,
+)
+from openbiliclaw.api.utils import (
     infer_source_platform_from_url as _infer_source_platform_from_url,
+)
+from openbiliclaw.api.utils import (
     normalize_source_platform as _normalize_source_platform,
+)
+from openbiliclaw.api.utils import (
     select_init_platforms as _select_init_platforms,
 )
 from openbiliclaw.storage.cache import get_cache as _get_cache  # noqa: E402
