@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from openbiliclaw.interview.routes import build_interview_router
-from tests.test_interview_engine import build_kb
+from tests.interview.test_interview_engine import build_kb
 
 if TYPE_CHECKING:
     from pathlib import Path
