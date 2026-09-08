@@ -158,3 +158,8 @@ def register_system_routes(app: Any, ctx: RuntimeContext) -> None:
             raise HTTPException(status_code=404, detail="Cognition update not found.")
         save_cognition_updates(updates)
         return CognitionUpdateSeenResponse(ok=True, id=update_id)
+
+    @app.get("/api/ping")
+    async def ping() -> JSONResponse:
+        """Pure liveness probe: no DB, no provider round-trips."""
+        return JSONResponse({"status": "ok", "service": "openbiliclaw-api"})

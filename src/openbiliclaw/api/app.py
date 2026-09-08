@@ -2102,18 +2102,6 @@ def create_app(
         provider = str(getattr(emb, "provider", "") or "").strip()
         return bool(provider)
 
-    @app.get("/api/ping")
-    async def ping() -> JSONResponse:
-        """Pure liveness probe: no DB, no provider round-trips.
-
-        ``/api/health`` is a READINESS endpoint — its embedding probe can
-        take seconds when the cache is cold (Ollama model reload), which
-        made the extension's connection badge sit on "未连接" after opening
-        the panel. UI liveness indicators should hit this instead and keep
-        ``/api/health`` for profile/embedding state.
-        """
-        return JSONResponse({"status": "ok", "service": "openbiliclaw-api"})
-
     @app.get("/api/health", response_model=HealthResponse, response_model_exclude_none=True)
     async def health() -> HealthResponse | JSONResponse:
         profile_ready = _health_profile_ready()
