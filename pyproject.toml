@@ -143,6 +143,7 @@ select = [
 "tests/diary/test_diary.py" = ["E501"]
 "tests/diary/test_diary_knowledge_graph.py" = ["E501"]
 "tests/knowledge/test_knowledge_forge.py" = ["E501"]
+"tests/notes/test_notes.py" = ["E501"]
 "src/openbiliclaw/diary/insights.py" = ["E501"]
 "src/openbiliclaw/diary/service.py" = ["E501"]
 "src/openbiliclaw/diary/store.py" = ["E501"]
