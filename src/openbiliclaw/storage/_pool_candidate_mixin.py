@@ -501,3 +501,238 @@ class PoolCandidateMixin:
                 if value:
                     counts[axis][value] += 1
         return {axis: dict(axis_counts) for axis, axis_counts in counts.items()}
+
+    # ── Pool trimming & source balance ──────────────────────────────
+
+    def trim_pool_to_target_count(
+        self,
+        *,
+        target: int,
+        source_share_quotas: dict[str, int] | None = None,
+    ) -> int:
+        """Suppress overflow fresh items so the pool does not exceed *target*."""
+        from openbiliclaw.storage.database import _pool_source_family, logger
+
+        if target <= 0:
+            return 0
+
+        rows = self._load_pool_raw_material_rows()
+        if len(rows) <= target:
+            return 0
+
+        ranked = sorted(rows, key=self._pool_trim_keep_key)
+
+        if source_share_quotas:
+            counts_per_source: dict[str, int] = defaultdict(int)
+            for row in rows:
+                source_family = _pool_source_family(
+                    row.get("source", ""),
+                    row.get("source_platform", ""),
+                )
+                counts_per_source[source_family] += 1
+
+            protected: list[dict[str, Any]] = []
+            negotiable_tracked: list[dict[str, Any]] = []
+            negotiable_untracked: list[dict[str, Any]] = []
+            seen: dict[str, int] = defaultdict(int)
+            for row in ranked:
+                source_family = _pool_source_family(
+                    row.get("source", ""),
+                    row.get("source_platform", ""),
+                )
+                quota = source_share_quotas.get(source_family)
+                if quota is None:
+                    negotiable_untracked.append(row)
+                    continue
+                if counts_per_source[source_family] <= quota:
+                    protected.append(row)
+                else:
+                    if seen[source_family] < quota:
+                        protected.append(row)
+                        seen[source_family] += 1
+                    else:
+                        negotiable_tracked.append(row)
+            ranked = protected + negotiable_untracked + negotiable_tracked
+
+        overflow_rows = ranked[target:]
+        overflow_bvids = [str(row.get("bvid", "")).strip() for row in overflow_rows]
+        clean_bvids = [bvid for bvid in overflow_bvids if bvid]
+        if not clean_bvids:
+            return 0
+
+        placeholders = ", ".join("?" for _ in clean_bvids)
+        self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'suppressed'
+            WHERE bvid IN ({placeholders})
+            """,
+            clean_bvids,
+        )
+        per_source: dict[str, int] = defaultdict(int)
+        for row in overflow_rows:
+            family = _pool_source_family(
+                row.get("source", ""),
+                row.get("source_platform", ""),
+            )
+            per_source[family] += 1
+        breakdown = ", ".join(
+            f"{src}:{cnt}" for src, cnt in sorted(per_source.items(), key=lambda kv: -kv[1])
+        )
+        logger.info(
+            "[diversity] trim_pool_to_target_count: target=%d, before=%d, "
+            "suppressed=%d, by-source: %s",
+            target,
+            len(rows),
+            len(clean_bvids),
+            breakdown or "(none)",
+        )
+        return len(clean_bvids)
+
+    def trim_pool_source_overflow(self, *, source_share_quotas: dict[str, int]) -> int:
+        """Suppress fresh rows that exceed platform-family pool quotas."""
+        from openbiliclaw.storage.database import _pool_source_family, logger
+
+        clean_quotas: dict[str, int] = {}
+        for source_family, quota in source_share_quotas.items():
+            try:
+                clean_quotas[str(source_family)] = max(0, int(quota))
+            except (TypeError, ValueError):
+                continue
+        if not clean_quotas:
+            return 0
+
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in self._load_pool_raw_material_rows():
+            source_family = _pool_source_family(row["source"], row["source_platform"])
+            if source_family in clean_quotas:
+                grouped[source_family].append(row)
+
+        overflow_rows: list[dict[str, Any]] = []
+        for source_family, rows in grouped.items():
+            quota = clean_quotas[source_family]
+            if len(rows) <= quota:
+                continue
+            ranked = sorted(rows, key=self._pool_trim_keep_key)
+            overflow_rows.extend(ranked[quota:])
+
+        clean_bvids = [str(row.get("bvid", "")).strip() for row in overflow_rows]
+        clean_bvids = [bvid for bvid in clean_bvids if bvid]
+        if not clean_bvids:
+            return 0
+
+        placeholders = ", ".join("?" for _ in clean_bvids)
+        self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'suppressed'
+            WHERE bvid IN ({placeholders})
+            """,
+            clean_bvids,
+        )
+        per_source: dict[str, int] = defaultdict(int)
+        for row in overflow_rows:
+            family = _pool_source_family(
+                row.get("source", ""),
+                row.get("source_platform", ""),
+            )
+            per_source[family] += 1
+        breakdown = ", ".join(
+            f"{src}:{cnt}" for src, cnt in sorted(per_source.items(), key=lambda kv: -kv[1])
+        )
+        logger.info(
+            "[diversity] trim_pool_source_overflow: suppressed=%d, by-source: %s",
+            len(clean_bvids),
+            breakdown or "(none)",
+        )
+        return len(clean_bvids)
+
+    def reactivate_under_quota_pool_sources(
+        self,
+        *,
+        target: int,
+        source_share_quotas: dict[str, int],
+        raw_source_share_quotas: dict[str, int] | None = None,
+    ) -> int:
+        """Move suppressed candidates back to fresh for under-quota source families."""
+        from openbiliclaw.storage.database import _is_linkable_pool_source, _pool_source_family
+
+        if target <= 0 or not source_share_quotas:
+            return 0
+
+        current_counts = self.count_pool_available_candidates_by_source()
+        raw_counts = self.count_pool_raw_material_by_source()
+        raw_quotas = raw_source_share_quotas or source_share_quotas
+        deficits = {
+            source_family: min(
+                min(target, max(0, int(quota))) - int(current_counts.get(source_family, 0)),
+                max(
+                    0,
+                    int(raw_quotas.get(source_family, quota))
+                    - int(raw_counts.get(source_family, 0)),
+                ),
+            )
+            for source_family, quota in source_share_quotas.items()
+            if int(quota) > 0
+        }
+        deficits = {source: deficit for source, deficit in deficits.items() if deficit > 0}
+        if not deficits:
+            return 0
+
+        min_score = self._pool_admission_min_score()
+        cursor = self.conn.execute(
+            """
+            SELECT bvid, source, source_platform, content_url, relevance_score, last_scored_at
+            FROM content_cache
+            WHERE COALESCE(pool_status, 'fresh') = 'suppressed'
+              AND COALESCE(feedback_type, '') != 'dislike'
+              AND COALESCE(relevance_score, 0.0) >= ?
+              AND NOT EXISTS (
+                SELECT 1 FROM recommendations AS r WHERE r.bvid = content_cache.bvid
+              )
+            ORDER BY
+                CASE candidate_tier WHEN 'primary' THEN 0 ELSE 1 END ASC,
+                relevance_score DESC,
+                last_scored_at DESC,
+                bvid ASC
+            """,
+            (min_score,),
+        )
+        viewed_content_keys = self.get_recent_viewed_content_keys()
+        selected_bvids: list[str] = []
+        selected_counts: dict[str, int] = defaultdict(int)
+        target_selection_count = sum(deficits.values())
+
+        for row in cursor.fetchall():
+            bvid = str(row["bvid"]).strip()
+            row_dict = dict(row)
+            if not bvid or self._is_viewed_row(row_dict, viewed_content_keys):
+                continue
+            if not _is_linkable_pool_source(
+                row["source"],
+                row["source_platform"],
+                row["content_url"],
+            ):
+                continue
+            source_family = _pool_source_family(row["source"], row["source_platform"])
+            deficit = deficits.get(source_family, 0)
+            if deficit <= 0 or selected_counts[source_family] >= deficit:
+                continue
+            selected_bvids.append(bvid)
+            selected_counts[source_family] += 1
+            if len(selected_bvids) >= target_selection_count:
+                break
+
+        if not selected_bvids:
+            return 0
+
+        placeholders = ", ".join("?" for _ in selected_bvids)
+        self._execute_write(
+            f"""
+            UPDATE content_cache
+            SET pool_status = 'fresh'
+            WHERE bvid IN ({placeholders})
+            """,
+            selected_bvids,
+        )
+        return len(selected_bvids)
