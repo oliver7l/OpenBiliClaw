@@ -387,7 +387,7 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         return JSONResponse(
             {
                 "ok": True,
-                "items": [l.model_dump(mode="json") for l in items],
+                "items": [item.model_dump(mode="json") for item in items],
                 "total": total,
             }
         )

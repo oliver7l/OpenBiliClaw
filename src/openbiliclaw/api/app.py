@@ -6324,7 +6324,7 @@ def create_app(
         return JSONResponse(
             {
                 "ok": True,
-                "data": [l.to_dict() for l in loops],
+                "data": [loop.to_dict() for loop in loops],
                 "total": len(loops),
             }
         )
@@ -6348,7 +6348,7 @@ def create_app(
         return JSONResponse(
             {
                 "ok": True,
-                "data": [l.to_dict() for l in loops],
+                "data": [loop.to_dict() for loop in loops],
                 "total": len(loops),
                 "message": f"扫描完成，发现 {len(loops)} 个开放循环",
             }
@@ -6704,7 +6704,7 @@ def create_app(
         return JSONResponse(
             {
                 "ok": True,
-                "items": [l.model_dump(mode="json") for l in items],
+                "items": [item.model_dump(mode="json") for item in items],
                 "total": total,
             }
         )
