@@ -42,7 +42,7 @@ def _ts_to_str(ts):
             raise ValueError
         return datetime.datetime.fromtimestamp(iv, datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:  # noqa: BLE001
-        return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+        return _now_local()
 
 
 def _fetch(answer_id):

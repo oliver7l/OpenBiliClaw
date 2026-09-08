@@ -42,6 +42,19 @@ def _bare_url(note_id):
 
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 
+# 中国本地时间(UTC+8)。本脚本所有入库时间字段一律按"北京时间"字符串存储。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
+
+
+def _now_local() -> str:
+    return datetime.datetime.now(CN_TZ).strftime(TIME_FMT)
+
+
+def _to_local_str(dt: datetime.datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.UTC)
+    return dt.astimezone(CN_TZ).strftime(TIME_FMT)
+
 
 def _is_fallback_ts(published_at, created_at=None):
     """判断 published_at 是否是"抓取时刻"回退值(即当初时间戳解析失败写进去的)。
@@ -91,7 +104,7 @@ def _ts_to_str(ts):
     dt = _parse_ts(ts)
     if dt is None:
         dt = datetime.datetime.now(datetime.UTC)
-    return dt.strftime(TIME_FMT)
+    return _to_local_str(dt)
 
 
 def _fetch(url, xsec):

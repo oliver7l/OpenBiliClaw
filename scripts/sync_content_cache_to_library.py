@@ -23,9 +23,12 @@ import json
 import email.utils
 import datetime
 
+# 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
+
 
 def _norm_pub(s):
-    """Normalize an arbitrary published_at string to 'YYYY-MM-DD HH:MM:SS' (UTC)."""
+    """Normalize an arbitrary published_at string to 'YYYY-MM-DD HH:MM:SS' (Beijing UTC+8)."""
     if not s:
         return None
     try:
@@ -33,11 +36,12 @@ def _norm_pub(s):
         if dt is not None:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=datetime.timezone.utc)
-            return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            return dt.astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         pass
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
         try:
+            # 无时区字面量按"已是北京时间"处理, 不再二次换算
             return datetime.datetime.strptime(s, fmt).strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
             pass

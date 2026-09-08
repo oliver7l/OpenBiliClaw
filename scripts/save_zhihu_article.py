@@ -9,6 +9,7 @@
 约定:
   - 走本机 zhihu CLI(已登录); 专栏 p/ 用 `zhihu article`, 回答用 `zhihu answer`
   - 按 url 去重, 已存在则跳过; 只新增, 不覆盖已有正文、不删任何数据
+  - 所有入库时间字段(published_at/created_at/updated_at)一律存北京时间(UTC+8)字符串
 """
 import datetime
 import json
@@ -21,6 +22,20 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
 PLATFORM = "zhihu"
+
+# 中国本地时间(UTC+8)。本脚本所有入库时间字段一律按"北京时间"字符串存储。
+CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
+TIME_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+def _now_local() -> str:
+    return datetime.datetime.now(CN_TZ).strftime(TIME_FMT)
+
+
+def _to_local_str(dt: datetime.datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.UTC)
+    return dt.astimezone(CN_TZ).strftime(TIME_FMT)
 
 
 def _article_id_from(url_or_id):
@@ -46,9 +61,10 @@ def _article_id_from(url_or_id):
 
 def _ts_to_str(ts):
     try:
-        return datetime.datetime.fromtimestamp(int(ts), datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+        dt = datetime.datetime.fromtimestamp(int(ts), datetime.UTC)
+        return _to_local_str(dt)
     except Exception:  # noqa: BLE001
-        return datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        return _now_local()
 
 
 def _fetch(kind, aid):
@@ -95,7 +111,7 @@ def main():
     if row:
         # 已存在: 若库内标题为空而本次抓到了, 仅补全标题(不覆盖正文)
         if (row[1] in (None, "")) and title:
-            now_iso = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+            now_iso = _now_local()
             cur.execute("UPDATE articles SET title=?, updated_at=? WHERE id=?",
                         (title, now_iso, row[0]))
             conn.commit()
@@ -104,7 +120,7 @@ def main():
             print(f"[跳过] 已存在: {row[1]}")
         conn.close()
         return
-    now_iso = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = _now_local()
     cur.execute(
         """INSERT INTO articles
            (source_type, source_name, title, url, author, summary, content_text,
