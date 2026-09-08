@@ -22,7 +22,7 @@ from openbiliclaw.soul.speculator import (
     choose_next_probe_candidate,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
 class ProbePublishMixin:

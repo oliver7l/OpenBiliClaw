@@ -18,7 +18,7 @@ from openbiliclaw.runtime._refresh_shared import (
     _MAX_DISCOVERY_BACKFILL_PER_REFRESH,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
 class LoopSupervisionMixin:

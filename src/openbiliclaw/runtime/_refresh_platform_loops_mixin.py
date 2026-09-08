@@ -25,7 +25,7 @@ from openbiliclaw.runtime.image_cache import (
     select_prefetch_targets,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
 class PlatformLoopsMixin:

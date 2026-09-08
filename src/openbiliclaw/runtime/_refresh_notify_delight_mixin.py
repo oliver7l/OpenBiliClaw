@@ -12,7 +12,7 @@ from typing import Any
 
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("openbiliclaw.runtime.refresh")
 
 
 class NotifyDelightMixin:
