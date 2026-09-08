@@ -29,6 +29,10 @@ from .store import DiaryStore
 
 logger = logging.getLogger(__name__)
 
+# 延迟导入，避免循环依赖
+_rag_service = None
+_self_evolution_service = None
+
 
 _DIARY_ANALYSIS_PROMPT = """你是一位专业的日记分析师和成长陪伴者。请分析以下日记内容，输出结构化的 JSON 结果。
 
@@ -106,24 +110,51 @@ class DiaryService:
         database: Database | None = None,
         db_path: str | None = None,
         llm_service: LLMService | None = None,
+        embedding_service: object | None = None,
     ) -> None:
         self.store = DiaryStore(database=database, db_path=db_path)
         self.store.initialize()
         self._llm_service = llm_service
+        self._embedding_service = embedding_service
 
     @property
     def llm_service(self) -> LLMService | None:
         return self._llm_service
 
+    @property
+    def embedding_service(self) -> object | None:
+        return self._embedding_service
+
     def set_llm_service(self, llm_service: LLMService) -> None:
         """设置 LLM 服务，用于日记分析。"""
         self._llm_service = llm_service
 
+    def set_embedding_service(self, service: object) -> None:
+        """设置 Embedding 服务，用于自动生成向量。"""
+        self._embedding_service = service
+
     # ── 基础 CRUD ───────────────────────────────────────────────
 
-    def create_entry(self, data: DiaryEntryCreate) -> DiaryEntry:
-        """创建日记。"""
-        return self.store.create_entry(data)
+    def create_entry(
+        self, data: DiaryEntryCreate, auto_embed: bool = True,
+        auto_similar: bool = True,
+    ) -> DiaryEntry:
+        """创建日记。
+
+        Args:
+            data: 日记数据
+            auto_embed: 创建后自动生成 chunk embedding 并同步 FTS5
+            auto_similar: 创建后自动查找相似历史日记
+
+        Returns:
+            创建的日记
+        """
+        entry = self.store.create_entry(data)
+        if auto_embed or auto_similar:
+            asyncio.ensure_future(self._auto_process_new_entry(
+                entry.id, do_embed=auto_embed, do_similar=auto_similar,
+            ))
+        return entry
 
     def get_entry(self, entry_id: int) -> DiaryEntry:
         """获取日记详情。"""
@@ -220,6 +251,222 @@ class DiaryService:
         except Exception as exc:
             logger.exception("日记分析失败: id=%s, error=%s", entry_id, exc)
             return None
+
+    # ── 自动处理（新日记后触发） ─────────────────────────────────
+
+    async def _auto_process_new_entry(
+        self, entry_id: int, do_embed: bool = True, do_similar: bool = True,
+    ) -> dict:
+        """新日记创建后的自动处理：生成 embedding + 同步 FTS5 + 发现相似日记。
+
+        Returns:
+            {"embedding": bool, "fts5": bool, "similar_entries": list}
+        """
+        result: dict = {"embedding": False, "fts5": False, "similar_entries": []}
+        try:
+            entry = self.store.get_entry(entry_id)
+        except Exception:
+            return result
+
+        # 1. 生成 chunk embedding
+        if do_embed:
+            try:
+                from .rag import DiaryRAGService
+                rag = DiaryRAGService(store=self.store)
+                rag.set_embedding_service(self._embedding_service if hasattr(self, '_embedding_service') else None)
+                if rag.embedding_service:
+                    chunk_count = await rag._generate_chunk_embeddings(entry)
+                    result["embedding"] = chunk_count > 0
+            except Exception as e:
+                logger.warning("自动生成 chunk embedding 失败: entry_id=%d, %s", entry_id, e)
+
+        # 2. 同步 FTS5
+        try:
+            self.store.sync_fts5(entry_id)
+            result["fts5"] = True
+        except Exception as e:
+            logger.warning("自动同步 FTS5 失败: entry_id=%d, %s", entry_id, e)
+
+        # 3. 发现相似历史日记
+        if do_similar:
+            try:
+                from .rag import DiaryRAGService, cosine_similarity
+                rag = DiaryRAGService(store=self.store)
+                # 用 chunk embedding 找相似
+                target_chunks = self.store.get_entry_chunks(entry_id)
+                if not target_chunks:
+                    # 全篇 embedding 降级
+                    target_vec = self.store.get_embedding(entry_id)
+                    if target_vec:
+                        all_embs = self.store.get_all_embeddings()
+                        similar = []
+                        for eid, vec in all_embs:
+                            if eid == entry_id:
+                                continue
+                            if len(vec) != len(target_vec):
+                                continue
+                            score = cosine_similarity(target_vec, vec)
+                            if score >= 0.5:
+                                similar.append((eid, score))
+                        similar.sort(key=lambda x: x[1], reverse=True)
+                        result["similar_entries"] = [
+                            {"id": eid, "score": round(score, 4)}
+                            for eid, score in similar[:5]
+                        ]
+                else:
+                    all_chunks = self.store.get_all_chunk_embeddings()
+                    similar: dict[int, float] = {}
+                    for _, tvec, _ in target_chunks:
+                        for eid, _, vec, _ in all_chunks:
+                            if eid == entry_id:
+                                continue
+                            if len(vec) != len(tvec):
+                                continue
+                            score = cosine_similarity(tvec, vec)
+                            if score >= 0.5:
+                                if eid not in similar or score > similar[eid]:
+                                    similar[eid] = score
+                    ranked = sorted(similar.items(), key=lambda x: x[1], reverse=True)[:5]
+                    result["similar_entries"] = [
+                        {"id": eid, "score": round(score, 4)} for eid, score in ranked
+                    ]
+            except Exception as e:
+                logger.warning("自动发现相似日记失败: entry_id=%d, %s", entry_id, e)
+
+        if result["similar_entries"]:
+            logger.info(
+                "新日记 #%d 自动处理完成：embedding=%s, fts5=%s, 相似日记=%d篇",
+                entry_id, result["embedding"], result["fts5"], len(result["similar_entries"]),
+            )
+        return result
+
+    async def find_similar_for_entry(
+        self, entry_id: int, top_k: int = 5, min_score: float = 0.5,
+    ) -> list[dict]:
+        """查找与指定日记相似的历史日记（供 API 调用）。"""
+        from .rag import DiaryRAGService, cosine_similarity
+        rag = DiaryRAGService(store=self.store)
+
+        target_chunks = self.store.get_entry_chunks(entry_id)
+        if not target_chunks:
+            return []
+
+        all_chunks = self.store.get_all_chunk_embeddings()
+        similar: dict[int, float] = {}
+        for _, tvec, _ in target_chunks:
+            for eid, _, vec, _ in all_chunks:
+                if eid == entry_id:
+                    continue
+                if len(vec) != len(tvec):
+                    continue
+                score = cosine_similarity(tvec, vec)
+                if score >= min_score:
+                    if eid not in similar or score > similar[eid]:
+                        similar[eid] = score
+
+        ranked = sorted(similar.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        results = []
+        for eid, score in ranked:
+            try:
+                entry = self.store.get_entry(eid)
+                results.append({
+                    "id": eid,
+                    "entry_date": entry.entry_date,
+                    "title": entry.title,
+                    "mood": entry.mood.value,
+                    "score": round(score, 4),
+                    "word_count": entry.word_count,
+                })
+            except Exception:
+                continue
+        return results
+
+    # ── 夜间 Consolidation ─────────────────────────────────────
+
+    async def run_nightly_consolidation(
+        self, target_date: str | None = None,
+        do_profile: bool = True, do_drift: bool = True,
+        do_tags: bool = True, do_embedding: bool = True,
+    ) -> dict:
+        """执行一次完整的夜间 consolidation。
+
+        这是一个组合流程：
+        1. 更新用户画像（SelfEvolutionService）
+        2. 检测漂移事件
+        3. 标签优化
+        4. 为未生成 embedding 的日记补全 chunk 向量
+        5. 同步 FTS5 索引
+
+        Args:
+            target_date: 目标日期，默认昨天
+            do_profile: 是否更新用户画像
+            do_drift: 是否检测漂移
+            do_tags: 是否优化标签
+            do_embedding: 是否补全 embedding
+
+        Returns:
+            执行结果摘要
+        """
+        if target_date is None:
+            from datetime import timedelta
+            target_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        logger.info("开始夜间 consolidation，目标日期: %s", target_date)
+        report: dict = {
+            "target_date": target_date,
+            "profile_updated": False,
+            "drifts_detected": 0,
+            "tags_optimized": False,
+            "embeddings_generated": 0,
+            "fts5_synced": False,
+        }
+
+        # 1. 用户画像 + 漂移检测
+        if do_profile or do_drift:
+            try:
+                from .self_evolution import SelfEvolutionService
+                evo = SelfEvolutionService(self.store)
+                if do_profile:
+                    evo.update_user_profile(target_date)
+                    report["profile_updated"] = True
+                if do_drift:
+                    drifts = evo.detect_drifts(target_date)
+                    report["drifts_detected"] = len(drifts)
+            except Exception as e:
+                logger.warning("夜间 consolidation 画像/漂移检测失败: %s", e)
+
+        # 2. 标签优化
+        if do_tags:
+            try:
+                from .self_evolution import SelfEvolutionService
+                evo = SelfEvolutionService(self.store)
+                evo.optimize_tags(target_date)
+                report["tags_optimized"] = True
+            except Exception as e:
+                logger.warning("夜间 consolidation 标签优化失败: %s", e)
+
+        # 3. 补全 embedding
+        if do_embedding:
+            try:
+                from .rag import DiaryRAGService
+                rag = DiaryRAGService(store=self.store)
+                if rag.embedding_service or (hasattr(self, '_embedding_service') and self._embedding_service):
+                    if not rag.embedding_service:
+                        rag.set_embedding_service(self._embedding_service)
+                    stats = await rag.batch_generate_embeddings(limit=50, use_chunks=True)
+                    report["embeddings_generated"] = stats.get("success", 0)
+            except Exception as e:
+                logger.warning("夜间 consolidation 补全 embedding 失败: %s", e)
+
+        # 4. 同步 FTS5
+        try:
+            self.store.sync_fts5()
+            report["fts5_synced"] = True
+        except Exception as e:
+            logger.warning("夜间 consolidation 同步 FTS5 失败: %s", e)
+
+        logger.info("夜间 consolidation 完成: %s", report)
+        return report
 
     async def analyze_batch(
         self, entry_ids: list[int], concurrency: int = 3

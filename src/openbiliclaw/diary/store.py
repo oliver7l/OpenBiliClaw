@@ -151,6 +151,45 @@ CREATE TABLE IF NOT EXISTS diary_embeddings (
 );
 CREATE INDEX IF NOT EXISTS idx_diary_embeddings_entry ON diary_embeddings(entry_id);
 CREATE INDEX IF NOT EXISTS idx_diary_embeddings_model ON diary_embeddings(model);
+
+-- 日记 Embedding 分块表：长日记拆成多个 chunk 分别生成 embedding
+CREATE TABLE IF NOT EXISTS diary_embedding_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL DEFAULT 0,
+    chunk_text TEXT NOT NULL DEFAULT '',
+    vector TEXT NOT NULL,
+    model TEXT DEFAULT '',
+    dimension INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (entry_id) REFERENCES diary_entries(id) ON DELETE CASCADE,
+    UNIQUE(entry_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_diary_embedding_chunks_entry ON diary_embedding_chunks(entry_id);
+
+-- 日记全文检索表（FTS5）：用于混合搜索
+CREATE VIRTUAL TABLE IF NOT EXISTS diary_fts5 USING fts5(
+    title, content, tags,
+    tokenize='unicode61',
+    content='diary_entries',
+    content_rowid='id'
+);
+
+-- FTS5 同步触发器
+CREATE TRIGGER IF NOT EXISTS diary_fts5_ai AFTER INSERT ON diary_entries BEGIN
+    INSERT INTO diary_fts5(rowid, title, content, tags)
+    VALUES (new.id, new.title, new.content, new.tags);
+END;
+CREATE TRIGGER IF NOT EXISTS diary_fts5_ad AFTER DELETE ON diary_entries BEGIN
+    INSERT INTO diary_fts5(diary_fts5, rowid, title, content, tags)
+    VALUES ('delete', old.id, old.title, old.content, old.tags);
+END;
+CREATE TRIGGER IF NOT EXISTS diary_fts5_au AFTER UPDATE ON diary_entries BEGIN
+    INSERT INTO diary_fts5(diary_fts5, rowid, title, content, tags)
+    VALUES ('delete', old.id, old.title, old.content, old.tags);
+    INSERT INTO diary_fts5(rowid, title, content, tags)
+    VALUES (new.id, new.title, new.content, new.tags);
+END;
 """
 
 
@@ -1082,3 +1121,170 @@ class DiaryStore:
         self.initialize()
         self.conn.execute("DELETE FROM diary_embeddings WHERE entry_id = ?", (entry_id,))
         self.conn.commit()
+
+    # ── 分块 Embedding CRUD ──────────────────────────────────
+
+    def upsert_chunk_embedding(
+        self, entry_id: int, chunk_index: int, chunk_text: str,
+        vector: list[float], model: str = "",
+    ) -> None:
+        """插入或更新某篇日记的一个 chunk 向量。"""
+        self.initialize()
+        now = datetime.now()
+        self.conn.execute(
+            """
+            INSERT INTO diary_embedding_chunks
+                (entry_id, chunk_index, chunk_text, vector, model, dimension, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(entry_id, chunk_index) DO UPDATE SET
+                vector = excluded.vector,
+                chunk_text = excluded.chunk_text,
+                model = excluded.model,
+                dimension = excluded.dimension,
+                created_at = excluded.created_at
+            """,
+            (entry_id, chunk_index, chunk_text, json.dumps(vector), model, len(vector), now),
+        )
+        self.conn.commit()
+
+    def get_all_chunk_embeddings(self) -> list[tuple[int, int, list[float], str]]:
+        """获取所有分块向量，返回 [(entry_id, chunk_index, vector, chunk_text), ...]。"""
+        self.initialize()
+        cursor = self.conn.execute(
+            "SELECT entry_id, chunk_index, vector, chunk_text FROM diary_embedding_chunks ORDER BY entry_id, chunk_index"
+        )
+        results = []
+        for row in cursor.fetchall():
+            try:
+                vector = json.loads(row["vector"])
+                results.append((row["entry_id"], row["chunk_index"], vector, row["chunk_text"] or ""))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return results
+
+    def get_entry_chunks(self, entry_id: int) -> list[tuple[int, list[float], str]]:
+        """获取某篇日记的所有分块，返回 [(chunk_index, vector, chunk_text), ...]。"""
+        self.initialize()
+        cursor = self.conn.execute(
+            "SELECT chunk_index, vector, chunk_text FROM diary_embedding_chunks WHERE entry_id = ? ORDER BY chunk_index",
+            (entry_id,),
+        )
+        results = []
+        for row in cursor.fetchall():
+            try:
+                vector = json.loads(row["vector"])
+                results.append((row["chunk_index"], vector, row["chunk_text"] or ""))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return results
+
+    def get_unembedded_chunks(self, limit: int = 100) -> list[tuple[DiaryEntry, int]]:
+        """获取尚未生成 chunk 向量的日记，返回 [(entry, chunk_count), ...]。
+        
+        如果某篇日记完全没有 chunk，且之前没有全篇 embedding，也返回。
+        """
+        self.initialize()
+        # 找完全没有 chunk 的日记
+        cursor = self.conn.execute(
+            """
+            SELECT e.*, COALESCE(
+                (SELECT COUNT(*) FROM diary_embedding_chunks WHERE entry_id = e.id), 0
+            ) as chunk_count
+            FROM diary_entries e
+            WHERE (SELECT COUNT(*) FROM diary_embedding_chunks WHERE entry_id = e.id) = 0
+            ORDER BY e.entry_date DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [(self._row_to_entry(row), int(row["chunk_count"])) for row in cursor.fetchall()]
+
+    def delete_chunk_embeddings(self, entry_id: int) -> None:
+        """删除某篇日记的所有 chunk 向量。"""
+        self.initialize()
+        self.conn.execute("DELETE FROM diary_embedding_chunks WHERE entry_id = ?", (entry_id,))
+        self.conn.commit()
+
+    def count_chunks(self) -> int:
+        """统计 chunk 向量总数。"""
+        self.initialize()
+        cursor = self.conn.execute("SELECT COUNT(*) FROM diary_embedding_chunks")
+        return int(cursor.fetchone()[0])
+
+    # ── FTS5 全文检索 ─────────────────────────────────────────
+
+    def sync_fts5(self, entry_id: int | None = None) -> None:
+        """将日记同步到 FTS5 索引。
+        
+        Args:
+            entry_id: 指定日记 ID，为 None 则全量重建
+        """
+        self.initialize()
+        if entry_id is not None:
+            # 删除旧索引并插入新数据
+            self.conn.execute("INSERT INTO diary_fts5(diary_fts5, rowid, title, content, tags) VALUES ('delete', ?, ?, ?, ?)",
+                              (entry_id, "", "", ""))
+            row = self.conn.execute("SELECT title, content, tags FROM diary_entries WHERE id = ?", (entry_id,)).fetchone()
+            if row:
+                self.conn.execute("INSERT INTO diary_fts5(rowid, title, content, tags) VALUES (?, ?, ?, ?)",
+                                  (entry_id, row["title"], row["content"], row["tags"]))
+        else:
+            # 全量重建
+            self.conn.execute("INSERT INTO diary_fts5(diary_fts5) VALUES('rebuild')")
+        self.conn.commit()
+
+    def fts5_search(self, query: str, limit: int = 20) -> list[tuple[int, float]]:
+        """FTS5 全文检索 + LIKE 降级，返回 [(entry_id, score), ...]。
+
+        FTS5 对中文支持有限，当 FTS5 无结果时自动降级为 LIKE 搜索。
+        score 越小表示匹配度越高（FTS5 BM25 或 LIKE 命中数倒数）。
+        """
+        self.initialize()
+        # 判断是否包含中文
+        has_chinese = any('\u4e00' <= ch <= '\u9fff' for ch in query)
+
+        if not has_chinese:
+            # 纯英文/数字查询：尝试 FTS5
+            try:
+                cursor = self.conn.execute(
+                    """
+                    SELECT rowid, bm25(diary_fts5) as score
+                    FROM diary_fts5
+                    WHERE diary_fts5 MATCH ?
+                    ORDER BY score
+                    LIMIT ?
+                    """,
+                    (query, limit),
+                )
+                results = [(row["rowid"], float(row["score"])) for row in cursor.fetchall()]
+                if results:
+                    return results
+            except sqlite3.OperationalError:
+                pass
+
+        # 含中文或 FTS5 无结果：LIKE 搜索降级
+        # 按关键词拆分，计算命中数作为分数
+        keywords = []
+        for ch in query.strip():
+            if ch.strip() and not ch.isspace():
+                keywords.append(ch)
+
+        if not keywords:
+            return []
+
+        # 用 LIKE 搜索匹配任意关键词的日记，按命中数排序
+        all_hits: dict[int, int] = {}
+        for kw in keywords:
+            rows = self.conn.execute(
+                "SELECT id FROM diary_entries WHERE content LIKE ? OR title LIKE ?",
+                (f"%{kw}%", f"%{kw}%"),
+            ).fetchall()
+            for row in rows:
+                eid = row["id"]
+                all_hits[eid] = all_hits.get(eid, 0) + 1
+
+        # 按命中数降序，取 top_k
+        ranked = sorted(all_hits.items(), key=lambda x: (-x[1], x[0]))[:limit]
+        # 将命中数转换为分数（越小越好，类似 BM25）
+        max_hits = max((h for _, h in ranked), default=1)
+        return [(eid, -hits / max_hits) for eid, hits in ranked]
