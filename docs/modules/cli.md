@@ -56,6 +56,15 @@ openbiliclaw [--log-level DEBUG|INFO|WARNING|ERROR] <命令>
 | `chat` | 苏格拉底式对话 | ✅ |
 | `delight` | 手动查看当前惊喜推荐候选 | ✅ |
 | `probe` | 手动查看并确认猜测兴趣方向 | ✅ |
+| `note list` | 列出笔记（支持筛选、搜索、分页） | ✅ |
+| `note get <id>` | 查看单条笔记详情 | ✅ |
+| `note create` | 创建笔记 | ✅ |
+| `note delete <id>` | 删除笔记 | ✅ |
+| `note search <query>` | 笔记全文搜索 | ✅ |
+| `note stats` | 笔记统计概览 | ✅ |
+| `note video <BV号>` | B 站视频转结构化笔记（字幕优先 + 音频兜底） | ✅ |
+| `note import-read-archive <dir>` | 从已读库目录批量导入笔记 | ✅ |
+| `note tasks` | 列出生成任务 | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli next-avoidance-probe` | OpenClaw JSON bridge：拉取下一条不喜欢领域探针 | ✅ |
 | `python -m openbiliclaw.integrations.openclaw.cli respond-avoidance-probe` | OpenClaw JSON bridge：确认 / 否认 / 多聊避雷探针 | ✅ |
 
@@ -411,6 +420,102 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 - 避雷主题只合真同义、严禁向上泛化（canonical 不得比成员更宽泛）
 - 用户在画像编辑里手动 remove/add 的条目会随改名同步（rename map 穿透 overrides），不会被合并「借尸还魂」
 - 回滚会把被回滚的合并对记入 no-merge 记忆，下一轮定时整理不会重做同一合并
+
+### `openbiliclaw note list`
+
+列出笔记，支持按类型、平台、标签筛选和全文搜索。
+
+```bash
+$ openbiliclaw note list                        # 列出最近 50 条
+$ openbiliclaw note list --type video          # 按类型筛选（video/manual/article/import）
+$ openbiliclaw note list --platform bilibili   # 按平台筛选
+$ openbiliclaw note list --tag 机器学习         # 按标签筛选
+$ openbiliclaw note list --limit 100 --offset 50  # 分页
+```
+
+### `openbiliclaw note get`
+
+查看单条笔记的完整内容。
+
+```bash
+$ openbiliclaw note get 42
+```
+
+### `openbiliclaw note create`
+
+手动创建一条笔记。
+
+```bash
+$ openbiliclaw note create --title "标题" --content "# 笔记正文"
+$ openbiliclaw note create --title "标题" --type video --platform bilibili --source-ref BV1xx
+```
+
+### `openbiliclaw note delete`
+
+删除指定笔记。
+
+```bash
+$ openbiliclaw note delete 42
+```
+
+### `openbiliclaw note search`
+
+全文搜索笔记（FTS5 trigram 分词，支持标题、内容、标签、作者）。
+
+```bash
+$ openbiliclaw note search "关键词"
+$ openbiliclaw note search "关键词" --limit 20
+```
+
+### `openbiliclaw note stats`
+
+查看笔记统计概览：总数、按类型分布、按平台分布、热门标签。
+
+```bash
+$ openbiliclaw note stats
+```
+
+### `openbiliclaw note video`
+
+将 B 站视频转为结构化笔记。**字幕优先策略**：先尝试获取 CC 字幕（零下载、零风控），失败再走音频下载 + faster-whisper 本地转录的兜底路径。转录后使用 LLM 生成结构化笔记并入库。
+
+```bash
+$ openbiliclaw note video BV1xxxxx                 # 默认：字幕优先 + ASR 校对 + 保存
+$ openbiliclaw note video BV1xxxxx -t study        # 指定内容类型（study/news/general/article）
+$ openbiliclaw note video BV1xxxxx --no-subtitle   # 跳过字幕，直接走音频转录
+$ openbiliclaw note video BV1xxxxx --no-rectify    # 跳过 ASR 校对（省 token）
+$ openbiliclaw note video BV1xxxxx --no-save       # 仅生成不入库，输出到终端
+$ openbiliclaw note video BV1xxxxx --whisper-model small  # 指定 whisper 模型大小
+```
+
+内容类型说明：
+- `article`（默认）：深度精读长文，最大限度还原视频知识内容
+- `study`：学习与复习笔记，含知识框架、核心知识点、对比辨析、自测题
+- `news`：前沿资讯与版本动态，含核心摘要、更新清单、优缺点权衡
+- `general`：通用知识笔记，含核心主旨、关键论点、方法论、行动清单
+
+依赖说明：
+- 字幕路径：零额外依赖，直接使用 B 站 CC 字幕
+- 音频路径：需要系统安装 `ffmpeg`；本地转录需要 `faster-whisper`（可选依赖，`pip install faster-whisper`）
+- 结构化生成：需要配置 LLM Provider
+
+### `openbiliclaw note import-read-archive`
+
+从 `notes/已读库/` 目录批量导入笔记。扫描每个子目录的四件套（`meta.json` / `raw.html` / `content.md` / `reading.html`），将 `content.md` 作为笔记正文导入。
+
+```bash
+$ openbiliclaw note import-read-archive notes/已读库
+```
+
+### `openbiliclaw note tasks`
+
+列出笔记生成任务及其状态。
+
+```bash
+$ openbiliclaw note tasks                       # 列出最近 20 个任务
+$ openbiliclaw note tasks --status running      # 按状态筛选
+$ openbiliclaw note tasks --limit 50
+```
 
 ### `openbiliclaw init`
 
