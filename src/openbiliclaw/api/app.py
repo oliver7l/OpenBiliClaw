@@ -1810,31 +1810,6 @@ def create_app(
             fresh.append(item)
         return fresh, fresh_keys_by_index
 
-    def _mark_source_bootstrap_keys(source: str, keys: list[str]) -> None:
-        """Persist bootstrap keys that already entered the source event path."""
-        if not keys:
-            return
-        from datetime import UTC, datetime
-
-        from openbiliclaw.sources.bootstrap_state import (
-            as_string_list,
-            source_bootstrap_state_key,
-        )
-
-        state = _load_source_bootstrap_state()
-        state_key = source_bootstrap_state_key(source)
-        merged = as_string_list(state.get(state_key, []))
-        seen = set(merged)
-        for key in keys:
-            normalized = str(key).strip()
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            merged.append(normalized)
-        state[state_key] = merged
-        state["last_source_bootstrap_sync_at"] = datetime.now(UTC).isoformat()
-        _save_source_bootstrap_state(state)
-
     chat_turn_lock = asyncio.Lock()
     fallback_chat_turns: dict[str, dict[str, Any]] = {}
     running_chat_turn_tasks: set[str] = set()
@@ -1895,42 +1870,6 @@ def create_app(
         ]
         rows.sort(key=lambda row: (str(row.get("created_at", "")), str(row.get("turn_id", ""))))
         return rows[-max(1, int(limit)) :]
-
-    def _create_chat_turn_row(payload: ChatTurnIn, *, turn_id: str) -> dict[str, Any]:
-        create_chat_turn = _chat_db_method("create_chat_turn")
-        if create_chat_turn is not None:
-            return cast(
-                "dict[str, Any]",
-                create_chat_turn(
-                    turn_id=turn_id,
-                    session=payload.session.strip() or "popup",
-                    scope=_normalize_chat_scope(payload.scope),
-                    subject_id=payload.subject_id.strip(),
-                    subject_title=payload.subject_title.strip(),
-                    message=payload.message.strip(),
-                ),
-            )
-
-        from datetime import datetime
-
-        now = datetime.now().isoformat(sep=" ")
-        fallback_chat_turns.setdefault(
-            turn_id,
-            {
-                "turn_id": turn_id,
-                "session": payload.session.strip() or "popup",
-                "scope": _normalize_chat_scope(payload.scope),
-                "subject_id": payload.subject_id.strip(),
-                "subject_title": payload.subject_title.strip(),
-                "message": payload.message.strip(),
-                "status": "pending",
-                "reply": "",
-                "error": "",
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-        return dict(fallback_chat_turns[turn_id])
 
     def _complete_chat_turn_row(turn_id: str, *, reply: str) -> None:
         complete_chat_turn = _chat_db_method("complete_chat_turn")
@@ -2668,6 +2607,421 @@ def create_app(
                     if isinstance(result, dict):
                         return cast("dict[str, object]", result)
         return None
+
+    def _apply_llm_update(cfg: Any, llm_data: object) -> None:
+        """Apply the LLM subset of a config update to an in-memory config."""
+        if not isinstance(llm_data, dict):
+            return
+        from openbiliclaw.config import _normalize_llm_concurrency, _normalize_llm_timeout
+
+        if "default_provider" in llm_data:
+            cfg.llm.default_provider = str(llm_data["default_provider"])
+        if "concurrency" in llm_data:
+            cfg.llm.concurrency = _normalize_llm_concurrency(llm_data["concurrency"])
+        if "timeout" in llm_data:
+            cfg.llm.timeout = _normalize_llm_timeout(llm_data["timeout"])
+        if "fallback_enabled" in llm_data:
+            cfg.llm.fallback_enabled = _as_bool(llm_data["fallback_enabled"])
+        if "fallback_provider" in llm_data:
+            cfg.llm.fallback_provider = str(llm_data["fallback_provider"]).strip()
+        for provider_name in (
+            "openai",
+            "claude",
+            "gemini",
+            "deepseek",
+            "ollama",
+            "openrouter",
+            "openai_compatible",
+        ):
+            if provider_name in llm_data and isinstance(llm_data[provider_name], dict):
+                provider_cfg = getattr(cfg.llm, provider_name)
+                pdata = llm_data[provider_name]
+                skipped_fields: list[str] = []
+                for field_name in (
+                    "api_key",
+                    "model",
+                    "base_url",
+                    "auth_mode",
+                    "http_referer",
+                    "x_title",
+                    "reasoning_effort",
+                ):
+                    if field_name in pdata:
+                        new_value = str(pdata[field_name])
+                        if field_name == "api_key" and "*" in new_value:
+                            skipped_fields.append(f"{field_name}=masked")
+                            continue
+                        existing = getattr(provider_cfg, field_name, "")
+                        if (
+                            field_name not in {"auth_mode", "reasoning_effort"}
+                            and not new_value.strip()
+                            and isinstance(existing, str)
+                            and existing.strip()
+                        ):
+                            skipped_fields.append(f"{field_name}=empty_skip")
+                            continue
+                        setattr(provider_cfg, field_name, new_value)
+                if skipped_fields:
+                    logger.debug(
+                        "Config LLM update: provider %s skipped fields: %s",
+                        provider_name,
+                        ", ".join(skipped_fields),
+                    )
+        if "embedding" in llm_data and isinstance(llm_data["embedding"], dict):
+            emb = llm_data["embedding"]
+            if "provider" in emb:
+                cfg.llm.embedding.provider = str(emb["provider"])
+            if "model" in emb:
+                new_model = str(emb["model"])
+                if new_model.strip() or not cfg.llm.embedding.model.strip():
+                    cfg.llm.embedding.model = new_model
+            if "api_key" in emb:
+                new_key = str(emb["api_key"])
+                if "*" not in new_key and (
+                    new_key.strip() or not cfg.llm.embedding.api_key.strip()
+                ):
+                    cfg.llm.embedding.api_key = new_key
+            if "base_url" in emb:
+                new_base_url = str(emb["base_url"])
+                if new_base_url.strip() or not cfg.llm.embedding.base_url.strip():
+                    cfg.llm.embedding.base_url = new_base_url
+            if "output_dimensionality" in emb:
+                try:
+                    cfg.llm.embedding.output_dimensionality = max(
+                        0,
+                        int(emb["output_dimensionality"] or 0),
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="llm.embedding.output_dimensionality must be an integer",
+                    ) from exc
+            if "similarity_threshold" in emb:
+                cfg.llm.embedding.similarity_threshold = float(emb["similarity_threshold"])
+            if "fallback_enabled" in emb:
+                cfg.llm.embedding.fallback_enabled = _as_bool(emb["fallback_enabled"])
+            if "fallback_provider" in emb:
+                cfg.llm.embedding.fallback_provider = str(emb["fallback_provider"]).strip()
+        for module_name in ("soul", "discovery", "recommendation", "evaluation"):
+            if module_name in llm_data and isinstance(llm_data[module_name], dict):
+                mod_cfg = getattr(cfg.llm, module_name)
+                mdata = llm_data[module_name]
+                if "provider" in mdata:
+                    mod_cfg.provider = str(mdata["provider"])
+                if "model" in mdata:
+                    mod_cfg.model = str(mdata["model"])
+
+
+    @app.post("/api/config/probe-service", response_model=ConfigServiceProbeResponse)
+    async def _probe_llm_config(cfg: Any) -> ConfigServiceProbeResponse:
+        from openbiliclaw.llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS
+        from openbiliclaw.llm.registry import build_llm_registry
+
+        started = time.perf_counter()
+        provider = str(getattr(cfg.llm, "default_provider", "") or "").strip().lower()
+        model = ""
+        try:
+            registry = build_llm_registry(cfg)
+            provider = provider or str(getattr(registry, "default_provider", "") or "")
+            provider_cfg = getattr(cfg.llm, provider, None)
+            model = str(getattr(provider_cfg, "model", "") or "").strip()
+            if not registry.is_chat_capable(provider):
+                return ConfigServiceProbeResponse(
+                    ok=False,
+                    kind="llm",
+                    provider=provider,
+                    model=model,
+                    error=f"LLM provider {provider!r} is not registered or not chat-capable.",
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            timeout_s = min(max(float(getattr(cfg.llm, "timeout", 300) or 300), 10.0), 30.0)
+            response = await asyncio.wait_for(
+                registry.complete_provider(
+                    provider,
+                    [
+                        {"role": "system", "content": "Reply with only OK."},
+                        {"role": "user", "content": "OpenBiliClaw connectivity probe."},
+                    ],
+                    temperature=0,
+                    max_tokens=LLM_CONNECTIVITY_PROBE_MAX_TOKENS,
+                    reasoning_effort="",
+                    model=model or None,
+                ),
+                timeout=timeout_s,
+            )
+            ok = bool(str(getattr(response, "content", "") or "").strip())
+            response_model = str(getattr(response, "model", "") or model)
+            return ConfigServiceProbeResponse(
+                ok=ok,
+                kind="llm",
+                provider=provider,
+                model=response_model,
+                message="LLM provider is available." if ok else "",
+                error="" if ok else "LLM provider returned an empty response.",
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            return ConfigServiceProbeResponse(
+                ok=False,
+                kind="llm",
+                provider=provider,
+                model=model,
+                error=str(exc),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+
+
+    async def _probe_embedding_config(cfg: Any) -> ConfigServiceProbeResponse:
+        from openbiliclaw.llm.base import LLMRegistry
+        from openbiliclaw.llm.registry import build_embedding_service
+
+        started = time.perf_counter()
+        emb_cfg = getattr(getattr(cfg, "llm", None), "embedding", None)
+        provider = str(getattr(emb_cfg, "provider", "") or "").strip().lower()
+        model = str(getattr(emb_cfg, "model", "") or "").strip()
+        if not provider:
+            return ConfigServiceProbeResponse(
+                ok=False,
+                kind="embedding",
+                provider="",
+                model=model,
+                error="Embedding provider is not configured.",
+            )
+        try:
+            service = build_embedding_service(cfg, LLMRegistry())
+            if service is None:
+                return ConfigServiceProbeResponse(
+                    ok=False,
+                    kind="embedding",
+                    provider=provider,
+                    model=model,
+                    error="Embedding service could not be built from the submitted config.",
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            probe = getattr(service, "probe", None)
+            if not callable(probe):
+                # Legacy/stub embedding service without a live probe —
+                # building it successfully is the best signal we have.
+                ok = True
+            else:
+                ok = bool(await asyncio.wait_for(probe(), timeout=15.0))
+            return ConfigServiceProbeResponse(
+                ok=ok,
+                kind="embedding",
+                provider=provider,
+                model=model,
+                message="Embedding provider is available." if ok else "",
+                error="" if ok else "Embedding provider returned no vector.",
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            return ConfigServiceProbeResponse(
+                ok=False,
+                kind="embedding",
+                provider=provider,
+                model=model,
+                error=str(exc),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+
+    def _pick_best_xhs_url(database: Any, note_id: str, incoming: str) -> str:
+        """Return the most share-worthy URL for a xhs note.
+
+        xhs search-result pages don't render ``xsec_token`` into ``<a href>``
+        (React SPA keeps the token in props, not DOM), but explore-feed
+        cards do. When the same note arrives both ways, prefer the URL
+        that carries a token — without it, outbound links can silently
+        dead-end at an xhs login wall.
+
+        Order of preference:
+        1. ``incoming`` URL if it already has ``xsec_token=``
+        2. Any prior ``xhs_observed_urls`` row for this note with a token
+        3. Existing ``content_cache.content_url`` if it has a token
+        4. Fall back to ``incoming`` (bare URL — still works for the
+           logged-in user on the xhs domain, just not guaranteed for
+           share/outbound traffic)
+        """
+        if "xsec_token=" in incoming:
+            return incoming
+        try:
+            row = database.conn.execute(
+                "SELECT url FROM xhs_observed_urls "
+                "WHERE url LIKE ? AND url LIKE '%xsec_token=%' "
+                "ORDER BY observed_at DESC LIMIT 1",
+                (f"%/{note_id}?%",),
+            ).fetchone()
+            if row and row["url"]:
+                return str(row["url"])
+        except Exception:
+            pass
+        try:
+            row = database.conn.execute(
+                "SELECT content_url FROM content_cache WHERE bvid=?",
+                (note_id,),
+            ).fetchone()
+            if row and isinstance(row["content_url"], str) and "xsec_token=" in row["content_url"]:
+                return str(row["content_url"])
+        except Exception:
+            pass
+        try:
+            row = database.conn.execute(
+                "SELECT content_url FROM discovery_candidates "
+                "WHERE source_platform='xiaohongshu' AND content_id=? "
+                "  AND content_url LIKE '%xsec_token=%' "
+                "ORDER BY last_seen_at DESC LIMIT 1",
+                (note_id,),
+            ).fetchone()
+            if row and row["content_url"]:
+                return str(row["content_url"])
+        except Exception:
+            pass
+        return incoming
+
+
+    def _create_chat_turn_row(payload: ChatTurnIn, *, turn_id: str) -> dict[str, Any]:
+        create_chat_turn = _chat_db_method("create_chat_turn")
+        if create_chat_turn is not None:
+            return cast(
+                "dict[str, Any]",
+                create_chat_turn(
+                    turn_id=turn_id,
+                    session=payload.session.strip() or "popup",
+                    scope=_normalize_chat_scope(payload.scope),
+                    subject_id=payload.subject_id.strip(),
+                    subject_title=payload.subject_title.strip(),
+                    message=payload.message.strip(),
+                ),
+            )
+
+        from datetime import datetime
+
+        now = datetime.now().isoformat(sep=" ")
+        fallback_chat_turns.setdefault(
+            turn_id,
+            {
+                "turn_id": turn_id,
+                "session": payload.session.strip() or "popup",
+                "scope": _normalize_chat_scope(payload.scope),
+                "subject_id": payload.subject_id.strip(),
+                "subject_title": payload.subject_title.strip(),
+                "message": payload.message.strip(),
+                "status": "pending",
+                "reply": "",
+                "error": "",
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        return dict(fallback_chat_turns[turn_id])
+
+
+    def _keyword_judge_sentiment(user_message: str) -> str:
+        """Fallback keyword-based sentiment detection."""
+        msg = user_message.lower()
+        negative_terms = {
+            "不喜欢",
+            "不感兴趣",
+            "不是这个意思",
+            "别推",
+            "没兴趣",
+            "不想看",
+        }
+        strong_positive_terms = {
+            "以后多推",
+            "这就是我想看的",
+            "我就喜欢",
+            "加入我的画像",
+        }
+        weak_positive_terms = {
+            "有点意思",
+            "可以看看",
+            "偶尔看看",
+            "还行",
+            "先试试",
+        }
+        if any(kw in msg for kw in negative_terms):
+            return "negative"
+        if any(kw in msg for kw in strong_positive_terms):
+            return "strong_positive"
+        if any(kw in msg for kw in weak_positive_terms):
+            return "weak_positive"
+        return "neutral"
+
+
+    def _rank_unread_by_interest(database: Any, *, limit: int) -> list[dict[str, Any]]:
+        """未读文章按兴趣契合度排序（今日建议与每日简报共用）。
+
+        抽样最近未读文章（优先有正文），按 soul 兴趣画像关键词打分，
+        返回 top ``limit``，附人读得懂的命中理由。
+        """
+        keywords = _load_interest_keywords()
+        cands = database.get_recent_articles(limit=300, status="unread")
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for item in cands:
+            text = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("summary") or ""),
+                    str(item.get("tags") or ""),
+                ]
+            ).lower()
+            score = 0.0
+            reasons: list[str] = []
+            for name, weight in keywords:
+                if name and name.lower() in text:
+                    score += weight
+                    if len(reasons) < 2:
+                        reasons.append(name)
+            if score > 0:
+                item["fit_score"] = round(min(1.0, score / 1.5), 3)
+                item["fit_reason"] = reasons
+                scored.append((score, item))
+        scored.sort(key=lambda kv: kv[0], reverse=True)
+        return [it for _, it in scored[: max(1, int(limit))]]
+
+    @app.get("/api/reading/suggestions")
+
+    def _get_diary_rag_service():
+        """获取或创建日记 RAG 服务实例（懒加载）。"""
+        nonlocal _diary_rag_service
+        if _diary_rag_service is not None:
+            return _diary_rag_service
+        database = getattr(ctx, "database", None)
+        if database is None:
+            return None
+        from openbiliclaw.diary import DiaryRAGService
+
+        rag = DiaryRAGService(database=database)
+        # 注入 embedding 和 llm 服务
+        embedding_service = getattr(ctx, "embedding_service", None)
+        llm_service = getattr(ctx, "llm_service", None)
+        if embedding_service is not None:
+            rag.set_embedding_service(embedding_service)
+        if llm_service is not None:
+            rag.set_llm_service(llm_service)
+        _diary_rag_service = rag
+        return rag
+
+    @app.get("/api/diary/rag/stats")
+
+    async def _complete_durable_chat_turn(turn_id: str) -> None:
+        if turn_id in running_chat_turn_tasks:
+            return
+        running_chat_turn_tasks.add(turn_id)
+        try:
+            row = _get_chat_turn_row(turn_id)
+            if row is None:
+                return
+            turn = _normalize_chat_turn(row)
+            if turn.status != "pending":
+                return
+            reply = await _generate_durable_chat_reply(turn)
+            _complete_chat_turn_row(turn_id, reply=reply)
+        except Exception as exc:
+            logger.exception("Failed to complete durable chat turn %s", turn_id)
+            _fail_chat_turn_row(turn_id, error=str(exc), reply="聊天出了点问题，稍后再试。")
+        finally:
+            running_chat_turn_tasks.discard(turn_id)
 
     def _serialize_recommendation_items(items: list[Any]) -> list[RecommendationOut]:
         return [
@@ -3801,62 +4155,6 @@ def create_app(
     # ── Conversational recommendation (生成式推荐第二步) ──
     _chat_recommend_sessions: dict[str, Any] = {}
 
-    @app.post("/api/chat/recommend", response_model=ChatRecommendResponse)
-    async def chat_recommend_endpoint(payload: ChatRecommendIn) -> ChatRecommendResponse:
-        """Conversational recommendation: talk to the recommendation engine in natural language.
-
-        Supports multi-turn context: "给我推荐几个广告算法视频" → "再来几个" → "讲讲第二个".
-        Session state is kept in memory (not persistent); pass session_id to continue a conversation.
-        """
-        from openbiliclaw.recommendation.chat_recommender import ChatSession, chat_recommend
-
-        if ctx.recommendation_engine is None:
-            raise HTTPException(status_code=503, detail="Recommendation engine not initialized.")
-
-        message = payload.message.strip()
-        if not message:
-            raise HTTPException(status_code=422, detail="Message is required.")
-
-        # Get or create session
-        session_id = (
-            payload.session_id
-            or f"rec-{int(asyncio.get_event_loop().time() * 1000)}-{id(message) % 10000}"
-        )
-        session = _chat_recommend_sessions.get(session_id)
-        if session is None:
-            # Snapshot user profile at session start
-            profile = None
-            if ctx.soul_engine is not None:
-                try:
-                    profile = ctx.soul_engine.load_profile()
-                except Exception:
-                    logger.exception("Failed to load soul profile for chat recommend session")
-            session = ChatSession(session_id=session_id, profile=profile)
-            _chat_recommend_sessions[session_id] = session
-
-        try:
-            reply = await chat_recommend(
-                message,
-                session=session,
-                engine=ctx.recommendation_engine,
-                llm_service=getattr(ctx, "llm_service", None),
-                default_limit=payload.limit,
-            )
-        except Exception:
-            logger.exception("Chat recommend failed")
-            reply = "推荐出了点问题，稍后再试。"
-
-        # Serialize last recommendations for the frontend
-        recs_out: list[RecommendationOut] = []
-        last_recs = getattr(session, "last_recommendations", []) or []
-        if last_recs:
-            try:
-                recs_out = _serialize_recommendation_items(last_recs)
-            except Exception:
-                logger.exception("Failed to serialize chat recommendations")
-
-        return ChatRecommendResponse(reply=reply, session_id=session_id, recommendations=recs_out)
-
     def _record_probe_cognition(
         summary: str,
         domain: str,
@@ -4055,38 +4353,6 @@ def create_app(
         if keyword_result != "neutral":
             return keyword_result, "keyword"
         return "neutral", "neutral_default"
-
-    def _keyword_judge_sentiment(user_message: str) -> str:
-        """Fallback keyword-based sentiment detection."""
-        msg = user_message.lower()
-        negative_terms = {
-            "不喜欢",
-            "不感兴趣",
-            "不是这个意思",
-            "别推",
-            "没兴趣",
-            "不想看",
-        }
-        strong_positive_terms = {
-            "以后多推",
-            "这就是我想看的",
-            "我就喜欢",
-            "加入我的画像",
-        }
-        weak_positive_terms = {
-            "有点意思",
-            "可以看看",
-            "偶尔看看",
-            "还行",
-            "先试试",
-        }
-        if any(kw in msg for kw in negative_terms):
-            return "negative"
-        if any(kw in msg for kw in strong_positive_terms):
-            return "strong_positive"
-        if any(kw in msg for kw in weak_positive_terms):
-            return "weak_positive"
-        return "neutral"
 
     async def _llm_judge_sentiment(
         user_message: str,
@@ -4293,190 +4559,6 @@ def create_app(
             return f"[关于避雷方向「{label}」的反馈] {turn.message}"
         return turn.message
 
-    async def _generate_durable_chat_reply(turn: ChatTurnOut) -> str:
-        if ctx.dialogue is None:
-            return "对话引擎暂不可用。"
-
-        # RAG: ground the reply in the user's crawled reading library. Only the
-        # plain "chat" scope is grounded — delight/probe scopes are feedback
-        # about one specific recommendation, where library passages would just
-        # be noise. References are stashed per turn so the UI can show the
-        # "已参考 N 篇收藏" badge.
-        retrieval_context: str | None = None
-        references: list[dict[str, Any]] = []
-        if turn.scope == "chat":
-            retrieval_context, references = await _rag_retrieve(turn.message, top_k=4)
-            if references:
-                chat_turn_references[str(turn.turn_id)] = references
-
-        concurrency = getattr(ctx.discovery_engine, "_concurrency", None)
-        if concurrency is not None:
-            concurrency.chat_active = True
-        try:
-            async with chat_turn_lock:
-                reply = await asyncio.wait_for(
-                    ctx.dialogue.respond(
-                        _contextual_chat_message(turn),
-                        retrieval_context=retrieval_context,
-                    ),
-                    timeout=120,
-                )
-                reply = str(reply)
-        except TimeoutError:
-            return "后台正忙，等一下再聊。"
-        except Exception:
-            logger.exception("Durable chat turn failed: %s", turn.turn_id)
-            return "聊天出了点问题，稍后再试。"
-        finally:
-            if concurrency is not None:
-                concurrency.chat_active = False
-
-        if turn.scope == "delight":
-            label = turn.subject_title or turn.subject_id
-            _record_probe_cognition(
-                f"关于惊喜推荐「{label}」你说：{turn.message}",
-                turn.subject_id or label,
-                "delight_chat",
-                detail=f"你的反馈：{turn.message}\n阿b的回复：{reply}",
-            )
-            await _publish_probe_event(
-                "delight.chat",
-                f"关于「{label}」你说：{turn.message}",
-                turn.subject_id or label,
-            )
-        elif turn.scope == "probe":
-            domain = turn.subject_id or turn.subject_title
-            sentiment, classifier = await _classify_probe_sentiment(turn.message, reply, domain)
-            speculator = getattr(ctx.soul_engine, "_speculator", None)
-            chat_response = "chat_neutral"
-            resulting_action = "none"
-            if sentiment == "negative":
-                chat_response = "chat_rejected"
-                resulting_action = "rejected"
-                if speculator is not None:
-                    with suppress(Exception):
-                        speculator.user_reject_speculation(domain, cooldown_days=14)
-                summary = f"你对「{domain}」的反馈偏负面（{turn.message}），已暂时搁置 14 天。"
-            elif sentiment == "strong_positive":
-                chat_response = "chat_confirmed"
-                resulting_action = "confirmed"
-                if speculator is not None:
-                    with suppress(Exception):
-                        _confirm_speculation_with_source(
-                            speculator,
-                            domain,
-                            confirmation_source="chat_confirmed",
-                        )
-                summary = f"你明确确认了对「{domain}」的兴趣，已加入画像。"
-            elif sentiment == "weak_positive":
-                chat_response = "weak_positive"
-                resulting_action = "weak_positive_deferred"
-                _record_exploration_buffer_event(
-                    domain=domain,
-                    source_event="weak_positive_chat",
-                )
-                summary = f"你对「{domain}」有轻微信号，先作为短期探索方向观察。"
-            else:
-                summary = f"关于「{domain}」你说：{turn.message}"
-            if speculator is not None:
-                _record_probe_feedback_history(
-                    domain,
-                    chat_response,
-                    speculator=speculator,
-                    message=turn.message,
-                    classification=sentiment,
-                    classifier=classifier,
-                    resulting_action=resulting_action,
-                )
-            _record_probe_cognition(
-                summary,
-                domain,
-                "chat",
-                detail=f"你的反馈：{turn.message}\n阿b的回复：{reply}",
-            )
-            await _publish_probe_event("interest.chat", summary, domain)
-        elif turn.scope == "avoidance_probe":
-            domain = turn.subject_id or turn.subject_title
-            sentiment, classifier = await _classify_probe_sentiment(turn.message, reply, domain)
-            speculator = getattr(ctx.soul_engine, "_avoidance_speculator", None)
-            if sentiment == "negative":
-                chat_response = "avoidance_chat_confirmed"
-                resulting_action = "confirmed"
-                if speculator is not None:
-                    with suppress(Exception):
-                        speculator.observe(
-                            [
-                                {
-                                    "event_type": "dislike",
-                                    "title": domain,
-                                    "metadata": {
-                                        "feedback_type": "dislike",
-                                        "user_message": turn.message,
-                                        "source": "avoidance_probe_chat",
-                                    },
-                                }
-                            ]
-                        )
-                summary = f"你确认「{domain}」偏向不喜欢，确认度 +1。"
-            elif sentiment in {"strong_positive", "weak_positive"}:
-                chat_response = "avoidance_chat_rejected"
-                resulting_action = "rejected"
-                if speculator is not None:
-                    reject_fn = getattr(speculator, "user_reject_avoidance", None)
-                    if callable(reject_fn):
-                        with suppress(Exception):
-                            reject_fn(domain, cooldown_days=14)
-                summary = f"你表示其实不排斥「{domain}」，已暂时搁置 14 天。"
-            else:
-                chat_response = "avoidance_chat_neutral"
-                resulting_action = "none"
-                summary = f"关于避雷方向「{domain}」你说：{turn.message}"
-            if speculator is not None:
-                _record_probe_feedback_history(
-                    domain,
-                    chat_response,
-                    speculator=speculator,
-                    message=turn.message,
-                    classification=sentiment,
-                    classifier=classifier,
-                    resulting_action=resulting_action,
-                    state_key="avoidance_probe_feedback_history",
-                    metadata_fn=lambda item_domain: _probe_metadata_from_active_avoidance(
-                        speculator,
-                        item_domain,
-                    ),
-                )
-            _record_probe_cognition(
-                summary,
-                domain,
-                "chat",
-                source="avoidance_probe",
-                detail=f"你的反馈：{turn.message}\n阿b的回复：{reply}",
-            )
-            await _publish_probe_event("avoidance.chat", summary, domain)
-
-        return reply
-
-    async def _complete_durable_chat_turn(turn_id: str) -> None:
-        if turn_id in running_chat_turn_tasks:
-            return
-        running_chat_turn_tasks.add(turn_id)
-        try:
-            row = _get_chat_turn_row(turn_id)
-            if row is None:
-                return
-            turn = _normalize_chat_turn(row)
-            if turn.status != "pending":
-                return
-            reply = await _generate_durable_chat_reply(turn)
-            _complete_chat_turn_row(turn_id, reply=reply)
-        except Exception as exc:
-            logger.exception("Failed to complete durable chat turn %s", turn_id)
-            _fail_chat_turn_row(turn_id, error=str(exc), reply="聊天出了点问题，稍后再试。")
-        finally:
-            running_chat_turn_tasks.discard(turn_id)
-
-    @app.post("/api/chat/turns", response_model=ChatTurnOut)
     async def start_chat_turn(payload: ChatTurnIn) -> ChatTurnOut:
         message = payload.message.strip()
         if not message:
@@ -4533,36 +4615,6 @@ def create_app(
         await publish()
         return {"ok": True, "action": "probe_triggered"}
 
-    @app.get("/api/interest-probes/pending")
-    async def pending_interest_probes() -> dict[str, Any]:
-        """Return active speculative interests that the user hasn't responded to.
-
-        The mobile web UI polls this on page load / bell-click so probes
-        survive page refreshes (unlike WebSocket-only delivery).
-        """
-        try:
-            from openbiliclaw.soul.speculator import load_speculative_state
-
-            spec_state = load_speculative_state(ctx.config.data_path)
-            active = [item for item in spec_state.active if item.status == "active"]
-            items = []
-            for item in active[:6]:
-                probe_mode, challenge = _probe_metadata_for_payload(item)
-                items.append(
-                    {
-                        "domain": item.domain,
-                        "reason": item.reason,
-                        "confidence": item.confidence,
-                        "status": item.status,
-                        "probe_mode": probe_mode,
-                        "challenge": challenge,
-                    }
-                )
-            return {"items": items}
-        except Exception:
-            return {"items": []}
-
-    @app.post("/api/avoidance-probes/trigger")
     async def trigger_avoidance_probe() -> dict[str, Any]:
         """Manually trigger an avoidance probe push via WebSocket."""
         controller = ctx.runtime_controller
@@ -4573,36 +4625,6 @@ def create_app(
             raise HTTPException(status_code=503, detail="Avoidance probe publisher not available")
         await publish()
         return {"ok": True, "action": "avoidance_probe_triggered"}
-
-    @app.get("/api/avoidance-probes/pending")
-    async def pending_avoidance_probes() -> dict[str, Any]:
-        """Return active speculative avoidances awaiting user response."""
-        try:
-            from openbiliclaw.soul.avoidance_speculator import load_avoidance_state
-
-            runtime_config = getattr(ctx, "config", None) or config
-            avoidance_state = load_avoidance_state(runtime_config.data_path)
-            active = [item for item in avoidance_state.active if item.status == "active"]
-            items = [
-                {
-                    "domain": item.domain,
-                    "reason": item.reason,
-                    "confidence": item.confidence,
-                    "source_mode": item.source_mode,
-                    "source_signal": item.source_signal,
-                    "status": item.status,
-                    "specifics": [
-                        {"name": specific.name, "confirmation_count": specific.confirmation_count}
-                        for specific in item.specifics
-                        if specific.name.strip()
-                    ],
-                }
-                for item in active[:6]
-            ]
-            return {"items": items}
-        except Exception:
-            logger.debug("Failed to load pending avoidance probes", exc_info=True)
-            return {"items": []}
 
     async def recommendation_click(
         payload: RecommendationClickIn,
@@ -4761,154 +4783,6 @@ def create_app(
     # collected from multiple sites via scripts/collect_topic.py. The API
     # exposes list/detail/create and a manual "collect now" trigger.
 
-    @app.get("/api/topics", response_model=None)
-    def api_topics_list() -> list[dict[str, object]]:
-        """List all topics with item counts (newest first)."""
-        import json as _json
-
-        topics = ctx.database.list_topics(include_paused=True)
-        out: list[dict[str, object]] = []
-        for t in topics:
-            out.append(
-                {
-                    "id": t["id"],
-                    "name": t["name"],
-                    "slug": t["slug"],
-                    "description": t.get("description") or "",
-                    "keywords": _json.loads(t.get("keywords") or "[]"),
-                    "platforms": _json.loads(t.get("platforms") or '["bilibili"]'),
-                    "status": t.get("status") or "active",
-                    "item_count": int(t.get("item_count") or 0),
-                    "last_collected_at": t.get("last_collected_at"),
-                    "created_at": t.get("created_at"),
-                    "updated_at": t.get("updated_at"),
-                }
-            )
-        return out
-
-    @app.post("/api/topics", response_model=None)
-    async def api_topics_create(payload: TopicCreateIn) -> dict[str, object]:
-        """Create a new topic. slug must be url-safe; keywords/platforms optional."""
-        import json as _json
-
-        name = (payload.name or "").strip()
-        slug = (payload.slug or "").strip().lower()
-        if not name or not slug:
-            raise HTTPException(status_code=422, detail="name and slug are required.")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
-            raise HTTPException(status_code=422, detail="slug 只能包含小写字母、数字和连字符。")
-        if ctx.database.get_topic_by_slug(slug) is not None:
-            raise HTTPException(status_code=409, detail=f"slug 已存在: {slug}")
-        keywords = list(payload.keywords or [])
-        platforms = list(payload.platforms or ["bilibili"])
-        try:
-            topic_id = ctx.database.create_topic(
-                name=name,
-                slug=slug,
-                description=(payload.description or "").strip(),
-                keywords=keywords,
-                platforms=platforms,
-            )
-        except Exception:
-            logger.exception("create_topic failed")
-            raise HTTPException(
-                status_code=409, detail="专题创建失败（名称或 slug 冲突？）"
-            ) from None
-        topic = ctx.database.get_topic_by_id(topic_id)
-        assert topic is not None  # just created
-        return {
-            "id": topic["id"],
-            "name": topic["name"],
-            "slug": topic["slug"],
-            "description": topic.get("description") or "",
-            "keywords": _json.loads(topic.get("keywords") or "[]"),
-            "platforms": _json.loads(topic.get("platforms") or '["bilibili"]'),
-            "status": topic.get("status") or "active",
-            "item_count": 0,
-        }
-
-    @app.get("/api/topics/{slug}", response_model=None)
-    def api_topic_detail(slug: str) -> dict[str, object]:
-        """Topic detail + collected items (newest first, paginated)."""
-        import json as _json
-
-        topic = ctx.database.get_topic_by_slug(slug)
-        if topic is None:
-            raise HTTPException(status_code=404, detail=f"未找到专题: {slug}")
-        items = ctx.database.get_topic_items(topic["id"], limit=200)
-        return {
-            "id": topic["id"],
-            "name": topic["name"],
-            "slug": topic["slug"],
-            "description": topic.get("description") or "",
-            "keywords": _json.loads(topic.get("keywords") or "[]"),
-            "platforms": _json.loads(topic.get("platforms") or '["bilibili"]'),
-            "status": topic.get("status") or "active",
-            "item_count": int(topic.get("item_count") or 0),
-            "last_collected_at": topic.get("last_collected_at"),
-            "created_at": topic.get("created_at"),
-            "items": items,
-        }
-
-    @app.post("/api/topics/{slug}/collect", response_model=None)
-    async def api_topic_collect(slug: str) -> dict[str, object]:
-        """Trigger a collection pass for one topic (autocli, may take ~30s+)."""
-        topic = ctx.database.get_topic_by_slug(slug)
-        if topic is None:
-            raise HTTPException(status_code=404, detail=f"未找到专题: {slug}")
-        try:
-            import importlib.util as _ilu
-
-            script = _PROJECT_ROOT / "scripts" / "collect_topic.py"
-            spec = _ilu.spec_from_file_location("collect_topic", script)
-            assert spec and spec.loader is not None
-            module = _ilu.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            stats = module.collect_topic(ctx.database, topic, limit=8)
-        except Exception:
-            logger.exception("topic collect failed")
-            raise HTTPException(status_code=500, detail="专题搜集失败，详见服务日志。") from None
-        return {
-            "ok": True,
-            "slug": slug,
-            "new": stats["new"],
-            "dup": stats["dup"],
-            "failed": stats["failed"],
-            "searches": stats["searches"],
-            "item_count": ctx.database.count_topic_items(topic["id"]),
-        }
-
-    @app.post("/api/insights/feedback", response_model=InsightFeedbackResponse)
-    async def insight_feedback(payload: InsightFeedbackIn) -> InsightFeedbackResponse:
-        """Calibrate an insight hypothesis from a user confirm/reject.
-
-        The popup's insight cards surface ``active_insights`` (hypothesis +
-        confidence). This endpoint routes a confirm/reject back into
-        ``SoulEngine.update_from_feedback`` so the hypothesis is validated and
-        re-weighted (confirm → confidence ≥0.75; reject → ≤0.35), closing the
-        loop that was previously implemented but unwired.
-        """
-        signal = payload.signal.strip().lower()
-        if signal not in {"confirm", "like", "support", "reject", "dislike", "deny"}:
-            raise HTTPException(status_code=422, detail="Unsupported insight feedback signal.")
-        hypothesis = payload.hypothesis.strip()
-        if not hypothesis:
-            raise HTTPException(status_code=422, detail="hypothesis is required.")
-        if ctx.soul_engine is None:
-            raise HTTPException(status_code=503, detail="Soul engine not ready.")
-
-        result = await ctx.soul_engine.update_from_feedback(
-            {"hypothesis": hypothesis, "signal": signal}
-        )
-        return InsightFeedbackResponse(
-            ok=True,
-            matched=bool(result.get("matched", False)),
-            hypothesis=str(result.get("hypothesis", hypothesis)),
-            signal=str(result.get("signal", signal)),
-            validated=bool(result.get("validated", False)),
-            confidence=float(result.get("confidence", 0.0)),
-        )
-
     # ── Source recipe management endpoints ──────────────────────────
 
     @app.get("/api/sources")
@@ -4917,36 +4791,6 @@ def create_app(
         recipes = ctx.database.get_all_recipes()
         return {"items": recipes}
 
-    @app.post("/api/sources", status_code=201)
-    def create_source(payload: dict[str, Any]) -> dict[str, Any]:
-        """Create a new source recipe."""
-        import uuid
-
-        recipe_id = payload.get("id") or str(uuid.uuid4())
-        source_type = payload.get("source_type", "")
-        name = payload.get("name", "")
-        strategy = payload.get("strategy", "")
-        if not source_type or not name or not strategy:
-            from fastapi import HTTPException
-
-            raise HTTPException(
-                status_code=422,
-                detail="source_type, name, and strategy are required",
-            )
-        recipe = {
-            "id": recipe_id,
-            "source_type": source_type,
-            "name": name,
-            "strategy": strategy,
-            "config": payload.get("config", {}),
-            "target_share": payload.get("target_share", 4),
-            "enabled": payload.get("enabled", True),
-            "created_by": payload.get("created_by", "user"),
-        }
-        ctx.database.save_source_recipe(recipe)
-        return {"ok": True, "recipe": recipe}
-
-    @app.put("/api/sources/{recipe_id}")
     def update_source(recipe_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Update fields of an existing source recipe."""
         updated = ctx.database.update_recipe(recipe_id, **payload)
@@ -5089,111 +4933,6 @@ def create_app(
         with suppress(Exception):
             mark(keyword_id)
 
-    def _pick_best_xhs_url(database: Any, note_id: str, incoming: str) -> str:
-        """Return the most share-worthy URL for a xhs note.
-
-        xhs search-result pages don't render ``xsec_token`` into ``<a href>``
-        (React SPA keeps the token in props, not DOM), but explore-feed
-        cards do. When the same note arrives both ways, prefer the URL
-        that carries a token — without it, outbound links can silently
-        dead-end at an xhs login wall.
-
-        Order of preference:
-        1. ``incoming`` URL if it already has ``xsec_token=``
-        2. Any prior ``xhs_observed_urls`` row for this note with a token
-        3. Existing ``content_cache.content_url`` if it has a token
-        4. Fall back to ``incoming`` (bare URL — still works for the
-           logged-in user on the xhs domain, just not guaranteed for
-           share/outbound traffic)
-        """
-        if "xsec_token=" in incoming:
-            return incoming
-        try:
-            row = database.conn.execute(
-                "SELECT url FROM xhs_observed_urls "
-                "WHERE url LIKE ? AND url LIKE '%xsec_token=%' "
-                "ORDER BY observed_at DESC LIMIT 1",
-                (f"%/{note_id}?%",),
-            ).fetchone()
-            if row and row["url"]:
-                return str(row["url"])
-        except Exception:
-            pass
-        try:
-            row = database.conn.execute(
-                "SELECT content_url FROM content_cache WHERE bvid=?",
-                (note_id,),
-            ).fetchone()
-            if row and isinstance(row["content_url"], str) and "xsec_token=" in row["content_url"]:
-                return str(row["content_url"])
-        except Exception:
-            pass
-        try:
-            row = database.conn.execute(
-                "SELECT content_url FROM discovery_candidates "
-                "WHERE source_platform='xiaohongshu' AND content_id=? "
-                "  AND content_url LIKE '%xsec_token=%' "
-                "ORDER BY last_seen_at DESC LIMIT 1",
-                (note_id,),
-            ).fetchone()
-            if row and row["content_url"]:
-                return str(row["content_url"])
-        except Exception:
-            pass
-        return incoming
-
-    def _backfill_xhs_tokens(database: Any, urls: list[str]) -> int:
-        """Upgrade cached xhs rows whose content_url lacks xsec_token.
-
-        The extension often observes the same note twice — once from a
-        search result page (no token in ``<a href>``) and once from an
-        explore-feed card (token present). When a tokenized URL arrives
-        later, rewrite the previously-cached bare URL so share links
-        don't dead-end at xhs's login wall.
-        """
-        updated = 0
-        for url in urls:
-            if "xsec_token=" not in url:
-                continue
-            try:
-                path = urlparse(url).path.strip("/")
-                note_id = path.rsplit("/", 1)[-1] if path else ""
-            except Exception:
-                continue
-            if not note_id:
-                continue
-            try:
-                cursor = database.conn.execute(
-                    "UPDATE content_cache SET content_url=? "
-                    "WHERE bvid=? AND source_platform='xiaohongshu' "
-                    "AND (content_url = '' OR content_url NOT LIKE '%xsec_token=%')",
-                    (url, note_id),
-                )
-                updated += cursor.rowcount or 0
-            except Exception:
-                pass
-            try:
-                cursor = database.conn.execute(
-                    "UPDATE discovery_candidates "
-                    "SET content_url=?, last_seen_at=CURRENT_TIMESTAMP "
-                    "WHERE source_platform='xiaohongshu' AND content_id=? "
-                    "AND (content_url = '' OR content_url NOT LIKE '%xsec_token=%')",
-                    (url, note_id),
-                )
-                updated += cursor.rowcount or 0
-            except Exception:
-                continue
-        # Commit unconditionally: a bare UPDATE (even with zero matched
-        # rows) opens a write transaction in sqlite3's default isolation
-        # mode and holds a RESERVED lock until commit. Skipping the commit
-        # when `updated == 0` leaked the transaction, blocking other
-        # connections' writers (e.g. the thread-local connection used by
-        # tests / threadpool requests) behind a stale lock.
-        if database.conn.in_transaction:
-            with suppress(Exception):
-                database.conn.commit()
-        return updated
-
     # ── XHS self-author filter (v0.3.48+) ────────────────────────────
     #
     # XHS search / explore / saved-author paths all happily return the
@@ -5219,76 +4958,6 @@ def create_app(
         if not user_id and not nickname:
             return None
         return {"user_id": user_id, "nickname": nickname}
-
-    def _extract_self_info_from_payload(payload: Any) -> dict[str, str] | None:
-        """Pull self_info from any XHS ingest payload.
-
-        v0.3.57+: extension v0.3.10 sends self_info at the **payload top
-        level** for every ingest path (passive ``observed-urls``, search /
-        creator ``task-result``, bootstrap_profile ``task-result``). The
-        legacy bootstrap-only nested location
-        ``debug.xhs_bootstrap.steps[*].self_info`` (v0.3.48 / extension
-        v0.3.9) is kept as fallback for older extensions.
-        """
-        if not isinstance(payload, dict):
-            return None
-        # 1) New top-level location.
-        info = _normalize_self_info(payload.get("self_info"))
-        if info is not None:
-            return info
-        # 2) Legacy bootstrap-debug nested location.
-        debug = payload.get("debug")
-        if not isinstance(debug, dict):
-            return None
-        bootstrap = debug.get("xhs_bootstrap")
-        if not isinstance(bootstrap, dict):
-            return None
-        steps = bootstrap.get("steps")
-        if not isinstance(steps, list):
-            return None
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            info = _normalize_self_info(step.get("self_info"))
-            if info is not None:
-                return info
-        return None
-
-    def _persist_xhs_self_info(self_info: dict[str, str]) -> None:
-        """Save self info into discovery_runtime_state if not already there."""
-        memory_manager = getattr(ctx.runtime_controller, "memory_manager", None)
-        if memory_manager is None:
-            return
-        try:
-            state = memory_manager.load_discovery_runtime_state()
-            existing = state.get("xhs_self_info")
-            # Idempotent: only write when content changes (avoid sqlite churn).
-            if isinstance(existing, dict) and existing == self_info:
-                return
-            update_state = getattr(memory_manager, "update_discovery_runtime_state", None)
-            if callable(update_state):
-                update_state(
-                    lambda runtime_state: runtime_state.update({"xhs_self_info": self_info})
-                )
-            else:
-                state["xhs_self_info"] = self_info
-                memory_manager.save_discovery_runtime_state(state)
-            logger.info(
-                "xhs self_info persisted: user_id=%s nickname=%r",
-                self_info.get("user_id", ""),
-                self_info.get("nickname", ""),
-            )
-            # Immediately purge any self-authored rows that slipped into
-            # the pool before this self_info was known.
-            suppressed = _purge_self_authored_pool_items(ctx.database, self_info)
-            if suppressed:
-                logger.info(
-                    "xhs self_info purge: suppressed %d self-authored pool item(s) (nickname=%r)",
-                    suppressed,
-                    self_info.get("nickname", ""),
-                )
-        except Exception:
-            logger.exception("Failed to persist xhs self_info")
 
     def _load_xhs_self_info() -> dict[str, str]:
         """Load self info from runtime state (returns empty dict on miss)."""
@@ -5470,100 +5139,6 @@ def create_app(
         except TypeError:
             return int(enqueue(writes))
 
-    @app.post("/api/sources/xhs/observed-urls")
-    async def ingest_xhs_observed_urls(payload: dict[str, Any]) -> dict[str, Any]:
-        """Accept xhs note URLs + optional metadata the extension collected.
-
-        Body: ``{ "urls": [...], "notes": [{url, title, author, cover_url}], "page_type": "..." }``
-
-        When ``notes`` is present, metadata is normalized into
-        ``discovery_candidates``.  The shared discovery-candidate drain then
-        evaluates and admits accepted notes through the same path as other
-        platforms.
-        """
-        from fastapi import HTTPException
-
-        urls_raw: list[str] = payload.get("urls", [])
-        notes_raw: list[dict[str, Any]] = payload.get("notes", [])
-        page_type: str = payload.get("page_type", "other")
-
-        if not urls_raw and not notes_raw:
-            raise HTTPException(status_code=422, detail="urls or notes must be non-empty")
-        if len(urls_raw) > xhs_max_urls_per_batch:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Too many URLs (max {xhs_max_urls_per_batch})",
-            )
-
-        # v0.3.57+: passive collector (extension v0.3.10) piggybacks
-        # self_info on every observed-urls request. Persist on first
-        # arrival so subsequent requests without self_info still filter
-        # via the loaded state.
-        self_info_now = _extract_self_info_from_payload(payload)
-        if self_info_now:
-            _persist_xhs_self_info(self_info_now)
-        self_info_for_filter = self_info_now or _load_xhs_self_info()
-
-        # Filter to valid xhs note URLs
-        valid_urls = [
-            u
-            for u in urls_raw
-            if isinstance(u, str) and u.startswith(xhs_url_prefix) and "/explore/" in u
-        ]
-
-        # Store bare URLs for tracking
-        if valid_urls:
-            ctx.database.save_xhs_observed_urls(valid_urls, page_type)
-            _backfill_xhs_tokens(ctx.database, valid_urls)
-
-        # Store rich notes into the shared pending evaluation pool.
-        enqueued = 0
-        if notes_raw:
-            enqueued = _cache_xhs_notes(
-                ctx.database,
-                notes_raw,
-                page_type,
-                self_info=self_info_for_filter or None,
-            )
-            if enqueued:
-                asyncio.create_task(_drain_discovery_candidates_once())
-
-        return {
-            "ok": True,
-            "accepted": len(valid_urls),
-            "enqueued": enqueued,
-        }
-
-    @app.post("/api/sources/xhs/tokens")
-    def ingest_xhs_tokens(payload: dict[str, Any]) -> dict[str, Any]:
-        """Ingest ``(note_id, xsec_token)`` pairs harvested by the MAIN-
-        world fetch sniffer inside ``dist/main/xhs-token-sniffer.js``.
-
-        We rebuild the full tokenized URL from each pair and feed it
-        through ``_backfill_xhs_tokens`` so previously-cached bare URLs
-        (the typical search-page-sourced ones) get upgraded in place.
-        Without this, clicking an xhs recommendation trips xhs's 300031
-        access-denied gating because the stored URL lacks xsec_token.
-        """
-        raw = payload.get("pairs", [])
-        if not isinstance(raw, list) or not raw:
-            return {"ok": True, "upgraded": 0}
-        urls: list[str] = []
-        for pair in raw:
-            if not isinstance(pair, dict):
-                continue
-            note_id = str(pair.get("note_id", "") or "").strip()
-            token = str(pair.get("xsec_token", "") or "").strip()
-            # Guard against the noise the sniffer's deep-walk can surface
-            # — e.g. 24-hex ids that aren't notes. The backfill UPDATE is
-            # narrow (bvid match), so the worst case of a false id is a
-            # no-op, but the token must at least be non-empty.
-            if not note_id or not token:
-                continue
-            urls.append(f"{xhs_url_prefix}explore/{note_id}?xsec_token={token}")
-        upgraded = _backfill_xhs_tokens(ctx.database, urls)
-        return {"ok": True, "upgraded": upgraded}
-
     # ── Bilibili extension search fallback endpoints ────────────────
 
     from openbiliclaw.sources.bili_tasks import (
@@ -5620,59 +5195,12 @@ def create_app(
         _xhs_task_queue = XhsTaskQueue(ctx.database)
         _xhs_creator_store = XhsCreatorStore(ctx.database)
 
-    @app.get("/api/sources/xhs/next-task")
-    def xhs_next_task(response: Any = None) -> Any:
-        """Claim and return the oldest runnable xhs task, or 204 if none."""
-        from starlette.responses import Response
-
-        # 204 No Content responses MUST NOT carry a body (RFC 7230).
-        # JSONResponse(204, None) serialises None to "null" (4 bytes),
-        # then GZipMiddleware (minimum_size=0) wraps it into ~20 bytes
-        # of gzip stream while Content-Length stays at 4, which trips
-        # h11's strict "Too much data for declared Content-Length"
-        # check on every poll. Use a body-less Response instead.
-        if _xhs_task_queue is None:
-            return Response(status_code=204)
-        task = _xhs_task_queue.next_pending(only_ids=_init_owned_ids_filter())
-        if task is None:
-            return Response(status_code=204)
-
-        import json as _json
-
-        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
-        return {
-            "id": task["id"],
-            "type": task["type"],
-            **payload,
-        }
-
     def xhs_list_creators() -> dict[str, Any]:
         """List all xhs creator subscriptions."""
         if _xhs_creator_store is None:
             return {"items": []}
         return {"items": _xhs_creator_store.list_all()}
 
-    @app.post("/api/sources/xhs/creators", status_code=201)
-    def xhs_add_creator(payload: dict[str, Any]) -> dict[str, Any]:
-        """Add an xhs creator subscription."""
-        from fastapi import HTTPException
-
-        creator_id = payload.get("creator_id", "")
-        creator_url = payload.get("creator_url", "")
-        display_name = payload.get("display_name", "")
-
-        if not creator_id or not creator_url:
-            raise HTTPException(
-                status_code=422,
-                detail="creator_id and creator_url are required",
-            )
-
-        if _xhs_creator_store is None:
-            raise HTTPException(status_code=503, detail="xhs not configured")
-        _xhs_creator_store.add(creator_id, creator_url, display_name)
-        return {"ok": True}
-
-    @app.delete("/api/sources/xhs/creators/{sub_id}")
     def xhs_delete_creator(sub_id: int) -> dict[str, Any]:
         """Delete an xhs creator subscription."""
         from fastapi import HTTPException
@@ -5776,90 +5304,6 @@ def create_app(
     def _xhs_token_from_url(url: str) -> str:
         match = re.search(r"(?:[?&])xsec_token=([^&#]+)", str(url or ""))
         return match.group(1) if match else ""
-
-    def _latest_xhs_token() -> str:
-        if not hasattr(ctx.database, "conn"):
-            return ""
-        queries = (
-            """
-            SELECT content_url
-            FROM discovery_candidates
-            WHERE source_platform = 'xiaohongshu'
-              AND content_url LIKE '%xsec_token=%'
-            ORDER BY last_seen_at DESC, id DESC
-            LIMIT 1
-            """,
-            """
-            SELECT content_url
-            FROM content_cache
-            WHERE source_platform = 'xiaohongshu'
-              AND content_url LIKE '%xsec_token=%'
-            ORDER BY discovered_at DESC, bvid DESC
-            LIMIT 1
-            """,
-        )
-        for sql in queries:
-            with suppress(Exception):
-                row = ctx.database.conn.execute(sql).fetchone()
-                if row:
-                    url = row["content_url"] if hasattr(row, "keys") else row[0]
-                    token = _xhs_token_from_url(str(url))
-                    if token:
-                        return token
-        return ""
-
-    @app.get("/api/sources/credentials", response_model=SourcesCredentialsResponse)
-    def sources_credentials(reveal_keys: bool = False) -> SourcesCredentialsResponse:
-        """Return current local Cookie / token snapshots for source settings pages."""
-        from openbiliclaw.bilibili.auth import resolve_runtime_cookie
-        from openbiliclaw.config import load_config
-        from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
-
-        cfg = load_config()
-        srcs = cfg.sources
-
-        bili_cookie = resolve_runtime_cookie(
-            data_dir=cfg.data_path,
-            configured_cookie=str(getattr(cfg.bilibili, "cookie", "") or ""),
-        )
-        dy_cookie = resolve_douyin_cookie(
-            data_dir=cfg.data_path,
-            cookie_env=getattr(srcs.douyin, "cookie_env", "OPENBILICLAW_DOUYIN_COOKIE"),
-        )
-        tw_cookie = resolve_x_cookie(
-            data_dir=cfg.data_path,
-            cookie_env=getattr(srcs.twitter, "cookie_env", "OPENBILICLAW_X_COOKIE"),
-        )
-        xhs_token = _latest_xhs_token()
-
-        def item(label: str, value: str, detail: str) -> SourceCredentialItem:
-            return SourceCredentialItem(
-                label=label,
-                value=_mask_source_credential(value, reveal=reveal_keys),
-                available=bool(value.strip()),
-                detail=detail,
-            )
-
-        return SourcesCredentialsResponse(
-            bilibili=item("Cookie", bili_cookie, "B 站当前 resolved Cookie。"),
-            xiaohongshu=item(
-                "xsec_token",
-                xhs_token,
-                "小红书不保存整站 Cookie；这里展示最近同步内容 URL 中的 xsec_token。",
-            ),
-            douyin=item("Cookie", dy_cookie, "抖音当前 resolved Cookie。"),
-            youtube=SourceCredentialItem(
-                label="Cookie",
-                available=False,
-                detail="YouTube 当前按公开源接入，后端不保存 Cookie。",
-            ),
-            twitter=item("Cookie", tw_cookie, "X 当前 resolved Cookie。"),
-            zhihu=SourceCredentialItem(
-                label="Cookie",
-                available=False,
-                detail="知乎登录态保存在浏览器站点 / 插件上下文中，后端不保存可展示 Cookie。",
-            ),
-        )
 
     # ── Douyin task queue endpoints (extension dispatcher) ──────────
     # Independent from the XHS block above by design — see
@@ -5993,89 +5437,6 @@ def create_app(
     if hasattr(ctx.database, "conn"):
         _yt_task_queue = YtTaskQueue(ctx.database)
 
-    @app.get("/api/sources/yt/next-task")
-    def yt_next_task(response: Any = None) -> Any:
-        """Return the oldest pending YouTube task, or 204 if none."""
-        from starlette.responses import Response
-
-        if _yt_task_queue is None:
-            return Response(status_code=204)
-        task = _yt_task_queue.next_pending(only_ids=_init_owned_ids_filter())
-        if task is None:
-            return Response(status_code=204)
-
-        import json as _json
-
-        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
-        return {
-            "id": task["id"],
-            "type": task["type"],
-            **payload,
-        }
-
-    @app.post("/api/sources/yt/task-result")
-    async def yt_task_result(payload: dict[str, Any]) -> dict[str, Any]:
-        """Accept a YouTube task result from the extension dispatcher."""
-        task_id = payload.get("task_id", "")
-        status = payload.get("status", "")
-        items = [v for v in payload.get("items", []) if isinstance(v, dict)]
-        scope_counts = payload.get("scope_counts")
-        if not isinstance(scope_counts, dict):
-            scope_counts = None
-        debug = payload.get("debug")
-        if not isinstance(debug, dict):
-            debug = None
-
-        if not task_id:
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=422, detail="task_id is required")
-
-        if _yt_task_queue is None:
-            return {"ok": True}
-
-        task = _yt_task_queue.get(task_id)
-        task_type = str(task.get("type", "")).strip() if task else ""
-
-        if status in {"partial", "ok"} or (status == "empty" and task_type == "bootstrap_profile"):
-            is_final = status == "ok" or (status == "empty" and task_type == "bootstrap_profile")
-            added_items = _yt_task_queue.merge_result(
-                task_id,
-                items=items if items else None,
-                scope_counts=scope_counts,
-                debug=debug,
-                complete=is_final,
-            )
-            # gui-init D1: persist the result (above) for init's own collector;
-            # during init skip profile propagation for non-owned results, but
-            # propagate init-OWNED bootstrap results through the deduped path.
-            _init_busy = _init_active_now()
-            _skip_profile = _init_busy and not _init_owns_task(task_id)
-            if task_type == "bootstrap_profile" and added_items and not _skip_profile:
-                fresh_items, item_keys_by_index = _filter_new_source_bootstrap_items(
-                    "yt",
-                    added_items,
-                    yt_bootstrap_item_key,
-                )
-                profile_events: list[dict[str, Any]] = []
-                propagated_keys: list[str] = []
-                for index, item in enumerate(fresh_items):
-                    for event in yt_bootstrap_items_to_events([item]):
-                        await ctx.memory_manager.propagate_event(event)
-                        profile_events.append(event)
-                        key = item_keys_by_index.get(index, "")
-                        if key:
-                            propagated_keys.append(key)
-                # Skip the incremental pipeline during init (see xhs handler).
-                if not _init_busy:
-                    await _ingest_profile_update_events(profile_events)
-                _mark_source_bootstrap_keys("yt", propagated_keys)
-        else:
-            _yt_task_queue.fail(task_id, error=payload.get("error", ""), debug=debug)
-
-        return {"ok": True}
-
-    @app.post("/api/sources/yt/kick")
     async def yt_task_kick() -> dict[str, Any]:
         """Broadcast `yt_task_available` over runtime-stream."""
         publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
@@ -6711,220 +6072,6 @@ def create_app(
             return []
         return [str(item).strip() for item in value if str(item).strip()]
 
-    def _apply_llm_update(cfg: Any, llm_data: object) -> None:
-        """Apply the LLM subset of a config update to an in-memory config."""
-        if not isinstance(llm_data, dict):
-            return
-        from openbiliclaw.config import _normalize_llm_concurrency, _normalize_llm_timeout
-
-        if "default_provider" in llm_data:
-            cfg.llm.default_provider = str(llm_data["default_provider"])
-        if "concurrency" in llm_data:
-            cfg.llm.concurrency = _normalize_llm_concurrency(llm_data["concurrency"])
-        if "timeout" in llm_data:
-            cfg.llm.timeout = _normalize_llm_timeout(llm_data["timeout"])
-        if "fallback_enabled" in llm_data:
-            cfg.llm.fallback_enabled = _as_bool(llm_data["fallback_enabled"])
-        if "fallback_provider" in llm_data:
-            cfg.llm.fallback_provider = str(llm_data["fallback_provider"]).strip()
-        for provider_name in (
-            "openai",
-            "claude",
-            "gemini",
-            "deepseek",
-            "ollama",
-            "openrouter",
-            "openai_compatible",
-        ):
-            if provider_name in llm_data and isinstance(llm_data[provider_name], dict):
-                provider_cfg = getattr(cfg.llm, provider_name)
-                pdata = llm_data[provider_name]
-                skipped_fields: list[str] = []
-                for field_name in (
-                    "api_key",
-                    "model",
-                    "base_url",
-                    "auth_mode",
-                    "http_referer",
-                    "x_title",
-                    "reasoning_effort",
-                ):
-                    if field_name in pdata:
-                        new_value = str(pdata[field_name])
-                        if field_name == "api_key" and "*" in new_value:
-                            skipped_fields.append(f"{field_name}=masked")
-                            continue
-                        existing = getattr(provider_cfg, field_name, "")
-                        if (
-                            field_name not in {"auth_mode", "reasoning_effort"}
-                            and not new_value.strip()
-                            and isinstance(existing, str)
-                            and existing.strip()
-                        ):
-                            skipped_fields.append(f"{field_name}=empty_skip")
-                            continue
-                        setattr(provider_cfg, field_name, new_value)
-                if skipped_fields:
-                    logger.debug(
-                        "Config LLM update: provider %s skipped fields: %s",
-                        provider_name,
-                        ", ".join(skipped_fields),
-                    )
-        if "embedding" in llm_data and isinstance(llm_data["embedding"], dict):
-            emb = llm_data["embedding"]
-            if "provider" in emb:
-                cfg.llm.embedding.provider = str(emb["provider"])
-            if "model" in emb:
-                new_model = str(emb["model"])
-                if new_model.strip() or not cfg.llm.embedding.model.strip():
-                    cfg.llm.embedding.model = new_model
-            if "api_key" in emb:
-                new_key = str(emb["api_key"])
-                if "*" not in new_key and (
-                    new_key.strip() or not cfg.llm.embedding.api_key.strip()
-                ):
-                    cfg.llm.embedding.api_key = new_key
-            if "base_url" in emb:
-                new_base_url = str(emb["base_url"])
-                if new_base_url.strip() or not cfg.llm.embedding.base_url.strip():
-                    cfg.llm.embedding.base_url = new_base_url
-            if "output_dimensionality" in emb:
-                try:
-                    cfg.llm.embedding.output_dimensionality = max(
-                        0,
-                        int(emb["output_dimensionality"] or 0),
-                    )
-                except (TypeError, ValueError) as exc:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="llm.embedding.output_dimensionality must be an integer",
-                    ) from exc
-            if "similarity_threshold" in emb:
-                cfg.llm.embedding.similarity_threshold = float(emb["similarity_threshold"])
-            if "fallback_enabled" in emb:
-                cfg.llm.embedding.fallback_enabled = _as_bool(emb["fallback_enabled"])
-            if "fallback_provider" in emb:
-                cfg.llm.embedding.fallback_provider = str(emb["fallback_provider"]).strip()
-        for module_name in ("soul", "discovery", "recommendation", "evaluation"):
-            if module_name in llm_data and isinstance(llm_data[module_name], dict):
-                mod_cfg = getattr(cfg.llm, module_name)
-                mdata = llm_data[module_name]
-                if "provider" in mdata:
-                    mod_cfg.provider = str(mdata["provider"])
-                if "model" in mdata:
-                    mod_cfg.model = str(mdata["model"])
-
-    async def _probe_llm_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS
-        from openbiliclaw.llm.registry import build_llm_registry
-
-        started = time.perf_counter()
-        provider = str(getattr(cfg.llm, "default_provider", "") or "").strip().lower()
-        model = ""
-        try:
-            registry = build_llm_registry(cfg)
-            provider = provider or str(getattr(registry, "default_provider", "") or "")
-            provider_cfg = getattr(cfg.llm, provider, None)
-            model = str(getattr(provider_cfg, "model", "") or "").strip()
-            if not registry.is_chat_capable(provider):
-                return ConfigServiceProbeResponse(
-                    ok=False,
-                    kind="llm",
-                    provider=provider,
-                    model=model,
-                    error=f"LLM provider {provider!r} is not registered or not chat-capable.",
-                    latency_ms=int((time.perf_counter() - started) * 1000),
-                )
-            timeout_s = min(max(float(getattr(cfg.llm, "timeout", 300) or 300), 10.0), 30.0)
-            response = await asyncio.wait_for(
-                registry.complete_provider(
-                    provider,
-                    [
-                        {"role": "system", "content": "Reply with only OK."},
-                        {"role": "user", "content": "OpenBiliClaw connectivity probe."},
-                    ],
-                    temperature=0,
-                    max_tokens=LLM_CONNECTIVITY_PROBE_MAX_TOKENS,
-                    reasoning_effort="",
-                    model=model or None,
-                ),
-                timeout=timeout_s,
-            )
-            ok = bool(str(getattr(response, "content", "") or "").strip())
-            response_model = str(getattr(response, "model", "") or model)
-            return ConfigServiceProbeResponse(
-                ok=ok,
-                kind="llm",
-                provider=provider,
-                model=response_model,
-                message="LLM provider is available." if ok else "",
-                error="" if ok else "LLM provider returned an empty response.",
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-        except Exception as exc:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="llm",
-                provider=provider,
-                model=model,
-                error=str(exc),
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-
-    async def _probe_embedding_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLMRegistry
-        from openbiliclaw.llm.registry import build_embedding_service
-
-        started = time.perf_counter()
-        emb_cfg = getattr(getattr(cfg, "llm", None), "embedding", None)
-        provider = str(getattr(emb_cfg, "provider", "") or "").strip().lower()
-        model = str(getattr(emb_cfg, "model", "") or "").strip()
-        if not provider:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="embedding",
-                provider="",
-                model=model,
-                error="Embedding provider is not configured.",
-            )
-        try:
-            service = build_embedding_service(cfg, LLMRegistry())
-            if service is None:
-                return ConfigServiceProbeResponse(
-                    ok=False,
-                    kind="embedding",
-                    provider=provider,
-                    model=model,
-                    error="Embedding service could not be built from the submitted config.",
-                    latency_ms=int((time.perf_counter() - started) * 1000),
-                )
-            probe = getattr(service, "probe", None)
-            if not callable(probe):
-                # Legacy/stub embedding service without a live probe —
-                # building it successfully is the best signal we have.
-                ok = True
-            else:
-                ok = bool(await asyncio.wait_for(probe(), timeout=15.0))
-            return ConfigServiceProbeResponse(
-                ok=ok,
-                kind="embedding",
-                provider=provider,
-                model=model,
-                message="Embedding provider is available." if ok else "",
-                error="" if ok else "Embedding provider returned no vector.",
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-        except Exception as exc:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="embedding",
-                provider=provider,
-                model=model,
-                error=str(exc),
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-
-    @app.post("/api/config/probe-service", response_model=ConfigServiceProbeResponse)
     async def probe_config_service(payload: ConfigServiceProbeIn) -> ConfigServiceProbeResponse:
         """Probe submitted LLM / embedding settings without saving config.toml."""
         from copy import deepcopy
@@ -7100,30 +6247,6 @@ def create_app(
                 items = cands[offset : offset + limit]
         return JSONResponse({"items": items, "total": total, "query": q})
 
-    @app.get("/api/articles/facets", response_model=None)
-    def list_article_facets() -> JSONResponse:
-        """Source-type distribution for the reading-library filter UI."""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"source_types": [], "total": 0})
-        try:
-            rows = database.conn.execute(
-                "SELECT source_type, COUNT(*) AS n FROM articles "
-                "WHERE COALESCE(status, 'unread') != 'hidden' "
-                "GROUP BY source_type ORDER BY n DESC"
-            ).fetchall()
-        except Exception:
-            logger.exception("Failed to read article facets")
-            return JSONResponse({"source_types": [], "total": 0})
-        total = sum(int(r["n"]) for r in rows)
-        return JSONResponse(
-            {
-                "source_types": [{"type": r["source_type"], "count": int(r["n"])} for r in rows],
-                "total": total,
-            }
-        )
-
-    @app.get("/api/articles/{article_id}")
     def get_article(article_id: int) -> JSONResponse:
         """Fetch a single article with its full body text for reading."""
         database = getattr(ctx, "database", None)
@@ -7184,112 +6307,6 @@ def create_app(
         ok = database.delete_article_note(note_id)
         return JSONResponse({"ok": ok, "id": note_id})
 
-    @app.post("/api/articles/{article_id}/summarize")
-    async def summarize_article(article_id: int) -> JSONResponse:
-        """Generate / refresh an AI summary (one-liner + 3 key points) via LLM.
-
-        Idempotent: an existing summary is returned as-is unless ``force``
-        is passed. Requires a body of at least 200 chars; short articles
-        fall back to their stored ``summary`` field.
-        """
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        row = database.get_article(article_id)
-        if row is None:
-            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
-        if row.get("ai_summary"):
-            try:
-                return JSONResponse(
-                    {"ok": True, "summary": json.loads(row["ai_summary"]), "cached": True}
-                )
-            except Exception:
-                pass  # 损坏则重新生成
-        content = str(row.get("content_text") or "").strip()
-        if len(content) < 200:
-            return JSONResponse(
-                {"ok": False, "error": "正文过短，无法生成摘要", "article_id": article_id},
-                status_code=422,
-            )
-        try:
-            from openbiliclaw.config import load_config as _sum_cfg
-            from openbiliclaw.llm.registry import build_llm_registry as _build_reg
-
-            registry = _build_reg(_sum_cfg())
-            system = (
-                "你是个人阅读助手。为下面这篇文章生成中文摘要，"
-                "只输出 JSON，不要多余文字，格式："
-                '{"one_liner":"不超过30字的一句话总结","points":["要点1，一句话","要点2，一句话","要点3，一句话"]}'
-            )
-            user = (
-                f"标题：{row.get('title') or ''}\n"
-                f"作者：{row.get('author') or ''}\n"
-                f"来源：{row.get('source_name') or row.get('source_type') or ''}\n"
-                f"标签：{row.get('tags') or '[]'}\n\n"
-                f"正文（截取前 3000 字）：\n{content[:3000]}"
-            )
-            resp = await registry.complete(
-                [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0.3,
-                # sensenova-6.8 is a reasoning model: its thinking process
-                # routinely eats 1000+ tokens, so a 700-token budget was
-                # exhausted by reasoning alone and content came back empty
-                # (finish_reason=length). 3000 leaves room for reasoning +
-                # the actual summary.
-                max_tokens=3000,
-                json_mode=True,
-            )
-            raw = (resp.content or "").strip()
-            summary = json.loads(raw)
-            if not isinstance(summary, dict):
-                raise ValueError("non-dict summary")
-            summary.setdefault("one_liner", "")
-            summary.setdefault("points", [])
-            summary["generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-            database.update_article_ai_summary(article_id, json.dumps(summary, ensure_ascii=False))
-            return JSONResponse({"ok": True, "summary": summary, "cached": False})
-        except Exception:
-            logger.exception("AI summary generation failed for article %d", article_id)
-            return JSONResponse(
-                {"ok": False, "error": "摘要生成失败，请稍后重试", "article_id": article_id},
-                status_code=502,
-            )
-
-    def _rank_unread_by_interest(database: Any, *, limit: int) -> list[dict[str, Any]]:
-        """未读文章按兴趣契合度排序（今日建议与每日简报共用）。
-
-        抽样最近未读文章（优先有正文），按 soul 兴趣画像关键词打分，
-        返回 top ``limit``，附人读得懂的命中理由。
-        """
-        keywords = _load_interest_keywords()
-        cands = database.get_recent_articles(limit=300, status="unread")
-        scored: list[tuple[float, dict[str, Any]]] = []
-        for item in cands:
-            text = " ".join(
-                [
-                    str(item.get("title") or ""),
-                    str(item.get("summary") or ""),
-                    str(item.get("tags") or ""),
-                ]
-            ).lower()
-            score = 0.0
-            reasons: list[str] = []
-            for name, weight in keywords:
-                if name and name.lower() in text:
-                    score += weight
-                    if len(reasons) < 2:
-                        reasons.append(name)
-            if score > 0:
-                item["fit_score"] = round(min(1.0, score / 1.5), 3)
-                item["fit_reason"] = reasons
-                scored.append((score, item))
-        scored.sort(key=lambda kv: kv[0], reverse=True)
-        return [it for _, it in scored[: max(1, int(limit))]]
-
-    @app.get("/api/reading/suggestions")
     def daily_reading_suggestions(limit: int = 5) -> JSONResponse:
         """Today's reading picks: unread articles ranked by interest fit."""
         database = getattr(ctx, "database", None)
@@ -7305,74 +6322,6 @@ def create_app(
             }
         )
 
-    @app.get("/api/reading/daily-brief")
-    def reading_daily_brief() -> JSONResponse:
-        """每日简报（确定性聚合，零 LLM）：阅读库页顶部卡片的数据源。
-
-        三个板块：
-        - ``reading``: 今日已读回顾——当天标记 finished 的文章数、来源
-          分布、主题标签（``Database.get_daily_reading_summary``）。
-        - ``profile``: 画像今天学到什么——今天的认知更新（含手动纠偏），
-          与画像页共用 ``memory_manager.load_cognition_updates``；soul
-          未初始化时该板块为空，不阻塞其余板块。
-        - ``tomorrow``: 明日值得看——未读文章按兴趣契合度 top 5
-          （与今日建议共用 ``_rank_unread_by_interest``）。
-        """
-        import datetime as _dt
-
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        today = _dt.datetime.now().strftime("%Y-%m-%d")
-
-        reading = database.get_daily_reading_summary(day=today)
-
-        profile_updates: list[dict[str, Any]] = []
-        load_cognition_updates = getattr(ctx.memory_manager, "load_cognition_updates", None)
-        if callable(load_cognition_updates):
-            with suppress(Exception):
-                for item in load_cognition_updates():
-                    created = str(item.get("created_at") or "")
-                    if not created.startswith(today):
-                        continue
-                    summary_text = str(item.get("summary") or "").strip()
-                    if not summary_text:
-                        continue
-                    profile_updates.append(
-                        {
-                            "summary": summary_text,
-                            "source_label": str(item.get("source_label") or ""),
-                            "created_at": created,
-                        }
-                    )
-                    if len(profile_updates) >= 5:
-                        break
-
-        tomorrow: list[dict[str, Any]] = []
-        with suppress(Exception):
-            tomorrow = [
-                {
-                    "id": it.get("id"),
-                    "title": it.get("title"),
-                    "source_type": it.get("source_type"),
-                    "fit_score": it.get("fit_score"),
-                    "fit_reason": it.get("fit_reason", []),
-                }
-                for it in _rank_unread_by_interest(database, limit=5)
-            ]
-
-        return JSONResponse(
-            {
-                "ok": True,
-                "date": today,
-                "reading": reading,
-                "profile": {"updates": profile_updates},
-                "tomorrow": tomorrow,
-                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        )
-
-    @app.get("/api/reading/intent-search")
     async def reading_intent_search(
         q: str = "",
         limit: int = 30,
@@ -7499,36 +6448,6 @@ def create_app(
             }
         )
 
-    @app.get("/api/reading/stats")
-    def reading_stats() -> JSONResponse:
-        """Reading-library dashboard: totals, monthly finished trend,
-        source mix, top tags, notes count, and a light interest-shift
-        view (recently-read tags vs the current interest profile).
-        """
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        stats = database.get_article_reading_stats()
-        # 兴趣迁移：最近在读/读完文章打到的画像关键词
-        recent = database.get_articles_for_reading_stats(limit=100)
-        interest_shift: dict[str, Any] = {"matched": [], "recent_articles": len(recent)}
-        keywords = _load_interest_keywords()
-        hit_counter: dict[str, float] = {}
-        for item in recent:
-            text = " ".join(
-                [
-                    str(item.get("title") or ""),
-                    str(item.get("tags") or ""),
-                ]
-            ).lower()
-            for name, weight in keywords:
-                if name and name.lower() in text:
-                    hit_counter[name] = hit_counter.get(name, 0.0) + weight
-        interest_shift["matched"] = sorted(hit_counter.items(), key=lambda kv: kv[1], reverse=True)[
-            :10
-        ]
-        return JSONResponse({"ok": True, "stats": stats, "interest_shift": interest_shift})
-
     # ── 知识库概念反向索引 API ─────────────────────────────────
     @app.get("/api/knowledge/concepts")
     def knowledge_concepts(
@@ -7585,155 +6504,6 @@ def create_app(
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
-    @app.get("/api/knowledge/concepts/{concept_name}")
-    def knowledge_concept_detail(concept_name: str, source: str = "") -> JSONResponse:
-        """查看某个概念在哪些文章中被提及。"""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            conn = database.conn
-            where = ["kb.target_concept = ?"]
-            params: list = [concept_name]
-            if source:
-                where.append("kb.source_site = ?")
-                params.append(source)
-
-            where_clause = " AND ".join(where)
-
-            rows = conn.execute(
-                f"""SELECT kb.source_article_id, kb.source_title, kb.source_url,
-                           kb.source_site, kb.target_type, a.summary, a.tags
-                    FROM knowledge_backlinks kb
-                    LEFT JOIN articles a ON kb.source_article_id = a.id
-                    WHERE {where_clause}
-                    ORDER BY kb.source_site, kb.source_title""",
-                params,
-            ).fetchall()
-
-            # 获取概念类型从 knowledge_concepts
-            concept_type = "concept"
-            if source:
-                ct_row = conn.execute(
-                    "SELECT DISTINCT concept_type FROM knowledge_concepts WHERE concept = ? AND source_site = ? LIMIT 1",
-                    (concept_name, source),
-                ).fetchone()
-                if ct_row:
-                    concept_type = ct_row[0] or "concept"
-            else:
-                ct_row = conn.execute(
-                    "SELECT DISTINCT concept_type FROM knowledge_concepts WHERE concept = ? LIMIT 1",
-                    (concept_name,),
-                ).fetchone()
-                if ct_row:
-                    concept_type = ct_row[0] or "concept"
-
-            # 按来源站点分组
-            by_source: dict[str, list[dict]] = {}
-            for r in rows:
-                site = r[3] or "unknown"
-                if site not in by_source:
-                    by_source[site] = []
-                by_source[site].append(
-                    {
-                        "article_id": r[0],
-                        "title": r[1],
-                        "url": r[2],
-                        "summary": r[5] or "",
-                        "tags": json.loads(r[6]) if r[6] else [],
-                    }
-                )
-
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "concept": concept_name,
-                    "type": concept_type,
-                    "total": len(rows),
-                    "by_source": by_source,
-                }
-            )
-        except Exception as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-    @app.get("/api/knowledge/stats")
-    def knowledge_stats() -> JSONResponse:
-        """知识库统计数据。"""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            conn = database.conn
-            total_concepts = conn.execute(
-                "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
-            ).fetchone()[0]
-            total_backlinks = conn.execute("SELECT COUNT(*) FROM knowledge_backlinks").fetchone()[0]
-
-            sources = conn.execute(
-                "SELECT source_site, COUNT(*) as cnt FROM knowledge_backlinks "
-                "GROUP BY source_site ORDER BY cnt DESC"
-            ).fetchall()
-            source_stats = {r[0]: r[1] for r in sources}
-
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "total_concepts": total_concepts,
-                    "total_backlinks": total_backlinks,
-                    "sources": source_stats,
-                }
-            )
-        except Exception as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-    @app.get("/api/knowledge/graph")
-    def knowledge_graph(limit: int = 50) -> JSONResponse:
-        """知识图谱数据（节点 + 边），用于可视化。"""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            conn = database.conn
-            # 取 TOP 概念作为节点
-            nodes_raw = conn.execute(
-                "SELECT concept, concept_type, source_site, COUNT(*) as w "
-                "FROM knowledge_concepts "
-                "GROUP BY concept "
-                "ORDER BY w DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            nodes = [
-                {"id": r[0], "type": r[1] or "concept", "source": r[2], "weight": r[3]}
-                for r in nodes_raw
-            ]
-
-            node_names = [n["id"] for n in nodes]
-
-            # 取边：同一篇文章中同时出现的概念对
-            if not node_names:
-                return JSONResponse({"ok": True, "nodes": [], "edges": []})
-
-            # 从 backlinks 构建边
-            edges_raw = conn.execute(
-                """SELECT kb1.target_concept as c1, kb2.target_concept as c2, COUNT(*) as w
-                FROM knowledge_backlinks kb1
-                JOIN knowledge_backlinks kb2 ON kb1.source_article_id = kb2.source_article_id
-                    AND kb1.target_concept < kb2.target_concept
-                WHERE kb1.target_concept IN ({}) AND kb2.target_concept IN ({})
-                GROUP BY c1, c2
-                ORDER BY w DESC
-                LIMIT 200""".format(
-                    ",".join("?" * len(node_names)), ",".join("?" * len(node_names))
-                ),
-                node_names + node_names,
-            ).fetchall()
-            edges = [{"source": r[0], "target": r[1], "weight": r[2]} for r in edges_raw]
-
-            return JSONResponse({"ok": True, "nodes": nodes, "edges": edges})
-        except Exception as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-    @app.post("/api/reading/auto-tag")
     def reading_auto_tag(
         limit: int = 500,
         status: str | None = None,
@@ -7798,49 +6568,6 @@ def create_app(
         return JSONResponse(
             {"ok": True, "scanned": len(rows), "updated": updated, "added": added_total}
         )
-
-    @app.get("/api/reading/similar")
-    def reading_similar(id: int, k: int = 8, candidate_limit: int = 500) -> JSONResponse:
-        """库内找相似：按 tag + 标题 bigram 的确定性相似度（零 LLM / 零网络）。"""
-        from openbiliclaw.reading.tags import similarity
-
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        target = database.get_article(id)
-        if not target:
-            return JSONResponse({"ok": False, "error": "article not found"}, status_code=404)
-        k = max(1, min(int(k), 30))
-        cands = database.get_recent_articles(limit=max(1, min(int(candidate_limit), 1000)))
-        t_title = str(target.get("title") or "")
-        t_tags = target.get("tags")
-        scored: list[tuple[float, dict[str, Any]]] = []
-        for c in cands:
-            if str(c.get("id")) == str(id):
-                continue
-            if str(c.get("status") or "") == "hidden":
-                continue
-            s = similarity(
-                t_title,
-                t_tags,
-                str(c.get("title") or ""),
-                c.get("tags"),
-            )
-            if s > 0:
-                scored.append((s, c))
-        scored.sort(key=lambda kv: kv[0], reverse=True)
-        items = [
-            {
-                "id": c.get("id"),
-                "title": c.get("title"),
-                "url": c.get("url"),
-                "source_type": c.get("source_type"),
-                "tags": c.get("tags"),
-                "similarity": round(s, 3),
-            }
-            for s, c in scored[:k]
-        ]
-        return JSONResponse({"ok": True, "target_id": id, "items": items})
 
     # ── 日记系统 API ─────────────────────────────────────────────
 
@@ -8026,76 +6753,6 @@ def create_app(
             return JSONResponse({"ok": False, "error": "分析失败"}, status_code=500)
         return JSONResponse({"ok": True, "analysis": analysis.model_dump(mode="json")})
 
-    @app.post("/api/diary/analyze-batch")
-    async def diary_analyze_batch(limit: int = 50, concurrency: int = 3) -> JSONResponse:
-        """批量分析所有未分析的日记。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service 未配置"}, status_code=503)
-        results = await svc.analyze_unanalyzed(
-            limit=max(1, min(int(limit), 200)), concurrency=max(1, min(int(concurrency), 10))
-        )
-        success = sum(1 for v in results.values() if v is not None)
-        return JSONResponse(
-            {
-                "ok": True,
-                "total": len(results),
-                "success": success,
-                "failed": len(results) - success,
-                "results": {
-                    str(k): (v.model_dump(mode="json") if v else None) for k, v in results.items()
-                },
-            }
-        )
-
-    @app.post("/api/diary/import")
-    def diary_import(payload: dict[str, Any]) -> JSONResponse:
-        """导入日记文件。
-
-        请求体：
-        - file_path: 本地文件路径
-        - format: lele / text / markdown（默认自动检测）
-        - source: 来源标识
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        file_path = payload.get("file_path", "")
-        if not file_path:
-            return JSONResponse({"ok": False, "error": "缺少 file_path"}, status_code=400)
-        fmt = payload.get("format", "auto")
-        source = payload.get("source", "")
-        importer = DiaryImporter(svc)
-        try:
-            if fmt == "lele" or (fmt == "auto" and "lele" in file_path.lower()):
-                count, entries = importer.import_lele_diary(
-                    file_path, source=source or "import_lele"
-                )
-            elif fmt == "markdown" or (fmt == "auto" and file_path.lower().endswith(".md")):
-                count, entries = importer.import_markdown_file(
-                    file_path, source=source or "import_markdown"
-                )
-            else:
-                count, entries = importer.import_text_file(
-                    file_path, source=source or "import_text"
-                )
-        except FileNotFoundError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-        except Exception as exc:
-            logger.exception("日记导入失败")
-            return JSONResponse({"ok": False, "error": f"导入失败: {exc}"}, status_code=500)
-        return JSONResponse(
-            {
-                "ok": True,
-                "imported": count,
-                "entries": [e.model_dump(mode="json") for e in entries],
-                "format": fmt,
-                "file_path": file_path,
-            }
-        )
-
     # ─── 日记数据洞察 API ───────────────────────────────────────────
 
     @app.get("/api/diary/insights/mood-trend")
@@ -8135,28 +6792,6 @@ def create_app(
             }
         )
 
-    @app.get("/api/diary/insights/streak")
-    def diary_insights_streak() -> JSONResponse:
-        """获取写作连续打卡统计。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import DiaryInsightsService
-
-        insights = DiaryInsightsService(svc.store)
-        streak = insights.get_writing_streak()
-        return JSONResponse(
-            {
-                "ok": True,
-                "current_streak": streak.current_streak,
-                "longest_streak": streak.longest_streak,
-                "total_days": streak.total_days,
-                "this_week_count": streak.this_week_count,
-                "this_month_count": streak.this_month_count,
-            }
-        )
-
-    @app.get("/api/diary/insights/word-trend")
     def diary_insights_word_trend(granularity: str = "month") -> JSONResponse:
         """获取字数趋势数据。"""
         svc = _get_diary_service()
@@ -8200,30 +6835,6 @@ def create_app(
         insights = DiaryInsightsService(svc.store)
         stats = insights.get_yearly_insight_stats(year)
         return JSONResponse({"ok": True, "year": year, "data": stats})
-
-    @app.post("/api/diary/insights/yearly/{year}/generate")
-    async def diary_insights_yearly_generate(year: int) -> JSONResponse:
-        """生成年度洞察报告（调用 LLM）。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import DiaryInsightsService
-
-        insights = DiaryInsightsService(svc.store)
-        stats = insights.get_yearly_insight_stats(year)
-        if stats.get("entry_count", 0) == 0:
-            return JSONResponse({"ok": False, "error": f"{year}年暂无日记"}, status_code=404)
-
-        prompt = DiaryInsightsService.build_yearly_report_prompt(year, stats)
-        try:
-            report = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse({"ok": True, "year": year, "report": report, "stats": stats})
-        except Exception as exc:
-            logger.exception("年度洞察报告生成失败")
-            return JSONResponse(
-                {"ok": False, "error": f"生成失败: {exc}", "stats": stats},
-                status_code=500,
-            )
 
     # ─── 日记反思 API（周报/月度反思/年度回顾/里程碑） ─────────────────
 
@@ -8292,39 +6903,6 @@ def create_app(
         result = reflection.generate_monthly_reflection(year, month)
         return JSONResponse({"ok": True, "data": result.__dict__})
 
-    @app.post("/api/diary/reflection/monthly/{year}/{month}/generate")
-    async def diary_reflection_monthly_generate(year: int, month: int) -> JSONResponse:
-        """生成 AI 月度反思。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import ReflectionService
-
-        reflection = ReflectionService(svc.store)
-        result = reflection.generate_monthly_reflection(year, month)
-        if result.entry_count == 0:
-            return JSONResponse(
-                {"ok": False, "error": f"{year}年{month}月暂无日记"}, status_code=404
-            )
-
-        prompt = reflection.build_monthly_reflection_prompt(result)
-        try:
-            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "data": result.__dict__,
-                    "ai_result": ai_result,
-                }
-            )
-        except Exception as exc:
-            logger.exception("月度反思生成失败")
-            return JSONResponse(
-                {"ok": False, "error": f"生成失败: {exc}", "data": result.__dict__},
-                status_code=500,
-            )
-
-    @app.get("/api/diary/reflection/yearly/{year}")
     def diary_reflection_yearly(year: int) -> JSONResponse:
         """获取年度回顾统计数据。"""
         svc = _get_diary_service()
@@ -8336,37 +6914,6 @@ def create_app(
         result = reflection.generate_yearly_review(year)
         return JSONResponse({"ok": True, "data": result.__dict__})
 
-    @app.post("/api/diary/reflection/yearly/{year}/generate")
-    async def diary_reflection_yearly_generate(year: int) -> JSONResponse:
-        """生成 AI 年度回顾。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import ReflectionService
-
-        reflection = ReflectionService(svc.store)
-        result = reflection.generate_yearly_review(year)
-        if result.entry_count == 0:
-            return JSONResponse({"ok": False, "error": f"{year}年暂无日记"}, status_code=404)
-
-        prompt = reflection.build_yearly_review_prompt(result)
-        try:
-            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "data": result.__dict__,
-                    "ai_result": ai_result,
-                }
-            )
-        except Exception as exc:
-            logger.exception("年度回顾生成失败")
-            return JSONResponse(
-                {"ok": False, "error": f"生成失败: {exc}", "data": result.__dict__},
-                status_code=500,
-            )
-
-    @app.get("/api/diary/reflection/milestones")
     def diary_reflection_milestones(
         start_date: str | None = None,
         end_date: str | None = None,
@@ -9236,46 +7783,6 @@ def create_app(
             }
         )
 
-    @app.post("/api/diary/fragments")
-    def diary_fragments_create(payload: dict[str, Any]) -> JSONResponse:
-        """创建一条碎片。
-
-        请求体：
-        - content: 碎片内容（必填）
-        - mood: 情绪标签（可选）
-        - fragment_date: 日期（可选，默认今天）
-        - source: 来源（可选）
-        - fragment_type: 碎片类型（可选，text/image/voice/link）
-        - media_path: 媒体文件路径（可选）
-        - media_description: 媒体内容描述（可选）
-        - tags: 标签列表（可选）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        content = payload.get("content", "").strip()
-        if not content:
-            return JSONResponse({"ok": False, "error": "缺少 content"}, status_code=400)
-        mood_str = payload.get("mood", "unknown")
-        try:
-            from openbiliclaw.diary import MoodLevel
-
-            mood = MoodLevel(mood_str)
-        except (ValueError, KeyError):
-            mood = MoodLevel.UNKNOWN
-        fragment = svc.create_fragment(
-            content=content,
-            mood=mood,
-            fragment_date=payload.get("fragment_date"),
-            source=payload.get("source", "manual"),
-            fragment_type=payload.get("fragment_type", "text"),
-            media_path=payload.get("media_path", ""),
-            media_description=payload.get("media_description", ""),
-            tags=payload.get("tags", []),
-        )
-        return JSONResponse({"ok": True, "data": fragment.model_dump(mode="json")})
-
-    @app.delete("/api/diary/fragments/{fragment_id}")
     def diary_fragments_delete(fragment_id: int) -> JSONResponse:
         """删除一条碎片。"""
         svc = _get_diary_service()
@@ -9316,30 +7823,6 @@ def create_app(
         except Exception as exc:
             logger.exception("碎片批量自动标签失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.post("/api/diary/fragments/generate-diary")
-    async def diary_fragments_generate_diary(payload: dict[str, Any] | None = None) -> JSONResponse:
-        """从当天碎片 AI 聚合生成一篇完整日记（证据驱动版）。
-
-        请求体（可选）：
-        - fragment_date: 碎片日期（默认今天）
-        - auto_delete: 生成后是否删除碎片（默认 true）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        payload = payload or {}
-        try:
-            entry = await svc.generate_diary_from_fragments(
-                fragment_date=payload.get("fragment_date"),
-                auto_delete=payload.get("auto_delete", True),
-            )
-            if entry is None:
-                return JSONResponse({"ok": False, "error": "当天没有碎片"}, status_code=404)
-            return JSONResponse({"ok": True, "data": entry.model_dump(mode="json")})
-        except Exception as exc:
-            logger.exception("碎片生成日记失败")
-            return JSONResponse({"ok": False, "error": f"生成失败: {exc}"}, status_code=500)
 
     # ── 日记标签与人物提取 API ────────────────────────────────
 
@@ -9445,31 +7928,6 @@ def create_app(
             logger.exception(f"提取日记 {entry_id} 失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
-    @app.post("/api/diary/extract-batch")
-    async def diary_extract_batch(payload: dict[str, Any] | None = None) -> JSONResponse:
-        """批量提取日记的标签和人物。
-
-        请求体（可选）：
-        - limit: 处理数量上限（默认 100）
-        - start_id: 起始日记 ID
-        - only_unextracted: 只处理未提取过的日记（默认 true）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        payload = payload or {}
-        try:
-            stats = await svc.batch_extract(
-                limit=payload.get("limit", 100),
-                start_id=payload.get("start_id"),
-                only_unextracted=payload.get("only_unextracted", True),
-            )
-            return JSONResponse({"ok": True, "data": stats})
-        except Exception as exc:
-            logger.exception("批量提取失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.get("/api/diary/extraction-stats")
     def diary_extraction_stats() -> JSONResponse:
         """获取标签和人物提取的统计信息。"""
         svc = _get_diary_service()
@@ -9485,28 +7943,6 @@ def create_app(
 
     _diary_rag_service = None
 
-    def _get_diary_rag_service():
-        """获取或创建日记 RAG 服务实例（懒加载）。"""
-        nonlocal _diary_rag_service
-        if _diary_rag_service is not None:
-            return _diary_rag_service
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return None
-        from openbiliclaw.diary import DiaryRAGService
-
-        rag = DiaryRAGService(database=database)
-        # 注入 embedding 和 llm 服务
-        embedding_service = getattr(ctx, "embedding_service", None)
-        llm_service = getattr(ctx, "llm_service", None)
-        if embedding_service is not None:
-            rag.set_embedding_service(embedding_service)
-        if llm_service is not None:
-            rag.set_llm_service(llm_service)
-        _diary_rag_service = rag
-        return rag
-
-    @app.get("/api/diary/rag/stats")
     def diary_rag_stats() -> JSONResponse:
         """获取向量生成统计信息。"""
         rag = _get_diary_rag_service()
@@ -9515,34 +7951,6 @@ def create_app(
         stats = rag.get_embedding_stats()
         return JSONResponse({"ok": True, "data": stats})
 
-    @app.post("/api/diary/rag/generate-embeddings")
-    async def diary_rag_generate_embeddings(payload: dict[str, Any] | None = None) -> JSONResponse:
-        """批量为日记生成 embedding 向量。
-
-        请求体（可选）：
-        - limit: 最多处理多少篇（默认 100）
-        - batch_size: 每批并发数（默认 10）
-        """
-        rag = _get_diary_rag_service()
-        if rag is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if rag.embedding_service is None:
-            return JSONResponse(
-                {"ok": False, "error": "Embedding 服务未配置，请先配置 LLM provider"},
-                status_code=400,
-            )
-        payload = payload or {}
-        try:
-            stats = await rag.batch_generate_embeddings(
-                limit=payload.get("limit", 100),
-                batch_size=payload.get("batch_size", 10),
-            )
-            return JSONResponse({"ok": True, "data": stats})
-        except Exception as exc:
-            logger.exception("批量生成 embedding 失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.get("/api/diary/rag/search")
     async def diary_rag_search(
         q: str,
         top_k: int = 10,
@@ -9599,76 +8007,6 @@ def create_app(
             )
         except Exception as exc:
             logger.exception("语义搜索失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.get("/api/diary/rag/similar/{entry_id}")
-    def diary_rag_similar(entry_id: int, top_k: int = 5, min_score: float = 0.5) -> JSONResponse:
-        """查找与指定日记相似的历史日记。
-
-        参数：
-        - entry_id: 目标日记 ID
-        - top_k: 返回最多多少条（默认 5）
-        - min_score: 最低相似度阈值（默认 0.5）
-        """
-        rag = _get_diary_rag_service()
-        if rag is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            results = rag.find_similar_entries(entry_id=entry_id, top_k=top_k, min_score=min_score)
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "entry_id": entry_id,
-                    "count": len(results),
-                    "results": [
-                        {
-                            "id": r.entry.id,
-                            "date": r.entry.entry_date,
-                            "title": r.entry.title,
-                            "content": r.entry.content[:300]
-                            + ("..." if len(r.entry.content) > 300 else ""),
-                            "score": round(r.score, 4),
-                        }
-                        for r in results
-                    ],
-                }
-            )
-        except Exception as exc:
-            logger.exception("相似日记查询失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    @app.post("/api/diary/rag/ask")
-    async def diary_rag_ask(payload: dict[str, Any]) -> JSONResponse:
-        """基于日记内容回答问题（RAG 问答）。
-
-        请求体：
-        - question: 用户问题（必填）
-        - top_k: 检索多少篇相关日记（默认 8）
-        """
-        rag = _get_diary_rag_service()
-        if rag is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if rag.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM 服务未配置"}, status_code=400)
-        question = payload.get("question", "").strip()
-        if not question:
-            return JSONResponse({"ok": False, "error": "缺少 question"}, status_code=400)
-        try:
-            answer = await rag.ask_question(
-                question=question,
-                top_k=payload.get("top_k", 8),
-            )
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "question": question,
-                    "answer": answer.answer,
-                    "sources": answer.sources,
-                    "related_questions": answer.related_questions,
-                }
-            )
-        except Exception as exc:
-            logger.exception("RAG 问答失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
     # ── 健康管理系统 API ───────────────────────────────────────
@@ -10670,128 +9008,6 @@ def create_app(
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
 
-    @app.get("/api/subscriptions/stats", response_model=SubscriptionStatsOut)
-    def list_subscriptions_with_stats() -> SubscriptionStatsOut:
-        """List all subscriptions with item count and last fetch statistics."""
-        from openbiliclaw.config import load_config as _load_cfg
-
-        _cfg = _load_cfg()
-        stats_map: dict[str, tuple[int, str]] = {}  # url -> (count, last_fetched)
-
-        # Query from content_cache
-        database = getattr(ctx, "database", None)
-        conn = getattr(database, "conn", None) if database else None
-
-        if conn is not None:
-            for platform, config_list in [
-                ("rss", _cfg.scheduler.rss_subscriptions),
-                ("xiaoyuzhou", _cfg.scheduler.xiaoyuzhou_subscriptions),
-                ("wechat", _cfg.scheduler.wechat_subscriptions),
-            ]:
-                for item in config_list:
-                    name = item.get("name", "")
-                    url = item.get("url", "")
-                    if not url:
-                        continue
-                    cursor = conn.execute(
-                        """
-                        SELECT COUNT(*) AS item_count, MAX(discovered_at) AS last_fetched
-                        FROM content_cache
-                        WHERE source_platform = ? AND up_name = ?
-                        """,
-                        (platform, name),
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        stats_map[f"{platform}:{url}"] = (int(row[0] or 0), str(row[1] or ""))
-
-        # Build response
-        result = SubscriptionStatsOut()
-
-        def map_subs(subs: list[dict[str, str]], platform: str) -> list[SubscriptionItemOut]:
-            out = []
-            for sub in subs:
-                key = f"{platform}:{sub['url']}"
-                count, last = stats_map.get(key, (0, ""))
-                out.append(
-                    SubscriptionItemOut(
-                        name=sub["name"],
-                        url=sub["url"],
-                        item_count=int(count),
-                        last_fetched_at=last or "",
-                    )
-                )
-            return out
-
-        result.rss = map_subs(list(_cfg.scheduler.rss_subscriptions), "rss")
-        result.xiaoyuzhou = map_subs(list(_cfg.scheduler.xiaoyuzhou_subscriptions), "xiaoyuzhou")
-        result.wechat = map_subs(list(_cfg.scheduler.wechat_subscriptions), "wechat")
-        return result
-
-    @app.post("/api/subscriptions")
-    async def add_subscription(payload: SubscriptionAddIn) -> JSONResponse:
-        """Add a new subscription source."""
-        from openbiliclaw.config import load_config as _load_cfg
-        from openbiliclaw.config import save_config as _save_cfg
-
-        async with _CONFIG_SAVE_LOCK:
-            _cfg = _load_cfg()
-            source_type = payload.source_type
-            source_map = {
-                "rss": "rss_subscriptions",
-                "xiaoyuzhou": "xiaoyuzhou_subscriptions",
-                "wechat": "wechat_subscriptions",
-            }
-            field_name = source_map.get(source_type)
-            if field_name is None:
-                return JSONResponse(
-                    {"ok": False, "error": f"unknown source_type: {source_type}"},
-                    status_code=400,
-                )
-            subscriptions: list[dict[str, str]] = getattr(_cfg.scheduler, field_name)
-            # Check if already exists
-            for sub in subscriptions:
-                if sub.get("url") == payload.url:
-                    return JSONResponse(
-                        {"ok": False, "error": "subscription already exists"},
-                        status_code=409,
-                    )
-            subscriptions.append({"name": payload.name, "url": payload.url})
-            setattr(_cfg.scheduler, field_name, subscriptions)
-            _save_cfg(_cfg)
-        return JSONResponse({"ok": True})
-
-    @app.delete("/api/subscriptions")
-    async def delete_subscription(payload: SubscriptionDeleteIn) -> JSONResponse:
-        """Delete a subscription source by type and URL."""
-        from openbiliclaw.config import load_config as _load_cfg
-        from openbiliclaw.config import save_config as _save_cfg
-
-        async with _CONFIG_SAVE_LOCK:
-            _cfg = _load_cfg()
-            source_type = payload.source_type
-            source_map = {
-                "rss": "rss_subscriptions",
-                "xiaoyuzhou": "xiaoyuzhou_subscriptions",
-                "wechat": "wechat_subscriptions",
-            }
-            field_name = source_map.get(source_type)
-            if field_name is None:
-                return JSONResponse(
-                    {"ok": False, "error": f"unknown source_type: {source_type}"},
-                    status_code=400,
-                )
-            subscriptions: list[dict[str, str]] = getattr(_cfg.scheduler, field_name)
-            new_list = [s for s in subscriptions if s.get("url") != payload.url]
-            if len(new_list) == len(subscriptions):
-                return JSONResponse(
-                    {"ok": False, "error": "subscription not found"},
-                    status_code=404,
-                )
-            setattr(_cfg.scheduler, field_name, new_list)
-            _save_cfg(_cfg)
-        return JSONResponse({"ok": True})
-
     # ── Notes CRUD routes ──────────────────────────────────────
     register_notes_routes(app, ctx)
 
@@ -11422,163 +9638,6 @@ def create_app(
             "total": len(processors),
         }
 
-    @app.post("/api/url/extract")
-    async def extract_url_content(payload: dict[str, Any]):
-        """Extract content from a single URL.
-
-        Request body:
-            url: The URL to extract content from.
-            cookies: Optional dict of authentication cookies.
-            save: Whether to save the extracted content to the articles table (default: false).
-        """
-        from openbiliclaw.sources.url_processors import match_processor
-        from openbiliclaw.sources.url_processors.base import ProcessorStatus
-
-        url = payload.get("url", "").strip()
-        if not url:
-            return JSONResponse({"error": "url is required"}, status_code=400)
-
-        cookies = payload.get("cookies", {})
-        should_save = payload.get("save", False)
-
-        try:
-            processor = match_processor(url)
-            result = await processor.process(url, cookies=cookies)
-
-            response_data = {
-                "status": result.status.value,
-                "source_type": result.source_type,
-                "source_name": result.source_name,
-                "title": result.title,
-                "author": result.author,
-                "summary": result.summary,
-                "content_text": result.content_text,
-                "content_html": result.content_html,
-                "published_at": result.published_at,
-                "tags": result.tags,
-                "url": result.url,
-                "metadata": result.metadata,
-                "error": result.error,
-            }
-
-            # Save to articles table if requested
-            if should_save and result.status == ProcessorStatus.success:
-                article_id = await _save_extracted_article(result)
-                response_data["saved"] = True
-                response_data["article_id"] = article_id
-            else:
-                response_data["saved"] = False
-
-            return response_data
-
-        except Exception as e:
-            logger.exception("URL extraction failed for %s", url)
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    async def get_article_snapshot(article_id: int):
-        """Get the offline HTML snapshot for an article.
-
-        Args:
-            article_id: The article ID.
-
-        Returns:
-            JSON with snapshot data (content_html, content_text, fetched_at).
-
-        """
-        import sqlite3
-
-        db_path = "data/openbiliclaw.db"
-        try:
-            cfg = getattr(ctx, "config", None)
-            if cfg and hasattr(cfg, "storage") and cfg.storage:
-                db_path = str(cfg.storage.db_path)
-        except Exception:
-            pass
-
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-
-            # 先查文章基本信息
-            article = cursor.execute(
-                "SELECT id, title, url, source_type FROM articles WHERE id = ?",
-                (article_id,),
-            ).fetchone()
-            if not article:
-                conn.close()
-                return JSONResponse({"error": "Article not found"}, status_code=404)
-
-            # 查快照
-            snapshot = cursor.execute(
-                """SELECT id, content_html, content_text, fetch_source, fetched_at
-                   FROM article_snapshots WHERE article_id = ? ORDER BY id DESC LIMIT 1""",
-                (article_id,),
-            ).fetchone()
-            conn.close()
-
-            if not snapshot:
-                return {
-                    "article_id": article_id,
-                    "title": article[1],
-                    "url": article[2],
-                    "source_type": article[3],
-                    "has_snapshot": False,
-                    "message": "No offline snapshot available for this article",
-                }
-
-            return {
-                "article_id": article_id,
-                "title": article[1],
-                "url": article[2],
-                "source_type": article[3],
-                "has_snapshot": True,
-                "snapshot_id": snapshot[0],
-                "content_html": snapshot[1],
-                "content_text": snapshot[2],
-                "fetch_source": snapshot[3],
-                "fetched_at": snapshot[4],
-            }
-
-        except Exception as e:
-            logger.exception("Failed to get snapshot for article %s: %s", article_id, e)
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @app.get("/api/snapshots/stats")
-    async def get_snapshots_stats():
-        """Get statistics about offline snapshots."""
-        import sqlite3
-
-        db_path = "data/openbiliclaw.db"
-        try:
-            cfg = getattr(ctx, "config", None)
-            if cfg and hasattr(cfg, "storage") and cfg.storage:
-                db_path = str(cfg.storage.db_path)
-        except Exception:
-            pass
-
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-
-            total = cursor.execute("SELECT COUNT(*) FROM article_snapshots").fetchone()[0]
-            with_html = cursor.execute(
-                "SELECT COUNT(*) FROM article_snapshots WHERE content_html != '' AND content_html IS NOT NULL"
-            ).fetchone()[0]
-            sources = cursor.execute(
-                "SELECT fetch_source, COUNT(*) FROM article_snapshots GROUP BY fetch_source"
-            ).fetchall()
-            conn.close()
-
-            return {
-                "total_snapshots": total,
-                "with_html": with_html,
-                "by_source": {s[0]: s[1] for s in sources},
-            }
-
-        except Exception as e:
-            logger.exception("Failed to get snapshot stats: %s", e)
-            return JSONResponse({"error": str(e)}, status_code=500)
-
     # ── LLM Quota Monitoring ──────────────────────────────────────
     @app.get("/api/llm/quota")
     async def llm_quota_status(hours: int = 5):
@@ -11690,5 +9749,6 @@ def create_app(
     app.include_router(
         create_synthesis_router(_self_evo_db_path, getattr(ctx, "llm_service", None))
     )
+
 
     return app
