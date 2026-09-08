@@ -394,3 +394,20 @@ class DiscoveryKeywordsMixin:
             (int(keyword_id),),
         ).fetchone()
         return int(row["yield_count"]) if row is not None else 0
+
+    def keyword_yield_total(self, platform: str) -> int:
+        """Return the platform-wide sum of ``yield_count`` across all keywords."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            self._ensure_fresh_read()
+            row = self.conn.execute(
+                "SELECT COALESCE(SUM(yield_count), 0) AS total "
+                "FROM discovery_keywords WHERE platform = ?",
+                (platform.strip(),),
+            ).fetchone()
+        except Exception:
+            logger.debug("keyword_yield_total failed for %s", platform, exc_info=True)
+            return 0
+        return int(row["total"]) if row is not None else 0

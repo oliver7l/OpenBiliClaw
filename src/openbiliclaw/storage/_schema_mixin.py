@@ -323,3 +323,62 @@ class SchemaMixin:
                 )
             except Exception:  # noqa: BLE001 — 单个索引失败不阻断启动
                 pass
+
+    # ── Table creation (small tables) ─────────────────────────────
+
+    def _ensure_source_recipes_table(self) -> None:
+        """Create the source_recipes table if it does not exist."""
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS source_recipes (
+                id            TEXT PRIMARY KEY,
+                source_type   TEXT NOT NULL,
+                name          TEXT NOT NULL,
+                strategy      TEXT NOT NULL,
+                config        TEXT DEFAULT '{}',
+                target_share  INTEGER DEFAULT 4,
+                enabled       INTEGER DEFAULT 1,
+                created_by    TEXT DEFAULT 'system',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_fetched_at TIMESTAMP
+            );
+        """)
+
+    def _ensure_xhs_observed_urls_table(self) -> None:
+        """Create the xhs_observed_urls table if it does not exist."""
+        from openbiliclaw.storage.database import _XHS_OBSERVED_URLS_DDL
+
+        self.conn.executescript(_XHS_OBSERVED_URLS_DDL)
+
+    def _ensure_chat_turns_table(self) -> None:
+        """Create durable popup chat-turn storage for existing databases."""
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS chat_turns (
+                turn_id       TEXT PRIMARY KEY,
+                session       TEXT NOT NULL DEFAULT 'popup',
+                scope         TEXT NOT NULL DEFAULT 'chat',
+                subject_id    TEXT NOT NULL DEFAULT '',
+                subject_title TEXT NOT NULL DEFAULT '',
+                message       TEXT NOT NULL DEFAULT '',
+                status        TEXT NOT NULL DEFAULT 'pending',
+                reply         TEXT NOT NULL DEFAULT '',
+                error         TEXT NOT NULL DEFAULT '',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_chat_turns_session_created
+                ON chat_turns(session, created_at, turn_id);
+            CREATE INDEX IF NOT EXISTS idx_chat_turns_scope_subject
+                ON chat_turns(scope, subject_id, created_at);
+        """)
+
+    def _ensure_watch_later_table(self) -> None:
+        """Create the watch_later bookmarks table for existing databases."""
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS watch_later (
+                bvid     TEXT PRIMARY KEY,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                note     TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_watch_later_added
+                ON watch_later(added_at DESC);
+        """)
