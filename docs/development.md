@@ -50,8 +50,8 @@ mypy src/
 # 测试（当前基线见 §8）
 pytest
 pytest --cov=openbiliclaw
-# 跳过收集错误继续跑全量（当前仓库存在收集错误，见 §8）
-pytest -q --continue-on-collection-errors
+# 提交前回归护栏（ruff + mypy + pytest，与 CI 对齐）
+scripts/ci-check.sh
 
 # 本地体验 CLI
 openbiliclaw start
@@ -140,7 +140,7 @@ openbiliclaw config-show
 pytest：3359 passed / 171 failed / 32 skipped / 20 errors（含收集错误）
 ```
 
-- 收集错误：`tests/test_llm_prompts.py`（stub 丢失私有名 `_AWARENESS_SYSTEM_PROMPT`）；`test_api_xhs_ingest.py` / `test_x_creators.py` / `test_xhs_tasks.py` 等
+- 收集错误：~~`tests/test_llm_prompts.py`（stub 丢失私有名）等 20 个~~ **已修复（2026-09-08）**：`llm/prompts.py` stub 显式 re-export 5 个私有名后，收集 3,675 用例 **0 错误**
 - 失败集中：llm registry/routing、notes、source_recipe、refresh_runtime、openclaw_adapter、profile_consolidator、search_strategy 等，多为抽取（K1）与近期功能未同步测试所致
 - **任何改动合入前请先确认失败面没有扩大**；建议以 `pytest -q --continue-on-collection-errors` 跑全量
 - 测试组织：`tests/` 扁平 201 个文件 + `tests/js/`、`tests/fixtures/`；命名 `test_<behavior>.py`
@@ -149,6 +149,13 @@ pytest：3359 passed / 171 failed / 32 skipped / 20 errors（含收集错误）
 ## 9. 已知问题登记（Open，仅记录不修复）
 
 > 以下为 2026-09-08 体检结果，作为后续重构/治理的输入。编号 K1-K11。
+
+> **处置进展（2026-09-08 小项批次）**
+> - K1：已修复 pytest 收集错误（`llm/prompts.py` stub 显式 re-export `_AWARENESS_SYSTEM_PROMPT` / `_BATCH_CONTENT_EVALUATION_SYSTEM_PROMPT` / `_MERGED_KEYWORDS_SYSTEM_PROMPT` / `_platform_content_label` / `_platform_friend_label`）；收集 3,675 用例 0 错误。171 个失败主体仍待 registry 的 Config 适配层（K1 核心）。
+> - K4：pyproject `[tool.mypy]` 已加 `exclude` 放行 `web/clone`，mypy 可跑全量；`web/clone` 移出 src 待阶段 1。
+> - K9：mypy 已解锁，当前 **775 errors / 170 文件**（历史存量，其中部分来自 K3 孤儿路由文件）；ruff 622 未动。
+> - K11：根目录游离 `openbiliclaw.db`（0B）/ `pool.db` 已删除（经 lsof 确认无进程占用）；`config.toml.bak*` 未动。
+> - 新增 `scripts/ci-check.sh`：提交前回归护栏（ruff + mypy + pytest `--continue-on-collection-errors`）。
 
 | # | 问题 | 证据位置 | 影响 |
 |---|---|---|---|
