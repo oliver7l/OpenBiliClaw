@@ -13733,6 +13733,14 @@ def create_app(
     except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
         logger.exception("Interview routes registration failed")
 
+    # ── 面试复盘记录 API ─────────────────────────────────────────
+    try:
+        from openbiliclaw.interview.review_routes import build_review_router
+
+        app.include_router(build_review_router())
+    except Exception:  # noqa: BLE001
+        logger.exception("Interview review routes registration failed")
+
     # ── 克隆系统 API ─────────────────────────────────────────────
 
     _clone_service: CloneService | None = None

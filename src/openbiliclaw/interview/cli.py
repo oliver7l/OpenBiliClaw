@@ -363,6 +363,174 @@ def interview_root() -> None:
         console.print("来源: 默认路径（DEFAULT_INTERVIEW_ROOT）")
 
 
+# ── 面试复盘记录 ──────────────────────────────────────────
+
+
+def _review_service() -> InterviewReviewService | None:
+    """创建复盘服务（使用 data/openbiliclaw.db）。"""
+    from openbiliclaw.interview.review_service import InterviewReviewService
+
+    project_root = Path(__file__).resolve().parents[3]
+    db_path = project_root / "data" / "openbiliclaw.db"
+    return InterviewReviewService(str(db_path))
+
+
+@interview_app.command("review-list")
+def review_list(
+    company: str = typer.Option(None, "--company", "-c", help="按公司过滤"),
+    result: str = typer.Option(None, "--result", "-r", help="按结果过滤"),
+    limit: int = typer.Option(20, "--limit", "-l", help="最多返回条数"),
+) -> None:
+    """列出面试复盘记录。"""
+    svc = _review_service()
+    if svc is None:
+        return
+    reviews = svc.list_reviews(company=company, result=result, limit=limit)
+    if not reviews:
+        console.print("[yellow]暂无面试复盘记录[/yellow]")
+        return
+    table = Table(title=f"面试复盘记录（{len(reviews)} 条）")
+    for col in ("ID", "公司", "岗位", "日期", "轮次", "结果", "时长", "情绪", "标签"):
+        table.add_column(col, overflow="fold")
+    for r in reviews:
+        table.add_row(
+            str(r.id),
+            r.company,
+            r.position,
+            str(r.interview_date),
+            r.round,
+            r.result,
+            f"{r.duration_min}min",
+            r.emotion_level or "-",
+            r.tags,
+        )
+    console.print(table)
+
+
+@interview_app.command("review-show")
+def review_show(
+    review_id: int = typer.Argument(..., help="复盘记录 ID"),
+) -> None:
+    """查看面试复盘详情。"""
+    svc = _review_service()
+    if svc is None:
+        return
+    r = svc.get(review_id)
+    if r is None:
+        console.print(f"[red]复盘记录 #{review_id} 不存在[/red]")
+        return
+    console.print(
+        Panel.fit(
+            f"#{r.id} · [bold]{r.company}[/bold] · {r.position}\n"
+            f"日期: {r.interview_date} · 轮次: {r.round} · 结果: {r.result}\n"
+            f"时长: {r.duration_min}min · 情绪: {r.emotion_level or '-'}\n"
+            f"标签: {r.tags or '-'}",
+            border_style="cyan",
+        )
+    )
+    if r.key_questions:
+        console.print(f"[bold]【被问要点】[/bold]\n{r.key_questions}")
+    if r.self_assessment:
+        console.print(f"[bold]【自我评估】[/bold]\n{r.self_assessment}")
+    if r.emotional_review:
+        console.print(f"[bold]【情绪复盘】[/bold]\n{r.emotional_review}")
+    if r.technical_review:
+        console.print(f"[bold]【技术复盘】[/bold]\n{r.technical_review}")
+    if r.action_items:
+        console.print(f"[bold]【行动计划】[/bold]\n{r.action_items}")
+    if r.ai_evaluation:
+        console.print(f"[bold]【AI评价】[/bold]\n{r.ai_evaluation[:500]}…")
+    if r.transcript_text:
+        console.print(f"[bold]【转录文本】[/bold] ({len(r.transcript_text)} 字)")
+    if r.transcript_path:
+        console.print(f"转录文件: {r.transcript_path}")
+    if r.audio_path:
+        console.print(f"音频文件: {r.audio_path}")
+    if r.notes:
+        console.print(f"[bold]【备注】[/bold]\n{r.notes}")
+
+
+@interview_app.command("review-search")
+def review_search(
+    query: str = typer.Argument(..., help="检索关键词"),
+    limit: int = typer.Option(20, "--limit", "-l", help="最多返回条数"),
+) -> None:
+    """全文检索面试复盘记录。"""
+    svc = _review_service()
+    if svc is None:
+        return
+    results = svc.search(query, limit=limit)
+    if not results:
+        console.print(f"[yellow]未找到匹配 '{query}' 的复盘记录[/yellow]")
+        return
+    console.print(f"[bold]检索 '{query}' 命中 {len(results)} 条:[/bold]")
+    for r in results:
+        console.print(
+            f"  #{r.id} [cyan]{r.company}[/cyan] · {r.position} · "
+            f"{r.interview_date} · {r.result}"
+        )
+
+
+@interview_app.command("review-stats")
+def review_stats() -> None:
+    """面试复盘统计。"""
+    svc = _review_service()
+    if svc is None:
+        return
+    s = svc.stats()
+    console.print(
+        Panel.fit(
+            f"总复盘记录: {s.total} 条\n"
+            f"最近30天: {s.recent_count} 条\n"
+            f"平均时长: {s.avg_duration} min\n"
+            f"按结果: {s.by_result or '(无)'}\n"
+            f"按公司: {s.by_company or '(无)'}\n"
+            f"按情绪: {s.by_emotion or '(无)'}",
+            title="面试复盘统计",
+            border_style="green",
+        )
+    )
+
+
+@interview_app.command("review-add")
+def review_add(
+    company: str = typer.Argument(..., help="公司名"),
+    position: str = typer.Argument(..., help="岗位名"),
+    date_str: str = typer.Argument(..., help="面试日期 YYYY-MM-DD"),
+    round_val: str = typer.Option("first", "--round", "-r", help="轮次"),
+    result: str = typer.Option("pending", "--result", help="结果"),
+    duration: int = typer.Option(0, "--duration", "-d", help="时长（分钟）"),
+    questions: str = typer.Option("", "--questions", "-q", help="被问要点"),
+    emotional: str = typer.Option("", "--emotional", help="情绪复盘"),
+    technical: str = typer.Option("", "--technical", help="技术复盘"),
+    action: str = typer.Option("", "--action", help="行动计划"),
+    tags: str = typer.Option("", "--tags", help="标签（逗号分隔）"),
+) -> None:
+    """添加一条面试复盘记录。"""
+    from datetime import date as date_cls
+
+    from openbiliclaw.interview.review_models import InterviewReviewCreate
+
+    svc = _review_service()
+    if svc is None:
+        return
+    data = InterviewReviewCreate(
+        company=company,
+        position=position,
+        interview_date=date_cls.fromisoformat(date_str),
+        round=round_val,
+        result=result,
+        duration_min=duration,
+        key_questions=questions,
+        emotional_review=emotional,
+        technical_review=technical,
+        action_items=action,
+        tags=tags,
+    )
+    r = svc.create(data)
+    console.print(f"[green]已创建面试复盘 #{r.id}: {r.company} / {r.position}[/green]")
+
+
 def register(app: typer.Typer) -> None:
     """注册 interview 命令组到主 CLI。"""
     app.add_typer(interview_app, name="interview")
