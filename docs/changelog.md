@@ -4,6 +4,14 @@
 
 ---
 
+## v0.3.220: 阶段1-K2 soul 双份实现收口（2026-09-08）
+
+- **K2 收口**：`src/openbiliclaw/soul/` 25 个模块由全量真实实现（约 1.36 万行）转为**模块别名 stub**（`sys.modules[__name__] = obc_soul.<mod>`）。diff 归一化确认两份实现无实质漂移后删除 src 侧副本，实现唯一化到 `packages/obc-soul`；`openbiliclaw.soul.*` 全部旧 import 路径继续可用，且与包实现为同一模块对象——SoulEngine 等类身份唯一（K2 的类身份分裂即此），`monkeypatch.setattr(模块对象, ...)` 补丁语义不变，cli.py 等 10+ 处直引零改动。
+- **obc-soul 补 `py.typed`**：包声明内联类型，mypy strict 下 `src/openbiliclaw/soul/` 26 文件零错误（obc-llm / obc-discovery 同样缺 py.typed，后续同法补齐可再降全仓 mypy 噪声）。
+- **验证**：`tests/soul/` + `tests/misc/test_pipeline_advanced.py` 383/384 通过（唯一失败为预存 fixture 缺失 `tests/soul/fixtures/awareness_singular_note.json`，与本改动无关）；模块别名一致性冒烟 25/25；api 消费链路（app.py → runtime_context → soul）探针测试通过；ruff check/format、mypy strict（soul 范围）通过。
+
+---
+
 ## v0.3.219: 修复桌面 Web 反馈接口 404（2026-09-08）
 
 - **修复推荐流点赞/不喜欢无反应**：`web/desktop/assets/js/app.js` 中 `userFeedback` / `userFeedbackBatch` / `interestTags` / `viewRecord` / `viewDwell` / `viewHistory` 六个 ENDPOINTS 误带 `/api` 前缀，经 `requestJson` 拼接 API base（默认 `/api`）后请求 `/api/api/...` 返回 404，且前端静默吞错导致点击无任何反馈；已去掉前缀与其余条目保持一致。

@@ -4,6 +4,12 @@
 
 ## 概述
 
+> **实现位置（2026-09-08，阶段 1-K2 收口）**：本模块的真实实现已抽取至
+> `packages/obc-soul/obc_soul/`（含 `py.typed`）；`src/openbiliclaw/soul/` 保留
+> 25 个**模块别名 stub**（`sys.modules[__name__] = obc_soul.<mod>`），
+> `openbiliclaw.soul.*` 旧 import 路径全部继续可用且与包实现为同一模块对象
+> （类身份唯一）。本文档描述的行为语义不变，源码请读 obc-soul 包。
+
 `soul/` 包实现了用户理解的核心逻辑，包括：
 
 - **SoulEngine** — 编排器，从事件出发驱动各层分析
