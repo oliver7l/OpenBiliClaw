@@ -24,6 +24,7 @@ from openbiliclaw.storage._chat_turn_mixin import ChatTurnMixin
 from openbiliclaw.storage._content_cache_mixin import ContentCacheMixin
 from openbiliclaw.storage._discovery_candidates_mixin import DiscoveryCandidatesMixin
 from openbiliclaw.storage._recommendation_mixin import RecommendationMixin
+from openbiliclaw.storage._favorites_mixin import FavoritesMixin
 from openbiliclaw.storage._user_feedback_mixin import UserFeedbackMixin
 from openbiliclaw.storage._events_mixin import EventsMixin
 from openbiliclaw.storage._llm_usage_mixin import LLMUsageMixin
@@ -547,7 +548,7 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -5067,63 +5068,6 @@ class Database(UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin,
             conn.close()
 
     # ── Favorites CRUD ───────────────────────────────────────────
-
-    def add_to_favorites(self, bvid: str, note: str = "") -> bool:
-        """Save a video to favorites. Returns True if newly inserted."""
-        self._execute_write(
-            """
-            INSERT INTO favorites (bvid, note)
-            VALUES (?, ?)
-            ON CONFLICT(bvid) DO UPDATE SET
-                added_at = CURRENT_TIMESTAMP,
-                note = excluded.note
-            """,
-            (bvid.strip(), note),
-        )
-        return self.conn.total_changes > 0
-
-    def remove_from_favorites(self, bvid: str) -> bool:
-        """Remove a favorite. Returns True if a row was deleted."""
-        self._execute_write(
-            "DELETE FROM favorites WHERE bvid = ?",
-            (bvid.strip(),),
-        )
-        return self.conn.total_changes > 0
-
-    def is_in_favorites(self, bvid: str) -> bool:
-        """Check whether a video is favorited."""
-        row = self.conn.execute(
-            "SELECT 1 FROM favorites WHERE bvid = ?",
-            (bvid.strip(),),
-        ).fetchone()
-        return row is not None
-
-    def count_favorites(self) -> int:
-        """Return total number of favorited videos."""
-        row = self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()
-        return int(row[0]) if row else 0
-
-    def list_favorites(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Return favorited videos with content_cache metadata, newest first."""
-        cursor = self.conn.execute(
-            """
-            SELECT
-                f.bvid,
-                f.added_at,
-                f.note,
-                COALESCE(c.title, '') AS title,
-                COALESCE(c.up_name, '') AS up_name,
-                COALESCE(c.cover_url, '') AS cover_url,
-                COALESCE(c.content_url, '') AS content_url,
-                COALESCE(c.source_platform, '') AS source_platform
-            FROM favorites AS f
-            LEFT JOIN content_cache AS c ON c.bvid = f.bvid
-            ORDER BY f.added_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-        return [dict(row) for row in cursor.fetchall()]
 
     def upsert_article(
         self,
