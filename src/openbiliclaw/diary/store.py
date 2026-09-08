@@ -12,9 +12,6 @@ import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
-
 from typing import TYPE_CHECKING
 
 from .models import (
@@ -29,6 +26,8 @@ from .models import (
     MoodLevel,
     TagType,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..storage.database import Database

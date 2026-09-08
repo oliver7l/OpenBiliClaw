@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,6 @@ _ANSWER_ID_RE = re.compile(r"^\d{15,25}$")
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
-
-
-from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 
 # ---------------------------------------------------------------------------

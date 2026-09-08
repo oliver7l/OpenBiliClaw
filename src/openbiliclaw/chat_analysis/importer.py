@@ -14,8 +14,6 @@ import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-logger = logging.getLogger(__name__)
-
 from .models import (
     ChatAnalysisChunkCreate,
     ChatMessageCreate,
@@ -25,6 +23,8 @@ from .models import (
     ImportStats,
     MessageType,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .store import ChatAnalysisStore

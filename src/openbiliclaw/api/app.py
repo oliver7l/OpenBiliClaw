@@ -923,25 +923,15 @@ def _normalize_cognition_update(item: dict[str, object]) -> CognitionUpdateSumma
 # 任何写操作自动清空缓存，保证数据一致性。
 # 使用统一缓存层 TwoLevelCache：内存 L1（微秒级）+ 磁盘 L2（diskcache，持久化，重启不失效）
 # ─── API 通用工具函数（从本文件逐步提取的纯函数）────────────
-from openbiliclaw.api.utils import (
+from openbiliclaw.api.utils import (  # noqa: E402
     coerce_e2e_event_rows as _coerce_e2e_event_rows,
-)
-from openbiliclaw.api.utils import (
     event_row_id as _event_row_id,
-)
-from openbiliclaw.api.utils import (
     event_row_metadata as _event_row_metadata,
-)
-from openbiliclaw.api.utils import (
     infer_source_platform_from_url as _infer_source_platform_from_url,
-)
-from openbiliclaw.api.utils import (
     normalize_source_platform as _normalize_source_platform,
-)
-from openbiliclaw.api.utils import (
     select_init_platforms as _select_init_platforms,
 )
-from openbiliclaw.storage.cache import get_cache as _get_cache
+from openbiliclaw.storage.cache import get_cache as _get_cache  # noqa: E402
 
 _api_cache = _get_cache()
 _DIARY_CACHE_TTL = 30.0

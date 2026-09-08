@@ -17,8 +17,6 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-logger = logging.getLogger(__name__)
-
 from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
 
 from .importer import ChatImporter, DeepseekAnalysisImportResult, ImportStats
@@ -34,6 +32,8 @@ from .models import (
     ChatTopic,
 )
 from .store import ChatAnalysisStore
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pathlib import Path

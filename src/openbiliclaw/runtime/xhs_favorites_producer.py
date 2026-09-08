@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
+from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,6 @@ CLEAN_ENV = {
 # DB helpers
 # ---------------------------------------------------------------------------
 
-
-from openbiliclaw.runtime._db import connect_pool as _obc_connect
 
 # ---------------------------------------------------------------------------
 # Fetch
