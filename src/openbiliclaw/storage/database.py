@@ -1421,33 +1421,6 @@ class Database(ViewHistoryMixin, QualityMixin, PruneMixin, PoolCandidateMixin, T
         )
         return int(cursor.rowcount or 0)
 
-    def get_latest_event_id(self) -> int:
-        """Return the latest event primary key."""
-        cursor = self.conn.execute("SELECT COALESCE(MAX(id), 0) AS latest_id FROM events")
-        row = cursor.fetchone()
-        return int(row["latest_id"]) if row is not None else 0
-
-    def query_events_since(
-        self,
-        *,
-        after_event_id: int,
-        event_types: list[str],
-    ) -> list[dict[str, Any]]:
-        """Query events newer than a given id for selected event types."""
-        if not event_types:
-            return []
-        placeholders = ", ".join("?" for _ in event_types)
-        cursor = self.conn.execute(
-            f"""
-            SELECT *
-            FROM events
-            WHERE id > ? AND event_type IN ({placeholders})
-            ORDER BY id ASC
-            """,
-            [after_event_id, *event_types],
-        )
-        return [dict(row) for row in cursor.fetchall()]
-
     def close(self) -> None:
         """Close the database connection(s)."""
         local_conn = getattr(self._thread_local, "conn", None)
