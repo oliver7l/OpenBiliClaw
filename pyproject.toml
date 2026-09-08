@@ -213,12 +213,12 @@ module = [
 ]
 disable_error_code = ["attr-defined"]
 
-# self_evolution 模块：大量函数缺少类型注解，待后续补充
+# self_evolution 模块：大量函数缺少类型注解，访问其他模块属性
 [[tool.mypy.overrides]]
 module = [
     "openbiliclaw.self_evolution.*",
 ]
-disable_error_code = ["no-untyped-def"]
+disable_error_code = ["no-untyped-def", "attr-defined"]
 
 # health 模块：数据库查询返回 int | None，传递给期望 int 的函数
 [[tool.mypy.overrides]]
@@ -258,10 +258,9 @@ module = [
 ]
 disable_error_code = ["arg-type"]
 
-# self_evolution/eval/notes 模块：访问其他模块提供的属性
+# eval/notes 模块：访问其他模块提供的属性
 [[tool.mypy.overrides]]
 module = [
-    "openbiliclaw.self_evolution.*",
     "openbiliclaw.eval.*",
     "openbiliclaw.notes.*",
 ]
