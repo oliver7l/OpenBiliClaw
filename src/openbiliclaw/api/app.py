@@ -1113,6 +1113,7 @@ def create_app(
     from openbiliclaw.api._image_proxy_routes import register_image_proxy_routes
     from openbiliclaw.api._cookie_routes import register_cookie_routes
     from openbiliclaw.api._activity_feed_routes import register_activity_feed_routes
+    from openbiliclaw.api._runtime_status_routes import register_runtime_status_routes
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import RegistryBuildError
 
@@ -3418,27 +3419,6 @@ def create_app(
             await drain(batch_size=30)
         except Exception:
             logger.exception("Background discovery candidate drain failed")
-
-    @app.get("/api/runtime-status", response_model=RuntimeStatusResponse)
-    async def runtime_status() -> RuntimeStatusResponse:
-        get_runtime_status = getattr(ctx.runtime_controller, "get_runtime_status", None)
-        if not callable(get_runtime_status):
-            return RuntimeStatusResponse(
-                initialized=False,
-                recommendation_count=0,
-                pending_signal_events=0,
-                unread_count=0,
-            )
-        # get_runtime_status() runs several count SQL queries synchronously;
-        # keep them off the event loop (frontend polls this endpoint).
-        payload = dict(await asyncio.get_running_loop().run_in_executor(None, get_runtime_status))
-        get_account_sync_status = getattr(ctx.account_sync_service, "get_runtime_status", None)
-        if callable(get_account_sync_status):
-            payload.update(get_account_sync_status())
-        get_update_status = getattr(ctx.auto_update_service, "get_runtime_status", None)
-        if callable(get_update_status):
-            payload.update(get_update_status())
-        return RuntimeStatusResponse(**payload)
 
     @app.get("/api/observability", response_model=ObservabilityResponse)
     async def observability() -> ObservabilityResponse:
@@ -13107,6 +13087,9 @@ def create_app(
 
     # ── Activity feed routes ────────────────────────────────────
     register_activity_feed_routes(app, ctx)
+
+    # ── Runtime status routes ───────────────────────────────────
+    register_runtime_status_routes(app, ctx)
 
     # ── 拆分后未接线的路由注册（K3 孤儿路由修复）──────────────────
     for _mod_name, _fn_name in [
