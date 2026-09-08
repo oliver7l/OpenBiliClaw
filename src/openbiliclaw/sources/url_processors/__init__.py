@@ -26,7 +26,7 @@ Supported platforms:
 """
 
 # Import all processors to trigger registration
-from openbiliclaw.sources.url_processors import (
+from openbiliclaw.sources.url_processors import (  # noqa: F401
     bilibili_processor,
     csdn_processor,
     douban_processor,

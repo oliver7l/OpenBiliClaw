@@ -143,4 +143,16 @@ __all__ = [
     "TimelineService",
     "TimelineCard",
     "TimelineStats",
+    # 洞察引擎
+    "InsightEngineService",
+    "InsightReport",
+    "MemoryOnThisDay",
+    "MorningBriefing",
+    "OpenLoop",
+    "PatternInsight",
+    # 记忆系统
+    "MemoryCompressionResult",
+    "MemoryEntry",
+    "MemoryStats",
+    "MemorySystemService",
 ]
