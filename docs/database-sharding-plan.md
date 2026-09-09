@@ -2,7 +2,7 @@
 
 > 版本：v1.0  
 > 创建日期：2026-09-09  
-> 状态：部分实施中 —— P0 基础设施、P1 llm.db、P2 events.db 已完成，P5 discovery 相关由另一方会话推进中  
+> 状态：部分实施中 —— P0 基础设施、P1 llm.db、P2 events.db 已完成（含 2026-09-09 收尾：DROP 主库旧表 + 移除双写），P5 discovery 相关由另一方会话推进中  
 > 目标：解决 SQLite 主库并发写入锁定问题，按写入频率和领域拆分数据库
 
 ---
@@ -410,7 +410,15 @@ class DatabaseMigrator:
 3. 修改 `_events_mixin.py` 写入 events.db ✅
 4. 修改所有查询 events 的代码 ✅（统一为 `events.events` / `events.view_history` 前缀，清除 `act.*` / `activity.db`）
 5. 双写验证 ✅（`insert_event` / `insert_view_history` 主写 events.db + 双写主库旧表）
-6. 删除主库旧表 —— 待双写验证通过后执行
+6. 删除主库旧表 ✅（2026-09-09 收尾完成：`scripts/finalize_db_sharding.py`，详情见下"P2 收尾"）
+
+### P2 收尾（2026-09-09 已完成）
+
+- **备份**：主库 `openbiliclaw.db` 用 online backup API 一致性备份至 `data/backups/openbiliclaw_pre_finalize_*.db`。
+- **DROP 主库 7 张已迁移旧表**：`llm_usage`（已迁 llm.db）、`events` / `view_history`（已迁 events.db）、`content_cache` / `recommendations` / `user_feedback` / `xhs_observed_urls`（已迁 pool.db）。`_events_mixin.py` / `_llm_usage_mixin.py` / `_view_history_mixin.py` / `_prune_mixin.py` 中所有显式双写块已移除，数据只写对应子库。
+- **schema 残留修复**：主库 `_SCHEMA_SQL` 已移除 `events` / `llm_usage` 定义；删除离散的 `_ensure_view_history_table()`（它曾在主库重建空的 `view_history`，与 events.db 权威表冲突导致裸名解析歧义）。现在主库不建任何已迁移表，裸名 / 前缀均正确落到子库。
+- **SQL token bug 修复**：`_user_feedback_mixin`、`_saved_memberships_mixin`、`self_evolution/knowledge_graph.py`、`self_evolution/interest_drift.py` 及 `_view_history_mixin.get_dwell_scores` 的 SQL 三引号串中残留的 `# noqa: E501` 被 SQLite 当作非法 token，导致写/读静默失败，已全部移除。`_view_history_mixin.get_interest_centroid_sources` 裸名表引用改为 `events.view_history` / `pool.content_cache` / `pool.user_feedback` 前缀。
+- **验证**：`tests/storage/ + tests/event/ + tests/pool/ + tests/recommendation/ + tests/delight/ + runtime 事件相关` = **406 passed** 全绿；生产端 discovery 访问均已正确走 `_discovery_conn` 独立连接。
 
 > **命名口径（v0.4.x 强制）**：事件子库统一为 **`events.db` ↔ ATTACH 别名 `events` ↔ 表 `events`**，
 > SQL 一律 `events.events` / `events.view_history`。不再使用 `activity.db` / `act` 等别名。

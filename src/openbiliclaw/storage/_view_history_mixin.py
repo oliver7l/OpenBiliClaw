@@ -22,8 +22,8 @@ class ViewHistoryMixin:
     def insert_view_history(self, item: dict[str, Any]) -> None:
         """Record a content view / click.
 
-        主写 events.db（P2 事件子库，别名 events），双写主库旧 view_history 表
-        供 db sharding 迁移验证期对比；验证后删除主库旧表。
+        主写 events.db（P2 事件子库，别名 events）。view_history 已随 db sharding
+        迁移至 events.db，主库不再承载该表。
         """
         params = (
             str(item.get("bvid", "")),
@@ -45,15 +45,6 @@ class ViewHistoryMixin:
             )
         except Exception as exc:
             logger.warning("events.db view_history 主写失败: %s", exc)
-        try:
-            self._execute_write(
-                "INSERT INTO view_history "
-                "(bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds) "  # noqa: E501
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                params,
-            )
-        except Exception as exc:
-            logger.debug("主库 view_history 双写失败（过渡期可忽略）: %s", exc)
 
     def update_view_dwell(self, bvid: str, dwell_seconds: float) -> bool:
         """Attach dwell seconds to the most recent view of bvid."""
@@ -81,7 +72,9 @@ class ViewHistoryMixin:
                           SUM(MIN(dwell_seconds, 600)) AS dwell_sum,
                           COUNT(*) AS views,
                           SUM(CASE WHEN dwell_seconds >= 60 THEN 1 ELSE 0 END) AS deep_views,
-                          SUM(CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END) AS quick_exits  # noqa: E501
+                          SUM(
+                              CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END
+                          ) AS quick_exits
                    FROM events.view_history
                    WHERE viewed_at >= ? AND COALESCE(topic_group, '') != ''
                    GROUP BY topic_group""",
@@ -131,8 +124,8 @@ class ViewHistoryMixin:
                        uf.title       AS title,
                        COALESCE(cc.description, '') AS description,
                        uf.created_at  AS signaled_at
-                FROM user_feedback uf
-                LEFT JOIN content_cache cc ON cc.bvid = uf.bvid
+                FROM pool.user_feedback uf
+                LEFT JOIN pool.content_cache cc ON cc.bvid = uf.bvid
                 WHERE uf.action = 'like'
                   AND uf.created_at >= ?
                   AND COALESCE(uf.topic_group, '') != ''
@@ -141,8 +134,8 @@ class ViewHistoryMixin:
                        vh.title       AS title,
                        COALESCE(cc.description, '') AS description,
                        vh.viewed_at   AS signaled_at
-                FROM view_history vh
-                LEFT JOIN content_cache cc ON cc.bvid = vh.bvid
+                FROM events.view_history vh
+                LEFT JOIN pool.content_cache cc ON cc.bvid = vh.bvid
                 WHERE vh.viewed_at >= ?
                   AND vh.dwell_seconds >= ?
                   AND COALESCE(vh.topic_group, '') != ''

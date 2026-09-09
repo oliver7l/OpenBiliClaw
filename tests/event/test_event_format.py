@@ -311,7 +311,7 @@ def test_event_db_round_trip_preserves_context_string_verbatim(tmp_path) -> None
     )
     from openbiliclaw.storage.database import Database
 
-    db_path = tmp_path / "events.db"
+    db_path = tmp_path / "app_main.db"
     db = Database(db_path)
     db.initialize()
     manager = MemoryManager(data_dir=tmp_path, database=db)
@@ -358,7 +358,7 @@ def test_event_db_round_trip_legacy_dict_context_still_works(tmp_path) -> None:
     """
     from openbiliclaw.storage.database import Database
 
-    db_path = tmp_path / "events.db"
+    db_path = tmp_path / "app_main.db"
     db = Database(db_path)
     db.initialize()
 

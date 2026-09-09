@@ -181,20 +181,6 @@ class PruneMixin:
             if deleted < batch_size:
                 break
             time.sleep(0.02)
-        # 双写期间同时清理主库旧数据
-        if llm_conn is not None:
-            try:
-                while True:
-                    cursor = self._execute_write(
-                        "DELETE FROM llm_usage WHERE id IN ("
-                        "SELECT id FROM llm_usage "
-                        "WHERE timestamp < datetime('now', ?) LIMIT ?)",
-                        (cutoff, batch_size),
-                    )
-                    if cursor.rowcount < batch_size:
-                        break
-            except Exception:
-                pass
         if total:
             logger.info(
                 "Pruned %d old llm_usage rows (older_than=%dd)",

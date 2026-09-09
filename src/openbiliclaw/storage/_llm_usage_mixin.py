@@ -50,7 +50,7 @@ class LLMUsageMixin:
         ``cost --by caller`` to compute hit rates and by
         ``estimate_cost`` to discount cached tokens correctly.
 
-        v0.4.0+: 双写模式，同时写 llm.db 和主库。llm.db 写入失败不影响主库。
+        v0.4.0+: 主写 llm.db，主库旧表已随 sharding 收尾移除。
         """
         total = max(0, prompt_tokens) + max(0, completion_tokens)
         params = (
@@ -78,12 +78,6 @@ class LLMUsageMixin:
             lastrowid = cursor.lastrowid or 0
         except Exception as e:
             logger.debug("llm.db 写入失败，回退主库: %s", e)
-
-        # 双写：主库（过渡期，验证后删除）
-        try:
-            self._execute_write(sql, params)
-        except Exception as e:
-            logger.debug("主库 llm_usage 双写失败: %s", e)
 
         return lastrowid
 

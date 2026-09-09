@@ -613,7 +613,7 @@ async def test_pipeline_retries_short_eval_score_batches(
 
     result = await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT status, eval_attempts, batch_eval_attempts "
         "FROM discovery_candidates ORDER BY id ASC"
     ).fetchall()
@@ -649,7 +649,7 @@ async def test_pipeline_retries_long_eval_score_batches_without_orphaning_claims
 
     result = await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT status, eval_attempts, batch_eval_attempts "
         "FROM discovery_candidates ORDER BY id ASC"
     ).fetchall()
@@ -685,7 +685,7 @@ async def test_pipeline_keeps_batch_eval_failures_pending_without_burning_retry_
     for _ in range(5):
         await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status, eval_attempts, batch_eval_attempts "
         "FROM discovery_candidates WHERE content_id='BVPOISON'"
     ).fetchone()
@@ -723,7 +723,7 @@ async def test_pipeline_batch_eval_failure_backstop_marks_failed_eval(
     for _ in range(2):
         await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status, eval_attempts, batch_eval_attempts "
         "FROM discovery_candidates WHERE content_id='BVBATCHFAIL'"
     ).fetchone()
@@ -757,7 +757,7 @@ async def test_pipeline_normalizes_topics_before_persisting_evaluated_candidates
 
     result = await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status, topic_key, topic_group FROM discovery_candidates WHERE content_id='BVNORM'"
     ).fetchone()
     assert result == {"evaluated": 1, "cached": 1, "rejected": 0}
@@ -1057,7 +1057,7 @@ async def test_pipeline_marks_franchise_quota_admission_rejection(
 
     result = await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status, eval_error FROM discovery_candidates WHERE content_id='BVFRANCHISE'"
     ).fetchone()
     assert result == {"evaluated": 1, "cached": 0, "rejected": 1}
@@ -1234,7 +1234,7 @@ async def test_pipeline_bili_extension_search_observed_low_score_is_rejected(
 
     result = await pipeline.drain_pending(profile=_build_profile(), batch_size=30)
 
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status, eval_error FROM discovery_candidates WHERE content_id='BVLOWOBS'"
     ).fetchone()
     assert result == {"evaluated": 1, "cached": 0, "rejected": 1}
@@ -1303,7 +1303,7 @@ def test_pipeline_target_zero_still_bounds_enqueued_candidates(tmp_path: Path) -
 
     enqueued = pipeline.enqueue_candidates(items, source_context="search")
 
-    count = db.conn.execute(
+    count = db._discovery_conn.execute(
         "SELECT COUNT(*) FROM discovery_candidates WHERE source_platform='xiaohongshu'"
     ).fetchone()[0]
     assert enqueued == 605

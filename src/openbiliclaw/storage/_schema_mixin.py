@@ -307,20 +307,23 @@ class SchemaMixin:
             pass
 
     def _ensure_event_read_indexes(self) -> None:
-        """Create indexes for the high-volume ``events`` table."""
+        """Create indexes for the high-volume ``events`` table (in events.db)."""
         import sqlite3
 
-        self.conn.executescript("""
-            CREATE INDEX IF NOT EXISTS idx_events_created_at
-                ON events (created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_events_event_type
-                ON events (event_type);
-        """)
-        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(events)").fetchall()}
+        index_defs = [
+            ("events.idx_events_created_at", "created_at DESC"),
+            ("events.idx_events_event_type", "event_type"),
+        ]
+        for idx, cols in index_defs:
+            with suppress(sqlite3.Error):
+                self.conn.execute(
+                    f"CREATE INDEX IF NOT EXISTS {idx} ON events ({cols})"
+                )
+        cols = {row[1] for row in self.conn.execute("PRAGMA events.table_info(events)").fetchall()}
         if "source_platform" not in cols:
             try:  # noqa: SIM105
                 self.conn.execute(
-                    "ALTER TABLE events ADD COLUMN source_platform TEXT "
+                    "ALTER TABLE events.events ADD COLUMN source_platform TEXT "
                     "GENERATED ALWAYS AS "
                     "(COALESCE(json_extract(metadata, '$.source_platform'), 'unknown')) VIRTUAL"
                 )
@@ -328,10 +331,10 @@ class SchemaMixin:
                 if "duplicate column" not in str(exc).lower():
                     raise
         self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_source_platform ON events (source_platform)"
+            "CREATE INDEX IF NOT EXISTS events.idx_events_source_platform ON events (source_platform)"
         )
         self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_agg_stats ON events (event_type, source_platform, inferred_satisfaction)"
+            "CREATE INDEX IF NOT EXISTS events.idx_events_agg_stats ON events (event_type, source_platform, inferred_satisfaction)"
         )
 
     def _ensure_content_cache_read_indexes(self) -> None:
@@ -614,35 +617,7 @@ class SchemaMixin:
         from openbiliclaw.storage.database import _USER_FEEDBACK_DDL
 
         self.conn.executescript(_USER_FEEDBACK_DDL)
-
-    # ── view history (implicit feedback) ────────────────────────────
-
-    def _ensure_view_history_table(self) -> None:
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS view_history (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                bvid        TEXT NOT NULL,
-                title       TEXT DEFAULT '',
-                source_platform TEXT DEFAULT '',
-                topic_group TEXT DEFAULT '',
-                content_url TEXT DEFAULT '',
-                up_name     TEXT DEFAULT '',
-                quality_score REAL DEFAULT 0.0,
-                fit_score   REAL DEFAULT 0.0,
-                viewed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_view_history_bvid
-                ON view_history(bvid);
-            CREATE INDEX IF NOT EXISTS idx_view_history_viewed_at
-                ON view_history(viewed_at);
-        """)
-        # v0.3.x implicit feedback: dwell seconds per view
-        existing_cols = {
-            r["name"] for r in self.conn.execute("PRAGMA table_info(view_history)").fetchall()
-        }
-        if "dwell_seconds" not in existing_cols:
-            self.conn.execute("ALTER TABLE view_history ADD COLUMN dwell_seconds REAL DEFAULT 0")
-            self.conn.commit()
+        # view_history 已随 db sharding 迁移至 events.db（_EVENTS_SCHEMA），主库不再建表
 
     def _ensure_topic_tables(self) -> None:
         """Create the topic (专题) tables.

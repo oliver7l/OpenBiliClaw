@@ -306,22 +306,6 @@ _EXPLORE_HIGH_RISK_CLUSTERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 _SCHEMA_VERSION = 2
 
 _SCHEMA_SQL = """
--- Event log (behavioral data from browser extension)
-CREATE TABLE IF NOT EXISTS events (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type            TEXT NOT NULL,        -- click, search, scroll, comment, etc.
-    url                   TEXT,
-    title                 TEXT,
-    context               TEXT,                 -- JSON: DOM snapshot reference, viewport, etc.
-    metadata              TEXT,                 -- JSON: additional event-specific data
-    -- v0.3.x event-satisfaction signal: deterministic classification
-    -- written at insert time by ``classify_event_satisfaction``. NULL on
-    -- pre-migration rows; consumers treat NULL as ``unknown``.
-    inferred_satisfaction TEXT,                 -- "positive" | "neutral" | "negative" | "unknown"
-    satisfaction_reason   TEXT,                 -- short snake_case reason; see event_format.py
-    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Content cache (discovered/evaluated content)
 -- 推荐流子库 schema：pool.db（总库连接 ATTACH 后使用 pool. 前缀）
 CREATE TABLE IF NOT EXISTS pool.content_cache (
@@ -469,28 +453,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_turns_scope_subject
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
-
--- Per-call LLM usage ledger. Populated by ``UsageRecorder`` after every
--- successful provider response. Used by ``openbiliclaw cost`` to print
--- daily spend summaries and by future per-module attribution work.
-CREATE TABLE IF NOT EXISTS llm_usage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    provider TEXT NOT NULL,
-    model TEXT NOT NULL DEFAULT '',
-    caller TEXT NOT NULL DEFAULT '',
-    prompt_tokens INTEGER NOT NULL DEFAULT 0,
-    completion_tokens INTEGER NOT NULL DEFAULT 0,
-    total_tokens INTEGER NOT NULL DEFAULT 0,
-    -- v0.3.28+: portion of prompt_tokens served from provider-side
-    -- prompt cache. Always <= prompt_tokens. 0 means cache miss / no
-    -- caching. Used to compute cache hit rate per caller.
-    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
-    estimated_cost_cny REAL NOT NULL DEFAULT 0.0,
-    success INTEGER NOT NULL DEFAULT 1
-);
-CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
-CREATE INDEX IF NOT EXISTS idx_llm_usage_provider ON llm_usage(provider, model);
 
 -- 知识库概念索引：记录每个概念出现在哪些文章中
 CREATE TABLE IF NOT EXISTS knowledge_concepts (
@@ -1042,7 +1004,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._ensure_auth_state_table()
         self._ensure_init_runs_table()
         self._ensure_user_feedback_table()
-        self._ensure_view_history_table()
+        # view_history 已随 db sharding 迁移至 events.db（_EVENTS_SCHEMA），主库不再建表
         self._ensure_topic_tables()
         self._ensure_knowledge_forge_tables()
         self.reset_stale_discovery_candidate_evaluations()

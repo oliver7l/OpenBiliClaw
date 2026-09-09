@@ -28,10 +28,10 @@ def _insert(
     db: Database, *, bvid: str, topic: str, dwell: float, when: datetime.datetime | None = None
 ) -> int:
     db.insert_view_history({"bvid": bvid, "topic_group": topic, "dwell_seconds": dwell})
-    row_id = int(db.conn.execute("SELECT MAX(id) FROM view_history").fetchone()[0])
+    row_id = int(db.conn.execute("SELECT MAX(id) FROM events.view_history").fetchone()[0])
     if when is not None:
         db.conn.execute(
-            "UPDATE view_history SET viewed_at = ? WHERE id = ?",
+            "UPDATE events.view_history SET viewed_at = ? WHERE id = ?",
             (when.strftime("%Y-%m-%d %H:%M:%S"), row_id),
         )
         db.conn.commit()
@@ -42,7 +42,7 @@ def _dwell_of(db: Database, bvid: str) -> list[float]:
     return [
         float(r[0])
         for r in db.conn.execute(
-            "SELECT dwell_seconds FROM view_history WHERE bvid = ? ORDER BY id", (bvid,)
+            "SELECT dwell_seconds FROM events.view_history WHERE bvid = ? ORDER BY id", (bvid,)
         ).fetchall()
     ]
 
@@ -50,7 +50,7 @@ def _dwell_of(db: Database, bvid: str) -> list[float]:
 def test_schema_migrates_dwell_seconds_column_and_is_idempotent(tmp_path: Path) -> None:
     db = Database(tmp_path / "migrate.db")
     db.initialize()
-    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(view_history)").fetchall()}
+    cols = {r["name"] for r in db.conn.execute("PRAGMA events.table_info(view_history)").fetchall()}
     assert "dwell_seconds" in cols
     db.initialize()  # second pass must not error on the ALTER TABLE guard
 

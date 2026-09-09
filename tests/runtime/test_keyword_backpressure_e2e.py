@@ -246,7 +246,7 @@ def db(tmp_path: Path) -> Database:
 
 
 def _pending(db: Database, platform: str, digest: str) -> list[str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword FROM discovery_keywords "
         "WHERE platform = ? AND status = 'pending' AND profile_kw_digest = ? "
         "ORDER BY id ASC",
@@ -256,7 +256,7 @@ def _pending(db: Database, platform: str, digest: str) -> list[str]:
 
 
 def _status(db: Database, keyword_id: int) -> str:
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE id = ?", (keyword_id,)
     ).fetchone()
     return str(row["status"]) if row is not None else "<missing>"

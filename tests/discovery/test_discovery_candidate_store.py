@@ -175,7 +175,7 @@ def test_initialize_resets_stale_evaluating_candidates(tmp_path: Path) -> None:
         ]
     )
     row = db.claim_discovery_candidates_for_eval(limit=1)[0]
-    db.conn.execute(
+    db._discovery_conn.execute(
         """
         UPDATE discovery_candidates
         SET claimed_at = datetime('now', '-60 minutes')
@@ -183,7 +183,7 @@ def test_initialize_resets_stale_evaluating_candidates(tmp_path: Path) -> None:
         """,
         (row["id"],),
     )
-    db.conn.commit()
+    db._discovery_conn.commit()
     db.close()
 
     reopened = Database(db_path)
@@ -223,7 +223,7 @@ def test_terminal_candidate_rows_are_not_rewritten_by_stale_updates(tmp_path: Pa
     )
     db.reject_discovery_candidate(candidate_id, status="rejected_duplicate", reason="late")
 
-    final = db.conn.execute(
+    final = db._discovery_conn.execute(
         "SELECT status, eval_error FROM discovery_candidates WHERE id = ?",
         (candidate_id,),
     ).fetchone()
@@ -250,7 +250,7 @@ def test_enqueue_discovery_candidates_can_bound_pending_rows_per_source(
 
     inserted = db.enqueue_discovery_candidates(writes, max_pending_per_source=3)
 
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         """
         SELECT content_id
         FROM discovery_candidates
@@ -296,7 +296,7 @@ def test_source_cap_counts_evaluating_rows_without_deleting_them(
         max_pending_per_source=3,
     )
 
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         """
         SELECT status, content_id
         FROM discovery_candidates

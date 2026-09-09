@@ -1416,10 +1416,11 @@
       closeMobileMenu();
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("delightPage");
-      window.renderDelightGrid();
+      if (typeof window.renderDelightGrid === "function") window.renderDelightGrid();
+      else console.warn("renderDelightGrid not ready — profile.js may have failed to load");
       // 队列还没就绪时立即单独拉取（pending-batch 本身 50ms 级），
       // 不等 hydrate 主链（runtime/notification/chat 等）全部完成再出卡。
-      if (!state.delights.length) void window.fetchDelightQueue();
+      if (!state.delights.length && typeof window.fetchDelightQueue === "function") void window.fetchDelightQueue();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 

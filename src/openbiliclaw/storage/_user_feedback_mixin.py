@@ -41,7 +41,8 @@ class UserFeedbackMixin:
             self.conn.commit()
             return False
         self.conn.execute(
-            """INSERT INTO user_feedback (bvid, action, source_platform, title, topic_group, body_text)  # noqa: E501
+            """INSERT INTO user_feedback
+               (bvid, action, source_platform, title, topic_group, body_text)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (bvid, action, source_platform, title, topic_group, body_text),
         )

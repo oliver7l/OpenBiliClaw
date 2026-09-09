@@ -93,17 +93,6 @@ class EventsMixin:
             lastrowid = cursor.lastrowid or 0
         except Exception as exc:
             logger.warning("events.db 主写失败，事件可能丢失: %s", exc)
-        # 双写：主库旧 events 表（db sharding 迁移双写验证期，验证后删除旧表）
-        try:
-            self._execute_write(
-                "INSERT INTO events "
-                "(event_type, url, title, context, metadata, "
-                " inferred_satisfaction, satisfaction_reason) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                params,
-            )
-        except Exception as exc:
-            logger.debug("主库 events 双写失败（过渡期可忽略）: %s", exc)
         return lastrowid
 
     def get_recent_events(self, limit: int = 100) -> list[dict[str, Any]]:

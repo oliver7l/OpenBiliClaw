@@ -2050,7 +2050,7 @@ if (!OBC) { console.error("profile.js: window.OBC not found — load app.js firs
         OBC.state.profile = profile;
         hydrateInboxFromSpeculations(profile.speculative_interests);
         hydrateInboxFromSpeculations(profile.speculative_avoidances, "avoidance.probe");
-        OBC.renderRail();
+        if (typeof OBC.renderRail === "function") OBC.renderRail();
         window.renderProfileDetails();
         renderMessages();
       }
@@ -2119,7 +2119,7 @@ if (!OBC) { console.error("profile.js: window.OBC not found — load app.js firs
     }
 
     function renderAll() {
-      const steps = [OBC.renderViewTabs, OBC.renderReshuffleToggle, OBC.renderFilters, OBC.renderVideos, syncSourceMetric, window.renderRail, window.renderProfileDetails, renderMessages, renderChat, renderPoolStatus];
+      const steps = [OBC.renderViewTabs, OBC.renderReshuffleToggle, OBC.renderFilters, OBC.renderVideos, syncSourceMetric, (typeof window.renderRail === "function" ? window.renderRail : () => {}), (typeof window.renderProfileDetails === "function" ? window.renderProfileDetails : () => {}), renderMessages, renderChat, (typeof renderPoolStatus === "function" ? renderPoolStatus : () => {})];
       for (const step of steps) {
         try { step(); } catch (error) { OBC.showFatal(error, step.name || "渲染"); }
       }

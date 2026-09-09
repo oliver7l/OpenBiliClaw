@@ -219,7 +219,8 @@ class SavedMembershipsMixin:
             conn.execute("BEGIN IMMEDIATE")
             removed_snapshot = conn.execute(
                 """
-                SELECT m.list_kind, i.item_key, i.source_platform, i.content_id, i.content_url, i.content_type  # noqa: E501
+                SELECT m.list_kind, i.item_key, i.source_platform,
+                       i.content_id, i.content_url, i.content_type
                 FROM saved_memberships AS m
                 JOIN saved_items AS i ON i.item_key = m.item_key
                 WHERE m.list_kind = ? AND m.item_key = ?

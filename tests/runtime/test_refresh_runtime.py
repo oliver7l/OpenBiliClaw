@@ -830,7 +830,7 @@ async def test_refresh_controller_backfills_pool_copy_after_replenishment() -> N
     # default 2-strategy plan produces 2 calls. Each carries the same
     # profile + per-refresh backfill limit.
     assert len(recommendations.pool_copy_calls) >= 1
-    assert all(call == ({"profile": "ok"}, 60) for call in recommendations.pool_copy_calls)
+    assert all(call == ({"profile": "ok"}, 120) for call in recommendations.pool_copy_calls)
 
 
 async def test_refresh_controller_detaches_embedding_prewarm_from_refresh_completion() -> None:
@@ -1363,7 +1363,7 @@ async def test_candidate_eval_drain_runs_when_refresh_plan_empty() -> None:
 
     assert result["cached"] == 3
     assert pipeline.drains == [30]
-    assert recommendations.pool_copy_calls == [({"profile": "ok"}, 60)]
+    assert recommendations.pool_copy_calls == [({"profile": "ok"}, 120)]
 
 
 async def test_candidate_eval_drain_defaults_to_larger_eval_batch() -> None:
@@ -1383,7 +1383,7 @@ async def test_candidate_eval_drain_defaults_to_larger_eval_batch() -> None:
     )
 
     assert result["cached"] == 3
-    assert pipeline.drains == [45]
+    assert pipeline.drains == [90]
 
 
 async def test_candidate_eval_releases_drain_lock_before_precompute() -> None:
@@ -1483,7 +1483,7 @@ async def test_candidate_eval_drain_with_real_database_makes_raw_candidate_avail
     assert llm.calls == 1
     assert database.count_discovery_candidates_by_status()["cached"] == 1
     assert database.count_pool_candidates() == 1
-    assert [call[1] for call in recommendations.pool_copy_calls] == [60]
+    assert [call[1] for call in recommendations.pool_copy_calls] == [120]
 
 
 async def test_refresh_pipeline_does_not_use_stale_topics_when_drain_skips() -> None:
@@ -3822,7 +3822,7 @@ class _CapturingPipeline:
 
 
 def _bili_kw_statuses(db: Database) -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = 'bilibili' ORDER BY id"
     ).fetchall()
     return {str(r["keyword"]): str(r["status"]) for r in rows}

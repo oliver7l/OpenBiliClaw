@@ -53,7 +53,7 @@ def db(tmp_path: Path) -> Database:
 def _seed_used_keyword(db: Database, platform: str, keyword: str) -> int:
     """Insert one pending keyword, claim it, mark it used, return its id."""
     db.insert_pending_keywords(platform, [keyword], "dig")
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT id FROM discovery_keywords WHERE platform=? AND keyword=?",
         (platform, keyword),
     ).fetchone()
@@ -64,11 +64,11 @@ def _seed_used_keyword(db: Database, platform: str, keyword: str) -> int:
 
 
 def _age_used_at(db: Database, keyword_id: int, *, days_ago: int) -> None:
-    db.conn.execute(
+    db._discovery_conn.execute(
         "UPDATE discovery_keywords SET used_at = datetime('now', ?) WHERE id = ?",
         (f"-{days_ago} day", keyword_id),
     )
-    db.conn.commit()
+    db._discovery_conn.commit()
 
 
 # ── DAO: increment idempotency + counting ────────────────────────────
@@ -109,7 +109,7 @@ class TestRetireZeroYield:
         _age_used_at(db, kid, days_ago=1)
         retired = db.retire_zero_yield_keywords(_BILI, min_age_minutes=60)
         assert retired == 1
-        status = db.conn.execute(
+        status = db._discovery_conn.execute(
             "SELECT status FROM discovery_keywords WHERE id=?", (kid,)
         ).fetchone()["status"]
         assert status == "expired"
@@ -119,7 +119,7 @@ class TestRetireZeroYield:
         db.increment_keyword_yield(kid, "BVc1")
         _age_used_at(db, kid, days_ago=1)
         assert db.retire_zero_yield_keywords(_BILI, min_age_minutes=60) == 0
-        status = db.conn.execute(
+        status = db._discovery_conn.execute(
             "SELECT status FROM discovery_keywords WHERE id=?", (kid,)
         ).fetchone()["status"]
         assert status == "used"
@@ -129,7 +129,7 @@ class TestRetireZeroYield:
         # pending. The age floor protects it.
         kid = _seed_used_keyword(db, _BILI, "fresh")
         assert db.retire_zero_yield_keywords(_BILI, min_age_minutes=60) == 0
-        status = db.conn.execute(
+        status = db._discovery_conn.execute(
             "SELECT status FROM discovery_keywords WHERE id=?", (kid,)
         ).fetchone()["status"]
         assert status == "used"
@@ -140,7 +140,7 @@ class TestRetireZeroYield:
         _age_used_at(db, kid_bili, days_ago=1)
         _age_used_at(db, kid_yt, days_ago=1)
         assert db.retire_zero_yield_keywords(_BILI, min_age_minutes=60) == 1
-        yt_status = db.conn.execute(
+        yt_status = db._discovery_conn.execute(
             "SELECT status FROM discovery_keywords WHERE id=?", (kid_yt,)
         ).fetchone()["status"]
         assert yt_status == "used"
@@ -171,7 +171,7 @@ class TestSourceKeywordIdRoundTrip:
         )
         db.enqueue_discovery_candidates([discovered_content_to_candidate_write(item)])
         row = dict(
-            db.conn.execute(
+            db._discovery_conn.execute(
                 "SELECT * FROM discovery_candidates WHERE candidate_key=?",
                 ("bilibili:BV1",),
             ).fetchone()
@@ -188,7 +188,7 @@ class TestSourceKeywordIdRoundTrip:
             source_strategy="search",
         )
         db.enqueue_discovery_candidates([discovered_content_to_candidate_write(item)])
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT source_keyword_id FROM discovery_candidates WHERE candidate_key=?",
             ("bilibili:BV2",),
         ).fetchone()
@@ -257,7 +257,7 @@ class TestCacheResultsBackfill:
             relevance_score=0.9,
         )
         assert engine.cache_evaluated_results([item]) == 1
-        rows = db.conn.execute("SELECT COUNT(*) FROM discovery_keyword_yield").fetchone()[0]
+        rows = db._discovery_conn.execute("SELECT COUNT(*) FROM discovery_keyword_yield").fetchone()[0]
         assert rows == 0
 
 
@@ -559,10 +559,10 @@ def test_planner_retire_zero_yield_retires_barren_word(db: Database) -> None:
     retired = planner.retire_zero_yield()
 
     assert retired == 1
-    barren_status = db.conn.execute(
+    barren_status = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE id=?", (kid_barren,)
     ).fetchone()["status"]
-    good_status = db.conn.execute(
+    good_status = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE id=?", (kid_good,)
     ).fetchone()["status"]
     assert barren_status == "expired"
