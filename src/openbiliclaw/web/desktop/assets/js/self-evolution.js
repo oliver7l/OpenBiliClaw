@@ -57,7 +57,8 @@ function openSelfEvolutionPage() {
   loadLatestTopics();
   loadLatestCards();
   loadLatestGraph();
-  loadNotifications();
+  // 通知计数已由 loadSelfEvoStatus() 展示；列表由 viewNotifications() 点击触发，
+  // 此处不调用全局 chat.js 的 loadNotifications（独立脚本无该符号，避免 ReferenceError）
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
