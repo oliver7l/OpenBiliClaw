@@ -113,6 +113,10 @@
           </label>
           <button class="icon-btn" id="reshuffleBtn" type="button" aria-label="换一批" title="换一批">↻</button>
           <button class="pill-btn" id="resetFiltersBtn" type="button" hidden="">重置筛选</button>
+          <!-- 惊喜推荐页面专用工具 -->
+          <span class="delight-pill" id="delightTopbarPill" hidden><strong id="delightCountTopbar">0</strong><span>条候选</span></span>
+          <span class="xhs-feed-tag" id="delightTopbarTag" hidden>delight</span>
+          <button class="pill-btn dark" id="delightRefreshBtn" type="button" hidden>换一换</button>
         </div>
       </div>
     </nav>
@@ -194,10 +198,9 @@
         <div class="content-page-head">
           <div>
             <p class="eyebrow">Delight</p>
-            <h2>惊喜推荐 <span class="delight-head-meta"><span id="delightCount">0 条候选</span> <span class="xhs-feed-tag">delight</span></span></h2>
+            <h2>惊喜推荐</h2>
             <p class="video-meta">基于你近期兴趣找出的高惊喜候选——大概率是你不会主动搜、但看了会想"原来可以这样"的内容。</p>
           </div>
-          <button class="pill-btn dark" id="delightRefreshBtn" type="button">换一换</button>
         </div>
         <div class="card-grid" id="delightGrid"></div>
         <p class="delight-page-note">喜欢点星标收藏、时钟稍后再看；点"忽略"会换掉这条。</p>

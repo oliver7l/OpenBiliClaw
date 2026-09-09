@@ -1887,6 +1887,8 @@ if (!OBC) { console.error("profile.js: window.OBC not found — load app.js firs
       const all = OBC.state.delights || [];
       const count = $("#delightCount");
       if (count) count.textContent = `${all.length} 条候选`;
+      const countTopbar = $("#delightCountTopbar");
+      if (countTopbar) countTopbar.textContent = all.length;
       if (!all.length) {
         grid.innerHTML = `
           <div class="obs-section">

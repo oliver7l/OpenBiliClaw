@@ -127,6 +127,8 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "xiaoyuzhou-feed",
             "agent-recommend",
             "self-evolution",
+            "knowledge",
+            "travel",
         }
 
         @app.get("/web/{page}", include_in_schema=False)

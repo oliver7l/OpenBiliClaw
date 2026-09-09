@@ -1305,6 +1305,20 @@
           if (fab) fab.setAttribute("hidden", "");
         }
       }
+      // Delight topbar tools: only show on delight page
+      const isDelightPage = pageId === "delightPage";
+      const delightPill = document.getElementById("delightTopbarPill");
+      const delightTag = document.getElementById("delightTopbarTag");
+      const delightBtn = document.getElementById("delightRefreshBtn");
+      const poolPill = document.querySelector(".pool-pill");
+      const reshuffleToggle = document.querySelector(".reshuffle-toggle");
+      const reshuffleBtn = document.getElementById("reshuffleBtn");
+      if (delightPill) delightPill.hidden = !isDelightPage;
+      if (delightTag) delightTag.hidden = !isDelightPage;
+      if (delightBtn) delightBtn.hidden = !isDelightPage;
+      if (poolPill) poolPill.style.display = isDelightPage ? "none" : "";
+      if (reshuffleToggle) reshuffleToggle.style.display = isDelightPage ? "none" : "";
+      if (reshuffleBtn) reshuffleBtn.style.display = isDelightPage ? "none" : "";
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
