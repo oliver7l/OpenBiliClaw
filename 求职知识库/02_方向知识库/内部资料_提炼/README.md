@@ -28,8 +28,14 @@
 
 | 时间 | 状态 |
 |---|---|
-| 2026-09-09 启动 | pipeline 就绪，模型 qwen2.5:7b 拉取中 |
-| — | 待跑（后台执行，断点续跑：已生成的不重做） |
+| 2026-09-09 | 22 篇 MIME/quoted-printable 垃圾文档解码（10 篇救回真实文本写回 DB，12 篇纯图片型标记 no_text） |
+| 2026-09-09 | 全量提炼完成：**256 篇 → 240 篇结构化笔记**（12 篇 no_text + 4 篇 <200字 跳过） |
+
+## 提炼方法说明
+
+- **解码**：`scripts/kb_decode_mime.py` 用标准库 `email`+`quopri` 解 MIME/QP，剥离 HTML/CSS/base64，干净正文写回 `doc.content` 与 `doc_content` 新版本。
+- **提炼**：`scripts/kb_refine_extractive.py` 纯 Python 抽取式（无模型依赖）：结构大纲 + 关键方法/模型/指标（带数字优先）+ 关键术语 + 与本人项目关联 + 价值评级。
+- **为何不用 LLM 合成**：本机 Ollama 仅装 bge-m3（embedding），`qwen2.5:7b` 拉取在本环境不稳定（卡 finalize / 重拉清缓存）；抽取式即时跑完全部 256 篇。LLM 深度合成可后续叠加（`scripts/kb_refine_internal.py` 已就绪，待模型可用时运行）。
 
 ## 说明
 
