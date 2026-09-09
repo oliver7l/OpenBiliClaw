@@ -15,17 +15,38 @@ class SchemaMixin:
     conn: Any
 
     def _ensure_llm_usage_cache_columns(self) -> None:
-        """Backfill v0.3.28+ prompt-cache columns on existing llm_usage tables."""
-        existing_columns = {
-            str(row["name"]) for row in self.conn.execute("PRAGMA table_info(llm_usage)").fetchall()
-        }
+        """Backfill v0.3.28+ prompt-cache columns on existing llm_usage tables.
+
+        v0.4.0+: 同时检查主库和 llm.db。
+        """
         required_columns = {
             "cached_input_tokens": "INTEGER NOT NULL DEFAULT 0",
         }
+        # 主库
+        self._ensure_columns_on_connection(self.conn, "llm_usage", required_columns)
+        # llm.db
+        llm_conn = getattr(self, "_llm_conn", None)
+        if llm_conn is not None:
+            self._ensure_columns_on_connection(llm_conn, "llm_usage", required_columns)
+
+    @staticmethod
+    def _ensure_columns_on_connection(
+        conn: Any, table_name: str, required_columns: dict[str, str]
+    ) -> None:
+        """Ensure required columns exist on a table in the given connection."""
+        try:
+            existing_columns = {
+                str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+            }
+        except Exception:
+            return
         for column_name, column_type in required_columns.items():
             if column_name in existing_columns:
                 continue
-            self.conn.execute(f"ALTER TABLE llm_usage ADD COLUMN {column_name} {column_type}")
+            try:
+                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+            except Exception:
+                pass
 
     def _ensure_event_satisfaction_columns(self) -> None:
         """Backfill v0.3.x event-satisfaction columns for pre-migration DBs."""

@@ -133,6 +133,13 @@ def open_db_conn(
     conn.execute("PRAGMA busy_timeout=60000")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-65536")
+    # 附加兄弟子库：pool.db / activity.db 与主库同目录且存在时，让 pool.* /
+    # act.* 前缀在任意裸连（如 self_evolution 等离线模块）上也能解析到子库表，
+    # 与 Database 自身连接保持一致。
+    _base = Path(db_path)
+    for _alias, _sibling in (("pool", _base.with_name("pool.db")), ("act", _base.with_name("activity.db"))):
+        if _sibling.exists():
+            conn.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_sibling),))
     return conn
 
 
@@ -667,6 +674,10 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 独立存放，与主库（笔记/日记/阅读库）及推荐流子库 pool.db 三者锁域隔离。
         # 主库 ATTACH 为 act，SQL 以 act. 前缀显式访问。
         self._activity_db_path = self._db_path.with_name("activity.db")
+        # LLM 用量库 llm.db：极高频写入的 llm_usage 表（每次 LLM 调用都写）
+        # 独立存放，与主库锁域隔离，避免 billing 写入阻塞核心业务。
+        self._llm_db_path = self._db_path.with_name("llm.db")
+        self._llm_conn: sqlite3.Connection | None = None
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -800,6 +811,60 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS act", (str(self._activity_db_path),))
 
+    # ── LLM 用量子库（llm.db）──────────────────────────────────────────
+    # 极高频写入的 llm_usage 表（每次 LLM 调用都写）独立存放，
+    # 与主库锁域隔离，避免 billing 写入阻塞核心业务。
+
+    _LLM_USAGE_SCHEMA = """
+        CREATE TABLE IF NOT EXISTS llm_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL DEFAULT '',
+            caller TEXT NOT NULL DEFAULT '',
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            total_tokens INTEGER NOT NULL DEFAULT 0,
+            cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+            estimated_cost_cny REAL NOT NULL DEFAULT 0.0,
+            success INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_provider ON llm_usage(provider, model);
+    """
+
+    def _ensure_llm_database(self) -> None:
+        """Ensure the LLM usage sub-database (llm.db) exists."""
+        if self._llm_db_path.exists():
+            return
+        import sqlite3 as _sqlite3
+
+        llm_conn = _sqlite3.connect(str(self._llm_db_path), timeout=30.0)
+        try:
+            llm_conn.executescript(self._LLM_USAGE_SCHEMA)
+            llm_conn.commit()
+            self._logger().warning(
+                "llm.db 不存在，已创建 llm_usage 表。"
+                "若主库存在旧 llm_usage，请先运行迁移脚本。"
+            )
+        finally:
+            llm_conn.close()
+
+    def _init_llm_connection(self) -> None:
+        """Initialize the LLM database connection."""
+        self._ensure_llm_database()
+        self._llm_conn = sqlite3.connect(
+            str(self._llm_db_path),
+            timeout=30.0,
+            check_same_thread=False,
+            factory=LockedConnection,
+        )
+        self._llm_conn.row_factory = sqlite3.Row
+        self._llm_conn.execute("PRAGMA journal_mode=WAL")
+        self._llm_conn.execute("PRAGMA busy_timeout = 30000")
+        self._llm_conn.execute("PRAGMA synchronous=NORMAL")
+        self._llm_conn.execute("PRAGMA cache_size = -65536")
+
     def _logger(self):
         import logging
 
@@ -831,6 +896,8 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._attach_activity(self._conn)
         with suppress(sqlite3.OperationalError):
             self._conn.execute("PRAGMA act.journal_mode=WAL")
+        # LLM 用量库：独立连接，极高频写入的 llm_usage 表与主库锁域隔离
+        self._init_llm_connection()
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn

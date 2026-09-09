@@ -2,18 +2,33 @@
 
 从 ``storage/database.py`` 拆出的 llm_usage 表操作组。
 ``Database`` 类继承本 mixin，调用方代码无需修改。
+
+v0.4.0+: llm_usage 表迁移到独立的 llm.db，与主库锁域隔离。
+当前为双写过渡期：同时写主库和 llm.db，读取优先从 llm.db。
 """
 
 from __future__ import annotations
 
+import logging
+from contextlib import suppress
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class LLMUsageMixin:
     """LLM 调用用量记录的读写方法。"""
 
-    conn: Any  # 由 Database 提供
+    conn: Any  # 由 Database 提供（主库连接）
+    _llm_conn: Any  # 由 Database 提供（llm.db 连接）
     _execute_write: Any  # 由 Database 提供
+
+    @property
+    def _llm(self) -> Any:
+        """获取 llm.db 连接，回退到主库连接。"""
+        if self._llm_conn is not None:
+            return self._llm_conn
+        return self.conn
 
     def insert_llm_usage(
         self,
@@ -34,27 +49,43 @@ class LLMUsageMixin:
         always ``<= prompt_tokens``. 0 means no cache use. Used by
         ``cost --by caller`` to compute hit rates and by
         ``estimate_cost`` to discount cached tokens correctly.
+
+        v0.4.0+: 双写模式，同时写 llm.db 和主库。llm.db 写入失败不影响主库。
         """
         total = max(0, prompt_tokens) + max(0, completion_tokens)
-        cursor = self._execute_write(
-            """INSERT INTO llm_usage
+        params = (
+            provider or "",
+            model or "",
+            caller or "",
+            int(max(0, prompt_tokens)),
+            int(max(0, completion_tokens)),
+            int(total),
+            int(max(0, cached_input_tokens)),
+            float(estimated_cost_cny),
+            1 if success else 0,
+        )
+        sql = """INSERT INTO llm_usage
                (provider, model, caller, prompt_tokens, completion_tokens,
                 total_tokens, cached_input_tokens, estimated_cost_cny,
                 success)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                provider or "",
-                model or "",
-                caller or "",
-                int(max(0, prompt_tokens)),
-                int(max(0, completion_tokens)),
-                int(total),
-                int(max(0, cached_input_tokens)),
-                float(estimated_cost_cny),
-                1 if success else 0,
-            ),
-        )
-        return cursor.lastrowid or 0
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+
+        # 主写：llm.db
+        lastrowid = 0
+        try:
+            cursor = self._llm.execute(sql, params)
+            self._llm.commit()
+            lastrowid = cursor.lastrowid or 0
+        except Exception as e:
+            logger.debug("llm.db 写入失败，回退主库: %s", e)
+
+        # 双写：主库（过渡期，验证后删除）
+        try:
+            self._execute_write(sql, params)
+        except Exception as e:
+            logger.debug("主库 llm_usage 双写失败: %s", e)
+
+        return lastrowid
 
     def query_llm_usage_by_day(
         self,
@@ -67,7 +98,7 @@ class LLMUsageMixin:
         total_tokens, cost_cny}. Days with zero usage are omitted —
         the CLI fills gaps for display.
         """
-        cursor = self.conn.execute(
+        cursor = self._llm.execute(
             """
             SELECT date(timestamp, 'localtime') AS day,
                    COUNT(*) AS calls,
@@ -90,7 +121,7 @@ class LLMUsageMixin:
         days: int = 7,
     ) -> list[dict[str, Any]]:
         """Return per-(provider, model) totals over the last ``days`` days."""
-        cursor = self.conn.execute(
+        cursor = self._llm.execute(
             """
             SELECT provider,
                    model,
@@ -124,7 +155,7 @@ class LLMUsageMixin:
         compute and surface per-caller cache hit rates — a low rate
         (< 30%) signals prompt-prefix instability worth investigating.
         """
-        cursor = self.conn.execute(
+        cursor = self._llm.execute(
             """
             SELECT COALESCE(caller, '') AS caller,
                    COUNT(*) AS calls,
@@ -143,7 +174,7 @@ class LLMUsageMixin:
 
     def query_llm_usage_total(self, *, days: int = 7) -> dict[str, Any]:
         """Return a single-row total for the last ``days`` days."""
-        cursor = self.conn.execute(
+        cursor = self._llm.execute(
             """
             SELECT COUNT(*) AS calls,
                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
@@ -178,7 +209,7 @@ class LLMUsageMixin:
         entry and pass it to ``query_llm_usage_since_id`` on exit to
         scope the cost summary to that single phase.
         """
-        cursor = self.conn.execute("SELECT COALESCE(MAX(id), 0) AS m FROM llm_usage")
+        cursor = self._llm.execute("SELECT COALESCE(MAX(id), 0) AS m FROM llm_usage")
         row = cursor.fetchone()
         return int(row["m"]) if row else 0
 
@@ -190,7 +221,7 @@ class LLMUsageMixin:
         to a single phase by passing ``max_llm_usage_id()`` taken at
         the phase entry.
         """
-        total_cursor = self.conn.execute(
+        total_cursor = self._llm.execute(
             """
             SELECT COUNT(*) AS calls,
                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
@@ -215,7 +246,7 @@ class LLMUsageMixin:
             }
         )
 
-        caller_cursor = self.conn.execute(
+        caller_cursor = self._llm.execute(
             """
             SELECT COALESCE(caller, '') AS caller,
                    COUNT(*) AS calls,

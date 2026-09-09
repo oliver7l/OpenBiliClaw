@@ -37,9 +37,9 @@ class PruneMixin:
         while True:
             cursor = self._execute_write(
                 f"""
-                DELETE FROM events
+                DELETE FROM act.events
                 WHERE id IN (
-                    SELECT id FROM events
+                    SELECT id FROM act.events
                     WHERE event_type IN ({placeholders})
                       AND created_at < datetime('now', ?)
                     LIMIT ?
@@ -158,23 +158,43 @@ class PruneMixin:
         retention_days: int = 90,
         batch_size: int = 2000,
     ) -> int:
-        """Delete old ``llm_usage`` accounting rows."""
+        """Delete old ``llm_usage`` accounting rows.
+
+        v0.4.0+: 优先从 llm.db 删除，双写期间同时删除主库旧数据。
+        """
         if retention_days <= 0:
             return 0
         cutoff = f"-{int(retention_days)} days"
         total = 0
+        llm_conn = getattr(self, "_llm_conn", None)
+        target_conn = llm_conn if llm_conn is not None else self.conn
         while True:
-            cursor = self._execute_write(
+            cursor = target_conn.execute(
                 "DELETE FROM llm_usage WHERE id IN ("
                 "SELECT id FROM llm_usage "
                 "WHERE timestamp < datetime('now', ?) LIMIT ?)",
                 (cutoff, batch_size),
             )
+            target_conn.commit()
             deleted = cursor.rowcount
             total += deleted
             if deleted < batch_size:
                 break
             time.sleep(0.02)
+        # 双写期间同时清理主库旧数据
+        if llm_conn is not None:
+            try:
+                while True:
+                    cursor = self._execute_write(
+                        "DELETE FROM llm_usage WHERE id IN ("
+                        "SELECT id FROM llm_usage "
+                        "WHERE timestamp < datetime('now', ?) LIMIT ?)",
+                        (cutoff, batch_size),
+                    )
+                    if cursor.rowcount < batch_size:
+                        break
+            except Exception:
+                pass
         if total:
             logger.info(
                 "Pruned %d old llm_usage rows (older_than=%dd)",
