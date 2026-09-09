@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi.responses import JSONResponse
@@ -99,11 +100,13 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
         import sqlite3
 
         # Get database path from config
-        db_path = "data/openbiliclaw.db"
+        # v0.4.0+: articles 表迁移到 content.db
+        db_path = "data/content.db"
         try:
             cfg = getattr(ctx, "config", None)
             if cfg and hasattr(cfg, "storage") and cfg.storage:
-                db_path = str(cfg.storage.db_path)
+                main_path = str(cfg.storage.db_path)
+                db_path = str(Path(main_path).with_name("content.db"))
         except Exception:
             pass
 

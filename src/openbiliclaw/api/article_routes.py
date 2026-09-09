@@ -107,7 +107,9 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
         if database is None:
             return JSONResponse({"source_types": [], "total": 0})
         try:
-            rows = database.conn.execute(
+            # v0.4.0+: articles 表迁移到 content.db
+            content_conn = getattr(database, "_content_conn", None) or database.conn
+            rows = content_conn.execute(
                 "SELECT source_type, COUNT(*) AS n FROM articles "
                 "WHERE COALESCE(status, 'unread') != 'hidden' "
                 "GROUP BY source_type ORDER BY n DESC"
