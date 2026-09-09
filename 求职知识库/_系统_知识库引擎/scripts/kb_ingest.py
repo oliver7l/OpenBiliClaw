@@ -303,17 +303,36 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_doc_cat ON doc(category)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_doc_status ON doc(status)")
     # trigram 对中文子串检索友好；不支持时回退 unicode61
+    # external content：FTS 不存全文影子表（省一半体积），doc 表变更靠触发器增量同步
     fts_ok = False
     for tok in ("trigram", "unicode61"):
         try:
             c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5("
-                      "rel_path, title, content, tokenize='%s')" % tok)
+                      "rel_path, title, content, "
+                      "content='doc', content_rowid='id', tokenize='%s')" % tok)
             fts_ok = tok
             break
         except Exception:
             continue
     if not fts_ok:
-        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(rel_path, title, content)")
+        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5("
+                  "rel_path, title, content, content='doc', content_rowid='id')")
+    # 增量同步触发器（幂等：先 DROP 再 CREATE）
+    c.executescript("""
+DROP TRIGGER IF EXISTS doc_fts_ai;
+CREATE TRIGGER doc_fts_ai AFTER INSERT ON doc BEGIN
+  INSERT INTO doc_fts(rowid, rel_path, title, content) VALUES (NEW.id, NEW.rel_path, NEW.title, NEW.content);
+END;
+DROP TRIGGER IF EXISTS doc_fts_ad;
+CREATE TRIGGER doc_fts_ad AFTER DELETE ON doc BEGIN
+  INSERT INTO doc_fts(doc_fts, rowid, rel_path, title, content) VALUES ('delete', OLD.id, OLD.rel_path, OLD.title, OLD.content);
+END;
+DROP TRIGGER IF EXISTS doc_fts_au;
+CREATE TRIGGER doc_fts_au AFTER UPDATE OF rel_path, title, content ON doc BEGIN
+  INSERT INTO doc_fts(doc_fts, rowid, rel_path, title, content) VALUES ('delete', OLD.id, OLD.rel_path, OLD.title, OLD.content);
+  INSERT INTO doc_fts(rowid, rel_path, title, content) VALUES (NEW.id, NEW.rel_path, NEW.title, NEW.content);
+END;
+""")
     c.execute("""CREATE TABLE IF NOT EXISTS unprocessed(
         id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT, kind TEXT,
         reason TEXT, status TEXT, updated_at TEXT)""")
@@ -376,7 +395,8 @@ def run(args):
     for i, (p, rel, ext, size, mtime) in enumerate(files, 1):
         stat["scanned"] += 1
         exist = cur.execute("SELECT mtime, status FROM doc WHERE path=?", (p,)).fetchone()
-        if exist and not args.强制 and abs(exist["mtime"] - mtime) < 1 and exist["status"] == "ok":
+        # duplicate 视为已收敛（与保留行同内容），不再重复提取，防复活
+        if exist and not args.强制 and abs(exist["mtime"] - mtime) < 1 and exist["status"] in ("ok", "duplicate"):
             stat["skipped"] += 1
             continue
         try:
@@ -397,6 +417,7 @@ def run(args):
             status = "ok"
         title = guess_title(rel, txt)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sha = hashlib.md5(txt.encode("utf-8", "ignore")).hexdigest()[:16] if txt else ""
         cur.execute("""INSERT INTO doc(path,rel_path,category,ext,size,mtime,sha,title,content,
                        char_count,extract_method,status,updated_at)
                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -404,10 +425,12 @@ def run(args):
                        rel_path=excluded.rel_path, category=excluded.category, ext=excluded.ext,
                        size=excluded.size, mtime=excluded.mtime, title=excluded.title,
                        content=excluded.content, char_count=excluded.char_count,
-                       extract_method=excluded.extract_method, status=excluded.status,
+                       extract_method=excluded.extract_method,
+                       status=CASE WHEN doc.status='duplicate' AND doc.sha=excluded.sha
+                                   THEN 'duplicate' ELSE excluded.status END,
                        updated_at=excluded.updated_at""",
                     (p, rel, classify(rel), ext, size, mtime,
-                     hashlib.md5(p.encode()).hexdigest()[:12], title, txt, n,
+                     sha, title, txt, n,
                      method, status, now))
         if exist:
             stat["updated"] += 1
@@ -435,20 +458,22 @@ def run(args):
                  stat["updated"], stat["skipped"], stat["empty"], stat["need_ocr"],
                  stat["failed"], elapsed, args.分类 or "全库"))
     conn.commit()
-    rebuild_fts(conn)
+    # 索引由 doc 表触发器增量同步，无需全量 rebuild（仅结构迁移/修复时手动调 kb_ingest.py 索引）
     print("完成：新增 %d / 更新 %d / 跳过 %d / 空 %d / 需OCR %d / 失败 %d，用时 %ss"
           % (stat["inserted"], stat["updated"], stat["skipped"], stat["empty"],
              stat["need_ocr"], stat["failed"], elapsed))
 
 
 def rebuild_fts(conn):
+    """外部内容表重建：FTS 不存正文，重建=清索引+重插 ok 行（触发器保后续增量）"""
     c = conn.cursor()
     try:
-        c.execute("DELETE FROM doc_fts")
-        rows = c.execute("SELECT rel_path, title, content FROM doc WHERE status='ok'").fetchall()
-        c.executemany("INSERT INTO doc_fts(rel_path,title,content) VALUES(?,?,?)", rows)
+        c.execute("INSERT INTO doc_fts(doc_fts) VALUES('delete-all')")
+        rows = c.execute("SELECT id, rel_path, title, content FROM doc "
+                         "WHERE status='ok' AND content!=''").fetchall()
+        c.executemany("INSERT INTO doc_fts(rowid,rel_path,title,content) VALUES(?,?,?,?)", rows)
         conn.commit()
-        print("全文索引重建：%d 篇" % len(rows))
+        print("全文索引重建：%d 篇（增量触发器已接管后续同步）" % len(rows))
     except Exception as e:
         print("FTS 重建失败：", e)
 
@@ -465,8 +490,8 @@ def search(kw, category=None, limit=20):
         if len(kw) >= 3:
             rows = c.execute(
                 "SELECT d.rel_path, d.title, d.category, snippet(doc_fts,2,'[',']','…',14) s "
-                "FROM doc_fts JOIN doc d ON d.rel_path=doc_fts.rel_path "
-                "WHERE doc_fts MATCH ?%s LIMIT ?" % sql_cat,
+                "FROM doc_fts JOIN doc d ON d.id = doc_fts.rowid "
+                "WHERE doc_fts MATCH ? AND d.status='ok'%s LIMIT ?" % sql_cat,
                 params + [limit]).fetchall()
     except Exception:
         rows = []

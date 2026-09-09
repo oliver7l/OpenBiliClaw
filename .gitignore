@@ -108,3 +108,8 @@ references/my-interview/
 references/
 # 个人面试转录等隐私材料
 transcript/
+
+# 知识库数据库备份（*.db.bak-* 不被 *.db 规则覆盖，必须单独忽略）
+*.db.bak*
+*.db-wal
+*.db-shm

@@ -83,9 +83,9 @@ def main():
         conn.commit()
         print("\n清理 + VACUUM 中（可能需要几分钟）...")
         t0 = time.time()
-        conn.execute("DELETE FROM doc_fts")
-        conn.executemany("INSERT INTO doc_fts(rel_path,title,content) VALUES(?,?,?)",
-                         conn.execute("SELECT rel_path,title,content FROM doc "
+        conn.execute("INSERT INTO doc_fts(doc_fts) VALUES('delete-all')")
+        conn.executemany("INSERT INTO doc_fts(rowid,rel_path,title,content) VALUES(?,?,?,?)",
+                         conn.execute("SELECT id,rel_path,title,content FROM doc "
                                       "WHERE status='ok' AND content!=''").fetchall())
         conn.commit()
         conn.isolation_level = None
