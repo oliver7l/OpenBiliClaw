@@ -593,6 +593,9 @@ class StorageConfig:
     """Storage configuration."""
 
     db_path: str = "data/openbiliclaw.db"
+    # 面试复盘子库：interview_reviews 独立存放，与主库锁域隔离，避免转录长文本
+    # 与 FTS 写入阻塞核心业务。默认 data/interview.db，可由配置覆盖。
+    interview_db_path: str = "data/interview.db"
 
 
 @dataclass

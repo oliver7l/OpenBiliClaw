@@ -358,7 +358,10 @@ def register_config_routes(
                 enabled=cfg.autostart.enabled,
                 manage_ollama=cfg.autostart.manage_ollama,
             ),
-            storage=StorageConfigOut(db_path=cfg.storage.db_path),
+            storage=StorageConfigOut(
+                db_path=cfg.storage.db_path,
+                interview_db_path=cfg.storage.interview_db_path,
+            ),
             logging=LoggingConfigOut(
                 level=cfg.logging.level,
                 file_level=cfg.logging.file_level,

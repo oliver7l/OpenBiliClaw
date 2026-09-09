@@ -1306,6 +1306,7 @@ class UpdateApplyResponse(BaseModel):
 
 class StorageConfigOut(BaseModel):
     db_path: str = "data/openbiliclaw.db"
+    interview_db_path: str = "data/interview.db"
 
 
 class LoggingConfigOut(BaseModel):

@@ -369,9 +369,18 @@ def interview_root() -> None:
 
 
 def _review_service() -> InterviewReviewService | None:
-    """创建复盘服务（使用 data/openbiliclaw.db）。"""
+    """创建复盘服务（使用 data/interview.db，面试复盘子库）。"""
     project_root = Path(__file__).resolve().parents[3]
-    db_path = project_root / "data" / "openbiliclaw.db"
+    db_path = project_root / "data" / "interview.db"
+    try:
+        from openbiliclaw.config import load_settings
+
+        settings = load_settings()
+        if settings.storage.interview_db_path:
+            p = Path(settings.storage.interview_db_path)
+            db_path = p if p.is_absolute() else project_root / p
+    except Exception:  # noqa: BLE001 - 配置加载失败时回退默认路径
+        pass
     return InterviewReviewService(str(db_path))
 
 

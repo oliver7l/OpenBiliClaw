@@ -32,9 +32,18 @@ logger = logging.getLogger(__name__)
 
 
 def _default_db_path() -> str:
-    """默认数据库路径：data/openbiliclaw.db"""
+    """默认数据库路径：data/interview.db（面试复盘子库，独立锁域）。"""
     project_root = Path(__file__).resolve().parents[3]
-    return str(project_root / "data" / "openbiliclaw.db")
+    try:
+        from openbiliclaw.config import Settings, load_settings
+
+        settings = load_settings()
+        if settings.storage.interview_db_path:
+            p = Path(settings.storage.interview_db_path)
+            return str(p if p.is_absolute() else project_root / p)
+    except Exception:  # noqa: BLE001 - 配置加载失败时回退默认路径
+        pass
+    return str(project_root / "data" / "interview.db")
 
 
 def build_review_router(db_path: str | None = None) -> APIRouter:
