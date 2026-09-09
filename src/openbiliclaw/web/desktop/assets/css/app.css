@@ -2638,7 +2638,7 @@ body.card-lg { --card-min: 340px; }
   flex-wrap: wrap;
   gap: 8px;
 }
-.observability-header-inner h2 { margin: 0; font-size: 18px; }
+.observability-header-inner h2 { margin: 0; font-size: 18px; display: none; }  /* 去重复标题，tab 已定位当前页 */
 .observability-subtitle { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); }
 .observability-actions { display: flex; gap: 8px; }
 .observability-body { max-width: 1200px; margin: 0 auto 16px; padding: 0 16px; }
