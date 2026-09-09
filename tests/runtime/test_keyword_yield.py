@@ -31,7 +31,6 @@ from openbiliclaw.discovery.candidate_pool import (
 )
 from openbiliclaw.discovery.engine import ContentDiscoveryEngine, DiscoveredContent
 from openbiliclaw.storage.database import Database
-
 from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
 from tests.discovery.test_search_strategy import _build_profile
 

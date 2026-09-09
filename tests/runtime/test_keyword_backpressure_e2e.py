@@ -65,7 +65,6 @@ from openbiliclaw.runtime.keyword_fetch import (
 from openbiliclaw.runtime.keyword_planner import KeywordPlanner
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
-
 from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
 
 if TYPE_CHECKING:

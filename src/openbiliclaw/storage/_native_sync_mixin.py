@@ -54,7 +54,7 @@ class NativeSyncMixin:
 
     def get_sync_task(self, task_id: str) -> dict[str, Any]:
         rows = self.conn.execute(
-            "SELECT task_id, item_key, list_kind, status, is_live FROM native_save_task_items WHERE task_id = ? AND is_live = 1",  # noqa: E501
+            "SELECT task_id, item_key, list_kind, status, is_live FROM native_save_task_items WHERE task_id = ? AND is_live = 1",
             (task_id,),
         ).fetchall()
         return {
@@ -66,7 +66,7 @@ class NativeSyncMixin:
         conn = self.open_connection()
         try:
             conn.execute(
-                "UPDATE native_save_task_items SET is_live = 0, updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",  # noqa: E501
+                "UPDATE native_save_task_items SET is_live = 0, updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
                 (task_id,),
             )
             conn.commit()

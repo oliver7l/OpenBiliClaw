@@ -6132,7 +6132,6 @@ class TestBackendAPI:
 
         from fastapi.testclient import TestClient
 
-        from openbiliclaw.api import app as app_module
         from openbiliclaw.memory.manager import MemoryManager
         from openbiliclaw.soul.avoidance_speculator import (
             AvoidanceSpeculator,
@@ -6402,7 +6401,6 @@ class TestBackendAPI:
 
         from fastapi.testclient import TestClient
 
-        from openbiliclaw.api import app as app_module
         from openbiliclaw.memory.manager import MemoryManager
         from openbiliclaw.soul.avoidance_speculator import (
             AvoidanceSpeculator,

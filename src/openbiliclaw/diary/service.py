@@ -242,7 +242,7 @@ class DiaryService:
         try:
             resp = await self._llm_service.complete_structured_task(
                 system_instruction=_DIARY_ANALYSIS_PROMPT,
-                user_input=f"日期：{entry.entry_date}\n标题：{entry.title or '(无标题)'}\n\n{entry.content[:8000]}",  # noqa: E501
+                user_input=f"日期：{entry.entry_date}\n标题：{entry.title or '(无标题)'}\n\n{entry.content[:8000]}",
                 temperature=0.3,
                 max_tokens=4096,
                 caller="diary.analyze_entry",

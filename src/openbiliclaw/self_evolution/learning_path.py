@@ -371,7 +371,7 @@ class LearningPathGenerator:
             "4. 为整个学习路径生成一个标题和描述\n"
             "5. 只使用提供的文章，不要编造不存在的文章\n"
             "6. 如果文章太多，挑选最相关的10-15篇\n"
-            '返回JSON格式：{"title": "...", "description": "...", "steps": [{"article_id": 123, "learning_point": "...", "estimated_minutes": 15}]}'  # noqa: E501
+            '返回JSON格式：{"title": "...", "description": "...", "steps": [{"article_id": 123, "learning_point": "...", "estimated_minutes": 15}]}'
         )
 
         user_input = (

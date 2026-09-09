@@ -385,8 +385,9 @@ def test_ollama_embedding_with_empty_credentials_uses_local_default_without_warn
     """
     import logging
 
-    from openbiliclaw.config import EmbeddingConfig
     import obc_llm.registry as registry_mod
+
+    from openbiliclaw.config import EmbeddingConfig
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(
@@ -419,8 +420,9 @@ def test_ollama_embedding_without_base_url_uses_local_default(
 ) -> None:
     import logging
 
-    from openbiliclaw.config import EmbeddingConfig
     import obc_llm.registry as registry_mod
+
+    from openbiliclaw.config import EmbeddingConfig
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(
@@ -996,8 +998,9 @@ def test_openai_embedding_chat_credential_fallback_still_warns_once(
 ) -> None:
     import logging
 
-    from openbiliclaw.config import EmbeddingConfig
     import obc_llm.registry as registry_mod
+
+    from openbiliclaw.config import EmbeddingConfig
 
     registry_mod._embedding_compat_warned.clear()
     config = Config(

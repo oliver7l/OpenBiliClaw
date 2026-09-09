@@ -78,7 +78,6 @@ from openbiliclaw.api.models import (
     SourcesConfigOut,
     SourceShareSuggestionIn,
     SourceShareSuggestionResponse,
-    SourcesStatusResponse,
     StorageConfigOut,
     TwitterSourceConfigOut,
     XiaohongshuSourceConfigOut,

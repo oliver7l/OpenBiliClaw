@@ -46,7 +46,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
 
             # 统计
             total = conn.execute(
-                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge_concepts kc WHERE {where_clause}",  # noqa: E501
+                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge_concepts kc WHERE {where_clause}",
                 params,
             ).fetchone()[0]
 

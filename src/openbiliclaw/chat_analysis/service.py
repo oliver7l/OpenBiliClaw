@@ -608,21 +608,21 @@ class ChatAnalysisService:
 
     def get_session_senders(self, session_id: int) -> list[str]:
         rows = self.store.conn.execute(
-            "SELECT DISTINCT sender FROM chat_messages WHERE session_id = ? AND sender != '' ORDER BY sender",  # noqa: E501
+            "SELECT DISTINCT sender FROM chat_messages WHERE session_id = ? AND sender != '' ORDER BY sender",
             (session_id,),
         ).fetchall()
         return [r[0] for r in rows]
 
     def get_session_message_types(self, session_id: int) -> dict[str, int]:
         rows = self.store.conn.execute(
-            "SELECT message_type, COUNT(*) FROM chat_messages WHERE session_id = ? GROUP BY message_type",  # noqa: E501
+            "SELECT message_type, COUNT(*) FROM chat_messages WHERE session_id = ? GROUP BY message_type",
             (session_id,),
         ).fetchall()
         return {r[0]: r[1] for r in rows}
 
     def get_session_time_range(self, session_id: int) -> tuple[str | None, str | None]:
         row = self.store.conn.execute(
-            "SELECT MIN(timestamp), MAX(timestamp) FROM chat_messages WHERE session_id = ? AND timestamp != ''",  # noqa: E501
+            "SELECT MIN(timestamp), MAX(timestamp) FROM chat_messages WHERE session_id = ? AND timestamp != ''",
             (session_id,),
         ).fetchone()
         return (row[0], row[1]) if row else (None, None)
