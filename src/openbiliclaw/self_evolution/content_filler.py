@@ -131,7 +131,7 @@ class ContentFiller:
     def _increment_attempts(self, article_id: int) -> None:
         conn = self._conn()
         conn.execute(
-            "UPDATE articles SET body_fetch_attempts = body_fetch_attempts + 1, updated_at = ? WHERE id = ?",  # noqa: E501
+            "UPDATE articles SET body_fetch_attempts = body_fetch_attempts + 1, updated_at = ? WHERE id = ?",
             (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), article_id),
         )
         conn.commit()

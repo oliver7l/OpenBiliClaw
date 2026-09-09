@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .base import LLMProvider, LLMProviderError, LLMRegistry
@@ -204,7 +205,7 @@ def build_embedding_service(
         # Persistent L2 cache: store embeddings in SQLite alongside main DB
         l2_cache: EmbeddingCache | None = None
         try:
-            cache_path = config.data_path / "embedding_cache.db"
+            cache_path = Path(config.data_path) / "embedding_cache.db"
             l2_cache = EmbeddingCache(cache_path)
             l2_cache.initialize()
         except Exception:

@@ -35,6 +35,7 @@ class SchemaMixin:
         required_columns = {
             "inferred_satisfaction": "TEXT",
             "satisfaction_reason": "TEXT",
+            "article_id": "INTEGER",
         }
         for column_name, column_type in required_columns.items():
             if column_name in existing_columns:
@@ -494,6 +495,7 @@ class SchemaMixin:
             ("reading_progress", "TEXT", "''"),
             ("favorited", "INTEGER", "0"),
             ("ai_summary", "TEXT", "''"),
+            ("topic_group", "TEXT", "''"),
         ]:
             with suppress(Exception):
                 self.conn.execute(f"ALTER TABLE articles ADD COLUMN {col} {typ} DEFAULT {default}")
