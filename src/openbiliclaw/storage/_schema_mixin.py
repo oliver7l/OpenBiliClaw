@@ -693,7 +693,9 @@ class SchemaMixin:
 
         # 2. 实体表（3.2.2）
         # P8：entities/entity_relations 独立存于 knowledge.db，故用 knowledge. 前缀；
-        # article_entities 与 articles 同属内容域，继续留在 content/主库。
+        # article_entities / article_relations 属内容域，真实数据存于 content.db，
+        # 用 content. 前缀建表/索引（主库连接 ATTACH content），避免裸名在主库重建空表
+        # 挡住 ATTACH 子库真实数据的裸名解析（P9 收尾发现）。
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS knowledge.entities (
                 id INTEGER PRIMARY KEY,
@@ -709,7 +711,7 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS knowledge.idx_entities_name ON entities(name);
 
             -- 文章-实体关联
-            CREATE TABLE IF NOT EXISTS article_entities (
+            CREATE TABLE IF NOT EXISTS content.article_entities (
                 article_id INTEGER,
                 entity_id INTEGER,
                 relevance REAL,
@@ -718,8 +720,8 @@ class SchemaMixin:
                 FOREIGN KEY (article_id) REFERENCES articles(id),
                 FOREIGN KEY (entity_id) REFERENCES entities(id)
             );
-            CREATE INDEX IF NOT EXISTS idx_article_entities_article ON article_entities(article_id);
-            CREATE INDEX IF NOT EXISTS idx_article_entities_entity ON article_entities(entity_id);
+            CREATE INDEX IF NOT EXISTS content.idx_article_entities_article ON article_entities(article_id);
+            CREATE INDEX IF NOT EXISTS content.idx_article_entities_entity ON article_entities(entity_id);
 
             -- 实体间关联
             CREATE TABLE IF NOT EXISTS knowledge.entity_relations (
@@ -742,7 +744,7 @@ class SchemaMixin:
 
         # 3. 文章间关联（3.3.2）
         self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS article_relations (
+            CREATE TABLE IF NOT EXISTS content.article_relations (
                 article_id_a INTEGER,
                 article_id_b INTEGER,
                 relation_type TEXT,
@@ -753,9 +755,9 @@ class SchemaMixin:
                 FOREIGN KEY (article_id_a) REFERENCES articles(id),
                 FOREIGN KEY (article_id_b) REFERENCES articles(id)
             );
-            CREATE INDEX IF NOT EXISTS idx_article_relations_a ON article_relations(article_id_a);
-            CREATE INDEX IF NOT EXISTS idx_article_relations_b ON article_relations(article_id_b);
-            CREATE INDEX IF NOT EXISTS idx_article_relations_type ON article_relations(relation_type);
+            CREATE INDEX IF NOT EXISTS content.idx_article_relations_a ON article_relations(article_id_a);
+            CREATE INDEX IF NOT EXISTS content.idx_article_relations_b ON article_relations(article_id_b);
+            CREATE INDEX IF NOT EXISTS content.idx_article_relations_type ON article_relations(relation_type);
         """)
 
         # 4. 质量审计表（3.5.3）
