@@ -201,9 +201,17 @@ def main():
             failn += 1
     print("\nOCR 完成：成功 %d / 失败 %d / 耗时 %.0fs" % (okn, failn, time.time() - t0))
     left = conn.execute("SELECT COUNT(*) FROM doc WHERE status='need_ocr'").fetchone()[0]
-    pend = conn.execute(
-        "SELECT COUNT(*) FROM doc_chunk ch WHERE ch.char_count>=60 AND ch.id NOT IN "
-        "(SELECT chunk_id FROM doc_vector)").fetchone()[0]
+    pend = 0
+    try:
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        pend = conn.execute(
+            "SELECT COUNT(*) FROM doc_chunk ch WHERE ch.char_count>=60 AND ch.id NOT IN "
+            "(SELECT chunk_id FROM doc_vector)").fetchone()[0]
+    except Exception as e:
+        print("(待补向量统计跳过: %s)" % str(e)[:40])
     print("剩余 need_ocr：%d 篇 | 待补向量块：%d（跑 python kb_embed.py 增量补）" % (left, pend))
 
 

@@ -2712,7 +2712,8 @@ def create_app(
         except Exception:
             pass
         try:
-            row = database.conn.execute(
+            _disc_conn = getattr(database, '_discovery_conn', None) or database.conn
+            row = _disc_conn.execute(
                 "SELECT content_url FROM discovery_candidates "
                 "WHERE source_platform='xiaohongshu' AND content_id=? "
                 "  AND content_url LIKE '%xsec_token=%' "

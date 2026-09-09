@@ -70,6 +70,14 @@ def load_positive_samples(
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=5000")
     con.execute("PRAGMA synchronous=NORMAL")
+    # ATTACH 子库，使 events.events / discovery_candidates 查询正常工作
+    from pathlib import Path
+    _db_dir = Path(db_path).parent
+    for _alias, _name in [("events", "events.db"), ("discovery", "discovery.db")]:
+        try:
+            con.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_db_dir / _name),))
+        except Exception:
+            pass
     samples: dict[str, PositiveSample] = {}
     try:
         for ev in event_types:
@@ -112,6 +120,14 @@ def load_candidate_pool(
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=5000")
     con.execute("PRAGMA synchronous=NORMAL")
+    # ATTACH 子库，使 discovery_candidates 查询正常工作
+    from pathlib import Path
+    _db_dir = Path(db_path).parent
+    for _alias, _name in [("events", "events.db"), ("discovery", "discovery.db")]:
+        try:
+            con.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_db_dir / _name),))
+        except Exception:
+            pass
     items: list[CandidateItem] = []
     try:
         q = """

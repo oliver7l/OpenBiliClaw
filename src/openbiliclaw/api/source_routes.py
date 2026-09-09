@@ -690,7 +690,8 @@ def register_source_routes(
         except Exception:
             pass
         try:
-            row = database.conn.execute(
+            _dc = getattr(database, '_discovery_conn', None) or database.conn
+            row = _dc.execute(
                 "SELECT content_url FROM discovery_candidates "
                 "WHERE source_platform='xiaohongshu' AND content_id=? "
                 "  AND content_url LIKE '%xsec_token=%' "
@@ -734,7 +735,8 @@ def register_source_routes(
             except Exception:
                 pass
             try:
-                cursor = database.conn.execute(
+                _dc = getattr(database, '_discovery_conn', None) or database.conn
+                cursor = _dc.execute(
                     "UPDATE discovery_candidates "
                     "SET content_url=?, last_seen_at=CURRENT_TIMESTAMP "
                     "WHERE source_platform='xiaohongshu' AND content_id=? "
@@ -1604,7 +1606,8 @@ def register_source_routes(
                 xhs_fresh = 0
             if xhs_tokens and not xhs_fresh:
                 try:
-                    row = ctx.database.conn.execute(
+                    _dc = getattr(ctx.database, '_discovery_conn', None) or ctx.database.conn
+                    row = _dc.execute(
                         "SELECT COUNT(*) FROM discovery_candidates "
                         "WHERE source_platform = 'xiaohongshu' "
                         "AND content_url LIKE '%xsec_token=%' "
@@ -2224,8 +2227,11 @@ def register_source_routes(
     def _latest_xhs_token() -> str:
         if not hasattr(ctx.database, "conn"):
             return ""
+        _dc = getattr(ctx.database, '_discovery_conn', None) or ctx.database.conn
         queries = (
-            """
+            (
+                _dc,
+                """
                 SELECT content_url
                 FROM discovery_candidates
                 WHERE source_platform = 'xiaohongshu'
@@ -2233,7 +2239,10 @@ def register_source_routes(
                 ORDER BY last_seen_at DESC, id DESC
                 LIMIT 1
                 """,
-            """
+            ),
+            (
+                ctx.database.conn,
+                """
                 SELECT content_url
                 FROM content_cache
                 WHERE source_platform = 'xiaohongshu'
@@ -2241,10 +2250,11 @@ def register_source_routes(
                 ORDER BY discovered_at DESC, bvid DESC
                 LIMIT 1
                 """,
+            ),
         )
-        for sql in queries:
+        for _conn, sql in queries:
             with suppress(Exception):
-                row = ctx.database.conn.execute(sql).fetchone()
+                row = _conn.execute(sql).fetchone()
                 if row:
                     url = row["content_url"] if hasattr(row, "keys") else row[0]
                     token = _xhs_token_from_url(str(url))
