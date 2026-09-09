@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from openbiliclaw.storage.database import open_db_conn
 
 import logging
 from typing import Any
@@ -427,7 +428,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         """Get self-evolution module status and stats."""
         import sqlite3
 
-        conn = sqlite3.connect(db_path)
+        conn = open_db_conn(db_path)
         stats = {}
         for table in [
             "insight_reports",

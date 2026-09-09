@@ -147,7 +147,9 @@ class ArticleRagRetriever:
     def _load_locked(self) -> None:
         import sqlite3
 
-        conn = sqlite3.connect(str(self._rag_db), timeout=10.0)
+        from openbiliclaw.storage.database import open_db_conn
+
+        conn = open_db_conn(str(self._rag_db))
         try:
             conn.execute("PRAGMA journal_mode=WAL")
             row = conn.execute(

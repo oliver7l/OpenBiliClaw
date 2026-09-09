@@ -45,6 +45,92 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# ── 进程内统一写锁 + 连接工厂 ────────────────────────────────────────
+# 大量离线模块（self_evolution/、knowledge_forge/ 等）不走 Database 类，
+# 各自 sqlite3.connect 并同时写库，在 WAL 单写者模型下互相挤兑导致
+# database is locked。这里提供一个进程级全局写锁：所有走 open_db_conn()
+# 连接发出的写语句都会先取同一把锁，把随机撞锁变成排队写（读不受限）。
+# WAL 下读写可并行，故只对写语句加锁，SELECT/WITH 不加，避免拖慢读。
+DB_WRITE_LOCK = threading.RLock()
+
+_WRITE_STATEMENT_PREFIXES = (
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "REPLACE",
+    "CREATE",
+    "ALTER",
+    "DROP",
+    "ATTACH",
+    "DETACH",
+    "BEGIN",
+    "START",
+    "COMMIT",
+    "END",
+    "ROLLBACK",
+    "VACUUM",
+    "REINDEX",
+    "PRAGMA",
+)
+
+
+class LockedConnection(sqlite3.Connection):
+    """SQLite connection that serializes write statements via DB_WRITE_LOCK.
+
+    Reads (SELECT / WITH) bypass the lock so WAL read-parallelism is
+    preserved; only writers queue on the shared process-wide lock.
+    """
+
+    def execute(self, sql, parameters=(), /):
+        if _is_write_statement(sql):
+            with DB_WRITE_LOCK:
+                return super().execute(sql, parameters)
+        return super().execute(sql, parameters)
+
+    def executemany(self, sql, seq_of_parameters, /):
+        if _is_write_statement(sql):
+            with DB_WRITE_LOCK:
+                return super().executemany(sql, seq_of_parameters)
+        return super().executemany(sql, seq_of_parameters)
+
+    def executescript(self, sql_script, /):
+        with DB_WRITE_LOCK:
+            return super().executescript(sql_script)
+
+
+def _is_write_statement(sql: object) -> bool:
+    try:
+        head = str(sql).lstrip()[:16].upper()
+    except Exception:
+        return True
+    return head.startswith(_WRITE_STATEMENT_PREFIXES)
+
+
+def open_db_conn(db_path: str | Path) -> LockedConnection:
+    """Open a lock-serialized SQLite connection with sane WAL defaults.
+
+    Replaces ad-hoc ``sqlite3.connect`` in modules that bypass Database.
+    Enables WAL, raises busy_timeout to 60s (was Python default ~5s, the
+    main reason writers gave up prematurely), and sets a sane cache so
+    long batch writes are not as likely to hold the write lock open.
+    """
+    import sqlite3 as _sqlite3
+
+    conn = _sqlite3.connect(
+        str(db_path),
+        timeout=60.0,
+        check_same_thread=False,
+        factory=LockedConnection,
+    )
+    conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=60000")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-65536")
+    return conn
+
+
 # v0.3.62+: retry budget tightened from 5×100ms (worst-case 500ms
 # blocking the asyncio event loop on lock contention) to 8×20ms
 # (worst-case 160ms). Same total absolute timeout floor (~160-500ms)
@@ -675,6 +761,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 推荐流子库：确保 pool.db 存在后 ATTACH，使无前缀 SQL 落到 pool schema
         self._ensure_pool_database()
         self._attach_pool(self._conn)
+        # 推荐流子库 pool.db 一并启用 WAL，与主库一致，降低并发写锁冲突
+        with suppress(sqlite3.OperationalError):
+            self._conn.execute("PRAGMA pool.journal_mode=WAL")
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn

@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -153,7 +154,7 @@ class AutoTopicGenerator:
         """
         candidates: list[TopicCandidate] = []
 
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             # 加载最新知识图谱
             row = conn.execute(
                 "SELECT graph_json FROM knowledge_graph ORDER BY id DESC LIMIT 1"
@@ -231,7 +232,7 @@ class AutoTopicGenerator:
             生成的专题，如果失败返回 None。
 
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             # 搜索相关文章
             articles = self._search_related_articles(conn, candidate.keywords, limit=max_articles)
 
@@ -698,7 +699,7 @@ class AutoTopicGenerator:
     def _get_existing_topic_slugs(self) -> set[str]:
         """获取已存在的专题 slug。"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with open_db_conn(self.db_path) as conn:
                 rows = conn.execute("SELECT slug FROM topics").fetchall()
                 return {r[0] for r in rows if r[0]}
         except Exception:

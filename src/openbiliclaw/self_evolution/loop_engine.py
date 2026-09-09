@@ -14,9 +14,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from openbiliclaw.diary.models import DiaryAnalysis
 
+import asyncio
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -42,6 +44,11 @@ _BATCH_MAX_HOURS = 24
 _MIN_CONTENT_CHARS = 200
 # How many articles to process in one batch for LLM-heavy tasks
 _BATCH_PROCESS_LIMIT = 15
+# getnote 高频补正文通道：独立于 batch 门槛，按较密节奏播种并收割。
+# 依据得到大脑 write_note 日配额(1000/天)合理分配：每天播种约 250 篇，
+# 留足安全余量防风控，越限即熔断至次日。
+_GETNOTE_DISPATCH_INTERVAL = 600  # 每 10 分钟唤醒一次
+_GETNOTE_DAILY_TARGET = 250  # 每日播种目标(save 次数)，达成后熔断至次日
 
 # ---------------------------------------------------------------------------
 # Persistent state
@@ -60,7 +67,7 @@ class SelfEvolutionState:
         self._ensure_table()
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=10.0)
+        conn = open_db_conn(self._db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -382,7 +389,7 @@ class SelfEvolutionLoopEngine:
         LLM 密集型任务，避免触发上游限流。
         """
         try:
-            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            conn = open_db_conn(self._db_path)
             cutoff = (datetime.now() - timedelta(hours=_SENSENOVA_QUOTA_WINDOW_HOURS)).isoformat()
             total_tokens = conn.execute(
                 "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) "
@@ -416,7 +423,7 @@ class SelfEvolutionLoopEngine:
         now = datetime.now()
         results: dict[str, Any] = {}
 
-        with sqlite3.connect(self._db_path, timeout=10.0) as conn:
+        with open_db_conn(self._db_path) as conn:
             conn.row_factory = sqlite3.Row
 
             # ── Check batch accumulation ────────────────────────────────────

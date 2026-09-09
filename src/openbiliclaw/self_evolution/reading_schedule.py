@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -136,7 +137,7 @@ class ReadingScheduler:
 
     def _ensure_table(self) -> None:
         """确保 reading_schedule 表存在。"""
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS reading_schedule (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,7 +181,7 @@ class ReadingScheduler:
         next_review = (datetime.now(UTC) + timedelta(days=initial_delay_days)).isoformat()
 
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with open_db_conn(self.db_path) as conn:
                 conn.execute(
                     """INSERT OR IGNORE INTO reading_schedule
                        (article_id, stability, difficulty, retrievability, state,
@@ -210,7 +211,7 @@ class ReadingScheduler:
         """
         now = datetime.now(UTC)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT * FROM reading_schedule WHERE article_id = ?",
@@ -322,7 +323,7 @@ class ReadingScheduler:
         now = datetime.now(UTC).isoformat()
         items: list[ReadingScheduleItem] = []
 
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
             # 1. 到期需要复习的文章
@@ -369,7 +370,7 @@ class ReadingScheduler:
             ReadingScheduleItem，如果不存在则返回 None。
 
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """SELECT rs.*, a.title, a.url, a.source_type
@@ -392,7 +393,7 @@ class ReadingScheduler:
         """
         now = datetime.now(UTC).isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             total = conn.execute("SELECT COUNT(*) FROM reading_schedule").fetchone()[0]
 
             by_state = {}
@@ -440,7 +441,7 @@ class ReadingScheduler:
         now = datetime.now(UTC).isoformat()
         next_review = (datetime.now(UTC) + timedelta(days=1)).isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with open_db_conn(self.db_path) as conn:
             # 找出尚未注册的文章
             rows = conn.execute(
                 """SELECT a.id FROM articles a

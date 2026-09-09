@@ -11,6 +11,7 @@ consumption patterns across different time windows.  Provides:
 """
 
 from __future__ import annotations
+from openbiliclaw.storage.database import open_db_conn
 
 import logging
 from dataclasses import dataclass, field
@@ -109,7 +110,7 @@ class InterestDriftDetector:
     def _get_conn(self) -> Any:
         import sqlite3
 
-        conn = sqlite3.connect(self.db_path)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

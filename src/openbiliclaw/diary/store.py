@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -216,7 +217,7 @@ class DiaryStore:
         if not hasattr(self._thread_local, "conn") or self._thread_local.conn is None:
             assert self._db_path is not None
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
+            conn = open_db_conn(str(self._db_path))
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout = 30000")

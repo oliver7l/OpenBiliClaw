@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from datetime import datetime, timedelta
 
 logger = logging.getLogger("self_evolution.content_filler")
@@ -37,6 +38,9 @@ _GETNOTE_SAVE_TIMEOUT = 110  # save 提交阻塞等待，实测约 58s
 _GETNOTE_NOTE_TIMEOUT = 60  # note 读取超时
 _GETNOTE_SEED_PER_CALL = 3  # 单轮最多播种（save 慢，防止阻塞 tick 太久）
 _GETNOTE_HARVEST_PER_CALL = 10  # 单轮最多收割
+# 历史笔记回收：早期 save 超时丢 note_id 的笔记已就绪，每轮顺带枚举最近笔记，
+# 按 title 匹配本库缺正文文章直接收割写回，弥补早期损耗。
+_GETNOTE_RECLAIM_LIMIT = 150  # 每轮最多枚举的平台最近笔记数
 
 # 最大失败重试次数
 _MAX_BODY_RETRIES = 3
@@ -84,10 +88,8 @@ class ContentFiller:
     # ── 辅助 ───────────────────────────────────────────────────────
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=30000")
-        return conn
+        # open_db_conn 已统一 WAL + busy_timeout=60s + 进程级写锁
+        return open_db_conn(self._db_path)
 
     # ═══════════════════════════════════════════════════════════════
     # 管线 1: 正文拉取
@@ -477,6 +479,7 @@ class ContentFiller:
         """
         return {
             **await self._harvest_getnote_pending(min(limit, _GETNOTE_HARVEST_PER_CALL)),
+            **await self._reclaim_seen_notes(),
             **await self._seed_getnote_pending(min(limit, _GETNOTE_SEED_PER_CALL)),
         }
 
@@ -588,6 +591,69 @@ class ContentFiller:
         web_content = (note.get("web_page") or {}).get("content") or ""
         ai_content = note.get("content") or ""
         return web_content, ai_content
+
+    @staticmethod
+    def _norm_title(text: str | None) -> str:
+        return (text or "").replace(" ", "").replace("\u3000", "").lower()
+
+    def _fetch_recent_notes(self, subprocess: object, limit: int) -> list[dict]:
+        """枚举平台最近笔记，用于 title 匹配回收历史已就绪笔记。"""
+        import json as _json
+
+        cmd = ["getnote", "notes", "--limit", str(limit), "-o", "json"]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=90
+        )
+        if proc.returncode != 0:
+            return []
+        try:
+            payload = _json.loads(proc.stdout or "{}")
+        except _json.JSONDecodeError:
+            return []
+        data = payload.get("data") if isinstance(payload, dict) else None
+        return (data or {}).get("notes") or []
+
+    async def _reclaim_seen_notes(self) -> dict[str, int]:
+        """回收历史早已就绪的平台笔记（早期 save 超时丢 note_id 的损耗）。
+
+        枚举最近 ``{notes}``，按 title 匹配本库缺正文、未在队里的文章，直接
+        收割写回正文+AI 摘要。全程在服务同进程内执行，避免外部脚本抢写锁。
+        """
+        import subprocess
+
+        notes = self._fetch_recent_notes(subprocess, _GETNOTE_RECLAIM_LIMIT)
+        if not notes:
+            return {"reclaimed": 0}
+
+        conn = self._conn()
+        try:
+            pend = {r[0] for r in conn.execute("SELECT article_id FROM getnote_pending")}
+            cands: dict[str, int] = {}
+            for row in conn.execute(
+                "SELECT id, title FROM articles WHERE (content_text IS NULL OR content_text = '')"
+            ):
+                nm = self._norm_title(row[1])
+                if nm:
+                    cands.setdefault(nm, row[0])
+        finally:
+            conn.close()
+
+        reclaimed = 0
+        for note in notes:
+            nid = str(note.get("note_id") or note.get("id") or "")
+            nm = self._norm_title(note.get("title"))
+            aid = cands.pop(nm, None)
+            if aid is None or aid in pend or not nid:
+                continue
+            web, ai = self._poll_note(nid, subprocess)
+            if web or ai:
+                self._save_getnote_harvest(aid, web, ai)
+                reclaimed += 1
+                logger.debug("getnote: reclaimed article %d note %s", aid, nid)
+
+        if reclaimed:
+            logger.info("content_filler: getnote reclaimed %d 篇历史已就绪笔记", reclaimed)
+        return {"reclaimed": reclaimed}
 
     def _save_getnote_harvest(self, article_id: int, web: str, ai: str) -> None:
         """写回正文+AI摘要（正文优先原始网页正文，否则用平台智能总结兜底）。"""

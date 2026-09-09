@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,7 +105,7 @@ class LearningPathGenerator:
         self.llm_service = llm_service
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

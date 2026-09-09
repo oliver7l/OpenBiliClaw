@@ -13,6 +13,7 @@ served via the API or pushed as notifications.
 """
 
 from __future__ import annotations
+from openbiliclaw.storage.database import open_db_conn
 
 import asyncio
 import json
@@ -467,7 +468,7 @@ class InsightReportGenerator:
     def _get_conn(self) -> Any:
         import sqlite3
 
-        conn = sqlite3.connect(self.db_path)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

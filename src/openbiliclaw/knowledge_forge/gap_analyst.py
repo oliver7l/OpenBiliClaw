@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -291,7 +292,7 @@ class GapAnalyst:
 
     # ------------------------------------------------------------------ 存储
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

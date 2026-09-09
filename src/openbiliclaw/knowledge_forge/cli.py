@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from openbiliclaw.storage.database import open_db_conn
 
 import json
 from typing import Any
@@ -398,7 +399,7 @@ def clean_cmd(
 
         from .summary_engine import _default_db_path
 
-        conn = sqlite3.connect(_default_db_path())
+        conn = open_db_conn(_default_db_path())
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if row is None:

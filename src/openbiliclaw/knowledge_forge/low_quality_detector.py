@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+from openbiliclaw.storage.database import open_db_conn
 from pathlib import Path
 from typing import Any
 
@@ -236,7 +237,7 @@ class LowQualityDetector:
             conn.close()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
