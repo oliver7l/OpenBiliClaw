@@ -29,7 +29,7 @@ import urllib.request
 DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "数据", "面试资料总库.db"))
 SRC_PREFIX = "01_原始资料库/03_工作资料/工作资料_腾讯/2020年09月-内部资料/"
 OUT_ROOT = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "02_方向知识库", "内部资料_提炼"))
+    os.path.dirname(__file__), "..", "..", "02_方向知识库", "内部资料_提炼_LLM"))
 MODEL = os.environ.get("REFINE_MODEL", "qwen2.5:7b")
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CHUNK = 5000
@@ -165,6 +165,50 @@ def synthesize(bullets, meta):
     return ollama_chat(sys_p, user, temperature=0.3, num_ctx=16384)
 
 
+def synthesize_direct(full_text, meta):
+    """短文档（≤14k字）一步合成：直接读全文产出结构化笔记，省一次抽取调用。"""
+    sys_p = ("你是求职面试知识库整理助手。根据下面这篇技术资料，直接输出一篇结构化面试提炼笔记（Markdown）。"
+             "候选人是10年算法工程师，做过腾讯微视/QQ看点图集/视频号/OPPO(国内+海外)/"
+             "百度/中信信用卡的推荐与广告项目。笔记要帮他快速回忆这篇资料、并判断对面试有无用。")
+    user = f"""资料信息：{meta}
+
+资料全文如下：
+{full_text}
+
+请输出如下结构的 Markdown 笔记（不要加额外前言）：
+
+# <资料标题（简洁）>
+> 来源：{meta}
+
+## 一句话定位
+（≤40字）
+
+## 核心内容摘要
+（3-5句，讲清主干）
+
+## 关键方法 · 模型 · 指标
+（要点列表，抓方法/模型/算法/指标/数据，去重）
+
+## 与推荐/广告/数据科学面试的关联
+（这篇资料能支撑哪些面试话题？列出可迁移点）
+
+## 关键术语
+（列出文中重要术语/缩写，便于检索）
+
+## 与本人项目的关联
+（若与微视/图集/视频号/OPPO/百度/中信项目相关，点出关联；无关写"无明显关联"）
+
+## 价值评估
+（高 / 中 / 低 —— 对面试准备的价值，并一句话理由）
+"""
+    return ollama_chat(sys_p, user, temperature=0.3, num_ctx=16384)
+
+
+# 长文档切块尺寸（加大以减半调用次数）
+LONG_CHUNK = 12000
+LONG_OVERLAP = 1200
+
+
 def refine_one(c, doc_id, rel_path, char_count):
     op = out_path(rel_path)
     if os.path.exists(op):
@@ -177,12 +221,14 @@ def refine_one(c, doc_id, rel_path, char_count):
     if sampled:
         meta += " ｜ ⚠️超长抽样(全文%.0f万→抽取%.0f万)" % (
             (char_count or 0) / 10000, len(text) / 10000)
-    if len(text) <= 12000:
-        note = synthesize_full(text, meta)
+    # 短文档（≤14k字）：一步合成，1 次调用
+    if len(text) <= 14000:
+        note = synthesize_direct(text, meta)
         if not note:
             return "fail"
     else:
-        chunks = chunk_text(text, 6000, 600)
+        # 长文档：滑动窗口抽取要点 → 合成
+        chunks = chunk_text(text, LONG_CHUNK, LONG_OVERLAP)
         bullets = []
         for ch in chunks:
             b = extract_chunk(ch)
