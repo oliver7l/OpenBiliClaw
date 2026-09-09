@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -449,8 +451,7 @@ class HealthStore:
         if not hasattr(self._thread_local, "conn") or self._thread_local.conn is None:
             assert self._db_path is not None
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
-            conn.row_factory = sqlite3.Row
+            conn = open_db_conn(str(self._db_path))
             conn.execute("PRAGMA foreign_keys = ON")
             self._thread_local.conn = conn
         return self._thread_local.conn

@@ -418,7 +418,8 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
             pass
 
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            conn.execute("PRAGMA busy_timeout=10000")
             cursor = conn.cursor()
 
             # 先查文章基本信息
@@ -477,7 +478,8 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
             pass
 
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            conn.execute("PRAGMA busy_timeout=10000")
             cursor = conn.cursor()
 
             total = cursor.execute("SELECT COUNT(*) FROM article_snapshots").fetchone()[0]

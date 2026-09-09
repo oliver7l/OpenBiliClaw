@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 from datetime import UTC, datetime
 from typing import Any
 
@@ -26,18 +28,10 @@ class SynthesisStore:
         self._ensure_tables()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+        return open_db_conn(self._db_path)
 
     def _connect_chat_db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect("data/chat_analysis.db")
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+        return open_db_conn("data/chat_analysis.db")
 
     # ── 建表 ───────────────────────────────────────────────────────
 

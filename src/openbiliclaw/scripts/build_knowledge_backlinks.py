@@ -55,7 +55,10 @@ def _get_conn() -> sqlite3.Connection | None:
     if not db_path:
         logger.error("数据库不存在")
         return None
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     logger.info("连接数据库: %s", db_path)
     return conn
 

@@ -64,8 +64,11 @@ def load_positive_samples(
     Later timestamps win for the same key (recency). ``eval_after`` applies
     the time-slice guard: only behavior after this instant counts.
     """
-    con = sqlite3.connect(db_path)
+    con = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=5000")
+    con.execute("PRAGMA synchronous=NORMAL")
     samples: dict[str, PositiveSample] = {}
     try:
         for ev in event_types:
@@ -103,8 +106,11 @@ def load_candidate_pool(
     source_platforms: tuple[str, ...] = ("bilibili",),
 ) -> list[CandidateItem]:
     """Load the full servable candidate pool as CandidateItems."""
-    con = sqlite3.connect(db_path)
+    con = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=5000")
+    con.execute("PRAGMA synchronous=NORMAL")
     items: list[CandidateItem] = []
     try:
         q = """

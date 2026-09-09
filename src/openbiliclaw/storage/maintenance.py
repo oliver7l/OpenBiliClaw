@@ -43,7 +43,7 @@ class RepairResult:
 
 def check_database_integrity(db_path: Path) -> IntegrityReport:
     """Return whether a SQLite database passes integrity check."""
-    connection = sqlite3.connect(str(db_path))
+    connection = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
     try:
         row = connection.execute("PRAGMA integrity_check").fetchone()
     except sqlite3.DatabaseError as exc:

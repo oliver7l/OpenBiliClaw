@@ -31,7 +31,8 @@ def register_llm_routes(app: Any, ctx: Any) -> None:
             except Exception:
                 pass
 
-            conn = sqlite3.connect(_quota_db_path)
+            conn = sqlite3.connect(_quota_db_path, timeout=10.0)
+            conn.execute("PRAGMA busy_timeout=10000")
             cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
 
             # 总调用次数

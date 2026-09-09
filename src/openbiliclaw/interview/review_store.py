@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -154,10 +156,18 @@ class InterviewReviewStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
+    @staticmethod
+    def _configure(conn: sqlite3.Connection) -> None:
+        """配置 SQLite 连接参数（WAL + 锁重试 + 性能调优）。"""
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+
     def _init_schema(self) -> None:
         """初始化表结构。"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
         try:
+            self._configure(conn)
             conn.executescript(SCHEMA)
             conn.executescript(FTS_SCHEMA)
             conn.executescript(FTS_TRIGGERS)
@@ -166,8 +176,9 @@ class InterviewReviewStore:
             conn.close()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        self._configure(conn)
         return conn
 
     def create(self, data: InterviewReviewCreate) -> InterviewReview:

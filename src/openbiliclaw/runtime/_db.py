@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 from pathlib import Path
 
 
@@ -16,7 +18,10 @@ def connect_main_with_pool(db_path: str | Path) -> sqlite3.Connection:
     这是大多数 *_producer.py 使用的标准连接方式：db_path 指向主库
     openbiliclaw.db，同目录下的 pool.db 作为 pool schema ATTACH 进来。
     """
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     with contextlib.suppress(sqlite3.OperationalError):
         conn.execute(
             "ATTACH DATABASE ? AS pool",
@@ -31,7 +36,11 @@ def connect_pool(db_path: str | Path) -> sqlite3.Connection:
     favorites producer 传入的 db_path 已经是 pool.db 的路径，
     不需要再 ATTACH。
     """
-    return sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
 
 
 def connect_inbox(platform: str, data_dir: str | Path = "data") -> sqlite3.Connection:

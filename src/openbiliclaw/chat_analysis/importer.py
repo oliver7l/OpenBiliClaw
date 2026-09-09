@@ -63,8 +63,11 @@ class ChatImporter:
             sessions_imported=0, messages_imported=0, analysis_chunks_imported=0, skipped=0
         )
 
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
 
         try:
             # 检测数据库结构
@@ -272,8 +275,11 @@ class ChatImporter:
             sessions_imported=0, messages_imported=0, analysis_chunks_imported=0, skipped=0
         )
 
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
 
         try:
             rows = conn.execute(

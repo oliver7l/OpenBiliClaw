@@ -107,7 +107,11 @@ def _is_write_statement(sql: object) -> bool:
     return head.startswith(_WRITE_STATEMENT_PREFIXES)
 
 
-def open_db_conn(db_path: str | Path) -> LockedConnection:
+def open_db_conn(
+    db_path: str | Path,
+    *,
+    isolation_level: str | None = "",
+) -> LockedConnection:
     """Open a lock-serialized SQLite connection with sane WAL defaults.
 
     Replaces ad-hoc ``sqlite3.connect`` in modules that bypass Database.
@@ -121,6 +125,7 @@ def open_db_conn(db_path: str | Path) -> LockedConnection:
         str(db_path),
         timeout=60.0,
         check_same_thread=False,
+        isolation_level=isolation_level,
         factory=LockedConnection,
     )
     conn.row_factory = _sqlite3.Row
@@ -658,6 +663,10 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 独立存放于 pool.db（总库+子库）。所有 Database 连接 ATTACH 该子库，
         # 无前缀 SQL 自动落到 pool schema（主库已不含这些表）。
         self._pool_db_path = self._db_path.with_name("pool.db")
+        # 活动库 activity.db：高频读写的动态行为表（events / view_history）
+        # 独立存放，与主库（笔记/日记/阅读库）及推荐流子库 pool.db 三者锁域隔离。
+        # 主库 ATTACH 为 act，SQL 以 act. 前缀显式访问。
+        self._activity_db_path = self._db_path.with_name("activity.db")
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -738,6 +747,59 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS pool", (str(self._pool_db_path),))
 
+    _ACTIVITY_SCHEMA = (
+        # 行为事件表：与主库历史 schema 一致（含生成列 source_platform + 索引）
+        "CREATE TABLE IF NOT EXISTS events ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " event_type TEXT NOT NULL, url TEXT, title TEXT, context TEXT, metadata TEXT,"
+        " inferred_satisfaction TEXT, satisfaction_reason TEXT,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " source_platform TEXT GENERATED ALWAYS AS"
+        " (COALESCE(json_extract(metadata, '$.source_platform'), 'unknown')) VIRTUAL,"
+        " article_id INTEGER);"
+        "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events (created_at DESC);"
+        "CREATE INDEX IF NOT EXISTS idx_events_event_type ON events (event_type);"
+        "CREATE INDEX IF NOT EXISTS idx_events_source_platform ON events (source_platform);"
+        "CREATE INDEX IF NOT EXISTS idx_events_agg_stats"
+        " ON events (event_type, source_platform, inferred_satisfaction);"
+        # 浏览历史表 + 索引
+        "CREATE TABLE IF NOT EXISTS view_history ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, bvid TEXT NOT NULL,"
+        " title TEXT DEFAULT '', source_platform TEXT DEFAULT '', topic_group TEXT DEFAULT '',"
+        " content_url TEXT DEFAULT '', up_name TEXT DEFAULT '',"
+        " quality_score REAL DEFAULT 0.0, fit_score REAL DEFAULT 0.0,"
+        " viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, dwell_seconds REAL DEFAULT 0);"
+        "CREATE INDEX IF NOT EXISTS idx_view_history_bvid ON view_history(bvid);"
+        "CREATE INDEX IF NOT EXISTS idx_view_history_viewed_at ON view_history(viewed_at);"
+    )
+
+    def _ensure_activity_database(self) -> None:
+        """Ensure the activity sub-database (activity.db) exists.
+
+        hosts events / view_history 两张高频动态表。首次缺失时按与主库一致的
+        schema 建表，然后由 scripts/migrate_activity_db.py 迁移历史数据。
+        """
+        if self._activity_db_path.exists():
+            return
+        import sqlite3 as _sqlite3
+
+        ac_conn = _sqlite3.connect(str(self._activity_db_path), timeout=30.0)
+        try:
+            ac_conn.executescript(self._ACTIVITY_SCHEMA)
+            # 让事件/浏览历史落到活动库而不是主库：建库即建迁移后索引供查询
+            ac_conn.commit()
+            self._logger().warning(
+                "activity.db 不存在，已创建 events/view_history 活动库。"
+                "请运行 scripts/migrate_activity_db.py 迁移历史数据。"
+            )
+        finally:
+            ac_conn.close()
+
+    def _attach_activity(self, conn: sqlite3.Connection) -> None:
+        """ATTACH the activity sub-database to a connection (idempotent)."""
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS act", (str(self._activity_db_path),))
+
     def _logger(self):
         import logging
 
@@ -746,7 +808,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
     def initialize(self) -> None:
         """Initialize the database and run migrations if needed."""
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
+        self._conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout = 30000")
@@ -764,6 +826,11 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 推荐流子库 pool.db 一并启用 WAL，与主库一致，降低并发写锁冲突
         with suppress(sqlite3.OperationalError):
             self._conn.execute("PRAGMA pool.journal_mode=WAL")
+        # 活动库：确保 activity.db 存在后 ATTACH，使 act.* 前缀落到活动 schema
+        self._ensure_activity_database()
+        self._attach_activity(self._conn)
+        with suppress(sqlite3.OperationalError):
+            self._conn.execute("PRAGMA act.journal_mode=WAL")
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn
@@ -818,7 +885,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # thread reuses the primary connection bound in initialize().
         local_conn = getattr(self._thread_local, "conn", None)
         if local_conn is None:
-            local_conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
+            local_conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
             local_conn.row_factory = sqlite3.Row
             local_conn.execute("PRAGMA journal_mode=WAL")
             local_conn.execute("PRAGMA busy_timeout = 30000")
@@ -827,6 +894,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             local_conn.execute("PRAGMA cache_size = -65536")
             local_conn.execute("PRAGMA mmap_size = 268435456")
             self._attach_pool(local_conn)
+            self._attach_activity(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -840,12 +908,13 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
-        conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
+        conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA mmap_size = 268435456")
         self._attach_pool(conn)
+        self._attach_activity(conn)
         return conn
 
     def _ensure_fresh_read(self) -> None:

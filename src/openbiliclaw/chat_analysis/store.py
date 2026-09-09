@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -193,12 +195,8 @@ class ChatAnalysisStore:
             return conn
         conn = getattr(self._local, "connection", None)
         if conn is None:
-            conn = sqlite3.connect(str(self._db_path), isolation_level=None)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = open_db_conn(str(self._db_path), isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
-            conn.execute("PRAGMA synchronous=NORMAL")
             self._local.connection = conn
         if not self._initialized:
             self._initialize_tables(conn)

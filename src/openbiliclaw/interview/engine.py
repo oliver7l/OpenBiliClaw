@@ -24,6 +24,8 @@ import csv
 import os
 import re
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 import time
 from datetime import date
 from pathlib import Path
@@ -304,7 +306,7 @@ class InterviewEngine:
         db_path = self.data_dir / "knowledge.db"
         if db_path.exists():
             db_path.unlink()
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
         try:
             cur = conn.cursor()
             cur.execute(
@@ -406,7 +408,7 @@ class InterviewEngine:
             db_path = self.data_dir / "knowledge.db"
             if db_path.exists():
                 try:
-                    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10.0)
                     db_count = conn.execute("SELECT COUNT(*) FROM file_index").fetchone()[0]
                     conn.close()
                 except sqlite3.Error:
@@ -462,7 +464,7 @@ class InterviewEngine:
     ) -> list[dict[str, str]]:
         db_path = self.data_dir / "knowledge.db"
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10.0)
         except sqlite3.Error:
             return []
         try:

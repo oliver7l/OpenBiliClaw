@@ -108,7 +108,8 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
             pass
 
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            conn.execute("PRAGMA busy_timeout=10000")
             cursor = conn.cursor()
 
             article_dict = result.to_article_dict()
