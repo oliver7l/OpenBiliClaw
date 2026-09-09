@@ -133,11 +133,12 @@ def open_db_conn(
     conn.execute("PRAGMA busy_timeout=60000")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-65536")
-    # 附加兄弟子库：pool.db / activity.db 与主库同目录且存在时，让 pool.* /
-    # act.* 前缀在任意裸连（如 self_evolution 等离线模块）上也能解析到子库表，
-    # 与 Database 自身连接保持一致。
+    # 附加兄弟子库：pool.db / events.db 与主库同目录且存在时，让 pool.* /
+    # events.* 前缀在任意裸连（如 self_evolution 等离线模块）上也能解析到子库表，
+    # 与 Database 自身连接保持一致。ATTACH 别名恒等于子库文件名（pool ↔ pool.db、
+    # events ↔ events.db），避免 act/activity 等多套叫法。
     _base = Path(db_path)
-    for _alias, _sibling in (("pool", _base.with_name("pool.db")), ("act", _base.with_name("activity.db"))):
+    for _alias, _sibling in (("pool", _base.with_name("pool.db")), ("events", _base.with_name("events.db"))):
         if _sibling.exists():
             conn.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_sibling),))
     return conn
@@ -670,14 +671,18 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 独立存放于 pool.db（总库+子库）。所有 Database 连接 ATTACH 该子库，
         # 无前缀 SQL 自动落到 pool schema（主库已不含这些表）。
         self._pool_db_path = self._db_path.with_name("pool.db")
-        # 活动库 activity.db：高频读写的动态行为表（events / view_history）
+        # 事件子库 events.db：高频读写的动态行为表（events / view_history）
         # 独立存放，与主库（笔记/日记/阅读库）及推荐流子库 pool.db 三者锁域隔离。
-        # 主库 ATTACH 为 act，SQL 以 act. 前缀显式访问。
-        self._activity_db_path = self._db_path.with_name("activity.db")
+        # 主库 ATTACH 为 events，SQL 以 events. 前缀显式访问。对应 db sharding 计划 P2。
+        self._events_db_path = self._db_path.with_name("events.db")
         # LLM 用量库 llm.db：极高频写入的 llm_usage 表（每次 LLM 调用都写）
         # 独立存放，与主库锁域隔离，避免 billing 写入阻塞核心业务。
         self._llm_db_path = self._db_path.with_name("llm.db")
         self._llm_conn: sqlite3.Connection | None = None
+        # Discovery 库 discovery.db：搜索发现相关表（keywords/candidates/runs）
+        # 独立存放，与主库锁域隔离。
+        self._discovery_db_path = self._db_path.with_name("discovery.db")
+        self._discovery_conn: sqlite3.Connection | None = None
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -758,7 +763,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS pool", (str(self._pool_db_path),))
 
-    _ACTIVITY_SCHEMA = (
+    _EVENTS_SCHEMA = (
         # 行为事件表：与主库历史 schema 一致（含生成列 source_platform + 索引）
         "CREATE TABLE IF NOT EXISTS events ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -784,32 +789,36 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         "CREATE INDEX IF NOT EXISTS idx_view_history_viewed_at ON view_history(viewed_at);"
     )
 
-    def _ensure_activity_database(self) -> None:
-        """Ensure the activity sub-database (activity.db) exists.
+    def _ensure_events_database(self) -> None:
+        """Ensure the events sub-database (events.db) exists.
 
         hosts events / view_history 两张高频动态表。首次缺失时按与主库一致的
-        schema 建表，然后由 scripts/migrate_activity_db.py 迁移历史数据。
+        schema 建表，然后由 scripts/migrate_events_db.py 迁移历史数据。
         """
-        if self._activity_db_path.exists():
+        if self._events_db_path.exists():
             return
         import sqlite3 as _sqlite3
 
-        ac_conn = _sqlite3.connect(str(self._activity_db_path), timeout=30.0)
+        ac_conn = _sqlite3.connect(str(self._events_db_path), timeout=30.0)
         try:
-            ac_conn.executescript(self._ACTIVITY_SCHEMA)
-            # 让事件/浏览历史落到活动库而不是主库：建库即建迁移后索引供查询
+            ac_conn.executescript(self._EVENTS_SCHEMA)
+            # 让事件/浏览历史落到事件子库而不是主库：建库即建迁移后索引供查询
             ac_conn.commit()
             self._logger().warning(
-                "activity.db 不存在，已创建 events/view_history 活动库。"
-                "请运行 scripts/migrate_activity_db.py 迁移历史数据。"
+                "events.db 不存在，已创建 events/view_history 事件子库。"
+                "请运行 scripts/migrate_events_db.py 迁移历史数据。"
             )
         finally:
             ac_conn.close()
 
-    def _attach_activity(self, conn: sqlite3.Connection) -> None:
-        """ATTACH the activity sub-database to a connection (idempotent)."""
+    def _attach_events(self, conn: sqlite3.Connection) -> None:
+        """ATTACH the events sub-database to a connection (idempotent, alias events).
+
+        别名为 events，与 events.db 及 db sharding 计划一致；SQL 用
+        ``events.events`` / ``events.view_history`` 前缀显式访问。
+        """
         with suppress(sqlite3.OperationalError):
-            conn.execute("ATTACH DATABASE ? AS act", (str(self._activity_db_path),))
+            conn.execute("ATTACH DATABASE ? AS events", (str(self._events_db_path),))
 
     # ── LLM 用量子库（llm.db）──────────────────────────────────────────
     # 极高频写入的 llm_usage 表（每次 LLM 调用都写）独立存放，
@@ -865,6 +874,20 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._llm_conn.execute("PRAGMA synchronous=NORMAL")
         self._llm_conn.execute("PRAGMA cache_size = -65536")
 
+    def _init_discovery_connection(self) -> None:
+        """Initialize the discovery database connection."""
+        self._discovery_conn = sqlite3.connect(
+            str(self._discovery_db_path),
+            timeout=30.0,
+            check_same_thread=False,
+            factory=LockedConnection,
+        )
+        self._discovery_conn.row_factory = sqlite3.Row
+        self._discovery_conn.execute("PRAGMA journal_mode=WAL")
+        self._discovery_conn.execute("PRAGMA busy_timeout = 30000")
+        self._discovery_conn.execute("PRAGMA synchronous=NORMAL")
+        self._discovery_conn.execute("PRAGMA cache_size = -65536")
+
     def _logger(self):
         import logging
 
@@ -891,13 +914,15 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 推荐流子库 pool.db 一并启用 WAL，与主库一致，降低并发写锁冲突
         with suppress(sqlite3.OperationalError):
             self._conn.execute("PRAGMA pool.journal_mode=WAL")
-        # 活动库：确保 activity.db 存在后 ATTACH，使 act.* 前缀落到活动 schema
-        self._ensure_activity_database()
-        self._attach_activity(self._conn)
+        # 事件子库：确保 events.db 存在后 ATTACH，使 events.* 前缀落到事件 schema
+        self._ensure_events_database()
+        self._attach_events(self._conn)
         with suppress(sqlite3.OperationalError):
-            self._conn.execute("PRAGMA act.journal_mode=WAL")
+            self._conn.execute("PRAGMA events.journal_mode=WAL")
         # LLM 用量库：独立连接，极高频写入的 llm_usage 表与主库锁域隔离
         self._init_llm_connection()
+        # Discovery 库：独立连接，搜索发现相关表与主库锁域隔离
+        self._init_discovery_connection()
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn
@@ -961,7 +986,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             local_conn.execute("PRAGMA cache_size = -65536")
             local_conn.execute("PRAGMA mmap_size = 268435456")
             self._attach_pool(local_conn)
-            self._attach_activity(local_conn)
+            self._attach_events(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -981,7 +1006,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA mmap_size = 268435456")
         self._attach_pool(conn)
-        self._attach_activity(conn)
+        self._attach_events(conn)
         return conn
 
     def _ensure_fresh_read(self) -> None:
