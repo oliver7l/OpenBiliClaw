@@ -74,14 +74,17 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 'href="/web/assets/css/app.css"',
                 f'href="/web/assets/css/app.css?v={version}"',
             )
-            html = html.replace(
-                'src="/web/assets/js/app.js"',
-                f'src="/web/assets/js/app.js?v={version}"',
-            )
-            html = html.replace(
-                'src="/web/assets/js/self-evolution.js"',
-                f'src="/web/assets/js/self-evolution.js?v={version}"',
-            )
+            for script in (
+                "app.js",
+                "self-evolution.js",
+                "feed-pages.js",
+                "pool-explore.js",
+                "profile.js",
+                "topics-app.js",
+                "health-app.js",
+            ):
+                src = f'src="/web/assets/js/{script}"'
+                html = html.replace(src, f'src="/web/assets/js/{script}?v={version}"')
             # 注入版本号全局变量，供动态加载的日记模块脚本做缓存控制
             html = html.replace(
                 "</head>",
@@ -125,10 +128,10 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "youtube-feed",
             "v2ex-feed",
             "xiaoyuzhou-feed",
-            "agent-recommend",
             "self-evolution",
-            "knowledge",
             "travel",
+            "topics",
+            "health",
         }
 
         @app.get("/web/{page}", include_in_schema=False)

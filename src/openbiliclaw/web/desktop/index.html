@@ -55,7 +55,6 @@
     <nav class="tabbar" id="tabBar" aria-label="全局导航">
       <div class="tabbar-scroll" aria-label="全局导航">
         <button class="tab-btn" id="homeBtn" type="button">首页</button>
-        <button class="tab-btn" id="agentRecommendBtn" type="button">🤖 Agent推荐</button>
         <div class="filter-dropdown" id="filterDropdown">
           <button class="tab-btn filter-dropdown-trigger" id="filterDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">筛选 ▾</button>
           <div class="filter-dropdown-menu" id="filterDropdownMenu" role="menu" hidden>
@@ -97,7 +96,6 @@
         </div>
         <button class="tab-btn" id="diaryBtn" type="button">📔 日记</button>
         <button class="tab-btn" id="topicsBtn" type="button">📚 专题</button>
-        <button class="tab-btn" id="knowledgeBtn" type="button">🧠 概念库</button>
         <button class="tab-btn" id="cloneBtn" type="button">🌐 克隆站</button>
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="healthBtn" type="button">🏥 健康档案</button>
@@ -994,35 +992,6 @@
         </div>
       </section>
 
-      <section class="knowledge-page content-page" id="knowledgePage" aria-label="概念知识库" hidden>
-        <div class="content-page-head">
-          <div>
-            <p class="eyebrow">Knowledge Graph</p>
-            <h2>🧠 概念知识库</h2>
-            <p class="video-meta">跨站概念反向索引，一键查看哪些文章提到了这个概念。</p>
-          </div>
-          <div class="content-page-actions">
-            <button class="pill-btn" id="knowledgeRefreshBtn" type="button">刷新</button>
-          </div>
-        </div>
-        <div class="knowledge-stats-bar" id="knowledgeStatsBar">
-          <span class="knowledge-stat">概念 <strong id="knowledgeTotalConcepts">0</strong></span>
-          <span class="knowledge-stat">链接 <strong id="knowledgeTotalBacklinks">0</strong></span>
-        </div>
-        <div class="knowledge-search-bar">
-          <input type="text" id="knowledgeSearchInput" class="knowledge-search" placeholder="搜索概念...（例如：内在价值、OpenAI、巴菲特）">
-        </div>
-        <div class="knowledge-concept-grid" id="knowledgeConceptGrid">
-          <div class="knowledge-empty" id="knowledgeEmpty" hidden>
-            <p>输入关键词搜索概念，或从顶部统计查看热门概念。</p>
-          </div>
-          <div class="knowledge-loading" id="knowledgeLoading" hidden>
-            <div class="spinner"></div>
-            <p>正在搜索...</p>
-          </div>
-        </div>
-      </section>
-
       <section class="chat-page content-page" id="chatPage" aria-label="聊聊口味" hidden>
         <div class="content-page-head">
           <div>
@@ -1201,8 +1170,12 @@
 
       <!-- 旅行预算：实时机票价格 + 预算概览 + 完整文档 -->
       <section class="travel-page content-page" id="travelPage" aria-label="旅行预算" hidden>
-        <div class="travel-header">
-          <h2>✈️ 新疆旅行预算</h2>
+        <div class="content-page-head travel-head">
+          <div>
+            <p class="eyebrow">Travel</p>
+            <h2>✈️ 新疆旅行预算</h2>
+            <p class="video-meta">实时机票价 + 预算明细 + 完整攻略，一趟算清。</p>
+          </div>
           <div class="travel-actions">
             <button class="pill-btn dark" id="travelRefreshBtn" type="button">↻ 刷新</button>
           </div>
@@ -1214,7 +1187,7 @@
         </div>
         <div class="travel-view" id="travelFlightsView">
           <div class="travel-alerts" id="travelAlerts" hidden></div>
-          <div class="travel-grid" id="travelFlightsGrid"></div>
+          <div class="card-grid is-minimal travel-grid" id="travelFlightsGrid"></div>
           <div class="travel-loading" id="travelFlightsLoading">加载中...</div>
         </div>
         <div class="travel-view" id="travelOverviewView" hidden>
@@ -1737,6 +1710,89 @@
       </form>
       </section>
 
+  <!-- 专题：追某个方向的跨平台内容（已并入桌面应用，沿用推荐流卡片风格） -->
+  <section class="topics-page content-page" id="topicsPage" aria-label="专题" hidden>
+    <div class="content-page-head topics-head">
+      <div>
+        <p class="eyebrow">Topics</p>
+        <h2>专题</h2>
+        <p class="video-meta">把某个方向的跨平台内容聚到一起，一键收集、随时回看。</p>
+      </div>
+      <div class="topics-head-actions">
+        <button class="pill-btn" id="topicsNewBtn" type="button">＋ 新建专题</button>
+        <button class="pill-btn dark" id="topicsCollectAllBtn" type="button">全部收集一次</button>
+      </div>
+    </div>
+
+    <!-- 新建专题面板（默认隐藏） -->
+    <div class="topics-panel" id="topicsNewPanel" hidden>
+      <div class="topics-panel-title">新建专题</div>
+      <div class="topics-form-row">
+        <label class="settings-field"><span>名称 *</span><input id="tpName" placeholder="如：计算广告"></label>
+        <label class="settings-field"><span>slug *（URL 标识）</span><input id="tpSlug" placeholder="如：advertising"></label>
+      </div>
+      <div class="topics-form-row">
+        <label class="settings-field"><span>关键词（逗号分隔）</span><input id="tpKeywords" placeholder="计算广告, 广告投放"></label>
+        <label class="settings-field"><span>来源平台</span>
+          <select id="tpPlatforms" multiple size="5">
+            <option value="bilibili" selected>bilibili（视频）</option>
+            <option value="zhihu">zhihu（知乎）</option>
+            <option value="xiaohongshu">xiaohongshu（小红书）</option>
+            <option value="weibo">weibo（微博）</option>
+            <option value="douban">douban（豆瓣）</option>
+          </select>
+        </label>
+      </div>
+      <div class="topics-form-row">
+        <label class="settings-field"><span>描述</span><textarea id="tpDesc" placeholder="这个专题关注什么、为什么建"></textarea></label>
+      </div>
+      <div class="topics-panel-actions">
+        <span class="topics-msg" id="tpNewMsg"></span>
+        <button class="pill-btn" id="tpCancelBtn" type="button">取消</button>
+        <button class="pill-btn dark" id="tpCreateBtn" type="button">创建</button>
+      </div>
+    </div>
+
+    <!-- 列表视图：推荐流卡片 -->
+    <div class="card-grid is-minimal topics-card-grid" id="topicsList"></div>
+    <div class="topics-empty" id="topicsEmpty" hidden></div>
+
+    <!-- 详情视图（默认隐藏） -->
+    <div class="topics-detail" id="topicsDetail" hidden></div>
+  </section>
+
+  <!-- 健康档案：统一并入桌面应用，共享 topbar+tabbar，内部表格/表单配应用主色调 -->
+  <section class="health-page content-page" id="healthPage" aria-label="健康档案" hidden>
+    <div class="content-page-head">
+      <div>
+        <p class="eyebrow">Health</p>
+        <h2>健康档案</h2>
+        <p class="video-meta">集中管理就诊、用药、化验、体检与复诊记录。</p>
+      </div>
+    </div>
+    <div class="health-tabs" id="healthTabs" role="tablist" aria-label="健康档案分类">
+      <button class="health-tab active" data-tab="overview" type="button">概览</button>
+      <button class="health-tab" data-tab="encounters" type="button">就诊记录</button>
+      <button class="health-tab" data-tab="conditions" type="button">健康问题</button>
+      <button class="health-tab" data-tab="medications" type="button">用药记录</button>
+      <button class="health-tab" data-tab="labs" type="button">化验结果</button>
+      <button class="health-tab" data-tab="procedures" type="button">检查记录</button>
+      <button class="health-tab" data-tab="allergies" type="button">过敏史</button>
+      <button class="health-tab" data-tab="vitals" type="button">生命体征</button>
+      <button class="health-tab" data-tab="immunizations" type="button">疫苗接种</button>
+      <button class="health-tab" data-tab="timeline" type="button">健康时间线</button>
+      <button class="health-tab" data-tab="documents" type="button">文档资料</button>
+      <button class="health-tab" data-tab="doctors" type="button">医生信息</button>
+      <button class="health-tab" data-tab="appointments" type="button">预约复诊</button>
+      <button class="health-tab" data-tab="medication-logs" type="button">服药记录</button>
+    </div>
+    <div class="health-content" id="healthContent"><div class="health-empty">加载中…</div></div>
+
+    <div class="health-modal-overlay" id="healthModalOverlay">
+      <div class="health-modal" id="healthModalContent"></div>
+    </div>
+  </section>
+
   <!-- 推荐流页面（独立于 #home，避免父元素隐藏影响显示） -->
   <section class="main-col" id="xhsFeedPage" aria-label="小红书推荐流" data-od-id="recommendation-home" hidden>
     <div class="observability-body" id="xhsFeedBody">
@@ -1771,45 +1827,6 @@
   <section class="main-col" id="xiaoyuzhouFeedPage" aria-label="小宇宙推荐流" data-od-id="recommendation-home" hidden>
     <div class="observability-body" id="xiaoyuzhouFeedBody">
       <div class="observability-loading">正在加载…</div>
-    </div>
-  </section>
-
-  <section class="main-col" id="agentRecommendPage" aria-label="Agent推荐" data-od-id="recommendation-home" hidden>
-    <div class="agent-recommend-container">
-      <div class="agent-recommend-search">
-        <div class="agent-recommend-input-wrapper">
-          <input type="text" id="agentRecommendInput" class="agent-recommend-input" placeholder="你想看什么？比如「AI 创业相关的播客」「B站好看的视频」「知乎上的科技文章」…" autocomplete="off">
-          <button class="pill-btn dark agent-clear-btn" id="agentRecommendClearBtn" type="button" title="清除搜索">×</button>
-          <button class="pill-btn dark" id="agentRecommendSearchBtn" type="button">搜索</button>
-        </div>
-        <div class="agent-recommend-hints-area">
-          <div class="agent-recommend-hints" id="agentRecentHints" style="display: none;">
-            <div class="agent-hints-label">最近搜索:</div>
-            <div class="agent-hints-tags" id="recentSearchTags"></div>
-          </div>
-          <div id="agentSessionContext" class="agent-session-context" style="display: none;">
-            <div class="agent-hints-label">当前语境:</div>
-            <span id="agentSessionContextText" class="agent-session-context-text"></span>
-            <button class="pill-btn dark agent-clear-btn" id="agentResetSessionBtn" type="button" title="重置筛选" style="padding: 2px 8px; font-size: 11px;">重置</button>
-          </div>
-          <div class="agent-recommend-hints">
-            <div class="agent-hints-label">快速搜索:</div>
-            <span class="agent-hint" data-hint="AI 创业">AI 创业</span>
-            <span class="agent-hint" data-hint="科技 播客">科技播客</span>
-            <span class="agent-hint" data-hint="B站 搞笑">B站搞笑</span>
-            <span class="agent-hint" data-hint="知乎 投资">知乎投资</span>
-            <span class="agent-hint" data-hint="小红书 美食">小红书美食</span>
-          </div>
-        </div>
-      </div>
-      <div class="observability-body" id="agentRecommendBody">
-        <div class="agent-recommend-interest-tags" id="agentInterestTags" style="display: none;"></div>
-        <div class="empty-state" style="padding: 60px 20px; text-align: center; color: var(--text-secondary);">
-          <p style="font-size: 18px; margin-bottom: 8px;">输入你想看的内容，我来帮你找</p>
-          <p style="font-size: 13px;">支持自然语言搜索，例如「AI 创业相关的播客」或「B站好看的视频」</p>
-          <p style="font-size: 12px; margin-top: 12px; color: var(--text-secondary);">快捷键：Enter = 搜索，Esc = 清空</p>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -1907,6 +1924,8 @@
   <script src="/web/assets/js/pool-explore.js" defer></script>
   <script src="/web/assets/js/profile.js" defer></script>
   <script src="/web/assets/js/feed-pages.js" defer></script>
+  <script src="/web/assets/js/topics-app.js" defer></script>
+  <script src="/web/assets/js/health-app.js" defer></script>
   <!-- 日记模块脚本由 app.js 在进入日记页面时按需动态加载 -->
 
 </body></html>

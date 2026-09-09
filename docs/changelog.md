@@ -6,6 +6,9 @@
 
 ## v0.3.221: 系统架构重构 — 巨类拆分与模块化（2026-09-09）
 
+- **移除 `/web/knowledge` 概念库页面（2026-09-09）**：桌面 Web 删除"🧠 概念库"标签按钮与 `knowledgePage` 区块（index.html）、`openKnowledgePage` 及其搜索/统计/详情函数与 `_knowledge` 状态、`knowledgePage` 路由注册 / `tabSync` / `MAIN_PAGE_IDS` 引用（app.js）、`.knowledge-*` 样式与选择器列表中的 `#knowledgePage`（app.css）、后端页面白名单条目（`_web_ui_routes.py`）。页面现返回 404；`/api/knowledge/*` 接口与 `/knowledge-graph` 静态挂载不受影响。
+- **修复 SQLite 3.53 兼容性（2026-09-09）**：storage 迁移脚本中 12 处 `CREATE INDEX ... ON <schema>.<table>` 写法在本机 SQLite 3.53.2/3.53.3 上触发 `OperationalError: near ".": syntax error`，导致 api(8420) 服务启动失败（`_SCHEMA_SQL` 7 处 knowledge 索引 + `_schema_mixin` 的 topic_items / entities / content_cache 索引）。统一改为**索引名保留 schema 前缀、ON 子句表名不带前缀**（SQLite 3.53 兼容写法，索引仍落在对应子库），数据库副本上验证全 schema 可执行且索引正确建入 knowledge.db，服务恢复正常。
+- **db sharding 主库废弃表清理（2026-09-09）**：核查主库 151 张表中 61 张为 `_deprecated_*` 拆分残留（含 `_deprecated_articles*` / `_deprecated_diary_*` / `_deprecated_audit_issues` / `_deprecated_gap_records` 等，约 668MB，占全库 82.8%），grep 确认无任何代码引用后安全删除。先一致性备份主库（`data/backups/openbiliclaw_pre_deprecated_clean_*.db`），DROP 61 张表（FTS 虚拟表先删、shadow 表级联，脚本 `scripts/cleanup_deprecated_tables.py`），`PRAGMA integrity_check` 通过、活跃表行数与删库前一致。VACUUM 回收空洞后主库 **1.6G → 58MB（-96.4%）**，剩余 90 张表、0 张废弃表。api(8420) 服务正常。
 - **自进化页改纯展示 + 缓存读取**：`/web/self-evolution` 打开即自动加载各模块已有数据（洞察/漂移/专题/卡片/图谱/推送），不再逐一点击。`/api/self-evolution` 的 `drift`、`topics`、`knowledge-graph` 三个 GET 接口由"每次请求全库重算"改为**默认返回最近一次缓存**（毫秒级秒回），带 `recompute=true` 才重新计算；为 `InterestDriftDetector` / `TopicMiner` 新增 `get_latest_report()` 读取方法。此前知识图谱等模块每次点击都全库重建导致"一直在处理"，现已消除。
 - **修复 `/web/self-evolution` 页面无数据**：`self-evolution.js` 顶部常量误定义为 `const API`，而全部 12 处 fetch 调用引用 `SELF_EVO_API`（未定义），打开页面即抛 `ReferenceError` 并被 catch 吞掉，状态卡片恒显 `—`、各模块按钮全部失败。已将常量改名为 `SELF_EVO_API` 与调用一致；后端 `/api/self-evolution/*` 数据本就正常（知识卡片 200、阅读调度 501 等），浏览器实测状态卡片与兴趣漂移分析均恢复。
 - **db sharding P2 events.db 拆分**：行为事件 `events` / 观看历史 `view_history` 迁出主库到子库 `data/events.db`，与主库、pool.db 锁域隔离。命名统一为 **文件 `events.db` ↔ ATTACH 别名 `events` ↔ 表 `events`**，SQL 一律 `events.events` / `events.view_history` 前缀；清除全仓 `activity.db` / `act.*` 旧别名（含 `self_evolution/`、`api/`、`eval/`、`scripts/`）。读写路径自洽：`insert_event` / `insert_view_history` 主写 events.db + 双写主库旧表（迁移验证期），`get_recent_events` / `query_events` / 行为统计等读 `events.events`。历史数据 229,756 行已迁入并校验一致，见 `scripts/migrate_events_db.py`。`push_notifications` 仍由主库 proactive_push 管理，未迁。
@@ -20,8 +23,7 @@
 - **K10 测试按模块组织**：`tests/` 目录从 196 个顶层 .py 文件重构为 **38 个子目录 + 7 个顶层文件**（96% 已组织）。顶层剩余 7 个均依赖 tests/ 相对路径，保留顶层。全量 `pytest --collect-only` → 3651 tests collected 0 errors。
 - **K1 地基清理**：pytest 全绿（195 个测试文件 3651 用例全部通过），修复 8 类测试失败模式。删除 3 个脆弱前端静态断言测试文件（共202行）。修复 3 个真实 bug：① database.py 索引创建缺列导致 `no such column`；② obc_llm/registry.py 的 `config.llm` → `config`；③ self_evolution/api.py 的 14 处 `llm_service = llm_service` 自引用（F823）。ruff 治理：总数从 495→155（F821/F823/F841 清零 42项、TC001-003 34项、UP042 24项、SIM系列 30项、I001/F401 38项、ruff format 85文件）。
 - **验证**：`tests/storage/` 109 passed 全绿；`create_app` 成功，496 条路由；15 个 runtime 模块导入成功，producer 测试 45 passed；全量 `pytest --collect-only -q` → 3651 tests collected 0 errors。
-
----
+- **桌面端页面统一为推荐流布局（2026-09-09）**：将惊喜、专题、阅读库、已读库、健康档案、收藏、稍后再看、旅行等卡片类页面统一为与首页推荐流一致的形式——头部固定两行（topbar + tabbar），下方直接是 3 列小白卡(`card-grid` + `video-card.is-minimal`)，去除多余区块。专题/健康/旅行已从独立页面迁入桌面 SPA（新增 `topics-app.js`、`health-app.js`、`travelPage` 路由），机票卡片改为推荐流同款小卡。修复两处真实 bug：① `.saved-page` 误套"标题+工具条同行"双列网格导致收藏/稍后再看头部（eyebrow/标题/meta）被隐藏，改回标准头部在上、3 列卡片在下；② `travelBtn` 从未绑定点击事件且 `travelPage` 不在 `MAIN_PAGE_IDS`，导致点"旅行"按钮页面一直隐藏、机票网格永不显示，已补导航绑定与页面注册。
 
 ## v0.3.220: 阶段1-K2 soul 双份实现收口（2026-09-08）
 
