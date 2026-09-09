@@ -1439,12 +1439,14 @@ class TestBackendAPI:
             "'https://www.xiaohongshu.com/explore/xhsold?xsec_token=dead', "
             "datetime('now', '-3 days'))"
         )
-        db.conn.execute(
+        db.conn.commit()
+        # P5：discovery_candidates 独立存于 discovery.db，经 _discovery_conn 写入
+        db._discovery_conn.execute(
             "INSERT INTO discovery_candidates (candidate_key, source_platform, content_url) "
             "VALUES ('xhs:backfilled', 'xiaohongshu', "
             "'https://www.xiaohongshu.com/explore/backfilled?xsec_token=live')"
         )
-        db.conn.commit()
+        db._discovery_conn.commit()
 
         app = create_app(memory_manager=object(), database=db, soul_engine=object())
         client = TestClient(app)

@@ -2,7 +2,7 @@
 
 > 版本：v1.0  
 > 创建日期：2026-09-09  
-> 状态：P0 基础设施、P1 llm.db、P2 events.db、P3 knowledge_audit.db、P5 discovery.db、P6 diary.db 全部完成（含 2026-09-09 收尾 + 续迁移剩余 4 表）。P4 经评审改为"维持现状"：`pool.db` 保留为独立推荐流子库（本已隔离推荐流高频写锁域），不并入 content.db。P7 health.db、P8 knowledge.db 均已完成。主库废弃表清理于 2026-09-09 完成：61 张 `_deprecated_*`（约 668MB）已删除，VACUUM 后主库 1.6G → 58MB。P8 收尾于 2026-09-09 完成（11 张知识表迁入 knowledge.db 并删除主库/audit 库旧表），详见下方 P8 收尾。  
+> 状态：P0 基础设施、P1 llm.db、P2 events.db、P3 knowledge_audit.db、P5 discovery.db、P6 diary.db、P7 health.db、P8 knowledge.db 全部完成（含 2026-09-09 收尾 + 续迁移剩余 4 表）。P4 经评审改为"维持现状"：`pool.db` 保留为独立推荐流子库（本已隔离推荐流高频写锁域），不并入 content.db。主库废弃表清理于 2026-09-09 完成：61 张 `_deprecated_*`（约 668MB）已删除，VACUUM 后主库 1.6G → 58MB。P9 主库清理于 2026-09-09 完成：DROP 32 张已迁移子库的残留空表（diary 13 + health 15 + content 4），主库 78 张 → 46 张，VACUUM 57.7 → 53.7 MB，详见下方 P9；主库改名 `core.db` 作为独立收尾项待办（涉及全仓路径引用，未在本轮执行）。
 > 目标：解决 SQLite 主库并发写入锁定问题，按写入频率和领域拆分数据库
 
 ---
@@ -688,7 +688,19 @@ class DatabaseMigrator:
 - 初始化状态：init_runs, source_recipes
 - 其他低频表：native_save_states, note_tasks, notes 等
 
-**实施步骤**：
+#### P9 主库残留空表清理（2026-09-09 已完成）
+
+- **核查**：主库 90 张活跃表（删 `_deprecated_*` 后）中 32 张为已迁移子库在产品上残留的空壳同名表，全部 0 行。
+- **分类**：diary 13 张（diary_embeddings/entry_persons/entry_tags/fragments/fts/fts5 系列/persons/tags，正表在 diary.db 独立连接）；health 15 张（health_*，正表在 health.db 独立连接）；content 4 张（article_entities 0/1226、article_relations 0/200、favorites 0/1、watch_later 0/1，正表在 content.db）。
+- **隐性 bug 修复**：content 4 张空表不仅是残留更有害——API 层（如 `knowledge_forge_routes._connect`）裸名 `FROM article_entities` 的 SQLite 解析优先命中主库空表，读到 0 行而非 ATTACH 的 content.db 真实 1226 行；DROP 后裸名自动落到 ATTACH 子库。
+- **执行**：先一致性备份主库（`data/backups/openbiliclaw_pre_p9_cleanup_*.db`）后 DROP 全部 32 张空表；VACUUM 主库 57.7 → 53.7 MB。
+- **验证**：裸名正确解析到 ATTACH 子库（article_entities → 1226、article_relations → 200、diary_entries → 925、health_patients → 5），跨库 JOIN 正常；主库 78 张 → **46 张**；serve-api(8420) 重启健康检查通过；`tests/storage + tests/knowledge` = **185 passed** 全绿。
+
+#### P9 剩余待办（未在本轮执行）
+
+- **主库改名 `openbiliclaw.db` → `core.db`**：涉及 `database.py` / `open_db_conn()` / 各 store 的 db_path 派生逻辑 / 配置项与脚本中所有 `openbiliclaw.db` 硬编码路径引用，改动面较大，作为独立收尾项后续处理。改名后主库表数已由 143 → 46 张，远超"<40"目标附近。
+
+**实施步骤**（改名部分）：
 
 1. 确认所有高频表已迁移
 2. 重命名 openbiliclaw.db → core.db

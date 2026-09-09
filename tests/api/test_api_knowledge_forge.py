@@ -29,10 +29,21 @@ def _isolate_runtime_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 
 def _make_kf_db(tmp_path: Path) -> Path:
-    """建一个带 KF 表结构与少量数据的临时库。"""
-    db = tmp_path / "kf_test.db"
-    conn = sqlite3.connect(db)
-    conn.executescript(
+    """建多子库 fixture，匹配 P8 后知识域表的真实分布。
+
+    - content.db:         articles / article_entities / article_relations（内容域）
+    - knowledge.db:       entities / entity_relations（知识图谱域，P8）
+    - knowledge_audit.db: audit_* / gap_* / article_quality_scores（审计域）
+    - kf_test.db:         空锚点，仅作 db_path 锚（路由 home 派生为 knowledge_audit.db，
+                          并 ATTACH content / knowledge，未前缀表解析到对应子库）
+    """
+    content = tmp_path / "content.db"
+    knowledge = tmp_path / "knowledge.db"
+    audit = tmp_path / "knowledge_audit.db"
+    anchor = tmp_path / "kf_test.db"
+
+    c = sqlite3.connect(content)
+    c.executescript(
         """
         CREATE TABLE articles (
             id INTEGER PRIMARY KEY, source_type TEXT, title TEXT, url TEXT,
@@ -40,10 +51,6 @@ def _make_kf_db(tmp_path: Path) -> Path:
             summary_detailed TEXT, summary_compact TEXT, summary_ultra_compact TEXT,
             summary_quality REAL, summary_version INTEGER, summary_generated_at TEXT,
             ai_summary TEXT, published_at TEXT, created_at TEXT
-        );
-        CREATE TABLE entities (
-            id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, description TEXT,
-            article_count INTEGER DEFAULT 0, first_seen_at TEXT, last_updated_at TEXT, metadata TEXT
         );
         CREATE TABLE article_entities (
             article_id INTEGER, entity_id INTEGER, relevance REAL, context TEXT,
@@ -54,6 +61,55 @@ def _make_kf_db(tmp_path: Path) -> Path:
             confidence REAL, description TEXT, created_at TEXT,
             PRIMARY KEY (article_id_a, article_id_b, relation_type)
         );
+        """
+    )
+    c.executemany(
+        """INSERT INTO articles (id, source_type, title, url, author, tags, content_text,
+                                 summary_detailed, summary_compact, summary_ultra_compact,
+                                 summary_quality)
+           VALUES (?, ?, ?, ?, '作者A', '["AI"]', '正文内容足够长。' * 50,
+                   '详细摘要内容', '精简摘要', '极简摘要', 0.85)""",
+        [(1, "zhihu", "推荐系统双塔", "http://a/1"), (2, "zhihu", "推荐系统粗排", "http://a/2")],
+    )
+    c.executemany(
+        "INSERT INTO article_entities (article_id, entity_id, relevance) VALUES (?, ?, ?)",
+        [(1, 1, 0.9), (2, 1, 0.8), (1, 3, 0.7)],
+    )
+    c.execute(
+        "INSERT INTO article_relations (article_id_a, article_id_b, relation_type,"
+        " confidence, description) VALUES (1, 2, 'same_topic', 0.7, '共享主题')"
+    )
+    c.commit()
+    c.close()
+
+    k = sqlite3.connect(knowledge)
+    k.executescript(
+        """
+        CREATE TABLE entities (
+            id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, description TEXT,
+            article_count INTEGER DEFAULT 0, first_seen_at TEXT, last_updated_at TEXT, metadata TEXT
+        );
+        CREATE TABLE entity_relations (
+            entity_id_a INTEGER, entity_id_b INTEGER, relation_type TEXT,
+            confidence REAL, description TEXT, co_occur INTEGER,
+            PRIMARY KEY (entity_id_a, entity_id_b, relation_type)
+        );
+        """
+    )
+    k.executemany(
+        "INSERT INTO entities (id, name, type, article_count) VALUES (?, ?, ?, ?)",
+        [
+            (1, "推荐系统", "topic", 2),
+            (2, "作者A", "author", 2),
+            (3, "双塔模型", "concept", 1),
+        ],
+    )
+    k.commit()
+    k.close()
+
+    a = sqlite3.connect(audit)
+    a.executescript(
+        """
         CREATE TABLE audit_tasks (
             id INTEGER PRIMARY KEY, task_type TEXT, status TEXT, started_at TEXT,
             completed_at TEXT, total_articles INTEGER, issues_found INTEGER,
@@ -79,47 +135,37 @@ def _make_kf_db(tmp_path: Path) -> Path:
         );
         """
     )
-    conn.executemany(
-        """INSERT INTO articles (id, source_type, title, url, author, tags, content_text,
-                                 summary_detailed, summary_compact, summary_ultra_compact,
-                                 summary_quality)
-           VALUES (?, ?, ?, ?, '作者A', '["AI"]', '正文内容足够长。' * 50,
-                   '详细摘要内容', '精简摘要', '极简摘要', 0.85)""",
-        [(1, "zhihu", "推荐系统双塔", "http://a/1"), (2, "zhihu", "推荐系统粗排", "http://a/2")],
-    )
-    conn.executemany(
-        "INSERT INTO entities (id, name, type, article_count) VALUES (?, ?, ?, ?)",
-        [
-            (1, "推荐系统", "topic", 2),
-            (2, "作者A", "author", 2),
-            (3, "双塔模型", "concept", 1),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO article_entities (article_id, entity_id, relevance) VALUES (?, ?, ?)",
-        [(1, 1, 0.9), (2, 1, 0.8), (1, 3, 0.7)],
-    )
-    conn.execute(
-        "INSERT INTO article_relations (article_id_a, article_id_b, relation_type,"
-        " confidence, description) VALUES (1, 2, 'same_topic', 0.7, '共享主题')"
-    )
-    conn.execute(
+    a.execute(
         "INSERT INTO audit_tasks (task_type, status, started_at, created_at) "
         "VALUES ('full_audit', 'completed', '2026-09-08 10:00:00', '2026-09-08 10:00:00')"
     )
-    conn.execute(
+    a.execute(
         "INSERT INTO audit_issues (article_id, issue_type, severity, description,"
         " status, created_at) VALUES (1, 'missing_tags', 'low', '缺标签', 'open',"
         " '2026-09-08 10:00:00')"
     )
-    conn.execute("INSERT INTO article_quality_scores (article_id, overall_score) VALUES (1, 85.0)")
-    conn.execute(
+    a.execute("INSERT INTO article_quality_scores (article_id, overall_score) VALUES (1, 85.0)")
+    a.execute(
         "INSERT INTO gap_records (gap_type, severity, description, status, created_at) "
         "VALUES ('topic_coverage', 'high', '主题覆盖不足', 'open', '2026-09-08 10:00:00')"
     )
-    conn.commit()
-    conn.close()
-    return db
+    a.commit()
+    a.close()
+
+    sqlite3.connect(anchor).close()  # 空锚点
+    return anchor
+
+
+def _content_db(db: Path) -> Path:
+    return db.with_name("content.db")
+
+
+def _knowledge_db(db: Path) -> Path:
+    return db.with_name("knowledge.db")
+
+
+def _audit_db(db: Path) -> Path:
+    return db.with_name("knowledge_audit.db")
 
 
 class TestKnowledgeForgeApi:
@@ -208,7 +254,7 @@ class TestKnowledgeForgeApi:
         # resolve
         r2 = client.post("/api/gap-records/1/resolve")
         assert r2.status_code == 200
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(_audit_db(db))
         status = conn.execute("SELECT status FROM gap_records WHERE id=1").fetchone()[0]
         conn.close()
         assert status == "resolved"
@@ -222,7 +268,7 @@ class TestKnowledgeForgeApi:
         assert len(items) == 1 and items[0]["article_id"] == 1
         r2 = client.post("/api/audit/issues/1/fix")
         assert r2.status_code == 200
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(_audit_db(db))
         status = conn.execute("SELECT status FROM audit_issues WHERE id=1").fetchone()[0]
         conn.close()
         assert status == "fixed"
@@ -248,7 +294,7 @@ class TestEntityEnhanceAndPages:
     def test_entity_detail_has_timeline_and_related(self, tmp_path: Path) -> None:
         """实体详情含引用时间线 + 相关实体共现。"""
         db = _make_kf_db(tmp_path)
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(_content_db(db)) as conn:
             conn.execute(
                 "UPDATE articles SET published_at = CASE id WHEN 1 THEN '2026-08-01' "
                 "WHEN 2 THEN '2026-09-01' END"
@@ -275,7 +321,7 @@ class TestEntityEnhanceAndPages:
     def test_contradiction_resolve_and_filter(self, tmp_path: Path) -> None:
         """标记误报后列表不再展示；confirmed 保留展示并带 status。"""
         db = _make_kf_db(tmp_path)
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(_content_db(db)) as conn:
             conn.executemany(
                 "INSERT INTO article_relations"
                 " (article_id_a, article_id_b, relation_type, confidence)"
@@ -297,16 +343,7 @@ class TestEntityEnhanceAndPages:
     def test_entity_related_prefers_persisted(self, tmp_path: Path) -> None:
         """entity_relations 持久化行优先于实时共现计算。"""
         db = _make_kf_db(tmp_path)
-        with sqlite3.connect(db) as conn:
-            conn.executescript(
-                """
-                CREATE TABLE entity_relations (
-                    entity_id_a INTEGER, entity_id_b INTEGER, relation_type TEXT,
-                    confidence REAL, description TEXT, co_occur INTEGER,
-                    PRIMARY KEY (entity_id_a, entity_id_b, relation_type)
-                );
-                """
-            )
+        with sqlite3.connect(_knowledge_db(db)) as conn:
             conn.execute(
                 "INSERT INTO entity_relations (entity_id_a, entity_id_b, relation_type,"
                 " confidence, description, co_occur) VALUES"
@@ -319,7 +356,7 @@ class TestEntityEnhanceAndPages:
 
     def test_audit_summary_endpoint(self, tmp_path: Path) -> None:
         db = _make_kf_db(tmp_path)
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(_audit_db(db)) as conn:
             conn.execute(
                 "INSERT INTO audit_issues (article_id, issue_type, severity, status, created_at) "
                 "VALUES (2, 'duplicate', 'high', 'open', '2026-09-08 10:00:00')"
@@ -332,7 +369,7 @@ class TestEntityEnhanceAndPages:
 
     def test_contradictions_list_endpoint(self, tmp_path: Path) -> None:
         db = _make_kf_db(tmp_path)
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(_content_db(db)) as conn:
             conn.execute(
                 "INSERT INTO article_relations (article_id_a, article_id_b, relation_type, "
                 "confidence, description) VALUES (1, 2, 'contradiction', 0.93, '两文观点相反')"
