@@ -36,10 +36,11 @@ logger = logging.getLogger(__name__)
 TABLE_TO_DB: dict[str, str] = {
     # P1: llm.db
     "llm_usage": "llm",
-    # P2: events.db
+    # P2: events.db（events / view_history 已迁入）
     "events": "events",
-    "push_notifications": "events",
     "view_history": "events",
+    # push_notifications 仍由 main 库 proactive_push 管理，未迁 events.db，先保持 core
+    # "push_notifications": "events",
     # P3: knowledge_audit.db (not yet migrated)
     # "audit_issues": "knowledge_audit",
     # "audit_tasks": "knowledge_audit",

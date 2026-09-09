@@ -131,9 +131,11 @@ class DiscoveryKeywordsMixin:
         if claim_n <= 0:
             return []
         self._ensure_fresh_read()
-        conn = self.open_connection()
+        # discovery_keywords 位于 discovery.db（P5 独立子库），必须在 _discovery
+        # 上开启事务，而不是主库 open_connection()（后者未 ATTACH discovery）。
+        conn = self._discovery
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            conn.execute("BEGIN IMMEDIATE")
             pending = conn.execute(
                 """
                 SELECT id
@@ -171,8 +173,6 @@ class DiscoveryKeywordsMixin:
             if conn.in_transaction:
                 conn.rollback()
             raise
-        finally:
-            conn.close()
         return [dict(row) for row in claimed]
 
     def mark_keyword_executing(self, keyword_id: int) -> None:
@@ -295,9 +295,9 @@ class DiscoveryKeywordsMixin:
             return 0
         digest = profile_kw_digest.strip()
         self._ensure_fresh_read()
-        conn = self.open_connection()
+        conn = self._discovery
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            conn.execute("BEGIN IMMEDIATE")
             candidates = conn.execute(
                 """
                 SELECT id, keyword
@@ -343,8 +343,6 @@ class DiscoveryKeywordsMixin:
             if conn.in_transaction:
                 conn.rollback()
             raise
-        finally:
-            conn.close()
         return recycled
 
     def expire_pending_by_digest(self, platform: str, current_digest: str) -> int:
@@ -492,9 +490,9 @@ class DiscoveryKeywordsMixin:
         now = datetime.now(UTC)
         now_text = now.strftime("%Y-%m-%d %H:%M:%S")
         new_until = (now + timedelta(seconds=max(0.0, lease_seconds))).strftime("%Y-%m-%d %H:%M:%S")
-        conn = self.open_connection()
+        conn = self._discovery
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT owner, locked_until FROM discovery_planner_lock WHERE lock_name = ?",
                 (lock_name,),
@@ -528,8 +526,6 @@ class DiscoveryKeywordsMixin:
             if conn.in_transaction:
                 conn.rollback()
             raise
-        finally:
-            conn.close()
         return True
 
     def renew_planner_lock(self, owner: str, lease_seconds: float) -> bool:

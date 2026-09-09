@@ -68,6 +68,13 @@ class ChatImporter:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
+        # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _content_path = _Path(str(db_path)).with_name("content.db")
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
 
         try:
             # 检测数据库结构
@@ -280,6 +287,13 @@ class ChatImporter:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
+        # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _content_path = _Path(str(db_path)).with_name("content.db")
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
 
         try:
             rows = conn.execute(

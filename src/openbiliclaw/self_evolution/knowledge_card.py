@@ -183,6 +183,14 @@ class KnowledgeCardGenerator:
 
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
+
+        # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _content_path = _Path(str(self.db_path)).with_name('content.db')
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
         return conn
 
     def generate_cards_from_article(

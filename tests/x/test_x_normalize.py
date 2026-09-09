@@ -14,7 +14,7 @@ from typing import Any
 from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.discovery.x_normalize import normalize_tweet
 
-_FIXTURES = Path(__file__).parent / "fixtures" / "x"
+_FIXTURES = Path(__file__).parent.parent / "fixtures" / "x"
 
 
 def _load(name: str) -> dict[str, Any]:

@@ -139,6 +139,19 @@ class AutoTopicGenerator:
 
     def __init__(self, db_path: str, llm_service: Any = None) -> None:
         self.db_path = db_path
+
+    def _get_conn(self):
+        """返回 ATTACH 了 content.db 的连接（v0.4.0+ articles 表迁移）。"""
+        conn = open_db_conn(self.db_path)
+        conn.row_factory = sqlite3.Row
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _content_path = _Path(str(self.db_path)).with_name('content.db')
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
+        return conn
+
         self.llm_service = llm_service
 
     def discover_candidates(self, min_mentions: int = 20, limit: int = 20) -> list[TopicCandidate]:
@@ -154,7 +167,7 @@ class AutoTopicGenerator:
         """
         candidates: list[TopicCandidate] = []
 
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             # 加载最新知识图谱
             row = conn.execute(
                 "SELECT graph_json FROM knowledge_graph ORDER BY id DESC LIMIT 1"
@@ -232,7 +245,7 @@ class AutoTopicGenerator:
             生成的专题，如果失败返回 None。
 
         """
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             # 搜索相关文章
             articles = self._search_related_articles(conn, candidate.keywords, limit=max_articles)
 
@@ -699,7 +712,7 @@ class AutoTopicGenerator:
     def _get_existing_topic_slugs(self) -> set[str]:
         """获取已存在的专题 slug。"""
         try:
-            with open_db_conn(self.db_path) as conn:
+            with self._get_conn() as conn:
                 rows = conn.execute("SELECT slug FROM topics").fetchall()
                 return {r[0] for r in rows if r[0]}
         except Exception:

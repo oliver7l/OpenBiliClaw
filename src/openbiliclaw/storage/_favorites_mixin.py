@@ -12,12 +12,23 @@ from typing import Any
 class FavoritesMixin:
     """收藏夹的读写方法。"""
 
-    conn: Any  # 由 Database 提供
-    _execute_write: Any  # 由 Database 提供
+    _content_conn: Any  # 由 Database 提供（content.db）
+
+    @property
+    def _content(self) -> Any:
+        """content.db 连接，缺省回退主库。"""
+        return getattr(self, "_content_conn", None) or self.conn
+
+    def _content_write(self, sql: str, params: tuple = ()) -> Any:
+        """写入 content.db 并自动 commit。"""
+        cursor = self._content.execute(sql, params)
+        self._content.commit()
+        return cursor
 
     def add_to_favorites(self, bvid: str, note: str = "") -> bool:
         """Save a video to favorites. Returns True if newly inserted."""
-        self._execute_write(
+        before = self._content.total_changes
+        self._content_write(
             """
             INSERT INTO favorites (bvid, note)
             VALUES (?, ?)
@@ -27,15 +38,16 @@ class FavoritesMixin:
             """,
             (bvid.strip(), note),
         )
-        return self._content.total_changes > 0
+        return self._content.total_changes > before
 
     def remove_from_favorites(self, bvid: str) -> bool:
         """Remove a favorite. Returns True if a row was deleted."""
-        self._execute_write(
+        before = self._content.total_changes
+        self._content_write(
             "DELETE FROM favorites WHERE bvid = ?",
             (bvid.strip(),),
         )
-        return self._content.total_changes > 0
+        return self._content.total_changes > before
 
     def is_in_favorites(self, bvid: str) -> bool:
         """Check whether a video is favorited."""

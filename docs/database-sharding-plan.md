@@ -2,7 +2,7 @@
 
 > 版本：v1.0  
 > 创建日期：2026-09-09  
-> 状态：待实施  
+> 状态：部分实施中 —— P0 基础设施、P1 llm.db、P2 events.db 已完成，P5 discovery 相关由另一方会话推进中  
 > 目标：解决 SQLite 主库并发写入锁定问题，按写入频率和领域拆分数据库
 
 ---
@@ -399,27 +399,33 @@ class DatabaseMigrator:
 **目标**：把用户行为事件流拆到独立库
 
 **表清单**：
-- `events`（229,756 行，用户行为事件）
-- `push_notifications`（0 行）
-- `view_history`（0 行）
+- `events`（229,756 行，用户行为事件）✅ 已迁入 events.db
+- `push_notifications`（0 行）—— 仍由主库 `proactive_push` 管理，暂缓迁移
+- `view_history`（0 行）✅ 已迁入 events.db
 
 **实施步骤**：
 
-1. 创建 events.db 和表结构（含索引）
-2. 迁移历史数据
-3. 修改 `_events_mixin.py` 写入 events.db
-4. 修改所有查询 events 的代码
-5. 双写验证
-6. 删除主库旧表
+1. 创建 events.db 和表结构（含索引）✅
+2. 迁移历史数据 ✅（`scripts/migrate_events_db.py`，229,756 行已校验）
+3. 修改 `_events_mixin.py` 写入 events.db ✅
+4. 修改所有查询 events 的代码 ✅（统一为 `events.events` / `events.view_history` 前缀，清除 `act.*` / `activity.db`）
+5. 双写验证 ✅（`insert_event` / `insert_view_history` 主写 events.db + 双写主库旧表）
+6. 删除主库旧表 —— 待双写验证通过后执行
+
+> **命名口径（v0.4.x 强制）**：事件子库统一为 **`events.db` ↔ ATTACH 别名 `events` ↔ 表 `events`**，
+> SQL 一律 `events.events` / `events.view_history`。不再使用 `activity.db` / `act` 等别名。
 
 **修改文件清单**：
-- `src/openbiliclaw/storage/_events_mixin.py`
-- `src/openbiliclaw/storage/database.py`
-- 所有引用 events 表的 API 路由
+- `src/openbiliclaw/storage/_events_mixin.py` ✅
+- `src/openbiliclaw/storage/_view_history_mixin.py` ✅
+- `src/openbiliclaw/storage/database.py` ✅
+- `src/openbiliclaw/storage/db_router.py` ✅
+- 所有引用 events 表的 API 路由 / self_evolution ✅
+- `scripts/migrate_events_db.py`（新增）✅
 
 **验收标准**：
-- [ ] events 写入 events.db
-- [ ] 用户行为追踪正常
+- [x] events 写入 events.db
+- [ ] 用户行为追踪正常（待 storage 测试套件解除 P5 discovery 阻塞后回归）
 - [ ] 推荐系统的事件分析正常工作
 
 ---

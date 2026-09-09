@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
+from contextlib import suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi.responses import JSONResponse
@@ -16,6 +19,19 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
+
+
+def _conn_with_content(database: Any) -> sqlite3.Connection:
+    """返回 ATTACH 了 content.db 的主库连接（用于跨库 JOIN articles）。"""
+    conn = _conn_with_content(database)
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    with suppress(Exception):
+        db_path = getattr(database, "_db_path", None)
+        if db_path:
+            content_path = Path(str(db_path)).with_name("content.db")
+            if content_path.exists():
+                conn.execute("ATTACH DATABASE ? AS content", (str(content_path),))
+    return conn
 
 
 def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
@@ -33,7 +49,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            conn = database.conn
+            conn = _conn_with_content(database)
             where = []
             params: list = []
             if q:
@@ -83,7 +99,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            conn = database.conn
+            conn = _conn_with_content(database)
             where = ["kb.target_concept = ?"]
             params: list = [concept_name]
             if source:
@@ -156,7 +172,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            conn = database.conn
+            conn = _conn_with_content(database)
             total_concepts = conn.execute(
                 "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
             ).fetchone()[0]
@@ -186,7 +202,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            conn = database.conn
+            conn = _conn_with_content(database)
             # 取 TOP 概念作为节点
             nodes_raw = conn.execute(
                 "SELECT concept, concept_type, source_site, COUNT(*) as w "

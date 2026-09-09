@@ -62,6 +62,11 @@ def _connect(ctx: RuntimeContext) -> sqlite3.Connection | None:
     if main_path.exists():
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS main_db", (str(main_path),))
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    content_path = Path(p).with_name("content.db")
+    if content_path.exists():
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS content", (str(content_path),))
     return conn
 
 

@@ -168,8 +168,9 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self._content.execute(
-                """INSERT OR IGNORE INTO content_cache (
+            # v0.4.0+: content_cache 表在 pool.db，主库连接已 ATTACH pool
+            self.conn.execute(
+                """INSERT OR IGNORE INTO pool.content_cache (
                     bvid, title, up_name, up_mid, duration, tags,
                     topic_key, style_key, franchise_key, description,
                     cover_url, view_count, like_count, favorite_count,
@@ -202,7 +203,7 @@ class ArticleMixin:
                     author,
                 ),
             )
-            self._content.commit()
+            self.conn.commit()
         except Exception:
             logger.exception("Failed to inject article to pool: %s", title)
 

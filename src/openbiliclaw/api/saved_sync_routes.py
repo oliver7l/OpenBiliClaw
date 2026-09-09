@@ -268,7 +268,9 @@ def register_saved_sync_routes(app: Any, ctx: RuntimeContext) -> None:
     @app.get("/api/reading/sources")
     async def get_reading_sources(request: Request) -> JSONResponse:
         db = ctx.database
-        rows = db.conn.execute(
+        # v0.4.0+: articles 表迁移到 content.db
+        content_conn = getattr(db, "_content_conn", None) or db.conn
+        rows = content_conn.execute(
             "SELECT source_type, COUNT(*) c FROM articles GROUP BY source_type ORDER BY c DESC"
         ).fetchall()
         sources = [{"source_type": r[0], "count": r[1]} for r in rows]

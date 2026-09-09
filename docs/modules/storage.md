@@ -16,6 +16,14 @@
 > `ATTACH pool.db`，推荐流方法中的无前缀 SQL 自然落到子库，与主库其余
 > 表（events / diary / saved 等）锁域隔离。迁移与回滚见 `scripts/migrate_pool_db.py`。
 
+> **v0.4.x 事件库拆分（db sharding P2）**：行为事件 `events` / 观看历史
+> `view_history` 已从主库迁出到子库 `data/events.db`。ATTACH 别名恒等于
+> 文件名（`events`），SQL 以 `events.events` / `events.view_history` 前缀显式
+> 访问；主库连接 `open_db_conn` 与 `Database` 均自动 ATTACH。这是分库后命名
+> 的统一口径：**文件 `events.db` ↔ 别名 `events` ↔ 表 `events`**。迁移期采用
+> 主写 events.db + 双写主库旧表，见 `scripts/migrate_events_db.py`；验证后
+> 再 DROP 主库旧表。历史数据（229,756 行 events）已迁移并校验一致。
+
 > **v0.3.221 巨类拆分（mixin 架构）**：`database.py` 从 9,064 行降至 **847 行（-91%）**，
 > 拆出 24 个功能 mixin。`Database` 类继承所有 mixin，调用方代码无需修改。
 > 每个 mixin 对应一个功能组，文件命名 `_<group>_mixin.py`，mixin 内对

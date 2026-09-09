@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "save_xhs_note.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "save_xhs_note.py"
 
 
 def _load():

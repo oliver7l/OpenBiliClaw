@@ -133,11 +133,24 @@ class ReadingScheduler:
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
+
+    def _get_conn(self):
+        """返回 ATTACH 了 content.db 的连接（v0.4.0+ articles 表迁移）。"""
+        conn = open_db_conn(self.db_path)
+        conn.row_factory = sqlite3.Row
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _content_path = _Path(str(self.db_path)).with_name('content.db')
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
+        return conn
+
         self._ensure_table()
 
     def _ensure_table(self) -> None:
         """确保 reading_schedule 表存在。"""
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS reading_schedule (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,7 +194,7 @@ class ReadingScheduler:
         next_review = (datetime.now(UTC) + timedelta(days=initial_delay_days)).isoformat()
 
         try:
-            with open_db_conn(self.db_path) as conn:
+            with self._get_conn() as conn:
                 conn.execute(
                     """INSERT OR IGNORE INTO reading_schedule
                        (article_id, stability, difficulty, retrievability, state,
@@ -211,7 +224,7 @@ class ReadingScheduler:
         """
         now = datetime.now(UTC)
 
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT * FROM reading_schedule WHERE article_id = ?",
@@ -323,7 +336,7 @@ class ReadingScheduler:
         now = datetime.now(UTC).isoformat()
         items: list[ReadingScheduleItem] = []
 
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             conn.row_factory = sqlite3.Row
 
             # 1. 到期需要复习的文章
@@ -370,7 +383,7 @@ class ReadingScheduler:
             ReadingScheduleItem，如果不存在则返回 None。
 
         """
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 """SELECT rs.*, a.title, a.url, a.source_type
@@ -393,7 +406,7 @@ class ReadingScheduler:
         """
         now = datetime.now(UTC).isoformat()
 
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM reading_schedule").fetchone()[0]
 
             by_state = {}
@@ -441,7 +454,7 @@ class ReadingScheduler:
         now = datetime.now(UTC).isoformat()
         next_review = (datetime.now(UTC) + timedelta(days=1)).isoformat()
 
-        with open_db_conn(self.db_path) as conn:
+        with self._get_conn() as conn:
             # 找出尚未注册的文章
             rows = conn.execute(
                 """SELECT a.id FROM articles a

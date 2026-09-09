@@ -4192,7 +4192,6 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/06 项目代码/lucene-search-prediction/src/main/scala/com/tencent/jaaf/ocean/search/prediction/xgboostlr/utils/Utils.scala,01_原始资料库,03_工作资料,其他,Utils.scala,.scala,1.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/05 存档文件/04_kd_timeliness.zip,01_原始资料库,03_工作资料,压缩包,04_kd_timeliness.zip,.zip,175679.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/05 存档文件/06_git_oa_com_ai_suanfa.zip,01_原始资料库,03_工作资料,压缩包,06_git_oa_com_ai_suanfa.zip,.zip,69414.9,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/01_data_process.ipynb,01_原始资料库,03_工作资料,其他,01_data_process.ipynb,.ipynb,29.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/age_map,01_原始资料库,03_工作资料,其他,age_map,,0.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/city_map,01_原始资料库,03_工作资料,其他,city_map,,0.0,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/entity_map,01_原始资料库,03_工作资料,其他,entity_map,,0.0,2026-09-03
@@ -4202,13 +4201,11 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/qqAge_map,01_原始资料库,03_工作资料,其他,qqAge_map,,9.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/query_map,01_原始资料库,03_工作资料,其他,query_map,,56.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/search_type_map,01_原始资料库,03_工作资料,其他,search_type_map,,0.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/stat-Copy1.ipynb,01_原始资料库,03_工作资料,其他,stat-Copy1.ipynb,.ipynb,60.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/stat.ipynb,01_原始资料库,03_工作资料,其他,stat.ipynb,.ipynb,64.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v1/type_map,01_原始资料库,03_工作资料,其他,type_map,,0.0,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/01_data_process.ipynb,01_原始资料库,03_工作资料,其他,01_data_process.ipynb,.ipynb,24.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/01_data_process_for_tensorflow.ipynb,01_原始资料库,03_工作资料,其他,01_data_process_for_tensorflow.ipynb,.ipynb,16.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/02_keras_train.ipynb,01_原始资料库,03_工作资料,其他,02_keras_train.ipynb,.ipynb,23.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/02_tensorflow_train.ipynb,01_原始资料库,03_工作资料,其他,02_tensorflow_train.ipynb,.ipynb,18.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/fea_map/city_map,01_原始资料库,03_工作资料,其他,city_map,,4.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/fea_map/entity_map,01_原始资料库,03_工作资料,其他,entity_map,,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 QQ 搜索/v2/fea_map/gender_map,01_原始资料库,03_工作资料,其他,gender_map,,0.0,2026-09-03
@@ -4313,8 +4310,6 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/COPYRIGHT,01_原始资料库,03_工作资料,其他,COPYRIGHT,,3.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/LICENSE,01_原始资料库,03_工作资料,其他,LICENSE,,0.0,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/README,01_原始资料库,03_工作资料,其他,README,,0.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/THIRDPARTYLICENSEREADME-JAVAFX.txt,01_原始资料库,03_工作资料,文本,THIRDPARTYLICENSEREADME-JAVAFX.txt,.txt,104.3,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/THIRDPARTYLICENSEREADME.txt,01_原始资料库,03_工作资料,文本,THIRDPARTYLICENSEREADME.txt,.txt,150.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/Welcome.html,01_原始资料库,03_工作资料,网页,Welcome.html,.html,0.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/bin/ControlPanel,01_原始资料库,03_工作资料,其他,ControlPanel,,6.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/jre/bin/java,01_原始资料库,03_工作资料,其他,java,,7.6,2026-09-03
@@ -5759,7 +5754,6 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/plugins/com.jrockit.mc.console.ui.notification_5.5.2.174165/icons/file_obj.gif,01_原始资料库,03_工作资料,图片,file_obj.gif,.gif,0.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/plugins/com.jrockit.mc.console.ui.notification_5.5.2.174165/icons/flight_recorder.png,01_原始资料库,03_工作资料,图片,flight_recorder.png,.png,3.0,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/plugins/com.jrockit.mc.console.ui.notification_5.5.2.174165/icons/new-trigger-wiz.gif,01_原始资料库,03_工作资料,图片,new-trigger-wiz.gif,.gif,3.8,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.ecore_2.10.1.v20140901-1043/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.ecore_2.10.1.v20140901-1043/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.ecore_2.10.1.v20140901-1043/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.ecore_2.10.1.v20140901-1043/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
@@ -5772,25 +5766,19 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.feature_3.9.0.v20140827-1444/META-INF/eclipse.inf,01_原始资料库,03_工作资料,其他,eclipse.inf,.inf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,15.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.3,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.ssl.feature_1.0.0.v20140827-1444/META-INF/eclipse.inf,01_原始资料库,03_工作资料,其他,eclipse.inf,.inf,0.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,1.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.feature_1.1.0.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
@@ -5805,11 +5793,8 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_zh_4.4.0.v20140623020002/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,6.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_zh_4.4.0.v20140623020002/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,45.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_zh_4.4.0.v20140623020002/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,6.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,1.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.core.ssl.feature_1.0.0.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
@@ -5819,69 +5804,47 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.rcp_5.5.2.174165/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,19.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.rcp_5.5.2.174165/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,4.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,14.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/asl-v20.txt,01_原始资料库,03_工作资料,文本,asl-v20.txt,.txt,11.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.3,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.ssl.feature_1.0.0.v20140827-1444/META-INF/eclipse.inf,01_原始资料库,03_工作资料,其他,eclipse.inf,.inf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,14.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/asl-v20.txt,01_原始资料库,03_工作资料,文本,asl-v20.txt,.txt,11.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,8.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,2.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.ecf.filetransfer.httpclient4.feature_3.9.1.v20140827-1444/META-INF/eclipse.inf,01_原始资料库,03_工作资料,其他,eclipse.inf,.inf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/about.html,01_原始资料库,03_工作资料,网页,about.html,.html,1.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/eclipse_update_120.jpg,01_原始资料库,03_工作资料,图片,eclipse_update_120.jpg,.jpg,21.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,16.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,6.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,45.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.babel.nls_eclipse_ja_4.4.0.v20140623020002/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,6.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.help_2.0.102.v20141007-2301/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.help_2.0.102.v20141007-2301/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.help_2.0.102.v20141007-2301/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,4.8,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.help_2.0.102.v20141007-2301/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.help_2.0.102.v20141007-2301/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.console_5.5.2.174165/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,19.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.console_5.5.2.174165/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.e4.rcp_1.3.100.v20141007-2033/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.e4.rcp_1.3.100.v20141007-2033/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.e4.rcp_1.3.100.v20141007-2033/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,19.7,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.e4.rcp_1.3.100.v20141007-2033/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.e4.rcp_1.3.100.v20141007-2033/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.rcp_4.4.0.v20141007-2301/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.rcp_4.4.0.v20141007-2301/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.rcp_4.4.0.v20141007-2301/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.rcp_4.4.0.v20141007-2301/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.rcp_4.4.0.v20141007-2301/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.emf.common_2.10.1.v20140901-1043/META-INF/eclipse.inf,01_原始资料库,03_工作资料,其他,eclipse.inf,.inf,0.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,1.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.rcp.feature_1.2.0.v20140523-0116/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.core_5.5.2.174165/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,19.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/com.jrockit.mc.feature.core_5.5.2.174165/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,3.0,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/epl-v10.html,01_原始资料库,03_工作资料,网页,epl-v10.html,.html,12.3,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/feature.properties,01_原始资料库,03_工作资料,其他,feature.properties,.properties,9.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/feature.xml,01_原始资料库,03_工作资料,其他,feature.xml,.xml,5.7,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/license.html,01_原始资料库,03_工作资料,网页,license.html,.html,8.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/META-INF/ECLIPSE_.RSA,01_原始资料库,03_工作资料,其他,ECLIPSE_.RSA,.rsa,7.6,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/META-INF/ECLIPSE_.SF,01_原始资料库,03_工作资料,其他,ECLIPSE_.SF,.sf,0.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/08 test/spark/jdk/jdk1_8/lib/missioncontrol/features/org.eclipse.equinox.p2.core.feature_1.3.0.v20140523-0116/META-INF/MANIFEST.MF,01_原始资料库,03_工作资料,其他,MANIFEST.MF,.mf,0.4,2026-09-03
@@ -5909,7 +5872,6 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/model_new/xgb_fea_index_20180813_add_playcnt,01_原始资料库,03_工作资料,其他,xgb_fea_index_20180813_add_playcnt,,18.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/model_new/xgb_model_20180813_add_playcnt,01_原始资料库,03_工作资料,其他,xgb_model_20180813_add_playcnt,,358.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/model_online/xgb_model_0506,01_原始资料库,03_工作资料,其他,xgb_model_0506,,350.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/model_online/xgboost_feature_map.txt,01_原始资料库,03_工作资料,文本,xgboost_feature_map.txt,.txt,18.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/sample_cgi_ret/sample_刺激战场,01_原始资料库,03_工作资料,其他,sample_刺激战场,,55.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/sample_cgi_ret/sample_吃鸡,01_原始资料库,03_工作资料,其他,sample_吃鸡,,51.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt/sample_cgi_ret/sample_小姐姐,01_原始资料库,03_工作资料,其他,sample_小姐姐,,38.7,2026-09-03
@@ -5927,20 +5889,9 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/rename.sh,01_原始资料库,03_工作资料,脚本,rename.sh,.sh,0.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/result_id_ml_fea,01_原始资料库,03_工作资料,其他,result_id_ml_fea,,0.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/sample,01_原始资料库,03_工作资料,其他,sample,,51.9,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_刺激战场.xlsx,01_原始资料库,03_工作资料,表格,query_刺激战场.xlsx,.xlsx,8.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_吃鸡.xlsx,01_原始资料库,03_工作资料,表格,query_吃鸡.xlsx,.xlsx,8.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_小姐姐.xlsx,01_原始资料库,03_工作资料,表格,query_小姐姐.xlsx,.xlsx,7.8,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_延禧攻略.xlsx,01_原始资料库,03_工作资料,表格,query_延禧攻略.xlsx,.xlsx,7.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_张宇.xlsx,01_原始资料库,03_工作资料,表格,query_张宇.xlsx,.xlsx,8.4,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_易烊千玺.xlsx,01_原始资料库,03_工作资料,表格,query_易烊千玺.xlsx,.xlsx,9.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_王者荣耀.xlsx,01_原始资料库,03_工作资料,表格,query_王者荣耀.xlsx,.xlsx,8.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_美女.xlsx,01_原始资料库,03_工作资料,表格,query_美女.xlsx,.xlsx,8.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_蔡徐坤.xlsx,01_原始资料库,03_工作资料,表格,query_蔡徐坤.xlsx,.xlsx,9.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/query_result/query_迪丽热巴.xlsx,01_原始资料库,03_工作资料,表格,query_迪丽热巴.xlsx,.xlsx,8.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/model_new/xgb_fea_index_20180813_add_playcnt,01_原始资料库,03_工作资料,其他,xgb_fea_index_20180813_add_playcnt,,18.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/model_new/xgb_model_20180813_add_playcnt,01_原始资料库,03_工作资料,其他,xgb_model_20180813_add_playcnt,,358.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/model_online/xgb_model_0506,01_原始资料库,03_工作资料,其他,xgb_model_0506,,350.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/model_online/xgboost_feature_map.txt,01_原始资料库,03_工作资料,文本,xgboost_feature_map.txt,.txt,18.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/sample_cgi_ret/sample_刺激战场,01_原始资料库,03_工作资料,其他,sample_刺激战场,,55.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/sample_cgi_ret/sample_吃鸡,01_原始资料库,03_工作资料,其他,sample_吃鸡,,51.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/kandian_xgb_predict/sample_cgi_ret/sample_小姐姐,01_原始资料库,03_工作资料,其他,sample_小姐姐,,38.7,2026-09-03
@@ -5962,7 +5913,6 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict/xgb_model_0508,01_原始资料库,03_工作资料,其他,xgb_model_0508,,348.4,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict/xgb_model_20180813_add_playcnt,01_原始资料库,03_工作资料,其他,xgb_model_20180813_add_playcnt,,358.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict/xgb_model_txt_0508,01_原始资料库,03_工作资料,其他,xgb_model_txt_0508,,304.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict/xgboost_feature_map.txt,01_原始资料库,03_工作资料,文本,xgboost_feature_map.txt,.txt,18.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/compare.ipynb,01_原始资料库,03_工作资料,其他,compare.ipynb,.ipynb,14.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/fea_libsvm,01_原始资料库,03_工作资料,其他,fea_libsvm,,5.8,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/rename.sh,01_原始资料库,03_工作资料,脚本,rename.sh,.sh,0.1,2026-09-03
@@ -5970,23 +5920,14 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/sample,01_原始资料库,03_工作资料,其他,sample,,51.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/test.py,01_原始资料库,03_工作资料,脚本,test.py,.py,4.0,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/test2.py,01_原始资料库,03_工作资料,脚本,test2.py,.py,7.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_刺激战场.xlsx,01_原始资料库,03_工作资料,表格,query_刺激战场.xlsx,.xlsx,8.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_吃鸡.xlsx,01_原始资料库,03_工作资料,表格,query_吃鸡.xlsx,.xlsx,8.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_周杰伦.xlsx,01_原始资料库,03_工作资料,表格,query_周杰伦.xlsx,.xlsx,8.9,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_小姐姐.xlsx,01_原始资料库,03_工作资料,表格,query_小姐姐.xlsx,.xlsx,7.9,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_延禧攻略.xlsx,01_原始资料库,03_工作资料,表格,query_延禧攻略.xlsx,.xlsx,7.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_张宇.xlsx,01_原始资料库,03_工作资料,表格,query_张宇.xlsx,.xlsx,8.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_易烊千玺.xlsx,01_原始资料库,03_工作资料,表格,query_易烊千玺.xlsx,.xlsx,9.1,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_王者荣耀.xlsx,01_原始资料库,03_工作资料,表格,query_王者荣耀.xlsx,.xlsx,8.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_美女.xlsx,01_原始资料库,03_工作资料,表格,query_美女.xlsx,.xlsx,8.5,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_蔡徐坤.xlsx,01_原始资料库,03_工作资料,表格,query_蔡徐坤.xlsx,.xlsx,9.2,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/query_result/query_迪丽热巴.xlsx,01_原始资料库,03_工作资料,表格,query_迪丽热巴.xlsx,.xlsx,8.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_new/xgb,01_原始资料库,03_工作资料,其他,xgb,,360.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_new/xgb_feamap,01_原始资料库,03_工作资料,其他,xgb_feamap,,18.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_new/xgb_v7,01_原始资料库,03_工作资料,其他,xgb_v7,,360.2,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_new/xgb_v7_feamap,01_原始资料库,03_工作资料,其他,xgb_v7_feamap,,18.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_online/xgb_model_0506,01_原始资料库,03_工作资料,其他,xgb_model_0506,,350.6,2026-09-03
-01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/model_online/xgboost_feature_map.txt,01_原始资料库,03_工作资料,文本,xgboost_feature_map.txt,.txt,18.5,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/sample_cgi_ret/sample_刺激战场,01_原始资料库,03_工作资料,其他,sample_刺激战场,,55.1,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/sample_cgi_ret/sample_吃鸡,01_原始资料库,03_工作资料,其他,sample_吃鸡,,51.9,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年01月-备份/04 看点搜索/离线预测模拟/xgb_predict_add_playcnt_sample_by_date/sample_cgi_ret/sample_周杰伦,01_原始资料库,03_工作资料,其他,sample_周杰伦,,64.6,2026-09-03
@@ -6350,23 +6291,9 @@
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年08月-UGC推荐/账号1591个（0813）.xlsx,01_原始资料库,03_工作资料,表格,账号1591个（0813）.xlsx,.xlsx,200.7,2026-09-03
 01_原始资料库/03_工作资料/工作资料_腾讯/2020年08月-UGC推荐/账号推荐-各场景top账号-2020年09月14日.xlsx,01_原始资料库,03_工作资料,表格,账号推荐-各场景top账号-2020年09月14日.xlsx,.xlsx,21.6,2026-09-03
 01_原始资料库/08_解码文本/README.md,01_原始资料库,08_解码文本,文档,README.md,.md,2.3,2026-09-09
-01_原始资料库/08_解码文本/06_社交与好友/PCG电商PMC规范.txt,01_原始资料库,08_解码文本,文本,PCG电商PMC规范.txt,.txt,3.9,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/QQ浏览器H2小程序规划.txt,01_原始资料库,08_解码文本,文本,QQ浏览器H2小程序规划.txt,.txt,23.0,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/作者权威等级信号建设（自有生态）.txt,01_原始资料库,08_解码文本,文本,作者权威等级信号建设（自有生态）.txt,.txt,2.7,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/关注账户与留存、时长、活跃天数因果分析_补充.txt,01_原始资料库,08_解码文本,文本,关注账户与留存、时长、活跃天数因果分析_补充.txt,.txt,9.0,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/微博ugc链路处理.txt,01_原始资料库,08_解码文本,文本,微博ugc链路处理.txt,.txt,2.2,2026-09-03
 01_原始资料库/08_解码文本/06_社交与好友/微博关注流架构.txt,01_原始资料库,08_解码文本,文本,微博关注流架构.txt,.txt,0.0,2026-09-03
 01_原始资料库/08_解码文本/06_社交与好友/微博热门流架构.txt,01_原始资料库,08_解码文本,文本,微博热门流架构.txt,.txt,0.1,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/推荐页-零关注用户场景化推人.txt,01_原始资料库,08_解码文本,文本,推荐页-零关注用户场景化推人.txt,.txt,10.7,2026-09-03
-01_原始资料库/08_解码文本/06_社交与好友/电商中台总体架构.txt,01_原始资料库,08_解码文本,文本,电商中台总体架构.txt,.txt,0.3,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号常用log协议-明细.txt,01_原始资料库,08_解码文本,文本,视频号常用log协议-明细.txt,.txt,7.3,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号数据上报流程与设计规范.txt,01_原始资料库,08_解码文本,文本,视频号数据上报流程与设计规范.txt,.txt,21.8,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号数据核心项目梳理.txt,01_原始资料库,08_解码文本,文本,视频号数据核心项目梳理.txt,.txt,3.8,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号数据目录.txt,01_原始资料库,08_解码文本,文本,视频号数据目录.txt,.txt,2.1,2026-09-03
 01_原始资料库/08_解码文本/05_视频号/视频号热点数据流程.txt,01_原始资料库,08_解码文本,文本,视频号热点数据流程.txt,.txt,0.0,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号相似召回.txt,01_原始资料库,08_解码文本,文本,视频号相似召回.txt,.txt,6.0,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号行为Embedding召回项目说明文档.txt,01_原始资料库,08_解码文本,文本,视频号行为Embedding召回项目说明文档.txt,.txt,7.4,2026-09-03
-01_原始资料库/08_解码文本/05_视频号/视频号评论文本引流打击策略.txt,01_原始资料库,08_解码文本,文本,视频号评论文本引流打击策略.txt,.txt,9.5,2026-09-03
 01_原始资料库/08_解码文本/04_看点推荐/2019内容质量工作总结.txt,01_原始资料库,08_解码文本,文本,2019内容质量工作总结.txt,.txt,2.0,2026-09-03
 01_原始资料库/08_解码文本/04_看点推荐/20200721+看点话题接入微博+UGC.txt,01_原始资料库,08_解码文本,文本,20200721+看点话题接入微博+UGC.txt,.txt,2.5,2026-09-03
 01_原始资料库/08_解码文本/04_看点推荐/2020年09月-内部资料__推荐系统__微信广告系统介绍_20200312.pdf.txt,01_原始资料库,08_解码文本,文本,2020年09月-内部资料__推荐系统__微信广告系统介绍_20200312.pdf.txt,.txt,14.7,2026-09-03
@@ -6443,42 +6370,13 @@
 01_原始资料库/08_解码文本/08_工程与平台/联合框架.txt,01_原始资料库,08_解码文本,文本,联合框架.txt,.txt,14.0,2026-09-03
 01_原始资料库/08_解码文本/08_工程与平台/调研工具规划.txt,01_原始资料库,08_解码文本,文本,调研工具规划.txt,.txt,6.5,2026-09-03
 01_原始资料库/08_解码文本/08_工程与平台/调试工具清单.txt,01_原始资料库,08_解码文本,文本,调试工具清单.txt,.txt,3.1,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/1.1+用户功能渗透与累积留存情况.txt,01_原始资料库,08_解码文本,文本,1.1+用户功能渗透与累积留存情况.txt,.txt,10.4,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/wxg底层数据流向与数据上报流程.txt,01_原始资料库,08_解码文本,文本,wxg底层数据流向与数据上报流程.txt,.txt,7.9,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/不同时段大盘用户生命周期状态占比变化.txt,01_原始资料库,08_解码文本,文本,不同时段大盘用户生命周期状态占比变化.txt,.txt,3.3,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/小说专项数据表及口径记录.txt,01_原始资料库,08_解码文本,文本,小说专项数据表及口径记录.txt,.txt,5.9,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/数据分析.txt,01_原始资料库,08_解码文本,文本,数据分析.txt,.txt,13.9,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/数据平台中心工作规范设想.txt,01_原始资料库,08_解码文本,文本,数据平台中心工作规范设想.txt,.txt,0.1,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/数据流梳理总结.txt,01_原始资料库,08_解码文本,文本,数据流梳理总结.txt,.txt,14.5,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/浏览器严口径数据完全说明.txt,01_原始资料库,08_解码文本,文本,浏览器严口径数据完全说明.txt,.txt,31.7,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/点赞、评论、分享等互动行为对时长和留存的增益.txt,01_原始资料库,08_解码文本,文本,点赞、评论、分享等互动行为对时长和留存的增益.txt,.txt,7.6,2026-09-03
 01_原始资料库/08_解码文本/09_数据分析/用研报告.txt,01_原始资料库,08_解码文本,文本,用研报告.txt,.txt,0.0,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/画像目标.txt,01_原始资料库,08_解码文本,文本,画像目标.txt,.txt,1.3,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/离线冷启训练实现与分析.txt,01_原始资料库,08_解码文本,文本,离线冷启训练实现与分析.txt,.txt,3.1,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/离线获取资讯白板数据.txt,01_原始资料库,08_解码文本,文本,离线获取资讯白板数据.txt,.txt,4.0,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/离线评估指标项目.txt,01_原始资料库,08_解码文本,文本,离线评估指标项目.txt,.txt,3.0,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/统一数据分析记录.txt,01_原始资料库,08_解码文本,文本,统一数据分析记录.txt,.txt,4.0,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/统计报表.txt,01_原始资料库,08_解码文本,文本,统计报表.txt,.txt,2.4,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/行为数据.txt,01_原始资料库,08_解码文本,文本,行为数据.txt,.txt,4.8,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/账号画像梳理.txt,01_原始资料库,08_解码文本,文本,账号画像梳理.txt,.txt,15.6,2026-09-03
-01_原始资料库/08_解码文本/09_数据分析/错别字数据集汇总.txt,01_原始资料库,08_解码文本,文本,错别字数据集汇总.txt,.txt,2.0,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-vivo-游戏中心推荐.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-vivo-游戏中心推荐.pdf.txt,.txt,4.7,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-大于无限-广告算法工程师.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-大于无限-广告算法工程师.pdf.txt,.txt,10.5,2026-09-03
-01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-大于无限-广告算法工程师_品牌版.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-大于无限-广告算法工程师_品牌版.pdf.txt,.txt,10.5,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-百度-数据分析.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-百度-数据分析.pdf.txt,.txt,8.0,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-腾讯-推荐.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-腾讯-推荐.pdf.txt,.txt,4.7,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-腾讯-游戏数据分析.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-腾讯-游戏数据分析.pdf.txt,.txt,6.8,2026-09-03
-01_原始资料库/08_解码文本/01_简历解码/童力简历__童力-腾讯-腾讯音乐.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力-腾讯-腾讯音乐.pdf.txt,.txt,4.7,2026-09-03
 01_原始资料库/08_解码文本/01_简历解码/童力简历__童力简历-2018年06月11日.pdf.txt,01_原始资料库,08_解码文本,文本,童力简历__童力简历-2018年06月11日.pdf.txt,.txt,4.9,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/query中核心mention识别.txt,01_原始资料库,08_解码文本,文本,query中核心mention识别.txt,.txt,18.4,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/利用Bootstraping构建语义模板抽取.txt,01_原始资料库,08_解码文本,文本,利用Bootstraping构建语义模板抽取.txt,.txt,8.4,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/图谱构建流程梳理.txt,01_原始资料库,08_解码文本,文本,图谱构建流程梳理.txt,.txt,2.2,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/垂类图谱快速构建能力V1.0.txt,01_原始资料库,08_解码文本,文本,垂类图谱快速构建能力V1.0.txt,.txt,3.8,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/基于query+pv的热门实体更新机制.txt,01_原始资料库,08_解码文本,文本,基于query+pv的热门实体更新机制.txt,.txt,1.6,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/属性抽取.txt,01_原始资料库,08_解码文本,文本,属性抽取.txt,.txt,10.0,2026-09-03
-01_原始资料库/08_解码文本/10_图谱NLP/错别字混淆集汇总.txt,01_原始资料库,08_解码文本,文本,错别字混淆集汇总.txt,.txt,0.6,2026-09-03
-01_原始资料库/08_解码文本/02_程序化广告笔记/书籍__2026年08月12日-程序化广告-学习笔记.pptx.txt,01_原始资料库,08_解码文本,文本,书籍__2026年08月12日-程序化广告-学习笔记.pptx.txt,.txt,9.2,2026-09-03
-01_原始资料库/08_解码文本/02_程序化广告笔记/书籍__8月12日-程序化广告-学习笔记.pptx.txt,01_原始资料库,08_解码文本,文本,书籍__8月12日-程序化广告-学习笔记.pptx.txt,.txt,0.2,2026-09-03
 01_原始资料库/08_解码文本/11_产品与规划/DS工作文档.txt,01_原始资料库,08_解码文本,文本,DS工作文档.txt,.txt,13.9,2026-09-03
 01_原始资料库/08_解码文本/11_产品与规划/Plato调研.txt,01_原始资料库,08_解码文本,文本,Plato调研.txt,.txt,14.1,2026-09-03
 01_原始资料库/08_解码文本/11_产品与规划/Week1+++7.13_7.17+项目进展.txt,01_原始资料库,08_解码文本,文本,Week1+++7.13_7.17+项目进展.txt,.txt,6.4,2026-09-03
@@ -6684,9 +6582,17 @@
 02_方向知识库/简历技术专题/01_多目标推荐系统/README.md,02_方向知识库,简历技术专题,文档,README.md,.md,14.6,2026-09-09
 02_方向知识库/简历技术专题/03_端云协同/README.md,02_方向知识库,简历技术专题,文档,README.md,.md,7.5,2026-09-09
 02_方向知识库/工作资料_加工/01_微视账号推荐项目档案.md,02_方向知识库,工作资料_加工,文档,01_微视账号推荐项目档案.md,.md,57.2,2026-09-09
-02_方向知识库/工作资料_加工/02_看点图集项目档案.md,02_方向知识库,工作资料_加工,文档,02_看点图集项目档案.md,.md,41.8,2026-09-09
+02_方向知识库/工作资料_加工/02_看点图集项目档案.md,02_方向知识库,工作资料_加工,文档,02_看点图集项目档案.md,.md,43.4,2026-09-09
 02_方向知识库/工作资料_加工/03_腾讯10级答辩项目档案.md,02_方向知识库,工作资料_加工,文档,03_腾讯10级答辩项目档案.md,.md,52.7,2026-09-09
 02_方向知识库/工作资料_加工/04_GNN与UGC与短内容项目档案.md,02_方向知识库,工作资料_加工,文档,04_GNN与UGC与短内容项目档案.md,.md,43.9,2026-09-09
+02_方向知识库/大模型推荐专题/README.md,02_方向知识库,大模型推荐专题,文档,README.md,.md,2.0,2026-09-09
+02_方向知识库/大模型推荐专题/_资料副本/加工1_幻灯片加工04_大模型做推荐段.md,02_方向知识库,大模型推荐专题,文档,加工1_幻灯片加工04_大模型做推荐段.md,.md,9.8,2026-09-09
+02_方向知识库/大模型推荐专题/_资料副本/原始1_part16_大模型做推荐.pptx.txt,02_方向知识库,大模型推荐专题,文本,原始1_part16_大模型做推荐.pptx.txt,.txt,11.2,2026-09-09
+02_方向知识库/大模型推荐专题/_资料副本/原始2_腾讯文档_大模型推荐系统调研_1.md,02_方向知识库,大模型推荐专题,文档,原始2_腾讯文档_大模型推荐系统调研_1.md,.md,1.7,2026-09-09
+02_方向知识库/大模型推荐专题/_资料副本/原始3_腾讯文档_大模型推荐系统调研_2.md,02_方向知识库,大模型推荐专题,文档,原始3_腾讯文档_大模型推荐系统调研_2.md,.md,1.7,2026-09-09
+02_方向知识库/大模型推荐专题/01_方法体系/00_总论_LLMforRecommendation.md,02_方向知识库,大模型推荐专题,文档,00_总论_LLMforRecommendation.md,.md,15.1,2026-09-09
+02_方向知识库/大模型推荐专题/03_面试弹药/README.md,02_方向知识库,大模型推荐专题,文档,README.md,.md,3.6,2026-09-09
+02_方向知识库/大模型推荐专题/02_落地能力与案例/README.md,02_方向知识库,大模型推荐专题,文档,README.md,.md,3.3,2026-09-09
 02_方向知识库/面试方法论/GitHub类似Agent项目调研-架构与知识库.md,02_方向知识库,面试方法论,文档,GitHub类似Agent项目调研-架构与知识库.md,.md,56.0,2026-09-04
 02_方向知识库/面试方法论/GitHub类似Agent项目调研-面试备战类.md,02_方向知识库,面试方法论,文档,GitHub类似Agent项目调研-面试备战类.md,.md,37.1,2026-09-04
 02_方向知识库/面试方法论/内部资料索引_面试相关.md,02_方向知识库,面试方法论,文档,内部资料索引_面试相关.md,.md,8.3,2026-09-03
@@ -6703,7 +6609,7 @@
 02_方向知识库/推荐系统/08_腾讯文档实战弹药_推荐技术.md,02_方向知识库,推荐系统,文档,08_腾讯文档实战弹药_推荐技术.md,.md,10.1,2026-09-09
 02_方向知识库/推荐系统/09_微视账号推荐与看点图集项目弹药.md,02_方向知识库,推荐系统,文档,09_微视账号推荐与看点图集项目弹药.md,.md,9.9,2026-09-09
 02_方向知识库/推荐系统/10_技术前沿弹药_GNN与LLM调研.md,02_方向知识库,推荐系统,文档,10_技术前沿弹药_GNN与LLM调研.md,.md,7.8,2026-09-09
-02_方向知识库/推荐系统/README.md,02_方向知识库,推荐系统,文档,README.md,.md,12.2,2026-09-09
+02_方向知识库/推荐系统/README.md,02_方向知识库,推荐系统,文档,README.md,.md,13.3,2026-09-09
 02_方向知识库/数据科学/01_指标体系与口径.md,02_方向知识库,数据科学,文档,01_指标体系与口径.md,.md,61.0,2026-09-04
 02_方向知识库/数据科学/02_异常归因与DAU拆解.md,02_方向知识库,数据科学,文档,02_异常归因与DAU拆解.md,.md,67.3,2026-09-04
 02_方向知识库/数据科学/03_用户分层与分群建模.md,02_方向知识库,数据科学,文档,03_用户分层与分群建模.md,.md,60.2,2026-09-04
@@ -6729,7 +6635,7 @@
 02_方向知识库/产品化项目弹药/腾讯_微视账号推荐系统1.0.md,02_方向知识库,产品化项目弹药,文档,腾讯_微视账号推荐系统1.0.md,.md,9.9,2026-09-04
 02_方向知识库/产品化项目弹药/腾讯_晋升答辩完整项目集.md,02_方向知识库,产品化项目弹药,文档,腾讯_晋升答辩完整项目集.md,.md,31.3,2026-09-04
 02_方向知识库/产品化项目弹药/腾讯_看点图集多目标推荐.md,02_方向知识库,产品化项目弹药,文档,腾讯_看点图集多目标推荐.md,.md,9.9,2026-09-04
-03_岗位弹药库/00_岗位弹药库总索引.md,03_岗位弹药库,03_岗位弹药库,文档,00_岗位弹药库总索引.md,.md,9.9,2026-09-09
+03_岗位弹药库/00_岗位弹药库总索引.md,03_岗位弹药库,03_岗位弹药库,文档,00_岗位弹药库总索引.md,.md,10.4,2026-09-09
 03_岗位弹药库/README.md,03_岗位弹药库,03_岗位弹药库,文档,README.md,.md,5.4,2026-09-09
 03_岗位弹药库/大宇无限-广告岗-面试准备/02_面试备战资料/大宇无限HR面_必问与话术.md,03_岗位弹药库,大宇无限-广告岗-面试准备,文档,大宇无限HR面_必问与话术.md,.md,6.8,2026-09-04
 03_岗位弹药库/大宇无限-广告岗-面试准备/02_面试备战资料/大宇无限_面试问答_other_offers.md,03_岗位弹药库,大宇无限-广告岗-面试准备,文档,大宇无限_面试问答_other_offers.md,.md,3.0,2026-09-07
@@ -6765,8 +6671,8 @@
 03_岗位弹药库/万声科技-面试准备/01_岗位与公司信息/面试安排_腾讯会议.md,03_岗位弹药库,万声科技-面试准备,文档,面试安排_腾讯会议.md,.md,1.3,2026-09-08
 03_岗位弹药库/拼多多-面试准备/02_面试备战资料/情报汇总_拼多多推荐算法_第一轮.md,03_岗位弹药库,拼多多-面试准备,文档,情报汇总_拼多多推荐算法_第一轮.md,.md,12.5,2026-09-05
 03_岗位弹药库/拼多多-面试准备/02_面试备战资料/预测题库与答案_P0-P4.md,03_岗位弹药库,拼多多-面试准备,文档,预测题库与答案_P0-P4.md,.md,26.5,2026-09-05
-03_岗位弹药库/拼多多-面试准备/03_速成包/拼多多_重排与电商场景专项.md,03_岗位弹药库,拼多多-面试准备,文档,拼多多_重排与电商场景专项.md,.md,17.1,2026-09-09
-03_岗位弹药库/拼多多-面试准备/03_速成包/拼多多面试_速成包.md,03_岗位弹药库,拼多多-面试准备,文档,拼多多面试_速成包.md,.md,25.5,2026-09-09
+03_岗位弹药库/拼多多-面试准备/03_速成包/拼多多_重排与电商场景专项.md,03_岗位弹药库,拼多多-面试准备,文档,拼多多_重排与电商场景专项.md,.md,17.2,2026-09-09
+03_岗位弹药库/拼多多-面试准备/03_速成包/拼多多面试_速成包.md,03_岗位弹药库,拼多多-面试准备,文档,拼多多面试_速成包.md,.md,25.6,2026-09-09
 03_岗位弹药库/拼多多-面试准备/01_岗位与公司信息/JD拆解_拼多多AI算法工程师_电商推荐.md,03_岗位弹药库,拼多多-面试准备,文档,JD拆解_拼多多AI算法工程师_电商推荐.md,.md,5.5,2026-09-05
 03_岗位弹药库/字节面试_2026-09-03/备战产出/弹药补充_字节_2026-09-03.md,03_岗位弹药库,字节面试_2026-09-03,文档,弹药补充_字节_2026-09-03.md,.md,6.5,2026-09-03
 03_岗位弹药库/字节面试_2026-09-03/备战产出/面试备战包_字节_2026-09-03.md,03_岗位弹药库,字节面试_2026-09-03,文档,面试备战包_字节_2026-09-03.md,.md,12.8,2026-09-08

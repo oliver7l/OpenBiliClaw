@@ -236,6 +236,11 @@ class DiaryStore:
                 if main_path is not None and Path(str(main_path)).exists():
                     with suppress(Exception):
                         conn.execute("ATTACH DATABASE ? AS main_db", (str(main_path),))
+            # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+            content_path = self._db_path.with_name("content.db")
+            if content_path.exists():
+                with suppress(Exception):
+                    conn.execute("ATTACH DATABASE ? AS content", (str(content_path),))
             self._thread_local.conn = conn
         return self._thread_local.conn
 

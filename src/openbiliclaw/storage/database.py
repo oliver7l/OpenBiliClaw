@@ -891,6 +891,36 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._discovery_conn.execute("PRAGMA busy_timeout = 30000")
         self._discovery_conn.execute("PRAGMA synchronous=NORMAL")
         self._discovery_conn.execute("PRAGMA cache_size = -65536")
+        # discovery.db 是 db sharding P5 独立子库：生产库迁移时已建好 discovery_candidates；
+        # 全新环境（测试/首次启动）discovery.db 只是空文件，这里幂等补建该表，
+        # 否则 initialize() 里 reset_stale_discovery_candidate_evaluations 的
+        # UPDATE discovery_candidates 会报 no such table。
+        existing = {
+            str(row["name"])
+            for row in self._discovery_conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='discovery_candidates'"
+            )
+        }
+        if "discovery_candidates" not in existing:
+            ddl = self._extract_create_table_sql(_SCHEMA_SQL, "discovery_candidates")
+            if ddl:
+                self._discovery_conn.executescript(ddl)
+            self._discovery_conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_discovery_candidates_status_seen "
+                "ON discovery_candidates(status, last_seen_at, id)"
+            )
+            self._discovery_conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_discovery_candidates_source_status "
+                "ON discovery_candidates(source_platform, status)"
+            )
+            self._discovery_conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_discovery_candidates_content_id "
+                "ON discovery_candidates(source_platform, content_id)"
+            )
+            self._discovery_conn.commit()
+            self._logger().warning(
+                "discovery.db 不存在，已按主库完整 schema 创建 discovery_candidates 表。"
+            )
 
     def _init_content_connection(self) -> None:
         """Initialize the content database connection."""
@@ -905,6 +935,35 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._content_conn.execute("PRAGMA busy_timeout = 30000")
         self._content_conn.execute("PRAGMA synchronous=NORMAL")
         self._content_conn.execute("PRAGMA cache_size = -65536")
+        # content.db 是 P4 独立子库，全新环境（测试/首次启动）需要幂等创建所有 content 表
+        # 注意：只创建真正属于 content.db 的表，其他表属于主库/pool.db/knowledge_audit.db
+        content_tables = [
+            "articles",
+            "article_entities",
+            "article_notes",
+            "article_relations",
+            "article_snapshots",
+            "article_tldrs",
+            "favorites",
+            "watch_later",
+        ]
+        existing = {
+            str(row["name"])
+            for row in self._content_conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        for table_name in content_tables:
+            if table_name not in existing:
+                ddl = self._extract_create_table_sql(_SCHEMA_SQL, table_name)
+                if ddl:
+                    self._content_conn.executescript(ddl)
+        # 主要索引：用户行为表
+        if "favorites" not in existing:
+            self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_favorites_bvid ON favorites(bvid)")
+        if "watch_later" not in existing:
+            self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_watch_later_bvid ON watch_later(bvid)")
+        self._content_conn.commit()
 
     def _logger(self):
         import logging
