@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi.responses import JSONResponse
@@ -22,10 +21,10 @@ def register_clone_routes(app: Any, ctx: Any) -> None:
         if database is None:
             return None
         from openbiliclaw.clone import CloneService as _CloneService
+        from openbiliclaw.clone.paths import resolve_clone_sites_dir
         from openbiliclaw.clone.store import CloneStore as _CloneStore
 
-        _web_dir = Path(__file__).resolve().parent.parent / "web"
-        _sites_dir = _web_dir / "clone" / "sites"
+        _sites_dir = resolve_clone_sites_dir(database)
         store = _CloneStore(database=database)
         _clone_service = _CloneService(store=store, sites_dir=_sites_dir)
         return _clone_service
@@ -151,8 +150,9 @@ def register_clone_routes(app: Any, ctx: Any) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            _web_dir = Path(__file__).resolve().parent.parent / "web"
-            sites_dir = _web_dir / "clone" / "sites"
+            from openbiliclaw.clone.paths import resolve_clone_sites_dir
+
+            sites_dir = resolve_clone_sites_dir(getattr(ctx, "database", None))
             imported = svc.import_existing_sites(sites_dir)
             return JSONResponse(
                 {

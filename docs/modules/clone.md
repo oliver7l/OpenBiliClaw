@@ -14,7 +14,7 @@
 | 克隆引擎 | wget/httrack/playwright 三种克隆方式 | `cloner.py` |
 | API 层 | RESTful 接口（在 `api/app.py` 中） | `api/app.py` |
 | 前端页面 | 桌面端克隆站点浏览与管理界面 | `web/desktop/index.html` |
-| 站点存储 | 克隆站点的文件存放目录 | `web/clone/sites/` |
+| 站点存储 | 克隆站点的文件存放目录 | `data/clone-sites/` |
 
 ## 已实现功能
 
@@ -24,7 +24,7 @@
 | 多条件筛选 | ✅ | 按分类、状态、标签、关键词筛选 |
 | 统计概览 | ✅ | 总数、总大小、总文件数、分类分布 |
 | 标签管理 | ✅ | 自动同步标签计数，支持按标签筛选 |
-| 批量导入 | ✅ | 扫描 `web/clone/sites/` 目录，自动导入已有站点 |
+| 批量导入 | ✅ | 扫描 `data/clone-sites/` 目录，自动导入已有站点 |
 | 站点预览 | ✅ | 点击卡片直接在新标签页打开克隆站点 |
 | 克隆新站点 | ✅ | 支持 wget/httrack/playwright 三种克隆引擎 |
 | 前端页面 | ✅ | 卡片式布局，显示名称、大小、文件数、分类、标签 |
@@ -71,7 +71,7 @@ from openbiliclaw.storage.database import Database
 db = Database("data/openbiliclaw.db")
 db.initialize()
 store = CloneStore(database=db)
-service = CloneService(store=store, sites_dir="src/openbiliclaw/web/clone/sites")
+service = CloneService(store=store, sites_dir="data/clone-sites")
 
 # 创建站点
 site = service.create_site(CloneSiteCreate(
@@ -87,7 +87,7 @@ site = service.create_site(CloneSiteCreate(
 sites, total = service.list_sites(category="website", search="关键词")
 
 # 批量导入已有站点
-imported = service.import_existing_sites("src/openbiliclaw/web/clone/sites")
+imported = service.import_existing_sites("data/clone-sites")
 
 # 克隆新站点
 from openbiliclaw.clone import CloneRequest
@@ -174,7 +174,7 @@ CREATE INDEX idx_clone_tags_count ON clone_tags(count DESC);
 
 ### 2. 站点文件与数据库分离
 
-站点文件存储在 `web/clone/sites/` 目录下，数据库只记录元数据。这样：
+站点文件存储在 `data/clone-sites/` 目录下（`clone/paths.py` 负责定位），数据库只记录元数据。这样：
 - 站点文件可以直接通过静态文件服务访问
 - 数据库记录轻量，包含筛选和搜索所需的所有字段
 - 删除站点记录后，文件可以保留或单独清理
