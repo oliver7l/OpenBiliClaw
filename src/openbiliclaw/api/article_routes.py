@@ -422,6 +422,13 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
         try:
             conn = sqlite3.connect(db_path, timeout=10.0)
             conn.execute("PRAGMA busy_timeout=10000")
+            # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+            from pathlib import Path
+            try:
+                _content_path = Path(db_path).with_name("content.db")
+                conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
+            except Exception:
+                pass
             cursor = conn.cursor()
 
             # 先查文章基本信息
@@ -482,6 +489,13 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
         try:
             conn = sqlite3.connect(db_path, timeout=10.0)
             conn.execute("PRAGMA busy_timeout=10000")
+            # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+            from pathlib import Path
+            try:
+                _content_path = Path(db_path).with_name("content.db")
+                conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
+            except Exception:
+                pass
             cursor = conn.cursor()
 
             total = cursor.execute("SELECT COUNT(*) FROM article_snapshots").fetchone()[0]
