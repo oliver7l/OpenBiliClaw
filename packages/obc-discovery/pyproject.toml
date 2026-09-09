@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "obc-discovery"
 version = "0.1.0"
 description = "OpenBiliClaw Content Discovery Engine — multi-strategy cross-platform content discovery"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "obc-llm>=0.1.0",
 ]
