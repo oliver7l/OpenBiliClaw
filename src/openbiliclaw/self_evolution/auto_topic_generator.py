@@ -641,6 +641,7 @@ class AutoTopicGenerator:
             ),
         )
         topic_id = cursor.lastrowid
+        assert topic_id is not None
 
         # 如果有 AI 综述，保存到 description 中
         if ai_summary:
@@ -651,7 +652,7 @@ class AutoTopicGenerator:
             )
 
         conn.commit()
-        logger.info("Created topic: %s (id=%d)", name, topic_id)
+        logger.info("Created topic: %s (id=%s)", name, topic_id)
         return topic_id
 
     def _add_topic_item(

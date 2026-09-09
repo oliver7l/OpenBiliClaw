@@ -73,7 +73,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         return report.to_dict()
 
     @router.get("/knowledge-cards")
-    async def list_knowledge_cards(limit: int = 50, card_type: str = None):
+    async def list_knowledge_cards(limit: int = 50, card_type: str | None = None):
         """List knowledge cards."""
         gen = KnowledgeCardGenerator(db_path)
         cards = gen.list_cards(limit=limit, card_type=card_type)
@@ -81,7 +81,7 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
 
     @router.post("/knowledge-cards/generate")
     async def generate_knowledge_cards(
-        article_id: int = None, limit: int = 20, max_per_article: int = 3
+        article_id: int | None = None, limit: int = 20, max_per_article: int = 3
     ):
         """Generate knowledge cards from articles."""
         gen = KnowledgeCardGenerator(db_path, llm_service=llm_service)

@@ -9,10 +9,16 @@ database on every tick.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from openbiliclaw.diary.models import DiaryAnalysis
+
 import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 # 商汤日日新配额限制（每 5 小时 60,000 点 ≈ 60M tokens）
@@ -90,6 +96,8 @@ class SelfEvolutionState:
     @property
     def last_processed_article_id(self) -> int:
         raw = self.get("last_processed_article_id", "0")
+        if raw is None:
+            return 0
         try:
             return int(raw)
         except (ValueError, TypeError):
@@ -238,7 +246,7 @@ class SlidingWindowStats:
     _WINDOW_DAYS = [7, 30, 90]
 
     @staticmethod
-    def refresh(conn: sqlite3.Connection) -> dict[str, Any]:
+    def refresh(conn: sqlite3.Connection) -> dict[int, dict[str, Any]]:
         """Compute and store sliding-window stats in a summary table.
 
         Returns a dict with the latest snapshot for the 7d window.
@@ -823,7 +831,7 @@ class SelfEvolutionLoopEngine:
             logger.debug("content_filler: getnote failed", exc_info=True)
             return None
 
-    async def _do_diary_analysis(self) -> dict[str, Any] | None:
+    async def _do_diary_analysis(self) -> dict[int, DiaryAnalysis | None] | None:
         """增量分析未分析的日记，每 tick 最多处理 20 篇。"""
         try:
             from openbiliclaw.diary.service import DiaryService
@@ -849,7 +857,7 @@ class SelfEvolutionLoopEngine:
         try:
             from openbiliclaw.chat_analysis.service import ChatAnalysisService
 
-            svc = ChatAnalysisService(db_path="data/chat_analysis.db")
+            svc = ChatAnalysisService(db_path=Path("data/chat_analysis.db"))
             result = await svc.analyze_unanalyzed(limit=10, concurrency=2)
             if result:
                 logger.info("self_evolution: chat analysis done: %s", result)

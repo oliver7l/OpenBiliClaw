@@ -147,7 +147,9 @@ class NoteStore:
             ),
         )
         self.conn.commit()
-        return self.get_note(cursor.lastrowid)
+        note = self.get_note(cursor.lastrowid)
+        assert note is not None
+        return note
 
     def get_note(self, note_id: int) -> Note | None:
         """根据 ID 获取笔记。"""
@@ -337,7 +339,9 @@ class NoteStore:
             ),
         )
         self.conn.commit()
-        return self.get_task(data.task_id)
+        task = self.get_task(data.task_id)
+        assert task is not None
+        return task
 
     def get_task(self, task_id: str) -> NoteTask | None:
         """根据 ID 获取任务。"""

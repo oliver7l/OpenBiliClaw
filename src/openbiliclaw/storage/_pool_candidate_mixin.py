@@ -15,10 +15,7 @@ class PoolCandidateMixin:
 
     conn: Any  # 由 Database 提供
     _ensure_fresh_read: Any  # 由 Database 提供
-    _pool_admission_min_score: Any  # 由 Database 提供
     _exclude_viewed_rows: Any  # 由 Database 提供
-    get_recent_viewed_content_keys: Any  # 由 Database 提供
-    _balance_pool_rows: Any  # 由 Database 提供
     _is_viewed_row: Any  # 由 Database 提供
     _execute_write: Any  # 由 Database 提供
     _pool_readiness_cache: Any  # 由 Database 提供

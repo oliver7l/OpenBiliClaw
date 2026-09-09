@@ -27,7 +27,7 @@ _BILI_SUBTITLE_BATCH = 10
 _AI_SUMMARY_BATCH = 20
 _AI_SUMMARY_CONCURRENCY = 3
 _GETNOTE_BATCH = 40
-_GETNOTE_INTERVAL_SECONDS = 2.0
+_GETNOTE_INTERVAL_SECONDS = 5.0
 
 # 最大失败重试次数
 _MAX_BODY_RETRIES = 3
@@ -64,7 +64,7 @@ class ContentFiller:
         选择条件：
         - content_text 为空
         - body_fetch_attempts < 最大重试次数
-        - 非视频来源（youtube/bilibili 走字幕管线）
+        - 非视频/短内容来源（youtube/bilibili/douyin/xiaohongshu 走字幕或特殊处理）
         """
         conn = self._conn()
         rows = conn.execute(
@@ -72,7 +72,7 @@ class ContentFiller:
                FROM articles
                WHERE (content_text IS NULL OR content_text = '')
                  AND body_fetch_attempts < ?
-                 AND source_type NOT IN ('youtube','bilibili','bili','yt')
+                 AND source_type NOT IN ('youtube','bilibili','bili','yt','douyin','xiaohongshu')
                ORDER BY body_fetch_attempts ASC, id ASC
                LIMIT ?""",
             (_MAX_BODY_RETRIES, limit),
@@ -512,29 +512,35 @@ class ContentFiller:
                     self._increment_attempts(article_id)
                     continue
 
-                # Step 2: getnote note <id> -o json
-                await asyncio.sleep(_GETNOTE_INTERVAL_SECONDS)  # rate limit
+                # Step 2: getnote note <id> -o json (with retry, content may need time to generate)
+                web_content = ""
+                ai_content = ""
+                for retry in range(3):
+                    await asyncio.sleep(_GETNOTE_INTERVAL_SECONDS)  # rate limit + wait for content
 
-                note_cmd = ["getnote", "note", note_id, "-o", "json"]
-                note_proc = subprocess.run(
-                    note_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                if note_proc.returncode != 0:
-                    logger.debug(
-                        "getnote: note fetch failed for %s: %s", note_id, note_proc.stderr[:200]
+                    note_cmd = ["getnote", "note", note_id, "-o", "json"]
+                    note_proc = subprocess.run(
+                        note_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
                     )
-                    self._increment_attempts(article_id)
-                    continue
+                    if note_proc.returncode != 0:
+                        logger.debug(
+                            "getnote: note fetch failed for %s (retry %d): %s",
+                            note_id, retry, note_proc.stderr[:200],
+                        )
+                        continue
 
-                note_data = json.loads(note_proc.stdout)
-                note = note_data.get("data", {}).get("note", {})
-
-                # Extract content_text and ai_summary
-                web_content = (note.get("web_page") or {}).get("content", "")
-                ai_content = note.get("content", "")
+                    try:
+                        note_data = json.loads(note_proc.stdout)
+                        note = note_data.get("data", {}).get("note", {})
+                        web_content = (note.get("web_page") or {}).get("content", "")
+                        ai_content = note.get("content", "")
+                        if web_content and len(web_content) > 200:
+                            break  # content ready, no need to retry
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.debug("getnote: parse failed for %s: %s", note_id, e)
 
                 if web_content and len(web_content) > 200:
                     self._save_body(article_id, web_content)

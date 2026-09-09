@@ -56,7 +56,7 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
             processor = match_processor(url)
             result = await processor.process(url, cookies=cookies)
 
-            response_data = {
+            response_data: dict[str, Any] = {
                 "status": result.status.value,
                 "source_type": result.source_type,
                 "source_name": result.source_name,
@@ -163,7 +163,8 @@ def register_library_routes(app: FastAPI, ctx: Any) -> None:
                 from openbiliclaw.self_evolution.reading_schedule import ReadingScheduler
 
                 scheduler = ReadingScheduler(db_path)
-                scheduler.register_article(article_id, initial_delay_days=1.0)
+                if article_id is not None:
+                    scheduler.register_article(article_id, initial_delay_days=1.0)
             except Exception as sched_err:
                 logger.warning(
                     "Failed to register article %s to reading schedule: %s", article_id, sched_err

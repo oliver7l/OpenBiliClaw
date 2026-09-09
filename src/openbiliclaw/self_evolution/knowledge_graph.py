@@ -493,8 +493,8 @@ class KnowledgeGraphBuilder:
 
                 for i, e1 in enumerate(entity_ids):
                     for e2 in entity_ids[i + 1 :]:
-                        key = tuple(sorted([e1, e2]))
-                        co_occurrence[key] += 1
+                        a, b = sorted([e1, e2])
+                        co_occurrence[(a, b)] += 1
 
             # Build relationships from co-occurrences
             for (e1, e2), count in co_occurrence.items():
