@@ -15,6 +15,22 @@ class ArticleMixin:
     """文章库的核心读写方法。"""
 
     conn: Any  # 由 Database 提供
+    _content_conn: Any  # 由 Database 提供（content.db）
+
+    @property
+    def _content(self) -> Any:
+        """content.db 连接，缺省回退主库。"""
+        return getattr(self, "_content_conn", None) or self.conn
+
+    def _content_write(self, sql: str, params: tuple | None = None) -> None:
+        """写入 content.db 并自动 commit。"""
+        self._content.execute(sql, params or ())
+        self._content.commit()
+
+    def _content_write_many(self, sql: str, params_list: list[tuple]) -> None:
+        """批量写入 content.db 并自动 commit。"""
+        self._content.executemany(sql, params_list)
+        self._content.commit()
 
     def upsert_article(
         self,
@@ -72,7 +88,7 @@ class ArticleMixin:
             ensure_ascii=False,
         )
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """INSERT INTO articles (source_type, source_name, title, url,
                     author, summary, content_text, published_at, tags,
                     content_cleaned, content_clean_score, content_clean_log,
@@ -121,7 +137,7 @@ class ArticleMixin:
                     content_verify_result,
                 ),
             )
-            self.conn.commit()
+            self._content.commit()
             return cursor.lastrowid
         except Exception:
             logger.exception("Failed to upsert article: %s", title)
@@ -152,7 +168,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self.conn.execute(
+            self._content.execute(
                 """INSERT OR IGNORE INTO content_cache (
                     bvid, title, up_name, up_mid, duration, tags,
                     topic_key, style_key, franchise_key, description,
@@ -186,7 +202,7 @@ class ArticleMixin:
                     author,
                 ),
             )
-            self.conn.commit()
+            self._content.commit()
         except Exception:
             logger.exception("Failed to inject article to pool: %s", title)
 
@@ -225,7 +241,7 @@ class ArticleMixin:
                 # makes the first shuffle pay a full cold read (~1s). Instead
                 # scan only the rowid (PK) — a few MB at most — sample ids in
                 # Python, then fetch just the sampled rows by PK.
-                id_rows = self.conn.execute(
+                id_rows = self._content.execute(
                     f"SELECT id FROM articles {where}", tuple(params)
                 ).fetchall()
                 ids = [row["id"] for row in id_rows]
@@ -233,7 +249,7 @@ class ArticleMixin:
                     return []
                 sample = random.sample(ids, limit) if len(ids) > limit else ids
                 placeholders = ",".join("?" * len(sample))
-                cursor = self.conn.execute(
+                cursor = self._content.execute(
                     f"""SELECT id, source_type, source_name, title, url, author,
                                summary, published_at, tags, status, created_at,
                                reading_percent, favorited, ai_summary
@@ -243,7 +259,7 @@ class ArticleMixin:
                 )
                 return [dict(row) for row in cursor.fetchall()]
             order_sql = "ORDER BY published_at DESC, created_at DESC"
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 f"""SELECT id, source_type, source_name, title, url, author,
                            summary, published_at, tags, status, created_at,
                            reading_percent, favorited, ai_summary
@@ -282,7 +298,7 @@ class ArticleMixin:
                 conditions.append("tags LIKE ?")
                 params.append(f'%"{tag}"%')
             where = "WHERE " + " AND ".join(conditions) if conditions else ""
-            cursor = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM articles {where}", tuple(params))
+            cursor = self._content.execute(f"SELECT COUNT(*) AS cnt FROM articles {where}", tuple(params))
             row = cursor.fetchone()
             return int(row["cnt"]) if row else 0
         except Exception:
@@ -296,7 +312,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """SELECT id, source_type, source_name, title, url, author,
                            summary, content_text, published_at, tags,
                            created_at, updated_at
@@ -353,7 +369,7 @@ class ArticleMixin:
         if len(q) >= 3:
             try:
                 fts_q = '"' + q.replace('"', '""') + '"'
-                cursor = self.conn.execute(
+                cursor = self._content.execute(
                     f"""SELECT {cols} FROM articles a
                         JOIN articles_fts f ON a.id = f.rowid
                         WHERE articles_fts MATCH ? {fsql}
@@ -367,7 +383,7 @@ class ArticleMixin:
 
         like = f"%{q}%"
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 f"""SELECT {cols} FROM articles a
                     WHERE (a.title LIKE ? OR a.content_text LIKE ?
                           OR a.tags LIKE ? OR a.author LIKE ? OR a.summary LIKE ?)
@@ -386,7 +402,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """SELECT id, source_type, source_name, title, url, author,
                            summary, content_text, published_at, tags, status,
                            reading_percent, reading_progress, favorited,
@@ -406,11 +422,11 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self.conn.execute(
+            self._content.execute(
                 "UPDATE articles SET tags = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (json.dumps(tags, ensure_ascii=False), article_id),
             )
-            self.conn.commit()
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to update tags for article %d", article_id)
@@ -427,11 +443,11 @@ class ArticleMixin:
         if status not in self.ARTICLE_STATUSES:
             return False
         try:
-            self.conn.execute(
+            self._content.execute(
                 "UPDATE articles SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (status, article_id),
             )
-            self.conn.commit()
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to update status for article %d", article_id)
@@ -451,12 +467,12 @@ class ArticleMixin:
 
         try:
             percent = max(0.0, min(100.0, float(percent)))
-            self.conn.execute(
+            self._content.execute(
                 "UPDATE articles SET reading_percent = ?, reading_progress = ?, "
                 "updated_at = datetime('now','localtime') WHERE id = ?",
                 (percent, (progress or "")[:4000], article_id),
             )
-            self.conn.commit()
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to save reading progress for article %d", article_id)
@@ -467,11 +483,11 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self.conn.execute(
+            self._content.execute(
                 "UPDATE articles SET favorited = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 (1 if favorited else 0, article_id),
             )
-            self.conn.commit()
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to set favorited for article %d", article_id)
@@ -489,11 +505,11 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 "INSERT INTO article_notes (article_id, quote, note, color) VALUES (?, ?, ?, ?)",
                 (article_id, (quote or "")[:2000], (note or "")[:4000], (color or "")[:20]),
             )
-            self.conn.commit()
+            self._content.commit()
             return cursor.lastrowid or None
         except Exception:
             logger.exception("Failed to add note for article %d", article_id)
@@ -504,7 +520,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """SELECT id, article_id, quote, note, color, created_at, updated_at
                    FROM article_notes WHERE article_id = ? ORDER BY id ASC""",
                 (article_id,),
@@ -519,8 +535,8 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self.conn.execute("DELETE FROM article_notes WHERE id = ?", (note_id,))
-            self.conn.commit()
+            self._content.execute("DELETE FROM article_notes WHERE id = ?", (note_id,))
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to delete note %d", note_id)
@@ -531,11 +547,11 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            self.conn.execute(
+            self._content.execute(
                 "UPDATE articles SET ai_summary = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 ((ai_summary or "")[:6000], article_id),
             )
-            self.conn.commit()
+            self._content.commit()
             return True
         except Exception:
             logger.exception("Failed to store AI summary for article %d", article_id)
@@ -546,7 +562,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """SELECT id, source_type, source_name, title, url, author,
                           summary, content_text, tags, status, created_at,
                           ai_summary
@@ -582,25 +598,25 @@ class ArticleMixin:
             "timeline": [],
         }
         try:
-            row = self.conn.execute(
+            row = self._content.execute(
                 "SELECT status, COUNT(*) AS n FROM articles GROUP BY status"
             ).fetchall()
             stats["by_status"] = {str(r["status"]): int(r["n"]) for r in row}
-            row = self.conn.execute(
+            row = self._content.execute(
                 "SELECT source_type, COUNT(*) AS n FROM articles GROUP BY source_type ORDER BY n DESC"
             ).fetchall()
             stats["by_source"] = {str(r["source_type"]): int(r["n"]) for r in row}
             stats["notes"] = int(
-                self.conn.execute("SELECT COUNT(*) AS n FROM article_notes").fetchone()["n"]
+                self._content.execute("SELECT COUNT(*) AS n FROM article_notes").fetchone()["n"]
             )
-            row = self.conn.execute(
+            row = self._content.execute(
                 """SELECT substr(published_at, 1, 7) AS ym, COUNT(*) AS n
                    FROM articles WHERE status = 'finished' AND published_at != ''
                    GROUP BY ym ORDER BY ym DESC LIMIT 12"""
             ).fetchall()
             stats["by_month"] = {str(r["ym"]): int(r["n"]) for r in row}
             tag_counter: dict[str, int] = {}
-            for r in self.conn.execute(
+            for r in self._content.execute(
                 "SELECT tags FROM articles WHERE tags IS NOT NULL AND tags != '[]' LIMIT 2000"
             ).fetchall():
                 try:
@@ -610,7 +626,7 @@ class ArticleMixin:
                     continue
             stats["top_tags"] = sorted(tag_counter.items(), key=lambda kv: kv[1], reverse=True)[:10]
             try:
-                row = self.conn.execute(
+                row = self._content.execute(
                     """SELECT strftime('%Y-W%W', updated_at) AS yw, COUNT(*) AS n
                        FROM articles
                        WHERE status = 'finished' AND updated_at != ''
@@ -620,7 +636,7 @@ class ArticleMixin:
             except Exception:
                 logger.exception("Failed to compute weekly reading trend")
             try:
-                row = self.conn.execute(
+                row = self._content.execute(
                     """SELECT date(updated_at) AS d, COUNT(*) AS n
                        FROM articles
                        WHERE status = 'finished'
@@ -640,7 +656,7 @@ class ArticleMixin:
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 """SELECT id, source_type, source_name, title, url, author,
                           tags, status, reading_percent, published_at,
                           created_at, updated_at
@@ -678,7 +694,7 @@ class ArticleMixin:
                 else ""
             )
             where = " AND ".join(conditions)
-            cursor = self.conn.execute(
+            cursor = self._content.execute(
                 f"""SELECT id, title, substr(content_text, 1, 4000) AS content_text,
                            summary, tags
                     FROM articles
@@ -702,7 +718,7 @@ class ArticleMixin:
             "top_topics": [],
         }
         try:
-            rows = self.conn.execute(
+            rows = self._content.execute(
                 """SELECT source_type, tags FROM articles
                    WHERE status = 'finished' AND date(updated_at) = ?""",
                 (day,),

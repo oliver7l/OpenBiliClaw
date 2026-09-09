@@ -683,6 +683,10 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 独立存放，与主库锁域隔离。
         self._discovery_db_path = self._db_path.with_name("discovery.db")
         self._discovery_conn: sqlite3.Connection | None = None
+        # Content 库 content.db：文章内容相关表（articles/favorites/watch_later）
+        # 独立存放，与主库锁域隔离。
+        self._content_db_path = self._db_path.with_name("content.db")
+        self._content_conn: sqlite3.Connection | None = None
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -888,6 +892,20 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._discovery_conn.execute("PRAGMA synchronous=NORMAL")
         self._discovery_conn.execute("PRAGMA cache_size = -65536")
 
+    def _init_content_connection(self) -> None:
+        """Initialize the content database connection."""
+        self._content_conn = sqlite3.connect(
+            str(self._content_db_path),
+            timeout=30.0,
+            check_same_thread=False,
+            factory=LockedConnection,
+        )
+        self._content_conn.row_factory = sqlite3.Row
+        self._content_conn.execute("PRAGMA journal_mode=WAL")
+        self._content_conn.execute("PRAGMA busy_timeout = 30000")
+        self._content_conn.execute("PRAGMA synchronous=NORMAL")
+        self._content_conn.execute("PRAGMA cache_size = -65536")
+
     def _logger(self):
         import logging
 
@@ -923,6 +941,8 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._init_llm_connection()
         # Discovery 库：独立连接，搜索发现相关表与主库锁域隔离
         self._init_discovery_connection()
+        # Content 库：独立连接，文章内容相关表与主库锁域隔离
+        self._init_content_connection()
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn

@@ -27,7 +27,7 @@ class FavoritesMixin:
             """,
             (bvid.strip(), note),
         )
-        return self.conn.total_changes > 0
+        return self._content.total_changes > 0
 
     def remove_from_favorites(self, bvid: str) -> bool:
         """Remove a favorite. Returns True if a row was deleted."""
@@ -35,11 +35,11 @@ class FavoritesMixin:
             "DELETE FROM favorites WHERE bvid = ?",
             (bvid.strip(),),
         )
-        return self.conn.total_changes > 0
+        return self._content.total_changes > 0
 
     def is_in_favorites(self, bvid: str) -> bool:
         """Check whether a video is favorited."""
-        row = self.conn.execute(
+        row = self._content.execute(
             "SELECT 1 FROM favorites WHERE bvid = ?",
             (bvid.strip(),),
         ).fetchone()
@@ -47,24 +47,27 @@ class FavoritesMixin:
 
     def count_favorites(self) -> int:
         """Return total number of favorited videos."""
-        row = self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()
+        row = self._content.execute("SELECT COUNT(*) FROM favorites").fetchone()
         return int(row[0]) if row else 0
 
     def list_favorites(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Return favorited videos with content_cache metadata, newest first."""
-        cursor = self.conn.execute(
+        """Return favorited videos, newest first.
+
+        v0.4.0+: favorites 表迁移到 content.db，content_cache 在 pool.db，
+        暂不跨库 JOIN，只返回 favorites 基础字段。
+        """
+        cursor = self._content.execute(
             """
             SELECT
                 f.bvid,
                 f.added_at,
                 f.note,
-                COALESCE(c.title, '') AS title,
-                COALESCE(c.up_name, '') AS up_name,
-                COALESCE(c.cover_url, '') AS cover_url,
-                COALESCE(c.content_url, '') AS content_url,
-                COALESCE(c.source_platform, '') AS source_platform
+                '' AS title,
+                '' AS up_name,
+                '' AS cover_url,
+                '' AS content_url,
+                '' AS source_platform
             FROM favorites AS f
-            LEFT JOIN content_cache AS c ON c.bvid = f.bvid
             ORDER BY f.added_at DESC
             LIMIT ? OFFSET ?
             """,
@@ -73,4 +76,4 @@ class FavoritesMixin:
         return [dict(row) for row in cursor.fetchall()]
 
     def count_favorites_legacy(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])
+        return int(self._content.execute("SELECT COUNT(*) FROM favorites").fetchone()[0])

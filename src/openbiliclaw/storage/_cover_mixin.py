@@ -22,7 +22,7 @@ class CoverMixin:
         evict: covers of saved or still-pending content are kept; covers of
         consumed, unsaved content are eligible for removal.
         """
-        cursor = self.conn.execute(
+        cursor = self._content.execute(
             """
             SELECT
                 COALESCE(cc.cover_url, '') AS cover_url,
@@ -46,7 +46,7 @@ class CoverMixin:
         ``fresh / shown / suppressed``, or saved (favorites / watch_later) — limited
         to the last ``recent_hours`` of discoveries and ordered newest-first.
         """
-        cursor = self.conn.execute(
+        cursor = self._content.execute(
             """
             SELECT cc.cover_url
             FROM content_cache AS cc
