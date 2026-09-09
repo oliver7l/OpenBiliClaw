@@ -27,9 +27,9 @@ import datetime
 
 BASE = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw"
 KB = os.path.join(BASE, "求职知识库")
-SRC = os.path.join(KB, "01_原始资料库/书籍/程序化广告学习笔记_拆分")
+SRC = os.path.join(KB, "01_原始资料库/02_我的笔记/01_程序化广告/原稿/程序化广告学习笔记_拆分")
 WORK = os.path.join(BASE, ".tmp_ocr")
-DECODED = os.path.join(KB, "01_原始资料库/解码文本")
+DECODED = os.path.join(KB, "01_原始资料库/08_解码文本")
 DB_PATH = os.path.join(KB, "_系统_知识库引擎/数据/幻灯片笔记.db")
 TESS = "/opt/homebrew/bin/tesseract"
 

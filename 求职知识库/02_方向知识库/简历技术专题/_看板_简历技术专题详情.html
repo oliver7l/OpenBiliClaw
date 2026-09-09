@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>简历技术专题 · 四方向详细看板</title>
+<style>
+  :root{
+    --bg:#0e1116; --card:#161b23; --card2:#1b222c; --line:#2a3440;
+    --txt:#e6eaf0; --muted:#9aa7b8; --accent:#4c9aff; --accent2:#7c5cff;
+    --green:#4cd97b; --amber:#f5b14c; --red:#f25858; --pink:#ff6bb3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.65;padding:32px 20px}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1{font-size:28px;letter-spacing:.5px;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:28px}
+  .hero{background:linear-gradient(135deg,#141a24,#1b2230);border:1px solid var(--line);border-radius:14px;padding:22px 26px;margin-bottom:30px}
+  .hero .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:18px}
+  .chip{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .chip .n{font-size:22px;font-weight:700;display:block}
+  .chip .l{font-size:12.5px;color:var(--muted);display:block;margin-top:2px}
+  .topic{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:26px;background:var(--card)}
+  .topic-head{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .topic-head h2{font-size:20px}
+  .tag{font-size:11.5px;padding:3px 10px;border-radius:20px;font-weight:600}
+  .tag-done{background:rgba(76,217,123,.15);color:var(--green)}
+  .tag-wip{background:rgba(245,177,76,.15);color:var(--amber)}
+  .topic-body{padding:20px 24px}
+  .section{margin-bottom:22px}
+  .section h3{font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .section h3::before{content:"";width:4px;height:14px;background:var(--accent);border-radius:2px}
+  .pitch{background:var(--card2);border-left:3px solid var(--accent);border-radius:8px;padding:14px 16px;font-size:15px;margin-bottom:14px;color:var(--txt)}
+  .num-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:10px}
+  .num{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .num b{font-size:19px;color:var(--green);display:block}
+  .num span{font-size:12px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th{background:rgba(76,154,255,.08);color:var(--accent);text-align:left;padding:9px 12px;font-weight:600;border-bottom:1px solid var(--line)}
+  td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:#d7dee8}
+  tr:last-child td{border-bottom:none}
+  td b{color:var(--txt)}
+  ul{margin:6px 0 6px 4px;list-style:none}
+  ul li{padding:6px 0 6px 22px;position:relative}
+  ul li::before{content:"▸";position:absolute;left:4px;color:var(--accent)}
+  .qa{margin-top:8px}
+  .qa .q{font-weight:600;color:var(--accent2);margin-top:12px}
+  .qa .a{color:#d7dee8;margin-top:3px}
+  .arrow{font-family:monospace;font-size:12.5px;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:12px 16px;white-space:pre;overflow-x:auto;color:#bfe0ff;line-height:1.6}
+  .indices{font-size:12.5px}
+  .indices .file{color:var(--green);font-family:ui-monospace,monospace}
+  .indices .src{color:var(--muted)}
+  .todo-live{color:var(--green)}
+  .todo-wait{color:var(--muted)}
+  .cross-ref{margin-top:18px;background:var(--card2);border:1px dashed var(--line);border-radius:10px;padding:14px 18px;font-size:14px;color:#dce4ee}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>简历技术专题 · 详细看板</h1>
+  <div class="sub">四个简历被深挖方向 · 结构统一：定位 → 原理 → 实战弹药 → 八股 QA → 资料索引 → 待丰富 · 更新于 2026-09-09</div>
+
+  <div class="hero">
+    <b>一句话主线（面试自我介绍开场）</b>
+    <div style="font-size:14.5px;color:#dce4ee;margin-top:8px">
+      多目标=优化维度 · 对比学习=信号稀疏时补表征 · 多场景统一建模=多目标结构搬到场景维度 · 端云协同=部署架构
+    </div>
+    <div class="grid">
+      <div class="chip"><span class="n" style="color:var(--accent)">4</span><span class="l">简历深挖专题</span></div>
+      <div class="chip"><span class="n" style="color:var(--green)">9</span><span class="l">最硬数字弹药</span></div>
+      <div class="chip"><span class="n" style="color:var(--amber)">20+</span><span class="l">八股追问 Q&amp;A</span></div>
+      <div class="chip"><span class="n" style="color:var(--pink)">30+</span><span class="l">资料索引条目</span></div>
+    </div>
+  </div>
+
+  <!-- ① 多目标 -->
+  <div class="topic">
+    <div class="topic-head">
+      <h2>① 多目标推荐系统</h2>
+      <span class="tag tag-wip">含业界对比 · 全网补充</span>
+    </div>
+    <div class="topic-body">
+      <div class="section">
+        <h3>一句话定位</h3>
+        <div class="pitch">"我做过多目标全链路升级：精排先上 ESMM 解决转化稀疏，再上 MMoE 同时优化时长与互动，把曝光/点击/转化/时长统一到一致样本空间，最后把多目标信号下沉到召回侧。"</div>
+        <div class="num-row">
+          <div class="num"><b>+0.42%</b><span>大盘累积时长</span></div>
+          <div class="num"><b>+35%</b><span>互动</span></div>
+          <div class="num"><b>+6.8%</b><span>短内容浮层时长</span></div>
+          <div class="num"><b>+80%</b><span>进评论率（多目标召回下沉）</span></div>
+          <div class="num"><b>+2.33%</b><span>微视 DEN 人均时长</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>业界方案 vs 我的方案（★ 被追问"业界怎么做的"）</h3>
+        <div class="arrow">2017  Shared-Bottom  (共享底层)
+  ↓  任务冲突/负迁移
+2018  MMoE (Google)   多个 Expert + 任务级 Gate 软共享
+  ↓  仍可能 seew-saw (此消彼长)
+2018  ESMM (Alibaba)  全空间建模 pCTCVR=pCTR×pCVR → 避选择偏差
+  ↓
+2020  PLE/CGC (Tencent)  Shared+Task experts 分离 + 渐进路由
+2020+ 权重自动/贝叶斯调参、长期价值(LTV)
+2024+ 大模型时代: SIGMA(指令式)/ MDL(多分布 token 化)/ HA-MoE(异构)</div>
+        <table>
+          <thead><tr><th>业界模型</th><th>核心机制</th><th>你的对应实践</th><th>怎么讲"我也做过"</th></tr></thead>
+          <tbody>
+            <tr><td><b>MMoE</b></td><td>Expert+Gate 软共享</td><td>图集短内容 MMoE（无量3.0全量）</td><td>"BG 第一个在无量3.0全量上线多目标"</td></tr>
+            <tr><td><b>ESMM</b></td><td>全空间+乘法拆解（+15% CVR）</td><td>图集点击+转化 ESMM（比例1:27）</td><td>"统一曝光层、避选择偏差"</td></tr>
+            <tr><td><b>PLE/CGC</b></td><td>Task experts 分离消跷跷板（+2.23% uv）</td><td>主用 MMoE + DEN</td><td>"冲突不严重先 MMoE，见 seesaw 往 PLE 演进"</td></tr>
+            <tr><td><b>DEN</b></td><td>Engagement+Attention 兴趣网络</td><td>你的自研 DEN</td><td>"MMoE 在内容消费场景的自研变体"</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:13px;color:var(--muted);margin-top:10px">差异化亮点：① ESMM+MMoE 按目标关系分层打不混用 ② 多目标从精排下沉到召回 ③ 落到长期价值而非短期指标。大模型时代（SIGMA/MDL/HA-MoE）——"LLM 是新瓶装旧酒，仍是多任务联合优化"。</p>
+      </div>
+      <div class="section">
+        <h3>八股 QA（节选）</h3>
+        <div class="qa">
+          <div class="q">Q：ESMM 为什么能解决样本选择偏差？</div>
+          <div class="a">A：pCVR 从"点击后样本"改为"曝光层样本"，用 pCTCVR=pCTR×pCVR + 共享 embedding，在曝光分布上间接学 pCVR，避免只在点击人群上学。</div>
+          <div class="q">Q：MMoE 和 ESMM 什么时候用哪个？</div>
+          <div class="a">A：有漏斗关系+转化稀疏用 ESMM；多平级冲突目标（时长 vs 互动）用 MMoE。图集里转化用 ESMM、浮层时长+互动用 MMoE。</div>
+          <div class="q">Q：多目标怎么融合成一个分？</div>
+          <div class="a">A：加权和（权重自动调/贝叶斯搜索）+ 必要约束（保量/曝光分配），权重按业务北极星反推不拍脑袋。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 对比学习 -->
+  <div class="topic">
+    <div class="topic-head">
+      <h2>② 对比学习</h2>
+      <span class="tag tag-done">OPPO 实战核心</span>
+    </div>
+    <div class="topic-body">
+      <div class="section">
+        <h3>一句话定位</h3>
+        <div class="pitch">"对比学习解决信号稀疏：让相似的用户/行为在 embedding 空间靠近、不相似的远离，不依赖密集标签也能学到有区分度的用户表征——表征准了，分发就准，变现自然涨。"</div>
+        <div class="num-row">
+          <div class="num"><b>+2.3%</b><span>中长尾用户 ARPU（头部持平）</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>三个研究点（难度递增）</h3>
+        <div class="arrow">Data Augmentation(数据增强)
+   ↓ 怎样造"同一样本"的不同视角
+Sampling Strategy(采样策略)
+   ↓ 正负样本对怎么选、难负例怎么控制
+Loss Function(损失函数)
+   ↓ 用什么对比损失把距离拉开</div>
+        <p style="font-size:13.5px;margin-top:10px">融合方式：你用 <b>Joint Learning</b>：`Loss = Loss_main + α·Loss_contrastive`，serving 只出 embedding、不增开销。</p>
+      </div>
+      <div class="section">
+        <h3>实战：OPPO 三个辅助任务（粒度从粗到细）</h3>
+        <table>
+          <thead><tr><th>任务</th><th>学什么</th><th>正负样本</th></tr></thead>
+          <tbody>
+            <tr><td><b>user-user 场景粒度</b></td><td>相似用户的群体表征</td><td>正=行为相似用户；负=不相似用户</td></tr>
+            <tr><td><b>正负反馈对比</b></td><td>"真喜欢 vs 假喜欢"</td><td>正=点击/下载；负=曝光未点击</td></tr>
+            <tr><td><b>深浅行为对比</b></td><td>真实深层意图（点击→下载→激活）</td><td>正=有深层行为；负=只有浅层/无行为</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:13.5px;margin-top:10px">完整话术 + 热门 item 去偏任务 + batch 内负采样 & 难负例控成本。</p>
+      </div>
+      <div class="section">
+        <h3>八股 QA（节选）</h3>
+        <div class="qa">
+          <div class="q">Q：对比学习和协同过滤（emb/user2vec）有啥区别？</div>
+          <div class="a">A：协同过滤是离散统计共现；对比学习是端到端学连续表征，能融更多特征且与主模型联合优化，直接服务排序。</div>
+          <div class="q">Q：为什么提升集中在中长尾？</div>
+          <div class="a">A：头部行为多监督够、边际小；自监督补稀疏主要惠及中长尾，用分活跃度桶实验对齐（头部持平、中长尾+2.3%）。</div>
+          <div class="q">Q：负样本怎么选？</div>
+          <div class="a">A：batch 内负采样控成本 + 难负例(hard negative)提升判别力，避免全局全量负采样。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 端云协同 -->
+  <div class="topic">
+    <div class="topic-head">
+      <h2>③ 端云协同</h2>
+      <span class="tag tag-done">OPPO + 腾讯双落地</span>
+    </div>
+    <div class="topic-body">
+      <div class="section">
+        <h3>一句话定位</h3>
+        <div class="pitch">"纯云端两个痛点：延迟高、服务器成本大。我的方案把能力拆开——核心大模型云端全量训练 + 轻量模型端侧实时推理 + 量化/剪枝/参数分拆压到端内存能承受——云端负载成本 ↓25%，端上实时性大增。"</div>
+        <div class="num-row">
+          <div class="num"><b>↓25%</b><span>云端负载成本</span></div>
+          <div class="num"><b>↓75%</b><span>模型体积（FP32→INT8）</span></div>
+          <div class="num"><b>毫秒级</b><span>端侧推理、无网络延迟</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>三种范式</h3>
+        <div class="arrow">范式1 云侧训练 + 云侧推理（传统）
+范式2 云侧训练 + 端侧推理 ★核心
+范式3 云侧训练 + 端侧推理 + 端云联合训练(联邦学习/隐私)</div>
+      </div>
+      <div class="section">
+        <h3>实战弹药</h3>
+        <table>
+          <thead><tr><th>方案</th><th>做法</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td><b>OPPO 端云协同</b>（广告岗）</td><td>云训+端推+量化/剪枝/参数分拆+（探索）联邦</td><td>云端负载成本 ↓25%，实时性↑</td></tr>
+            <tr><td><b>腾讯端云重排</b>（内容岗）</td><td>云上重排（覆盖大众/触发式/Pointer Network）+ 端上重排（高端机高消人群/即时兴趣）</td><td>云上快速落地为主阵地，端上探索新范式</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section">
+        <h3>八股 QA（节选）</h3>
+        <div class="qa">
+          <div class="q">Q：端侧和云侧模型怎么同步？</div>
+          <div class="a">A：云侧定期(天/时)训练下沉；端侧用本地 session 增量微调。难点是更新频率不同致分布漂移，需校验端上收益 ∪ 准确度损耗。</div>
+          <div class="q">Q：为什么端上重排只给高端机+高消？</div>
+          <div class="a">A：端上推理吃算力/内存/耗电，低端跑不动高精度模型；高消人群价值高值得为即时兴趣花端侧资源，先小流量验证。</div>
+          <div class="q">Q：端云联合训练和传统云端区别？</div>
+          <div class="a">A：传统集中原始数据；联邦只在端上算梯度、传梯度/加密更新，原始行为不出端→隐私。代价是通信、non-iid、聚合收敛难。</div>
+        </div>
+      </div>
+      <div class="cross-ref">⚠️ <b>待确认风险</b>：腾讯端云重排文件名带"琳洁"（linjiezhou/PRM 仓库作者）。若不是你的账号，须先梳理"你实际负责的部分"再当"我的项目"讲，避免被追问穿帮。</div>
+    </div>
+  </div>
+
+  <!-- ④ 多场景统一建模 -->
+  <div class="topic">
+    <div class="topic-head">
+      <h2>④ 多场景统一建模 &amp; 多目标多场景</h2>
+      <span class="tag tag-done">与多目标打通</span>
+    </div>
+    <div class="topic-body">
+      <div class="section">
+        <h3>一句话定位</h3>
+        <div class="pitch">"不同场景（位置/品类/页面）点击率差一个量级、数据量不均：逐个单独训练浪费数据、统一模型被大场景带偏。我的做法=共享底层学全局通用 + 场景专属塔学各自偏差 + 场景交互缓解小场景稀疏。"</div>
+        <div class="num-row">
+          <div class="num"><b>30%→20%</b><span>多位置 CTR 校准偏差</span></div>
+          <div class="num"><b>+1.04%</b><span>ARPU</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>核心观点：多场景 = 多目标（★）</h3>
+        <div class="pitch" style="border-left-color:var(--accent2)">关键桥：样本天然按场景互斥 → BMM 把每个场景点击当独立目标，套多目标 MMoE 的多专家+门控来共享/差异化。故多场景建模 = 多目标结构 + 场景维度样本切分(position/sign 偏差特征)。</div>
+        <table>
+          <thead><tr><th>业界模型</th><th>核心机制</th><th>你的对应</th></tr></thead>
+          <tbody>
+            <tr><td><b>BMM</b></td><td>场景当目标 + 独立塔*mask + 偏差网络(sign/pos)</td><td>多目标 MMoE 结构复用</td></tr>
+            <tr><td><b>SAML</b></td><td>辅助网络共享知识 + 多分支差异 + mutual unit 场景互借</td><td>缓解小场景训练不足的思路</td></tr>
+            <tr><td><b>HC²</b></td><td>对比学习做多场景（通用/个体 loss）</td><td>衔接对比学习专题</td></tr>
+            <tr><td><b>多位置校准</b></td><td>统一模型 + 每位置校准因子(Isotonic/Platt)</td><td>OPPO 实操（30%→20%）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section">
+        <h3>实战弹药</h3>
+        <ul>
+          <li><b>OPPO 多位置校准</b>：统一模型 pCTR + 每位置校准因子 → 偏差 30%+ → 20% 内，ARPU +1.04%</li>
+          <li><b>OPPO 全场景统一样本/特征体系</b>：应用商店/游戏中心/搜索，多场景多目标自适应</li>
+          <li><b>微视场景化推人</b>：零关注用户按场景分层精细化（新用户好友/兴趣达人、老用户消费兴趣/热门探索）</li>
+          <li><b>UGC 多品类浮层主 Feeds</b>：图文/短视频/话题统一推荐 → 多目标排序</li>
+        </ul>
+      </div>
+      <div class="cross-ref">🔗 交叉引用：BMM 的 mask-logistic 与 HC² 的 Generalized/Individual loss 细节、与对比学习专题打通（场景粒度对比），均已列入待丰富清单。</div>
+    </div>
+  </div>
+
+  <div class="cross-ref" style="margin-bottom:30px">
+    <b>资料归属 &amp; 便捷访问</b>（已全部入库：`kb.py 查 &lt;关键词&gt;` 均可命中）
+    <div class="indices" style="margin-top:10px;line-height:2">
+      · <span class="file">总览</span> <span class="src">02_方向知识库/简历技术专题/README.md</span><br>
+      · <span class="file">多目标</span> <span class="src">01_多目标推荐系统/README.md</span><br>
+      · <span class="file">对比学习</span> <span class="src">02_对比学习/README.md</span><br>
+      · <span class="file">端云协同</span> <span class="src">03_端云协同/README.md</span><br>
+      · <span class="file">多场景统一建模</span> <span class="src">04_多场景统一建模/README.md</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

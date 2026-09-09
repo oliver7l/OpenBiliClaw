@@ -71,9 +71,17 @@ _系统_知识库引擎/
 │   ├── 05_面试题索引.csv    # 题目/方向/公司/答案位置
 │   ├── 06_全库文件索引.csv  # 三层全部文件清单（路径/层/子层/类型/大小/日期）
 │   ├── 07_概念关系表.csv    # 概念/类型/关联概念/关系/数字/出处（schema 层）
-│   └── knowledge.db         # 完整 SQLite 数据库（全库文件索引）
+│   ├── knowledge.db         # 完整 SQLite 数据库（全库文件索引）
+│   ├── 面试资料总库.db       # L0 原始库：全量文档抽取原文 + 整篇 FTS（kb_ingest.py 维护）
+│   ├── 面试处理库.db         # L1 处理库：标题感知分块 + 段落级 FTS（kb_layers.py 构建）
+│   ├── 面试弹药库.db         # L2 弹药库：CSV 结构化事实 + 03 备战文档全文 + FTS（kb_layers.py）
+│   └── 幻灯片笔记.db         # 图片型幻灯片 OCR 台账（slides_pipeline.py 维护）
 ├── scripts/
 │   ├── kb.py             # 统一检索命令
+│   ├── kb_ingest.py      # L0 入库：全量文档抽文本 → 面试资料总库.db（断点续跑/need_ocr 台账）
+│   ├── kb_layers.py      # 三层库构建：原始库 → 处理库/弹药库 + 统计 + 跨库查询
+│   ├── kb_ocr_large.py   # 大文件 OCR 通道（扫描件/图片型文档）
+│   ├── kb_backfill_ocr.py# OCR 结果回填入库
 │   ├── build_index.py    # 全库文件索引生成器（-> 06_csv + knowledge.db）
 │   └── doctor.py         # 健康检查（题索引引用/岗位目录/日志对齐/数字表/索引新鲜度）
 ├── 规范/
@@ -101,6 +109,31 @@ python3 scripts/doctor.py                # 系统健康检查（PASS/FAIL）
 python3 scripts/doctor.py --fix          # 检查 + 重建索引修复
 python3 scripts/build_index.py           # 全库文件索引重建（新增大量文件后跑）
 ```
+
+### 三层库（kb_layers.py）
+
+原始资料 → 处理库 → 弹药库三层数据库，与 01/02/03 目录分层一一对应：
+
+```
+L0 原始库 面试资料总库.db   ← kb_ingest.py（文档抽原文，只读源）
+        ↓ 构建
+L1 处理库 面试处理库.db     ← 标题感知分块（~1500字/块）+ 段落级 FTS，精确到段落命中
+        ↓ 构建
+L2 弹药库 面试弹药库.db     ← 7 张 CSV 结构化事实（岗位/项目/数字/题库/日志/概念）
+                             + 03_岗位弹药库 104 篇备战文档全文 + FTS
+```
+
+```bash
+python3 scripts/kb_layers.py 构建                  # 增量构建处理库 + 弹药库（原始库只读）
+python3 scripts/kb_layers.py 构建 --库 处理 --强制  # 强制全量重建
+python3 scripts/kb_layers.py 统计                  # 三层库规模总览
+python3 scripts/kb_layers.py 查 冷启动通过率        # 跨库查询（先弹药后处理）
+python3 scripts/kb_layers.py 查 出价 --库 弹药 --岗位 大宇   # 按岗位过滤弹药库
+```
+
+约定：L0 由 `kb_ingest.py` 独自维护；L1 按 (doc_id, mtime) 增量续跑；
+L2 可随时重建（数据源是 CSV + 03 目录，幂等覆盖）；数字答案永远以
+`03_真实数字表.csv`（L2 number 表同源）为权威。
 
 ---
 
