@@ -14,15 +14,38 @@ if TYPE_CHECKING:
 
 
 class DiscoveryKeywordsMixin:
-    """Database methods for the discovery keyword store."""
+    """Database methods for the discovery keyword store.
+
+    v0.4.0+: discovery 相关表迁移到独立的 discovery.db，与主库锁域隔离。
+    """
 
     conn: Any
     _execute_write: Any
     _execute_many_write: Any
+    _discovery_conn: Any  # 由 Database 提供（discovery.db 连接）
+
+    @property
+    def _discovery(self) -> Any:
+        """获取 discovery.db 连接，回退到主库连接。"""
+        if getattr(self, '_discovery_conn', None) is not None:
+            return self._discovery_conn
+        return self.conn
+
+    def _discovery_write(self, sql: str, params: tuple = ()) -> Any:
+        """在 discovery.db 上执行写入并提交。"""
+        cursor = self._discovery.execute(sql, params)
+        self._discovery.commit()
+        return cursor
+
+    def _discovery_write_many(self, sql: str, params_list: list) -> Any:
+        """在 discovery.db 上批量执行写入并提交。"""
+        cursor = self._discovery.executemany(sql, params_list)
+        self._discovery.commit()
+        return cursor
 
     def _ensure_discovery_keywords_table(self) -> None:
         """Create the unified search-keyword store + planner single-flight lock."""
-        self.conn.executescript("""
+        self._discovery.executescript("""
             CREATE TABLE IF NOT EXISTS discovery_keywords (
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 platform          TEXT NOT NULL,
@@ -78,8 +101,8 @@ class DiscoveryKeywordsMixin:
             rows.append((platform_key, word, digest))
         if not rows:
             return 0
-        before = self.conn.total_changes
-        self._execute_many_write(
+        before = self._discovery.total_changes
+        self._discovery_write_many(
             """
             INSERT OR IGNORE INTO discovery_keywords
                 (platform, keyword, profile_kw_digest, status)
@@ -87,12 +110,12 @@ class DiscoveryKeywordsMixin:
             """,
             rows,
         )
-        return self.conn.total_changes - before
+        return self._discovery.total_changes - before
 
     def count_pending_keywords(self, platform: str, profile_kw_digest: str) -> int:
         """Return how many ``pending`` keywords exist for this digest."""
         self._ensure_fresh_read()
-        row = self.conn.execute(
+        row = self._discovery.execute(
             """
             SELECT COUNT(*) AS n
             FROM discovery_keywords
@@ -154,7 +177,7 @@ class DiscoveryKeywordsMixin:
 
     def mark_keyword_executing(self, keyword_id: int) -> None:
         """Move a ``claimed`` keyword to ``executing`` (async fetch enqueued)."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'executing', executing_at = CURRENT_TIMESTAMP
@@ -165,7 +188,7 @@ class DiscoveryKeywordsMixin:
 
     def mark_keyword_used(self, keyword_id: int) -> None:
         """Mark a keyword ``used`` (terminal — its fetch has completed)."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'used', used_at = CURRENT_TIMESTAMP
@@ -176,7 +199,7 @@ class DiscoveryKeywordsMixin:
 
     def mark_keyword_failed(self, keyword_id: int) -> int:
         """Mark a keyword ``failed`` and bump ``attempts``."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'failed',
@@ -185,7 +208,7 @@ class DiscoveryKeywordsMixin:
             """,
             (int(keyword_id),),
         )
-        row = self.conn.execute(
+        row = self._discovery.execute(
             "SELECT attempts FROM discovery_keywords WHERE id = ?",
             (int(keyword_id),),
         ).fetchone()
@@ -193,7 +216,7 @@ class DiscoveryKeywordsMixin:
 
     def rollback_keyword_to_pending(self, keyword_id: int) -> None:
         """Return a ``claimed`` keyword to ``pending`` (budget-rejection rollback)."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'pending', claimed_at = NULL
@@ -219,7 +242,7 @@ class DiscoveryKeywordsMixin:
         executing_cutoff = (now - timedelta(minutes=max(0.0, executing_timeout_minutes))).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'pending', claimed_at = NULL, executing_at = NULL
@@ -246,7 +269,7 @@ class DiscoveryKeywordsMixin:
         cutoff = (datetime.now(UTC) - timedelta(hours=max(0.0, window_hours))).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        rows = self.conn.execute(
+        rows = self._discovery.execute(
             """
             SELECT keyword
             FROM discovery_keywords
@@ -326,7 +349,7 @@ class DiscoveryKeywordsMixin:
 
     def expire_pending_by_digest(self, platform: str, current_digest: str) -> int:
         """Expire ``pending`` keywords generated under a stale profile digest."""
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'expired'
@@ -355,7 +378,7 @@ class DiscoveryKeywordsMixin:
         if platform is not None:
             platform_clause = " AND platform = ?"
             params.append(platform.strip())
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             f"""
             DELETE FROM discovery_keywords
             WHERE status IN ('used', 'expired', 'failed')
@@ -372,17 +395,17 @@ class DiscoveryKeywordsMixin:
         cid = str(content_id or "").strip()
         if kid <= 0 or not cid:
             return False
-        before = self.conn.total_changes
-        self._execute_write(
+        before = self._discovery.total_changes
+        self._discovery_write(
             """
             INSERT OR IGNORE INTO discovery_keyword_yield (keyword_id, content_id)
             VALUES (?, ?)
             """,
             (kid, cid),
         )
-        if self.conn.total_changes == before:
+        if self._discovery.total_changes == before:
             return False
-        self._execute_write(
+        self._discovery_write(
             "UPDATE discovery_keywords SET yield_count = yield_count + 1 WHERE id = ?",
             (kid,),
         )
@@ -391,7 +414,7 @@ class DiscoveryKeywordsMixin:
     def keyword_yield_count(self, keyword_id: int) -> int:
         """Return the stored ``yield_count`` for a keyword (0 if unknown)."""
         self._ensure_fresh_read()
-        row = self.conn.execute(
+        row = self._discovery.execute(
             "SELECT yield_count FROM discovery_keywords WHERE id = ?",
             (int(keyword_id),),
         ).fetchone()
@@ -404,7 +427,7 @@ class DiscoveryKeywordsMixin:
         logger = logging.getLogger(__name__)
         try:
             self._ensure_fresh_read()
-            row = self.conn.execute(
+            row = self._discovery.execute(
                 "SELECT COALESCE(SUM(yield_count), 0) AS total "
                 "FROM discovery_keywords WHERE platform = ?",
                 (platform.strip(),),
@@ -423,7 +446,7 @@ class DiscoveryKeywordsMixin:
         logger = logging.getLogger(__name__)
         try:
             self._ensure_fresh_read()
-            row = self.conn.execute(
+            row = self._discovery.execute(
                 "SELECT COUNT(*) AS n FROM discovery_keywords "
                 "WHERE platform = ? AND status = 'used'",
                 (platform.strip(),),
@@ -445,7 +468,7 @@ class DiscoveryKeywordsMixin:
         cutoff = (datetime.now(UTC) - timedelta(minutes=max(0.0, min_age_minutes))).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_keywords
             SET status = 'expired'
@@ -516,7 +539,7 @@ class DiscoveryKeywordsMixin:
         new_until = (datetime.now(UTC) + timedelta(seconds=max(0.0, lease_seconds))).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_planner_lock
             SET locked_until = ?, updated_at = CURRENT_TIMESTAMP
@@ -531,7 +554,7 @@ class DiscoveryKeywordsMixin:
         from datetime import UTC, datetime
 
         now_text = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_planner_lock
             SET owner = '', locked_until = ?, updated_at = CURRENT_TIMESTAMP

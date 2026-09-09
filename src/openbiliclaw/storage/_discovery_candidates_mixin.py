@@ -12,12 +12,35 @@ from typing import Any
 
 
 class DiscoveryCandidatesMixin:
-    """发现候选队列的读写方法。"""
+    """发现候选队列的读写方法。
+
+    v0.4.0+: discovery 相关表迁移到独立的 discovery.db，与主库锁域隔离。
+    """
 
     conn: Any  # 由 Database 提供
     _execute_write: Any  # 由 Database 提供
     _ensure_fresh_read: Any  # 由 Database 提供
     _coerce_source_keyword_id: Any  # 由 Database 提供
+    _discovery_conn: Any  # 由 Database 提供（discovery.db 连接）
+
+    @property
+    def _discovery(self) -> Any:
+        """获取 discovery.db 连接，回退到主库连接。"""
+        if getattr(self, '_discovery_conn', None) is not None:
+            return self._discovery_conn
+        return self.conn
+
+    def _discovery_write(self, sql: str, params: tuple = ()) -> Any:
+        """在 discovery.db 上执行写入并提交。"""
+        cursor = self._discovery.execute(sql, params)
+        self._discovery.commit()
+        return cursor
+
+    def _discovery_write_many(self, sql: str, params_list: list) -> Any:
+        """在 discovery.db 上批量执行写入并提交。"""
+        cursor = self._discovery.executemany(sql, params_list)
+        self._discovery.commit()
+        return cursor
 
     @staticmethod
     def _candidate_value(candidate: object, key: str, default: Any = "") -> Any:
@@ -66,7 +89,7 @@ class DiscoveryCandidatesMixin:
                 default={},
             )
             score_threshold = float(self._candidate_value(candidate, "score_threshold", 0.0) or 0.0)
-            cursor = self._execute_write(
+            cursor = self._discovery_write(
                 """
                 INSERT OR IGNORE INTO discovery_candidates (
                     candidate_key,
@@ -148,7 +171,7 @@ class DiscoveryCandidatesMixin:
             if cursor.rowcount > 0:
                 inserted += 1
                 continue
-            self._execute_write(
+            self._discovery_write(
                 """
                 UPDATE discovery_candidates
                 SET last_seen_at = CURRENT_TIMESTAMP
@@ -183,7 +206,7 @@ class DiscoveryCandidatesMixin:
         if not source or cap <= 0:
             return 0
         self._ensure_fresh_read()
-        row = self.conn.execute(
+        row = self._discovery.execute(
             """
             SELECT COUNT(*) AS count
             FROM discovery_candidates
@@ -195,7 +218,7 @@ class DiscoveryCandidatesMixin:
         excess = current - cap
         if excess <= 0:
             return 0
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             DELETE FROM discovery_candidates
             WHERE id IN (
@@ -232,7 +255,7 @@ class DiscoveryCandidatesMixin:
     ) -> int:
         """Release evaluator claims left behind by a crashed process."""
         minutes = max(1, int(max_age_minutes))
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             """
             UPDATE discovery_candidates
             SET status = 'pending_eval',
@@ -254,7 +277,7 @@ class DiscoveryCandidatesMixin:
         self._ensure_fresh_read()
         # Peek a bounded window and round-robin in Python so one noisy source
         # cannot monopolize a mixed evaluator batch.
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT *
             FROM discovery_candidates
@@ -293,7 +316,7 @@ class DiscoveryCandidatesMixin:
 
         ids = [int(row["id"]) for row in selected]
         placeholders = ", ".join("?" for _ in ids)
-        self._execute_write(
+        self._discovery_write(
             f"""
             UPDATE discovery_candidates
             SET status = 'evaluating',
@@ -304,7 +327,7 @@ class DiscoveryCandidatesMixin:
             """,
             ids,
         )
-        claimed_rows = self.conn.execute(
+        claimed_rows = self._discovery.execute(
             f"""
             SELECT id
             FROM discovery_candidates
@@ -329,7 +352,7 @@ class DiscoveryCandidatesMixin:
         if admission_limit <= 0:
             return []
         self._ensure_fresh_read()
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT *
             FROM discovery_candidates
@@ -353,7 +376,7 @@ class DiscoveryCandidatesMixin:
             candidate_id = int(evaluation.get("candidate_id") or evaluation.get("id") or 0)
             if candidate_id <= 0:
                 continue
-            cursor = self._execute_write(
+            cursor = self._discovery_write(
                 """
                 UPDATE discovery_candidates
                 SET status = ?,
@@ -406,7 +429,7 @@ class DiscoveryCandidatesMixin:
         placeholders = ", ".join("?" for _ in ids)
         if not increment_attempts:
             batch_attempts_limit = max(1, int(max_batch_attempts))
-            cursor = self._execute_write(
+            cursor = self._discovery_write(
                 f"""
                 UPDATE discovery_candidates
                 SET batch_eval_attempts = batch_eval_attempts + 1,
@@ -438,7 +461,7 @@ class DiscoveryCandidatesMixin:
             return int(cursor.rowcount)
 
         attempts_limit = max(1, int(max_attempts))
-        cursor = self._execute_write(
+        cursor = self._discovery_write(
             f"""
             UPDATE discovery_candidates
             SET eval_attempts = eval_attempts + 1,
@@ -465,7 +488,7 @@ class DiscoveryCandidatesMixin:
 
     def mark_discovery_candidate_cached(self, candidate_id: int) -> None:
         """Mark an evaluated candidate as successfully inserted into content_cache."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_candidates
             SET status = 'cached',
@@ -487,7 +510,7 @@ class DiscoveryCandidatesMixin:
         reason: str = "",
     ) -> None:
         """Mark a candidate as rejected before it enters content_cache."""
-        self._execute_write(
+        self._discovery_write(
             """
             UPDATE discovery_candidates
             SET status = ?,
@@ -502,7 +525,7 @@ class DiscoveryCandidatesMixin:
     def count_discovery_candidates_by_status(self) -> dict[str, int]:
         """Return candidate queue counts grouped by lifecycle status."""
         self._ensure_fresh_read()
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT status, COUNT(*) AS count
             FROM discovery_candidates
@@ -523,7 +546,7 @@ class DiscoveryCandidatesMixin:
         existing: set[str] = set()
         for chunk in _chunks(clean, 900):
             placeholders = ", ".join("?" for _ in chunk)
-            cursor = self.conn.execute(
+            cursor = self._discovery.execute(
                 f"""
                 SELECT candidate_key
                 FROM discovery_candidates
@@ -537,7 +560,7 @@ class DiscoveryCandidatesMixin:
     def count_discovery_candidates_by_source_status(self) -> dict[str, dict[str, int]]:
         """Return candidate queue counts grouped by source and lifecycle status."""
         self._ensure_fresh_read()
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT source_platform, status, COUNT(*) AS count
             FROM discovery_candidates
@@ -555,7 +578,7 @@ class DiscoveryCandidatesMixin:
     def count_discovery_pending_raw_material_by_source(self) -> dict[str, int]:
         """Return not-yet-cached raw candidate counts grouped by source."""
         self._ensure_fresh_read()
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT source_platform, COUNT(*) AS count
             FROM discovery_candidates
@@ -568,7 +591,7 @@ class DiscoveryCandidatesMixin:
 
     def _count_pending_discovery_raw_material(self) -> int:
         self._ensure_fresh_read()
-        cursor = self.conn.execute(
+        cursor = self._discovery.execute(
             """
             SELECT COUNT(*) AS count
             FROM discovery_candidates
