@@ -299,10 +299,13 @@ class TestDatabase:
                 "UPDATE content_cache SET style_key = ? WHERE bvid = ?",
                 ("story_doc", "BV1LEGACY"),
             )
-            db.conn.execute(
+            # discovery_candidates 位于 discovery.db 子库，经 _discovery 连接写读；
+            # content_cache 仍走主库连接，两者分别提交。
+            db._discovery.execute(
                 "UPDATE discovery_candidates SET style_key = ? WHERE candidate_key = ?",
                 ("lifestyle", "xhs:legacy-note"),
             )
+            db._discovery.commit()
             db.conn.commit()
             db.close()
 
@@ -312,7 +315,7 @@ class TestDatabase:
                 "SELECT style_key FROM content_cache WHERE bvid = ?",
                 ("BV1LEGACY",),
             ).fetchone()
-            candidate_row = migrated.conn.execute(
+            candidate_row = migrated._discovery.execute(
                 "SELECT style_key FROM discovery_candidates WHERE candidate_key = ?",
                 ("xhs:legacy-note",),
             ).fetchone()
@@ -1364,7 +1367,7 @@ class TestDatabase:
 
             db.conn.execute(
                 """
-                INSERT INTO events (event_type, url, title, context, metadata, created_at)
+                INSERT INTO events.events (event_type, url, title, context, metadata, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -1378,7 +1381,7 @@ class TestDatabase:
             )
             db.conn.execute(
                 """
-                INSERT INTO events (event_type, url, title, context, metadata, created_at)
+                INSERT INTO events.events (event_type, url, title, context, metadata, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -3148,27 +3151,15 @@ class TestEventSatisfactionPersistence:
         `unknown` must include them so the consumer can opt in to
         unclassified history.
         """
-        path = tmp_path / "legacy-then-modern.db"
-        legacy = sqlite3.connect(str(path))
-        legacy.executescript(
-            """
-            CREATE TABLE events (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type  TEXT NOT NULL,
-                url         TEXT,
-                title       TEXT,
-                context     TEXT,
-                metadata    TEXT,
-                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            INSERT INTO events (event_type, title) VALUES ('view', 'legacy NULL row');
-            """
-        )
-        legacy.commit()
-        legacy.close()
-
-        db = Database(path)
+        db = Database(tmp_path / "openbiliclaw.db")
         db.initialize()
+        # 迁移后 legacy 行：inferred_satisfaction 为 NULL（v0.3 前未分类历史，
+        # 事件已迁入 events.db，双写验证期主库旧表同语义）。
+        db.conn.execute(
+            "INSERT INTO events.events (event_type, title, inferred_satisfaction) "
+            "VALUES ('view', 'legacy NULL row', NULL)"
+        )
+        db.conn.commit()
         db.insert_event("like", title="新数据")  # post-migration → positive
 
         unknown_rows = db.query_events(satisfaction_modes=frozenset({"unknown"}), limit=10)

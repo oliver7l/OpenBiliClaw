@@ -6,6 +6,7 @@ and read-optimization index creation (_ensure_*_read_indexes).
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 
@@ -31,37 +32,48 @@ class SchemaMixin:
 
     @staticmethod
     def _ensure_columns_on_connection(
-        conn: Any, table_name: str, required_columns: dict[str, str]
+        conn: Any,
+        table_name: str,
+        required_columns: dict[str, str],
+        schema: str | None = None,
     ) -> None:
-        """Ensure required columns exist on a table in the given connection."""
+        """Ensure required columns exist on a table in the given connection.
+
+        ``schema`` 用于经 ATTACH 访问的子库（如 events.db）：SQLite 的
+        PRAGMA 约定是 ``PRAGMA <schema>.table_info(<表>)``（schema 在 pragma
+        名前置、表名仍用裸名），不支持 ``table_info(events.events)`` 点分形式。
+        """
+        pragma = (
+            f"PRAGMA {schema}.table_info({table_name})"
+            if schema
+            else f"PRAGMA table_info({table_name})"
+        )
+        qual = f"{schema}.{table_name}" if schema else table_name
         try:
-            existing_columns = {
-                str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-            }
+            existing_columns = {str(row["name"]) for row in conn.execute(pragma).fetchall()}
         except Exception:
             return
         for column_name, column_type in required_columns.items():
             if column_name in existing_columns:
                 continue
-            try:
-                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
-            except Exception:
-                pass
+            with suppress(Exception):
+                conn.execute(f"ALTER TABLE {qual} ADD COLUMN {column_name} {column_type}")
 
     def _ensure_event_satisfaction_columns(self) -> None:
-        """Backfill v0.3.x event-satisfaction columns for pre-migration DBs."""
-        existing_columns = {
-            str(row["name"]) for row in self.conn.execute("PRAGMA table_info(events)").fetchall()
-        }
+        """Backfill v0.3.x event-satisfaction columns for pre-migration DBs.
+
+        v0.4.x+: events.db 拆分后，行为事件主写 events.db（别名 events）。
+        这里镜像到主库旧 events 表（双写验证期）与 events.db 两份，确保两处结构一致。
+        """
         required_columns = {
             "inferred_satisfaction": "TEXT",
             "satisfaction_reason": "TEXT",
             "article_id": "INTEGER",
         }
-        for column_name, column_type in required_columns.items():
-            if column_name in existing_columns:
-                continue
-            self.conn.execute(f"ALTER TABLE events ADD COLUMN {column_name} {column_type}")
+        # 主库旧 events 表（双写验证期）
+        self._ensure_columns_on_connection(self.conn, "events", required_columns)
+        # events.db（P2 事件子库，别名 events，经 self.conn ATTACH 访问）
+        self._ensure_columns_on_connection(self.conn, "events", required_columns, schema="events")
 
     def _ensure_recommendation_feedback_columns(self) -> None:
         """Backfill recommendation feedback columns for existing databases."""
@@ -255,22 +267,26 @@ class SchemaMixin:
         """Rewrite known legacy content-form style keys to viewing-mode keys."""
         from openbiliclaw.storage.database import _LEGACY_STYLE_KEY_MAP
 
-        targets = (
-            ("content_cache", "style_key"),
-            ("discovery_candidates", "style_key"),
+        # content_cache 位于 pool.db（self.conn 默认 schema 落到 pool）；
+        # discovery_candidates 位于 discovery.db（独立 _discovery 连接）。
+        # 两条路径都要归一化，否则子库里的候选永远不会被收敛。
+        self._rename_legacy_style_keys(self.conn, "content_cache", _LEGACY_STYLE_KEY_MAP)
+        self._rename_legacy_style_keys(
+            self._discovery, "discovery_candidates", _LEGACY_STYLE_KEY_MAP
         )
-        for table_name, column_name in targets:
-            existing_columns = {
-                str(row["name"])
-                for row in self.conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-            }
-            if column_name not in existing_columns:
-                continue
-            for legacy_key, style_key in _LEGACY_STYLE_KEY_MAP.items():
-                self.conn.execute(
-                    f"UPDATE {table_name} SET {column_name} = ? WHERE {column_name} = ?",
-                    (style_key, legacy_key),
-                )
+
+    @staticmethod
+    def _rename_legacy_style_keys(conn: Any, table_name: str, style_map: dict[str, str]) -> None:
+        existing_columns = {
+            str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if "style_key" not in existing_columns:
+            return
+        for legacy_key, style_key in style_map.items():
+            conn.execute(
+                f"UPDATE {table_name} SET style_key = ? WHERE style_key = ?",
+                (style_key, legacy_key),
+            )
 
     def _ensure_recommendation_read_indexes(self) -> None:
         """Create indexes used by recommendation and activity-feed reads."""
@@ -586,6 +602,7 @@ class SchemaMixin:
 
     def _ensure_user_feedback_table(self) -> None:
         from openbiliclaw.storage.database import _USER_FEEDBACK_DDL
+
         self.conn.executescript(_USER_FEEDBACK_DDL)
 
     # ── view history (implicit feedback) ────────────────────────────
@@ -933,4 +950,3 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_native_save_task_items_order
                 ON native_save_task_items(updated_at DESC);
         """)
-

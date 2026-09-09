@@ -22,7 +22,9 @@ class CoverMixin:
         evict: covers of saved or still-pending content are kept; covers of
         consumed, unsaved content are eligible for removal.
         """
-        cursor = self._content.execute(
+        # content_cache/favorites/watch_later 均位于 pool.db（self.conn 默认 schema
+        # 落到 pool），与 cache_content/add_to_favorites 的写入路径保持一致。
+        cursor = self.conn.execute(
             """
             SELECT
                 COALESCE(cc.cover_url, '') AS cover_url,
@@ -46,7 +48,7 @@ class CoverMixin:
         ``fresh / shown / suppressed``, or saved (favorites / watch_later) — limited
         to the last ``recent_hours`` of discoveries and ordered newest-first.
         """
-        cursor = self._content.execute(
+        cursor = self.conn.execute(
             """
             SELECT cc.cover_url
             FROM content_cache AS cc

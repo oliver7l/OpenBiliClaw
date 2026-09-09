@@ -159,7 +159,7 @@ def test_query_events_and_stats_delegate_to_database(tmp_path: Path) -> None:
     older = datetime.now() - timedelta(days=3)
     memory._database.conn.execute(
         """
-        INSERT INTO events (event_type, url, title, context, metadata, created_at)
+        INSERT INTO events.events (event_type, url, title, context, metadata, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
@@ -173,7 +173,7 @@ def test_query_events_and_stats_delegate_to_database(tmp_path: Path) -> None:
     )
     memory._database.conn.execute(
         """
-        INSERT INTO events (event_type, url, title, context, metadata)
+        INSERT INTO events.events (event_type, url, title, context, metadata)
         VALUES (?, ?, ?, ?, ?)
         """,
         (

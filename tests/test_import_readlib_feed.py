@@ -24,21 +24,14 @@ from openbiliclaw.sources.event_format import (  # noqa: E402
 
 
 def _make_db(tmp_path: Path) -> sqlite3.Connection:
-    """建 events + read_archive 两张最小表，与库内 schema 对齐。"""
+    """建 main(read_archive) + 子库 events(events) 两张库，与库内 schema 对齐。
+
+    events 已拆分到 events.db，经 ATTACH 以 events. 前缀访问，与
+    import_readlib_to_db 的生产写入路径一致。
+    """
     conn = sqlite3.connect(tmp_path / "feed.db")
     conn.executescript(
         """
-        CREATE TABLE events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL,
-            url TEXT,
-            title TEXT,
-            context TEXT,
-            metadata TEXT,
-            inferred_satisfaction TEXT,
-            satisfaction_reason TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
         CREATE TABLE read_archive (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_type TEXT,
@@ -54,6 +47,27 @@ def _make_db(tmp_path: Path) -> sqlite3.Connection:
             updated_at TEXT
         );
         """
+    )
+    events_conn = sqlite3.connect(tmp_path / "feed.events.db")
+    events_conn.executescript(
+        """
+        CREATE TABLE events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            url TEXT,
+            title TEXT,
+            context TEXT,
+            metadata TEXT,
+            inferred_satisfaction TEXT,
+            satisfaction_reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    events_conn.commit()
+    events_conn.close()
+    conn.execute(
+        "ATTACH DATABASE ? AS events", (str(tmp_path / "feed.events.db"),)
     )
     return conn
 
@@ -78,7 +92,7 @@ def test_feed_inserts_positive_finished_event(tmp_path) -> None:
     assert _feed(conn) is True
     row = conn.execute(
         "SELECT event_type, url, title, context, metadata, "
-        "inferred_satisfaction, satisfaction_reason FROM events"
+        "inferred_satisfaction, satisfaction_reason FROM events.events"
     ).fetchone()
     assert row[0] == "article_finished"
     assert row[1] == "local://readlib/示例"
@@ -100,11 +114,11 @@ def test_feed_is_idempotent_per_url(tmp_path) -> None:
     conn = _make_db(tmp_path)
     assert _feed(conn) is True
     assert _feed(conn) is False
-    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM events.events").fetchone()[0] == 1
 
 
 def test_feed_different_urls_not_deduped(tmp_path) -> None:
     conn = _make_db(tmp_path)
     assert _feed(conn, url="local://readlib/a") is True
     assert _feed(conn, article_id=2, url="local://readlib/b") is True
-    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM events.events").fetchone()[0] == 2

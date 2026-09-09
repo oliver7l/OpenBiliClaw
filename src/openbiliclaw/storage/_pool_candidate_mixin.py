@@ -307,7 +307,9 @@ class PoolCandidateMixin:
         for row in self._load_pool_raw_material_rows():
             source_family = _pool_source_family(row["source"], row["source_platform"])
             counts[source_family] += 1
-        cursor = self.conn.execute(
+        # discovery.db 是独立子库（P5），候选写入与存量计数均走 _discovery 连接；
+        # 这里必须同路径读取，否则组内计数会漏掉未入库候选。
+        cursor = self._discovery.execute(
             """
             SELECT source_platform, source_strategy, COUNT(*) AS count
             FROM discovery_candidates

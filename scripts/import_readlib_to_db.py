@@ -168,7 +168,7 @@ def feed_profile_event(
         True 表示本次新插入了一条事件。
     """
     existing = cur.execute(
-        "SELECT id FROM events "
+        "SELECT id FROM events.events "
         "WHERE event_type = 'article_finished' AND url = ? LIMIT 1",
         (url,),
     ).fetchone()
