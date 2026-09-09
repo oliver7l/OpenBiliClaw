@@ -899,7 +899,7 @@ if (!OBC) { console.error("pool-explore.js: window.OBC not found — load app.js
           const el = $("#profileViewHistory");
           if (!el) return;
           if (!views || !views.length) {
-            el.innerHTML = `<p class="video-meta">还没有浏览记录，去 Agent 推荐页面逛逛吧。</p>`;
+            el.innerHTML = `<p class="video-meta">还没有浏览记录，去首页或推荐流逛逛吧。</p>`;
             return;
           }
           el.innerHTML = `<div class="view-history-list">${views.map((v) => {
