@@ -11,7 +11,6 @@ consumption patterns across different time windows.  Provides:
 """
 
 from __future__ import annotations
-from openbiliclaw.storage.database import open_db_conn
 
 import logging
 from dataclasses import dataclass, field
@@ -22,6 +21,7 @@ from openbiliclaw.self_evolution.insight_report import (
     extract_topics,
     infer_platform_from_url,
 )
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger("self_evolution.drift")
 
@@ -109,9 +109,17 @@ class InterestDriftDetector:
 
     def _get_conn(self) -> Any:
         import sqlite3
+        from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
 
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
+        # v0.4.0+: articles 表在 content.db（interest_drift 用 LEFT JOIN articles），
+        # 主库连接需 ATTACH content，否则报 no such table: articles。
+        _content_path = _Path(str(self.db_path)).with_name("content.db")
+        if _content_path.exists():
+            with _suppress(Exception):
+                conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
         return conn
 
     def detect(
@@ -401,7 +409,8 @@ class InterestDriftDetector:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO drift_reports
-                (report_id, current_start, current_end, previous_start, previous_end, generated_at, report_json)  # noqa: E501
+                (report_id, current_start, current_end,
+                 previous_start, previous_end, generated_at, report_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
