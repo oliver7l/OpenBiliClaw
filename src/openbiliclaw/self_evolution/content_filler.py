@@ -16,8 +16,10 @@ import hashlib
 import json
 import logging
 import sqlite3
+from contextlib import suppress
 from openbiliclaw.storage.database import open_db_conn
 from datetime import datetime, timedelta
+from pathlib import Path
 
 logger = logging.getLogger("self_evolution.content_filler")
 
@@ -57,12 +59,14 @@ class ContentFiller:
         llm_service: object | None = None,
     ) -> None:
         self._db_path = db_path
+        # v0.4.0+: articles 表迁移到 content.db，main_db.getnote_pending 留在主库
+        self._content_db_path = str(Path(db_path).with_name("content.db"))
         self._llm_service = llm_service
         self._ensure_getnote_pending_table()
 
     # ── 得到大脑异步收割队列表结构 ─────────────────────────────────
     def _ensure_getnote_pending_table(self) -> None:
-        """确保 getnote_pending 队列表存在（持久化「播种后待收割」项）。
+        """确保 main_db.getnote_pending 队列表存在（持久化「播种后待收割」项）。
 
         字段说明：
         - article_id 关联 articles.id（主键）
@@ -70,7 +74,7 @@ class ContentFiller:
         - saved_at   save 提交时间，用于判断是否已过异步生成缓冲期
         - poll_attempts  已收割轮数，超 GETNOTE_MAX_POLLS 则放弃
         """
-        conn = self._conn()
+        conn = self._main_conn()
         try:
             conn.execute(
                 """CREATE TABLE IF NOT EXISTS getnote_pending (
@@ -88,7 +92,15 @@ class ContentFiller:
     # ── 辅助 ───────────────────────────────────────────────────────
 
     def _conn(self) -> sqlite3.Connection:
-        # open_db_conn 已统一 WAL + busy_timeout=60s + 进程级写锁
+        """content.db 连接（articles 表），ATTACH 主库以便跨库查询。"""
+        conn = open_db_conn(self._content_db_path)
+        # ATTACH 主库，getnote_pending 用 main_db.getnote_pending 访问
+        with suppress(Exception):
+            conn.execute("ATTACH DATABASE ? AS main_db", (self._db_path,))
+        return conn
+
+    def _main_conn(self) -> sqlite3.Connection:
+        """主库连接（main_db.getnote_pending 表）。"""
         return open_db_conn(self._db_path)
 
     # ═══════════════════════════════════════════════════════════════
@@ -468,11 +480,11 @@ class ContentFiller:
         累加失败次数，导致大量文章被误判为永久失败而跳过，且丢掉的 note_id
         无法复用。这里改为：
 
-        - **阶段A · 收割**: 处理 ``getnote_pending`` 队列中已过异步缓冲期的
+        - **阶段A · 收割**: 处理 ``main_db.getnote_pending`` 队列中已过异步缓冲期的
           条目，``getnote note`` 读取内容；成功写回正文+摘要并出队；未就绪
           则保留等下轮；超轮数上限才放弃释放。
         - **阶段B · 播种**: 队列有容量时，为缺正文的新文章 ``save`` 并写入
-          ``getnote_pending``，**立即返回不等待**，异步内容下一轮再收割。
+          ``main_db.getnote_pending``，**立即返回不等待**，异步内容下一轮再收割。
 
         读取失败不再累加 ``body_fetch_attempts``（那是给“正文抓不到”的永久
         跳过机制），异步等待本身是正常现象。
@@ -496,7 +508,7 @@ class ContentFiller:
         conn = self._conn()
         rows = conn.execute(
             """SELECT article_id, note_id, poll_attempts
-               FROM getnote_pending
+               FROM main_db.getnote_pending
                WHERE saved_at <= ?
                ORDER BY saved_at ASC, article_id ASC
                LIMIT ?""",
@@ -627,7 +639,7 @@ class ContentFiller:
 
         conn = self._conn()
         try:
-            pend = {r[0] for r in conn.execute("SELECT article_id FROM getnote_pending")}
+            pend = {r[0] for r in conn.execute("SELECT article_id FROM main_db.getnote_pending")}
             cands: dict[str, int] = {}
             for row in conn.execute(
                 "SELECT id, title FROM articles WHERE (content_text IS NULL OR content_text = '')"
@@ -684,7 +696,7 @@ class ContentFiller:
         """为缺正文的新文章 save，登记进待收割队列；队列满则跳过。"""
         conn = self._conn()
         pending_count = conn.execute(
-            "SELECT COUNT(*) FROM getnote_pending"
+            "SELECT COUNT(*) FROM main_db.getnote_pending"
         ).fetchone()[0]
         if pending_count >= _GETNOTE_MAX_PENDING:
             conn.close()
@@ -696,7 +708,7 @@ class ContentFiller:
                WHERE (content_text IS NULL OR content_text = '')
                  AND url IS NOT NULL AND url != ''
                  AND body_fetch_attempts < ?
-                 AND id NOT IN (SELECT article_id FROM getnote_pending)
+                 AND id NOT IN (SELECT article_id FROM main_db.getnote_pending)
                ORDER BY
                  CASE
                    WHEN source_type IN ('youtube','yt') THEN 0
@@ -783,13 +795,13 @@ class ContentFiller:
         # 不累加 body_fetch_attempts，避免误杀；仅记录日志由上层配额控制频率
         logger.debug("getnote: save failed for article %d（下轮重试）", article_id)
 
-    # ── getnote_pending 队列 CRUD ─────────────────────────────────
+    # ── main_db.getnote_pending 队列 CRUD ─────────────────────────────────
     def _enqueue_pending(self, article_id: int, note_id: str) -> None:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = self._conn()
         try:
             conn.execute(
-                """INSERT OR REPLACE INTO getnote_pending
+                """INSERT OR REPLACE INTO main_db.getnote_pending
                    (article_id, note_id, saved_at, poll_attempts, updated_at)
                    VALUES (?, ?, ?, 0, ?)""",
                 (article_id, note_id, now, now),
@@ -802,7 +814,7 @@ class ContentFiller:
         conn = self._conn()
         try:
             conn.execute(
-                "UPDATE getnote_pending SET poll_attempts = ?, updated_at = ? WHERE article_id = ?",
+                "UPDATE main_db.getnote_pending SET poll_attempts = ?, updated_at = ? WHERE article_id = ?",
                 (polls, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), article_id),
             )
             conn.commit()
@@ -812,7 +824,7 @@ class ContentFiller:
     def _delete_pending(self, article_id: int) -> None:
         conn = self._conn()
         try:
-            conn.execute("DELETE FROM getnote_pending WHERE article_id = ?", (article_id,))
+            conn.execute("DELETE FROM main_db.getnote_pending WHERE article_id = ?", (article_id,))
             conn.commit()
         finally:
             conn.close()
