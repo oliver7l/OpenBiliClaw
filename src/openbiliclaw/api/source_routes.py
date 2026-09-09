@@ -1823,17 +1823,17 @@ def register_source_routes(
                   SUM(CASE WHEN pool_status = 'feedbacked' THEN 1 ELSE 0 END) AS feedbacked,
                   SUM(CASE WHEN pool_status = 'pending' THEN 1 ELSE 0 END) AS pending,
                   SUM(CASE WHEN COALESCE(pool_expression, '') != '' THEN 1 ELSE 0 END) AS with_expr,
-                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,  # noqa: E501
-                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,  # noqa: E501
+                  SUM(CASE WHEN COALESCE(pool_expression, '') = '' THEN 1 ELSE 0 END) AS without_expr,
+                  SUM(CASE WHEN topic_group != '' AND topic_group IS NOT NULL THEN 1 ELSE 0 END) AS with_topic,
                   SUM(CASE WHEN delight_score > 0.0 THEN 1 ELSE 0 END) AS delight_candidates,
                   SUM(CASE WHEN delight_notified = 1 THEN 1 ELSE 0 END) AS delight_notified,
-                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,  # noqa: E501
+                  SUM(CASE WHEN last_scored_at IS NOT NULL THEN 1 ELSE 0 END) AS candidates_accepted,
                   SUM(CASE WHEN quality_score <= 0.0 THEN 1 ELSE 0 END) AS bucket_0,
-                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,  # noqa: E501
-                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,  # noqa: E501
-                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,  # noqa: E501
-                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,  # noqa: E501
-                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10  # noqa: E501
+                  SUM(CASE WHEN quality_score > 0.0 AND quality_score <= 0.2 THEN 1 ELSE 0 END) AS bucket_02,
+                  SUM(CASE WHEN quality_score > 0.2 AND quality_score <= 0.4 THEN 1 ELSE 0 END) AS bucket_04,
+                  SUM(CASE WHEN quality_score > 0.4 AND quality_score <= 0.6 THEN 1 ELSE 0 END) AS bucket_06,
+                  SUM(CASE WHEN quality_score > 0.6 AND quality_score <= 0.8 THEN 1 ELSE 0 END) AS bucket_08,
+                  SUM(CASE WHEN quality_score > 0.8 AND quality_score <= 1.0 THEN 1 ELSE 0 END) AS bucket_10
                 FROM content_cache
             """).fetchone()
             m_total = int(master["total"]) if master else 0
@@ -1909,7 +1909,8 @@ def register_source_routes(
             ]
 
             # ── 5. Discovery candidates ──
-            disc_rows = db.conn.execute("""
+            disc_conn = getattr(db, '_discovery_conn', None) or db.conn
+            disc_rows = disc_conn.execute("""
                 SELECT status, COUNT(*) AS c
                 FROM discovery_candidates GROUP BY status ORDER BY c DESC
             """).fetchall()
@@ -1931,13 +1932,14 @@ def register_source_routes(
             pipeline.discovery_candidates_evaluated = disc_evaluated
 
             # ── 6. LLM usage (combined: by_caller covers all 7d, derive today from it) ──
-            caller_rows = db.conn.execute("""
+            llm_conn = getattr(db, '_llm_conn', None) or db.conn
+            caller_rows = llm_conn.execute("""
                 SELECT caller, COUNT(*) AS calls,
                        COALESCE(SUM(estimated_cost_cny), 0) AS cost_cny,
                        COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
                        COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,  # noqa: E501
-                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost  # noqa: E501
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN 1 ELSE 0 END) AS today_calls,
+                       SUM(CASE WHEN timestamp >= datetime('now', 'start of day', 'localtime') THEN COALESCE(estimated_cost_cny, 0) ELSE 0 END) AS today_cost
                 FROM llm_usage
                 WHERE timestamp >= datetime('now', '-7 day', 'localtime')
                 GROUP BY caller ORDER BY cost_cny DESC LIMIT 20
@@ -1998,7 +2000,7 @@ def register_source_routes(
                                 runtime[k] = st[k]
 
             # ── 8. Keywords stats ──
-            kw_rows = db.conn.execute("""
+            kw_rows = disc_conn.execute("""
                 SELECT platform, status, COUNT(*) AS c
                 FROM discovery_keywords GROUP BY platform, status ORDER BY platform, status
             """).fetchall()
@@ -2012,7 +2014,7 @@ def register_source_routes(
             ]
 
             # ── 9. Eval stats (combined single query) ──
-            eval_row = db.conn.execute("""
+            eval_row = disc_conn.execute("""
                 SELECT COUNT(*) AS total, COALESCE(SUM(eval_attempts), 0) AS attempts
                 FROM discovery_candidates
             """).fetchone()
