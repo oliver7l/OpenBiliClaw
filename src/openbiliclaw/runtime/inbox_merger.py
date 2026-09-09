@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sqlite3
 import time
 from pathlib import Path
 
 from openbiliclaw.runtime.inbox_db import get_inbox_path, list_inbox_platforms
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def merge_inbox(
         return {"platform": platform, "cache_pending": 0, "cache_merged": 0, "articles_merged": 0, "cleared": 0}
 
     # ── 1. 合并 content_cache 到 pool.db ──
-    pool_conn = sqlite3.connect(str(pool_db_path), timeout=60.0)
+    pool_conn = open_db_conn(str(pool_db_path))
     cache_merged = 0
     cache_pending = 0
     try:
@@ -81,7 +81,7 @@ def merge_inbox(
     articles_merged = 0
     articles_pending = 0
     for attempt in range(3):
-        main_conn = sqlite3.connect(str(main_db_path), timeout=60.0)
+        main_conn = open_db_conn(str(main_db_path))
         try:
             main_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
             articles_pending = main_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]

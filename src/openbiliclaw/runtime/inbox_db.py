@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import sqlite3
+
+from openbiliclaw.storage.database import open_db_conn
 from pathlib import Path
 
 # content_cache 完整 DDL（与 pool.db 保持一致）
@@ -105,11 +107,7 @@ def connect_inbox(platform: str, data_dir: str | Path = "data") -> sqlite3.Conne
     返回的连接已启用 WAL 模式和 busy_timeout。
     """
     db_path = get_inbox_path(platform, data_dir)
-    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = open_db_conn(str(db_path))
     conn.executescript(_INBOX_CONTENT_CACHE_DDL)
     conn.executescript(_INBOX_ARTICLES_DDL)
     return conn

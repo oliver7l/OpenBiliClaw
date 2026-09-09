@@ -18,6 +18,8 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, Literal
 
+from openbiliclaw.storage.database import open_db_conn
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -104,11 +106,7 @@ class EmbeddingStore:
         self._conn: sqlite3.Connection | None = None
 
     def __enter__(self) -> EmbeddingStore:
-        self._conn = sqlite3.connect(self._db_path, timeout=30.0, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA busy_timeout=5000")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn = open_db_conn(self._db_path)
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -119,11 +117,7 @@ class EmbeddingStore:
     def _query_row(self, text: str) -> sqlite3.Row | None:
         """Query the embedding cache according to match_mode."""
         if self._conn is None:
-            self._conn = sqlite3.connect(self._db_path, timeout=30.0, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.execute("PRAGMA synchronous=NORMAL")
+            self._conn = open_db_conn(self._db_path)
         if self._match_mode == "exact":
             return self._conn.execute(
                 "SELECT vector, dimension, encoding FROM embedding_cache "

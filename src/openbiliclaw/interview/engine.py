@@ -306,7 +306,7 @@ class InterviewEngine:
         db_path = self.data_dir / "knowledge.db"
         if db_path.exists():
             db_path.unlink()
-        conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+        conn = open_db_conn(db_path)
         try:
             cur = conn.cursor()
             cur.execute(

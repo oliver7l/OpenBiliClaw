@@ -158,14 +158,13 @@ class InterviewReviewStore:
 
     @staticmethod
     def _configure(conn: sqlite3.Connection) -> None:
-        """配置 SQLite 连接参数（WAL + 锁重试 + 性能调优）。"""
+        """配置 SQLite 连接参数（WAL + 性能调优；写锁由 open_db_conn 统一）。"""
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
 
     def _init_schema(self) -> None:
         """初始化表结构。"""
-        conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
+        conn = open_db_conn(self.db_path)
         try:
             self._configure(conn)
             conn.executescript(SCHEMA)
@@ -176,7 +175,7 @@ class InterviewReviewStore:
             conn.close()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
+        conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         self._configure(conn)
         return conn
