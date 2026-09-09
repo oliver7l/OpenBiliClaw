@@ -893,15 +893,47 @@ def _cli_run_forever(interval_hours: int, limit: int, discover_only: bool) -> No
 
 
 def _api_fetch_json(url: str) -> list[dict[str, Any]]:
-    """Fetch a V2EX API endpoint and return the parsed JSON array."""
-    req = urllib.request.Request(url, headers={"User-Agent": API_USER_AGENT})
-    try:
-        with _API_DEFAULT_OPENER.open(req, timeout=30) as resp:
-            parsed = json.loads(resp.read().decode("utf-8"))
-            return cast("list[dict[str, Any]]", parsed)
-    except Exception as exc:
-        logger.error("V2EX API request failed for %s: %s", url, exc)
-        return []
+    """Fetch a V2EX API endpoint and return the parsed JSON array.
+
+    Includes browser-like headers and up to 3 retries to handle
+    intermittent Cloudflare 403 challenges.
+    """
+    headers = {
+        "User-Agent": API_USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.v2ex.com/",
+    }
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with _API_DEFAULT_OPENER.open(req, timeout=30) as resp:
+                parsed = json.loads(resp.read().decode("utf-8"))
+                return cast("list[dict[str, Any]]", parsed)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403 and attempt < max_retries - 1:
+                logger.warning(
+                    "V2EX API 403 (attempt %d/%d), retrying in 5s...: %s",
+                    attempt + 1, max_retries, url,
+                )
+                import time
+                time.sleep(5)
+                continue
+            logger.error("V2EX API request failed for %s: %s", url, exc)
+            return []
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                logger.warning(
+                    "V2EX API error (attempt %d/%d), retrying in 3s...: %s",
+                    attempt + 1, max_retries, exc,
+                )
+                import time
+                time.sleep(3)
+                continue
+            logger.error("V2EX API request failed for %s: %s", url, exc)
+            return []
+    return []
 
 
 def _api_parse_topics(topics: list[dict[str, Any]], source: str) -> list[dict[str, Any]]:
