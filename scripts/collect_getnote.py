@@ -168,6 +168,15 @@ def _iter_notes(src_dir: str):
 def collect(src_dir: str, *, dry_run: bool) -> dict:
     total = inserted = filled = skipped = ignored = 0
     conn = None if dry_run else sqlite3.connect(DB_PATH)
+# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+try:
+    from pathlib import Path as _Path
+    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+    if _content_db.exists():
+        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+except Exception:
+    pass
+
     cur = None if dry_run else conn.cursor()
     now_iso = dt.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 

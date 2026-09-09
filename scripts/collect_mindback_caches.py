@@ -258,6 +258,15 @@ def main():
             only = a.split("=", 1)[1]
     srcs = [only] if only else list(SOURCES.keys())
     conn = sqlite3.connect(DB_PATH)
+# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+try:
+    from pathlib import Path as _Path
+    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+    if _content_db.exists():
+        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+except Exception:
+    pass
+
     cur = conn.cursor()
     # 已存在 url 集合(按源), xhs 归一化去 query
     exist = {}
