@@ -426,3 +426,31 @@ class InterestDriftDetector:
             conn.commit()
         finally:
             conn.close()
+
+    def get_latest_report(self) -> dict[str, Any] | None:
+        """Load the most recent saved drift report as a dict, or None."""
+        import json
+
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS drift_reports (
+                    report_id TEXT PRIMARY KEY,
+                    current_start TEXT,
+                    current_end TEXT,
+                    previous_start TEXT,
+                    previous_end TEXT,
+                    generated_at TEXT,
+                    report_json TEXT
+                )
+                """
+            )
+            row = conn.execute(
+                "SELECT report_json FROM drift_reports ORDER BY generated_at DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return json.loads(row["report_json"])
+            return None
+        finally:
+            conn.close()

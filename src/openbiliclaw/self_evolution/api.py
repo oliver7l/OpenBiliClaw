@@ -55,23 +55,41 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         return report
 
     @router.get("/drift")
-    async def get_interest_drift(current_window_days: int = 7, previous_window_days: int = 30):
-        """Get interest drift analysis."""
+    async def get_interest_drift(
+        recompute: bool = False,
+        current_window_days: int = 7,
+        previous_window_days: int = 30,
+    ):
+        """Get the latest saved interest drift analysis.
+
+        Returns the most recent saved report; pass `recompute=true` to
+        re-detect from the content library and update the cache.
+        """
         detector = InterestDriftDetector(db_path)
-        report = detector.detect(
-            current_window_days=current_window_days,
-            previous_window_days=previous_window_days,
-        )
-        detector.save_report(report)
-        return report.to_dict()
+        report = detector.get_latest_report()
+        if recompute or report is None:
+            fresh = detector.detect(
+                current_window_days=current_window_days,
+                previous_window_days=previous_window_days,
+            )
+            detector.save_report(fresh)
+            report = fresh.to_dict()
+        return report
 
     @router.get("/topics")
-    async def get_mined_topics(window_days: int = 14):
-        """Get auto-mined topic candidates."""
+    async def get_mined_topics(recompute: bool = False, window_days: int = 14):
+        """Get the latest saved auto-mined topic candidates.
+
+        Returns the most recent saved report; pass `recompute=true` to
+        re-mine from the content library and update the cache.
+        """
         miner = TopicMiner(db_path)
-        report = miner.mine(window_days=window_days)
-        miner.save_report(report)
-        return report.to_dict()
+        report = miner.get_latest_report()
+        if recompute or report is None:
+            fresh = miner.mine(window_days=window_days)
+            miner.save_report(fresh)
+            report = fresh.to_dict()
+        return report
 
     @router.get("/knowledge-cards")
     async def list_knowledge_cards(limit: int = 50, card_type: str | None = None):
@@ -109,11 +127,19 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         return card.to_dict()
 
     @router.get("/knowledge-graph")
-    async def get_knowledge_graph(limit: int = 500, min_mentions: int = 2):
-        """Build and return the personal knowledge graph."""
+    async def get_knowledge_graph(
+        recompute: bool = False, limit: int = 500, min_mentions: int = 2
+    ):
+        """Get the latest saved personal knowledge graph.
+
+        Returns the most recent saved graph; pass `recompute=true` to
+        rebuild from the content library and update the cache.
+        """
         builder = KnowledgeGraphBuilder(db_path)
-        graph = builder.build(limit=limit, min_mentions=min_mentions)
-        builder.save_graph(graph)
+        graph = builder.load_latest_graph()
+        if recompute or graph is None:
+            graph = builder.build(limit=limit, min_mentions=min_mentions)
+            builder.save_graph(graph)
         return graph.to_dict()
 
     @router.get("/knowledge-graph/entity/{entity_id}")

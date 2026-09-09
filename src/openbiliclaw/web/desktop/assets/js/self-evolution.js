@@ -8,9 +8,10 @@
 (function () {
   "use strict";
 
-  const API = {
+  const SELF_EVO_API = {
     status: "/api/self-evolution/status",
     insightReports: "/api/self-evolution/insight-reports",
+    insightReport: (id) => `/api/self-evolution/insight-reports/${id}`,
     generateInsight: "/api/self-evolution/insight-reports/generate",
     drift: "/api/self-evolution/drift",
     topics: "/api/self-evolution/topics",
@@ -50,6 +51,13 @@ function openSelfEvolutionPage() {
   document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
   window.showMainPage("selfEvolutionPage");
   loadSelfEvoStatus();
+  // 纯展示：打开页面即加载各模块已有数据，不做重新计算
+  loadLatestInsight();
+  loadLatestDrift();
+  loadLatestTopics();
+  loadLatestCards();
+  loadLatestGraph();
+  loadNotifications();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -89,6 +97,23 @@ function showLoading(id) {
 }
 
 // ===== Insight Report =====
+async function loadLatestInsight() {
+  try {
+    const res = await fetch(SELF_EVO_API.insightReports + "?limit=1");
+    const data = await res.json();
+    const reports = data.reports || [];
+    if (reports.length === 0) {
+      setHTML("insightReportContent", '<p class="self-evo-empty">暂无洞察报告，点击下方按钮生成</p>');
+      return;
+    }
+    const detailRes = await fetch(SELF_EVO_API.insightReport(reports[0].report_id));
+    const detail = await detailRes.json();
+    if (detail && !detail.error) renderInsightReport(detail);
+  } catch (error) {
+    console.error("Failed to load insight report", error);
+  }
+}
+
 async function generateInsightReport() {
   showLoading("insightReportContent");
   try {
@@ -138,10 +163,24 @@ function renderInsightReport(data) {
 }
 
 // ===== Interest Drift =====
+async function loadLatestDrift() {
+  try {
+    const res = await fetch(SELF_EVO_API.drift);
+    const data = await res.json();
+    if (data && data.report_id) {
+      renderDrift(data);
+    } else {
+      setHTML("driftContent", '<p class="self-evo-empty">暂无漂移分析，点击下方按钮分析</p>');
+    }
+  } catch (error) {
+    console.error("Failed to load drift", error);
+  }
+}
+
 async function analyzeDrift() {
   showLoading("driftContent");
   try {
-    const res = await fetch(SELF_EVO_API.drift + "?current_window_days=7&previous_window_days=30");
+    const res = await fetch(SELF_EVO_API.drift + "?recompute=true");
     const data = await res.json();
     selfEvoState.driftData = data;
     renderDrift(data);
@@ -204,10 +243,24 @@ function renderDrift(data) {
 }
 
 // ===== Topic Mining =====
+async function loadLatestTopics() {
+  try {
+    const res = await fetch(SELF_EVO_API.topics);
+    const data = await res.json();
+    if (data && data.report_id) {
+      renderTopics(data);
+    } else {
+      setHTML("topicsContent", '<p class="self-evo-empty">暂无候选专题，点击下方按钮挖掘</p>');
+    }
+  } catch (error) {
+    console.error("Failed to load topics", error);
+  }
+}
+
 async function mineTopics() {
   showLoading("topicsContent");
   try {
-    const res = await fetch(SELF_EVO_API.topics + "?window_days=14");
+    const res = await fetch(SELF_EVO_API.topics + "?recompute=true");
     const data = await res.json();
     selfEvoState.topicsData = data;
     renderTopics(data);
@@ -244,6 +297,16 @@ function renderTopics(data) {
 }
 
 // ===== Knowledge Cards =====
+async function loadLatestCards() {
+  try {
+    const res = await fetch(SELF_EVO_API.knowledgeCards + "?limit=50");
+    const data = await res.json();
+    renderCards(data);
+  } catch (error) {
+    console.error("Failed to load knowledge cards", error);
+  }
+}
+
 async function generateCards() {
   showLoading("cardsContent");
   try {
@@ -356,10 +419,24 @@ function renderReviewCard() {
 }
 
 // ===== Knowledge Graph =====
+async function loadLatestGraph() {
+  try {
+    const res = await fetch(SELF_EVO_API.knowledgeGraph);
+    const data = await res.json();
+    if (data && data.generated_at) {
+      renderGraph(data);
+    } else {
+      setHTML("graphContent", '<p class="self-evo-empty">暂无知识图谱，点击下方按钮构建</p>');
+    }
+  } catch (error) {
+    console.error("Failed to load knowledge graph", error);
+  }
+}
+
 async function buildGraph() {
   showLoading("graphContent");
   try {
-    const res = await fetch(SELF_EVO_API.knowledgeGraph + "?limit=500&min_mentions=2");
+    const res = await fetch(SELF_EVO_API.knowledgeGraph + "?recompute=true");
     const data = await res.json();
     selfEvoState.graphData = data;
     renderGraph(data);

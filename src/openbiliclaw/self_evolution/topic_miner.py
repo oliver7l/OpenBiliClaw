@@ -401,3 +401,28 @@ class TopicMiner:
             conn.commit()
         finally:
             conn.close()
+
+    def get_latest_report(self) -> dict[str, Any] | None:
+        """Load the most recent saved mining report as a dict, or None."""
+        import json
+
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS topic_mining_reports (
+                    report_id TEXT PRIMARY KEY,
+                    generated_at TEXT,
+                    window_days INTEGER,
+                    report_json TEXT
+                )
+                """
+            )
+            row = conn.execute(
+                "SELECT report_json FROM topic_mining_reports ORDER BY generated_at DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return json.loads(row["report_json"])
+            return None
+        finally:
+            conn.close()
