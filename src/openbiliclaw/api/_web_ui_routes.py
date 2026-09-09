@@ -247,8 +247,10 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
 
     # ── Clone Sites static mount ──────────────────────────────────
     # Serves cloned sites under /clone/sites/{slug} so they can be
-    # previewed in the browser.
-    _clone_sites_dir = _web_dir / "clone" / "sites"
+    # previewed in the browser. Sites live in <data>/clone-sites/.
+    from openbiliclaw.clone.paths import resolve_clone_sites_dir
+
+    _clone_sites_dir = resolve_clone_sites_dir(getattr(ctx, "database", None))
     if _clone_sites_dir.is_dir():
         app.mount(
             "/clone/sites",

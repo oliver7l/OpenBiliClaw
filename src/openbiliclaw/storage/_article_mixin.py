@@ -309,11 +309,15 @@ class ArticleMixin:
     # ── 文章详情与搜索 ──────────────────────────────────────────────
 
     def get_readarchive_article(self, article_id: int) -> dict[str, Any] | None:
-        """Fetch a single read_archive article including its full body."""
+        """Fetch a single read_archive article including its full body.
+
+        read_archive 表保留在主库（见 _schema_mixin 注释），因此这里必须使用
+        主库连接 ``self.conn`` 而非 content.db 的 ``self._content``。
+        """
         from openbiliclaw.storage.database import logger
 
         try:
-            cursor = self._content.execute(
+            cursor = self.conn.execute(
                 """SELECT id, source_type, source_name, title, url, author,
                            summary, content_text, published_at, tags,
                            created_at, updated_at
@@ -325,6 +329,114 @@ class ArticleMixin:
         except Exception:
             logger.exception("Failed to fetch read_archive article %d", article_id)
             return None
+
+    def get_recent_readarchive(
+        self,
+        limit: int = 24,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get recent read_archive entries, optionally filtered by source_type/tag.
+
+        read_archive 表位于主库，必须用 ``self.conn``。``tag`` 匹配 tags JSON 数组。
+        """
+        from openbiliclaw.storage.database import logger
+
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            cursor = self.conn.execute(
+                f"""SELECT id, source_type, source_name, title, url, author,
+                           summary, content_text, published_at, tags,
+                           created_at, updated_at
+                    FROM read_archive
+                    {where}
+                    ORDER BY published_at DESC, created_at DESC
+                    LIMIT ? OFFSET ?""",
+                (*params, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to query read_archive")
+            return []
+
+    def count_readarchive(
+        self,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> int:
+        """Count read_archive entries matching the same filters as get_recent_readarchive."""
+        from openbiliclaw.storage.database import logger
+
+        try:
+            conditions: list[str] = []
+            params: list[Any] = []
+            if source_type:
+                conditions.append("source_type = ?")
+                params.append(source_type)
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            cursor = self.conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM read_archive {where}", tuple(params)
+            )
+            row = cursor.fetchone()
+            return int(row["cnt"]) if row else 0
+        except Exception:
+            logger.exception("Failed to count read_archive")
+            return 0
+
+    def search_readarchive(
+        self,
+        q: str,
+        limit: int = 24,
+        offset: int = 0,
+        source_type: str | None = None,
+        tag: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Full-text search over the read_archive table (LIKE fallback)."""
+        from openbiliclaw.storage.database import logger
+
+        q = (q or "").strip()
+        if not q:
+            return []
+        cols = (
+            "id, source_type, source_name, title, url, author, summary, "
+            "content_text, published_at, tags, created_at, updated_at"
+        )
+        filters: list[str] = []
+        fparams: list[Any] = []
+        if source_type:
+            filters.append("source_type = ?")
+            fparams.append(source_type)
+        if tag:
+            filters.append("tags LIKE ?")
+            fparams.append(f'%"{tag}"%')
+        fsql = (" AND " + " AND ".join(filters)) if filters else ""
+        like = f"%{q}%"
+        try:
+            cursor = self.conn.execute(
+                f"""SELECT {cols} FROM read_archive
+                    WHERE (title LIKE ? OR content_text LIKE ?
+                          OR tags LIKE ? OR author LIKE ? OR summary LIKE ?)
+                          {fsql}
+                    ORDER BY published_at DESC, created_at DESC
+                    LIMIT ? OFFSET ?""",
+                (like, like, like, like, like, *fparams, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("Failed to search read_archive")
+            return []
 
     def search_articles(
         self,

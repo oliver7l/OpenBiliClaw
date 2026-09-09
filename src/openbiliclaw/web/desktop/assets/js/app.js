@@ -1503,6 +1503,20 @@
       "diary-enhanced-center.js",
     ];
 
+    // ── 概念知识库 state（提前声明，避免 routeFromPath 初始化时访问未初始化变量）──
+    // app.js 解析早期 routeFromPath() 会调用 openKnowledgePage，若 _knowledge
+    // 未提前声明将触发 "Cannot access '_knowledge' before initialization"。
+    const _knowledge = {
+      concepts: [],
+      total: 0,
+      searchTerm: "",
+      sourceFilter: "",
+      offset: 0,
+      limit: 50,
+      loading: false,
+      hasMore: true,
+    };
+
     // ── 日记系统 Diary state（提前声明，避免 routeFromPath 初始化时访问未初始化变量）──
     const diaryState = {
       entries: [],
@@ -4931,16 +4945,6 @@ safeBind("#knowledgeBtn", "click", () => navigateTo("/web/knowledge"));
     }
 
     /* ═══ 概念知识库 ═══ */
-    const _knowledge = {
-      concepts: [],
-      total: 0,
-      searchTerm: "",
-      sourceFilter: "",
-      offset: 0,
-      limit: 50,
-      loading: false,
-      hasMore: true,
-    };
 
     function openKnowledgePage() {
       closeMobileMenu();
