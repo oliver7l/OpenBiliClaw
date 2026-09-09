@@ -70,6 +70,21 @@ CREATE INDEX IF NOT EXISTS idx_inbox_pool_status ON content_cache (pool_status);
 CREATE INDEX IF NOT EXISTS idx_inbox_source_platform ON content_cache (source_platform);
 """
 
+# articles 表 DDL（精简版，只包含 producer 写入的字段；合并到主库）
+_INBOX_ARTICLES_DDL = """
+CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    source_name TEXT DEFAULT '',
+    title TEXT NOT NULL,
+    url TEXT NOT NULL UNIQUE,
+    author TEXT DEFAULT '',
+    content_text TEXT DEFAULT '',
+    published_at TEXT DEFAULT '',
+    tags TEXT DEFAULT '[]'
+);
+"""
+
 
 def get_inbox_dir(data_dir: str | Path = "data") -> Path:
     """获取 inbox 子库目录，不存在则创建。"""
@@ -96,6 +111,7 @@ def connect_inbox(platform: str, data_dir: str | Path = "data") -> sqlite3.Conne
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(_INBOX_CONTENT_CACHE_DDL)
+    conn.executescript(_INBOX_ARTICLES_DDL)
     return conn
 
 

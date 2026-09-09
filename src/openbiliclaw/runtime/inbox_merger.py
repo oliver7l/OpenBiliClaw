@@ -37,85 +37,122 @@ _MERGE_COLUMNS = [
 ]
 
 
-def merge_inbox(platform: str, pool_db_path: str | Path, data_dir: str | Path = "data") -> dict:
-    """合并单个 platform 的 inbox 子库到 pool.db。
+def merge_inbox(
+    platform: str,
+    pool_db_path: str | Path,
+    main_db_path: str | Path = "data/openbiliclaw.db",
+    data_dir: str | Path = "data",
+) -> dict:
+    """合并单个 platform 的 inbox 子库到 pool.db（content_cache）和主库（articles）。
 
-    返回合并统计: {platform, pending, merged, skipped, cleared}
+    返回合并统计: {platform, cache_pending, cache_merged, articles_merged, cleared}
     """
     inbox_path = get_inbox_path(platform, data_dir)
     if not inbox_path.exists():
-        return {"platform": platform, "pending": 0, "merged": 0, "skipped": 0, "cleared": 0}
+        return {"platform": platform, "cache_pending": 0, "cache_merged": 0, "articles_merged": 0, "cleared": 0}
 
+    # ── 1. 合并 content_cache 到 pool.db ──
     pool_conn = sqlite3.connect(str(pool_db_path), timeout=60.0)
+    cache_merged = 0
+    cache_pending = 0
     try:
-        # ATTACH inbox 子库
         pool_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
-
-        # 统计待合并数量
-        pending = pool_conn.execute("SELECT COUNT(*) FROM inbox.content_cache").fetchone()[0]
-        if pending == 0:
-            pool_conn.execute("DETACH DATABASE inbox")
-            return {"platform": platform, "pending": 0, "merged": 0, "skipped": 0, "cleared": 0}
-
-        # INSERT OR IGNORE 合并到总库
-        cols = ", ".join(_MERGE_COLUMNS)
-        cursor = pool_conn.execute(
-            f"INSERT OR IGNORE INTO content_cache ({cols}) SELECT {cols} FROM inbox.content_cache"
-        )
-        merged = cursor.rowcount
-        skipped = pending - merged
-
-        # 清空 inbox 子库
-        pool_conn.execute("DELETE FROM inbox.content_cache")
-        pool_conn.commit()
+        cache_pending = pool_conn.execute("SELECT COUNT(*) FROM inbox.content_cache").fetchone()[0]
+        if cache_pending > 0:
+            cols = ", ".join(_MERGE_COLUMNS)
+            cursor = pool_conn.execute(
+                f"INSERT OR IGNORE INTO content_cache ({cols}) SELECT {cols} FROM inbox.content_cache"
+            )
+            cache_merged = cursor.rowcount
+            pool_conn.execute("DELETE FROM inbox.content_cache")
+            pool_conn.commit()
         pool_conn.execute("DETACH DATABASE inbox")
-
-        logger.info("[%s] merged: %d new, %d duplicates (pending=%d)", platform, merged, skipped, pending)
-        return {
-            "platform": platform,
-            "pending": pending,
-            "merged": merged,
-            "skipped": skipped,
-            "cleared": merged + skipped,
-        }
     except Exception as e:
-        logger.error("[%s] merge failed: %s", platform, e)
+        logger.error("[%s] content_cache merge failed: %s", platform, e)
         pool_conn.rollback()
         try:
             pool_conn.execute("DETACH DATABASE inbox")
         except Exception:
             pass
-        return {"platform": platform, "pending": -1, "merged": 0, "skipped": 0, "cleared": 0, "error": str(e)}
     finally:
         pool_conn.close()
 
+    # ── 2. 合并 articles 到主库 ──
+    articles_merged = 0
+    articles_pending = 0
+    main_conn = sqlite3.connect(str(main_db_path), timeout=60.0)
+    try:
+        main_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
+        articles_pending = main_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]
+        if articles_pending > 0:
+            art_cols = "source_type, source_name, title, url, author, content_text, published_at, tags"
+            cursor = main_conn.execute(
+                f"INSERT OR IGNORE INTO articles ({art_cols}) SELECT {art_cols} FROM inbox.articles"
+            )
+            articles_merged = cursor.rowcount
+            main_conn.execute("DELETE FROM inbox.articles")
+            main_conn.commit()
+        main_conn.execute("DETACH DATABASE inbox")
+    except Exception as e:
+        logger.error("[%s] articles merge failed: %s", platform, e)
+        main_conn.rollback()
+        try:
+            main_conn.execute("DETACH DATABASE inbox")
+        except Exception:
+            pass
+    finally:
+        main_conn.close()
 
-def merge_all(pool_db_path: str | Path, data_dir: str | Path = "data") -> list[dict]:
-    """合并所有 inbox 子库到 pool.db。"""
+    total = cache_pending + articles_pending
+    logger.info(
+        "[%s] merged: cache %d new (%d pending), articles %d new (%d pending)",
+        platform, cache_merged, cache_pending, articles_merged, articles_pending,
+    )
+    return {
+        "platform": platform,
+        "cache_pending": cache_pending,
+        "cache_merged": cache_merged,
+        "articles_merged": articles_merged,
+        "cleared": total,
+    }
+
+
+def merge_all(
+    pool_db_path: str | Path,
+    main_db_path: str | Path = "data/openbiliclaw.db",
+    data_dir: str | Path = "data",
+) -> list[dict]:
+    """合并所有 inbox 子库到 pool.db（content_cache）和主库（articles）。"""
     platforms = list_inbox_platforms(data_dir)
     results = []
     for platform in sorted(platforms):
-        results.append(merge_inbox(platform, pool_db_path, data_dir))
+        results.append(merge_inbox(platform, pool_db_path, main_db_path, data_dir))
         time.sleep(0.5)  # 合并之间短暂间隔
     return results
 
 
-def run_forever(pool_db_path: str | Path, interval_minutes: int = 5, data_dir: str | Path = "data") -> None:
+def run_forever(
+    pool_db_path: str | Path,
+    interval_minutes: int = 5,
+    main_db_path: str | Path = "data/openbiliclaw.db",
+    data_dir: str | Path = "data",
+) -> None:
     """定期合并所有 inbox 子库。"""
     logger.info("inbox merger started (interval=%dmin)", interval_minutes)
     while True:
         cycle_start = time.time()
-        results = merge_all(pool_db_path, data_dir)
-        total_merged = sum(r.get("merged", 0) for r in results)
-        total_pending = sum(r.get("pending", 0) for r in results if r.get("pending", 0) > 0)
+        results = merge_all(pool_db_path, main_db_path, data_dir)
+        total_cache = sum(r.get("cache_merged", 0) for r in results)
+        total_articles = sum(r.get("articles_merged", 0) for r in results)
         elapsed = time.time() - cycle_start
-        logger.info("cycle done: %d merged, %d pending in %.0fs", total_merged, total_pending, elapsed)
+        logger.info("cycle done: %d cache + %d articles merged in %.0fs", total_cache, total_articles, elapsed)
         time.sleep(interval_minutes * 60)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Inbox sub-database merger")
     parser.add_argument("--pool-db", default="data/pool.db", help="Path to pool.db (default: data/pool.db)")
+    parser.add_argument("--main-db", default="data/openbiliclaw.db", help="Path to main db (default: data/openbiliclaw.db)")
     parser.add_argument("--data-dir", default="data", help="Data directory (default: data)")
     parser.add_argument("--interval", type=int, default=5, help="Merge interval in minutes (default: 5)")
     parser.add_argument("--once", action="store_true", help="Run only one merge cycle then exit")
@@ -128,14 +165,14 @@ def main() -> None:
     )
 
     if args.platform:
-        result = merge_inbox(args.platform, args.pool_db, args.data_dir)
+        result = merge_inbox(args.platform, args.pool_db, args.main_db, args.data_dir)
         print(result)
     elif args.once:
-        results = merge_all(args.pool_db, args.data_dir)
+        results = merge_all(args.pool_db, args.main_db, args.data_dir)
         for r in results:
             print(r)
     else:
-        run_forever(args.pool_db, args.interval, args.data_dir)
+        run_forever(args.pool_db, args.interval, args.main_db, args.data_dir)
 
 
 if __name__ == "__main__":
