@@ -38,7 +38,7 @@ _GETNOTE_MAX_POLLS = 6  # 单篇最多收割轮数，超出视为无法获取并
 _GETNOTE_MAX_PENDING = 200  # 在途待收割队列上限（避免积压/触发平台风控）
 _GETNOTE_SAVE_TIMEOUT = 110  # save 提交阻塞等待，实测约 58s
 _GETNOTE_NOTE_TIMEOUT = 60  # note 读取超时
-_GETNOTE_SEED_PER_CALL = 3  # 单轮最多播种（save 慢，防止阻塞 tick 太久）
+_GETNOTE_SEED_PER_CALL = 8  # 单轮最多播种（平衡日吞吐与平台风控）
 _GETNOTE_HARVEST_PER_CALL = 10  # 单轮最多收割
 # 历史笔记回收：早期 save 超时丢 note_id 的笔记已就绪，每轮顺带枚举最近笔记，
 # 按 title 匹配本库缺正文文章直接收割写回，弥补早期损耗。
@@ -486,14 +486,25 @@ class ContentFiller:
         - **阶段B · 播种**: 队列有容量时，为缺正文的新文章 ``save`` 并写入
           ``main_db.getnote_pending``，**立即返回不等待**，异步内容下一轮再收割。
 
-        读取失败不再累加 ``body_fetch_attempts``（那是给“正文抓不到”的永久
-        跳过机制），异步等待本身是正常现象。
+        ``limit`` 由调用方按每日配额节奏传入（默认批次较小，避免一次性灌入
+        过多触发平台风控）；读取失败不再累加 ``body_fetch_attempts``。
         """
         return {
             **await self._harvest_getnote_pending(min(limit, _GETNOTE_HARVEST_PER_CALL)),
             **await self._reclaim_seen_notes(),
             **await self._seed_getnote_pending(min(limit, _GETNOTE_SEED_PER_CALL)),
         }
+
+    async def absorb_from_getnote(self) -> dict[str, int]:
+        """每日低频率「平台笔记吸收」（内容源入库）。
+
+        与高频 ``fetch_via_getnote``（每 6 分钟 收割+播种）分离：全量 ``--all``
+        拉取平台笔记较重且有风控特征，故独立每日执行一次，将平台已有就绪内容
+        补录进库（新建 + 补全）。
+        """
+        import asyncio as _asyncio
+
+        return await _asyncio.to_thread(self._import_orphan_notes)
 
     # ── 阶段A：收割已就绪的笔记 ────────────────────────────────────
     async def _harvest_getnote_pending(
@@ -608,14 +619,24 @@ class ContentFiller:
     def _norm_title(text: str | None) -> str:
         return (text or "").replace(" ", "").replace("\u3000", "").lower()
 
-    def _fetch_recent_notes(self, subprocess: object, limit: int) -> list[dict]:
-        """枚举平台最近笔记，用于 title 匹配回收历史已就绪笔记。"""
+    def _fetch_recent_notes(
+        self, subprocess: object, limit: int, *, all_notes: bool = False
+    ) -> list[dict]:
+        """枚举平台笔记。
+
+        - ``all_notes=False``：``--limit`` 拉最近 N 条（注意：平台实际固定返回最近
+          20 条，--limit 会被忽略），用于 title 匹配回收刚播种的历史笔记。
+        - ``all_notes=True``：``--all`` 自动翻页拉全量笔记（可拿 500+），用于
+          「内容源入库」——把平台上本地完全没有的笔记新建入库。
+        """
         import json as _json
 
-        cmd = ["getnote", "notes", "--limit", str(limit), "-o", "json"]
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=90
+        cmd = (
+            ["getnote", "notes", "--all", "-o", "json"]
+            if all_notes
+            else ["getnote", "notes", "--limit", str(limit), "-o", "json"]
         )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
         if proc.returncode != 0:
             return []
         try:
@@ -666,6 +687,165 @@ class ContentFiller:
         if reclaimed:
             logger.info("content_filler: getnote reclaimed %d 篇历史已就绪笔记", reclaimed)
         return {"reclaimed": reclaimed}
+
+    def _import_orphan_notes(self) -> dict[str, int]:
+        """「getnote 平台当作内容源」：把平台上有、本地完全没收录的笔记新建入库。
+
+        前置回收段 ``_reclaim_seen_notes`` 只补全「本地缺正文、有对应标题」的
+        文章；本方法补齐另一半——平台笔记在本地库里根本没有对应篇目时，直接
+        新建为一条新文章（url = getnote://note_<note_id>）存入 content.db，供
+        后续 RAG / 推荐池消费。
+
+        约束：
+        - 仅当平台笔记带 content（智能总结）才入库，避免无效空条目；
+        - url 用 ``getnote://note_<note_id>`` 去重，与本地剪藏 ``getnote://<file_id>`` 隔离；
+        - 标题归一化去重，已存在相同标题者跳过；
+        - 过滤「测试 / 个人日记」类噪声标题，避免污染内容库。
+        """
+        import re
+        import subprocess
+
+        # 噪声标题：平台 AI 生成的测试帖、纯个人生活流水帐、超短含糊标题
+        _NOISE_PATTERNS = re.compile(
+            r"^(测试|test|t2|t3|超时测试|统计测试|调试|temp|tmp$)"
+            r"|测试(YouTube|知乎|b站|bilibili|视频|链接|save|单篇)"
+            r"|^(视频面试-[^·]{0,6}|与\w+的日常|带娃日常|.*趣事|家庭小插曲)"
+            r"|^[a-z0-9]{4,6}$",
+            re.IGNORECASE,
+        )
+
+        notes = self._fetch_recent_notes(subprocess, _GETNOTE_RECLAIM_LIMIT, all_notes=True)
+        if not notes:
+            return {"imported": 0}
+
+        conn = self._conn()
+        try:
+            # url 去重键：getnote://note_<id>
+            existing_urls = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT url FROM articles WHERE url IS NOT NULL AND url != ''"
+                )
+            }
+            # 标题 → (article_id, 是否有正文, 是否有ai_summary)
+            title_map: dict[str, tuple[int, bool, bool]] = {}
+            for r in conn.execute(
+                "SELECT id, title, content_text, ai_summary FROM articles"
+            ):
+                t = self._norm_title(r[1])
+                if t and t not in title_map:
+                    title_map[t] = (
+                        r[0],
+                        bool(r[2] and (r[2] or "").strip()),
+                        bool(r[3] and (r[3] or "").strip()),
+                    )
+        finally:
+            conn.close()
+
+        imported = 0
+        harvested = 0
+        for note in notes:
+            nid = str(note.get("note_id") or note.get("id") or "")
+            if not nid:
+                continue
+            nurl = f"getnote://note_{nid}"
+            title = (note.get("title") or "").strip()
+            nm = self._norm_title(title)
+            content = (note.get("content") or "").strip()
+            if not nm or not content or len(content) < 40:
+                continue
+            if _NOISE_PATTERNS.search(title or ""):
+                continue
+            existing = title_map.get(nm)
+            if existing is None:
+                # 情况①：标题不在本地 → 新建入库
+                if nurl in existing_urls:
+                    continue
+                imported += self._upsert_getnote_article(nid, nurl, note, content)
+                existing_urls.add(nurl)
+                title_map[nm] = (0, True, True)
+            else:
+                # 情况②：标题已在本地 → 若缺正文缺摘要则用平台总结收割写回
+                aid, has_body, has_sum = existing
+                if aid and not (has_body and has_sum):
+                    try:
+                        # _save_getnote_harvest 会把 content 同时写入正文与 ai_summary
+                        self._save_getnote_harvest(aid, "", content)
+                        harvested += 1
+                        title_map[nm] = (aid, True, True)
+                        logger.debug(
+                            "getnote: harvested article %d note %s (整改)", aid, nid
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "getnote: harvest article %d note %s failed: %s", aid, nid, exc
+                        )
+
+        if imported or harvested:
+            logger.info(
+                "content_filler: getnote absorb → imported %d / harvested(补全) %d",
+                imported,
+                harvested,
+            )
+        return {"imported": imported, "harvested": harvested}
+
+    def _upsert_getnote_article(
+        self, nid: str, nurl: str, note: dict, content: str
+    ) -> int:
+        """把平台一条本地没有的笔记新建为一条文章，返回 1（成功）或 0。"""
+        import json as _json
+
+        title = (note.get("title") or "").strip()
+        tag_names = [
+            (t.get("name") if isinstance(t, dict) else str(t))
+            for t in (note.get("tags") or [])
+            if not isinstance(t, dict) or t.get("type") != "system"
+        ]
+        tags = ["getnote"] + [n for n in tag_names if n]
+        try:
+            wconn = self._conn()
+            created = wconn.execute(
+                """INSERT INTO articles (source_type, source_name, title, url,
+                    summary, content_text, published_at, tags, ai_summary,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           datetime('now','localtime'), datetime('now','localtime'))
+                   ON CONFLICT(url) DO UPDATE SET
+                    title=excluded.title,
+                    content_text=CASE
+                      WHEN excluded.content_text <> '' THEN excluded.content_text
+                      ELSE articles.content_text END,
+                    ai_summary=CASE
+                      WHEN excluded.ai_summary IS NULL THEN excluded.ai_summary
+                      ELSE articles.ai_summary END,
+                    updated_at=datetime('now','localtime')""",
+                (
+                    "getnote",
+                    "GetNote",
+                    title,
+                    nurl,
+                    title,
+                    content[:20000],
+                    (note.get("created_at") or "").replace("T", " ")[:19],
+                    _json.dumps(tags, ensure_ascii=False),
+                    _json.dumps(
+                        {
+                            "core": "",
+                            "key_points": [],
+                            "explanation": content[:5000],
+                            "source": "getnote",
+                        },
+                        ensure_ascii=False,
+                    ),
+                ),
+            )
+            wconn.commit()
+            wconn.close()
+            logger.debug("getnote: imported orphan article %s note %s", created.lastrowid, nid)
+            return 1
+        except Exception as exc:
+            logger.debug("getnote: import orphan note %s failed: %s", nid, exc)
+            return 0
 
     def _save_getnote_harvest(self, article_id: int, web: str, ai: str) -> None:
         """写回正文+AI摘要（正文优先原始网页正文，否则用平台智能总结兜底）。"""

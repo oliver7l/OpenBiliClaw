@@ -44,11 +44,6 @@ _BATCH_MAX_HOURS = 24
 _MIN_CONTENT_CHARS = 200
 # How many articles to process in one batch for LLM-heavy tasks
 _BATCH_PROCESS_LIMIT = 15
-# getnote 高频补正文通道：独立于 batch 门槛，按较密节奏播种并收割。
-# 依据得到大脑 write_note 日配额(1000/天)合理分配：每天播种约 250 篇，
-# 留足安全余量防风控，越限即熔断至次日。
-_GETNOTE_DISPATCH_INTERVAL = 600  # 每 10 分钟唤醒一次
-_GETNOTE_DAILY_TARGET = 250  # 每日播种目标(save 次数)，达成后熔断至次日
 
 # ---------------------------------------------------------------------------
 # Persistent state
@@ -174,7 +169,7 @@ class ContentFilter:
     def count_new_articles(conn: sqlite3.Connection, since_id: int) -> int:
         """How many articles have been added since ``since_id``."""
         row = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM articles WHERE id > ?", (since_id,)
+            "SELECT COUNT(*) AS cnt FROM content.articles WHERE id > ?", (since_id,)
         ).fetchone()
         return row["cnt"] if row else 0
 
@@ -200,7 +195,7 @@ class ContentFilter:
             f"a.id > {since_id}",
         ]
         if exclude_with_tldr:
-            conditions.append("a.id NOT IN (SELECT article_id FROM article_tldrs)")
+            conditions.append("a.id NOT IN (SELECT article_id FROM content.article_tldrs)")
         if exclude_with_cards:
             conditions.append("a.id NOT IN (SELECT source_article_id FROM knowledge_cards)")
 
@@ -218,7 +213,7 @@ class ContentFilter:
                                        AND e.event_type = 'view')
                         THEN 1
                         ELSE 0 END AS quality_score
-            FROM articles a
+            FROM content.articles a
             WHERE {where_clause}
             ORDER BY quality_score DESC, a.id DESC
             LIMIT ?
@@ -233,11 +228,11 @@ class ContentFilter:
         """Count articles that are new and long enough to process."""
         row = conn.execute(
             """
-            SELECT COUNT(*) AS cnt FROM articles a
+            SELECT COUNT(*) AS cnt FROM content.articles a
             WHERE a.id > ?
               AND a.content_text IS NOT NULL
               AND length(a.content_text) >= ?
-              AND a.id NOT IN (SELECT article_id FROM article_tldrs)
+              AND a.id NOT IN (SELECT article_id FROM content.article_tldrs)
               AND a.id NOT IN (SELECT source_article_id FROM knowledge_cards)
             """,
             (since_id, min_chars),
@@ -287,7 +282,7 @@ class SlidingWindowStats:
             topic_rows = conn.execute(
                 """
                 SELECT topic_group, COUNT(*) AS cnt
-                FROM articles
+                FROM content.articles
                 WHERE created_at >= ? AND topic_group IS NOT NULL
                 GROUP BY topic_group
                 ORDER BY cnt DESC LIMIT 30
@@ -300,7 +295,7 @@ class SlidingWindowStats:
             plat_rows = conn.execute(
                 """
                 SELECT source_type, COUNT(*) AS cnt
-                FROM articles
+                FROM content.articles
                 WHERE created_at >= ?
                 GROUP BY source_type
                 ORDER BY cnt DESC
@@ -310,7 +305,7 @@ class SlidingWindowStats:
             platforms = {r["source_type"]: r["cnt"] for r in plat_rows}
 
             total = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM articles WHERE created_at >= ?",
+                "SELECT COUNT(*) AS cnt FROM content.articles WHERE created_at >= ?",
                 (cutoff,),
             ).fetchone()["cnt"]
 
@@ -433,6 +428,15 @@ class SelfEvolutionLoopEngine:
 
         with open_db_conn(self._db_path) as conn:
             conn.row_factory = sqlite3.Row
+            # v0.4.0+: articles/article_tldrs 迁到 content.db，主库连接需 ATTACH
+            # content 别名，SQL 以 content.articles / content.article_tldrs 前缀访问
+            # （与 SelfEvolutionState._get_conn 的 ATTACH 保持一致）。
+            from contextlib import suppress as _suppress
+
+            _content_path = Path(str(self._db_path)).with_name("content.db")
+            if _content_path.exists():
+                with _suppress(Exception):
+                    conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
 
             # ── Check batch accumulation ────────────────────────────────────
             since_id = self._state.last_processed_article_id
@@ -523,15 +527,6 @@ class SelfEvolutionLoopEngine:
                     1,
                     results,
                     lambda: self._do_content_filler_ai(),
-                )
-            # Getnote fill: every tick, up to 5 articles (via getnote platform)
-            # 优先处理视频来源（YouTube/B站/小红书等），日上限 ~120
-            if self._quota_ok():
-                await self._run_if_due(
-                    "content_filler_getnote",
-                    1,
-                    results,
-                    lambda: self._do_content_filler_getnote(),
                 )
 
         # ── Step 4: TL;DR (batch) ───────────────────────────────────────────
@@ -657,7 +652,7 @@ class SelfEvolutionLoopEngine:
 
     def _update_last_id(self, conn: sqlite3.Connection) -> None:
         try:
-            row = conn.execute("SELECT MAX(id) AS max_id FROM articles").fetchone()
+            row = conn.execute("SELECT MAX(id) AS max_id FROM content.articles").fetchone()
             if row and row["max_id"]:
                 self._state.last_processed_article_id = int(row["max_id"])
         except Exception:
@@ -830,20 +825,6 @@ class SelfEvolutionLoopEngine:
             return result
         except Exception:
             logger.debug("content_filler: ai_summary failed", exc_info=True)
-            return None
-
-    async def _do_content_filler_getnote(self) -> dict[str, int] | None:
-        """通过得到大脑平台填充正文+AI摘要，优先处理视频类链接。"""
-        try:
-            from openbiliclaw.self_evolution.content_filler import ContentFiller
-
-            filler = ContentFiller(self._db_path)
-            result = await filler.fetch_via_getnote()
-            if result and (result.get("seeded") or result.get("harvested")):
-                logger.info("content_filler: getnote done: %s", result)
-            return result
-        except Exception:
-            logger.debug("content_filler: getnote failed", exc_info=True)
             return None
 
     async def _do_diary_analysis(self) -> dict[int, DiaryAnalysis | None] | None:

@@ -38,6 +38,17 @@ _PLATFORM_SOURCE_ORDER = ("bilibili", "xiaohongshu", "douyin", "youtube", "twitt
 _BILIBILI_DISCOVERY_SOURCES = ("search", "related_chain", "trending", "explore")
 _PROBE_CHALLENGE_MODES = {"lateral", "bridge", "wildcard"}
 
+# getnote 播种（补正文）调度：每批 POST 少量缺正文文章的 URL，稍后收割回补。
+# 节奏目标每日 800 条：每批 _GETNOTE_SEED_PER_BATCH 条、每 _GETNOTE_DISPATCH_INTERVAL
+# 秒一批，全天约 864 条；配合当日配额熔断（今日剩余额度或累计播种满 800 即停），
+# 避免高频密集写入触发平台风控。
+_GETNOTE_DISPATCH_INTERVAL = 5 * 60  # 每 5 分钟一批
+_GETNOTE_SEED_PER_BATCH = 3  # 每批最多播种条数（800/天 余量）
+_GETNOTE_DAILY_TARGET = 800  # 每日播种目标(save 次数)，达成后熔断至次日
+# getnote 平台内容吸收（每日一次）：全量 --all 拉取平台已有就绪笔记补录入库，
+# 独立于播种通道低频执行，避免反复高频轮询在平台留下过重访问痕迹。
+_GETNOTE_ABSORB_INTERVAL = 24 * 60 * 60
+
 
 def _call_accepts_limit(fn: Any) -> bool:
     """Return whether a producer callable accepts a ``limit=`` keyword."""

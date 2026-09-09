@@ -14,6 +14,10 @@ from typing import Any, cast
 
 from openbiliclaw.runtime._refresh_shared import (
     _COVER_PREFETCH_INTERVAL_SECONDS,
+    _GETNOTE_ABSORB_INTERVAL,
+    _GETNOTE_DAILY_TARGET,
+    _GETNOTE_DISPATCH_INTERVAL,
+    _GETNOTE_SEED_PER_BATCH,
     _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS,
     _MAX_DISCOVERY_BACKFILL_PER_REFRESH,
     RefreshControllerAttrs,
@@ -146,10 +150,16 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
                 self._loop_cover_prefetch(),
             ),
             self._spawn_loop(
-                "getnote_filler",
-                "getnote补正文",
-                600,  # 每 10 分钟一批（见 loop_engine._GETNOTE_DISPATCH_INTERVAL）
+                "getnote_fill",
+                "getnote补正文播种",
+                _GETNOTE_DISPATCH_INTERVAL,
                 self._loop_content_filler_getnote(),
+            ),
+            self._spawn_loop(
+                "getnote_absorb",
+                "getnote平台内容吸收",
+                _GETNOTE_ABSORB_INTERVAL,
+                self._loop_content_filler_absorb(),
             ),
             self._spawn_loop(
                 "self_evolution",
@@ -211,69 +221,146 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
             raise
 
     async def _loop_content_filler_getnote(self) -> None:
-        """getnote 补正文独立高频通道（每 10 分钟）。
+        """getnote 补正文播种通道（按频受控）。
 
-        不受自进化 batch 门槛约束，独立调度：每轮播种少量文章并收割已就绪
-        的异步笔记；按得到大脑 ``write_note`` 日配额自动熔断（达成每日目标后
-        暂停至次日），避免撞到平台日上限触发风控。
+        恢复低频播种：每批 ``_GETNOTE_SEED_PER_BATCH`` 条缺正文文章的 URL 提交
+        平台抓取，稍后收割回补正文+摘要。节奏目标每日 800 条，配合当日配额
+        熔断——今日 write_note 剩余额度不足，或累计已达当日目标，即睡到次日。
         """
         raw = getattr(getattr(self, "database", None), "_db_path", None)
         db_path: str = str(raw) if raw else "data/openbiliclaw.db"
 
         while True:
             try:
-                if await self._getnote_check_quota_target():
-                    continue  # 已熔断睡到次日，醒后继续
+                if await self._getnote_check_quota():
+                    continue  # 熔断：已睡到次日
                 from openbiliclaw.self_evolution.content_filler import ContentFiller
 
                 filler = ContentFiller(db_path)
-                result = await filler.fetch_via_getnote()
-                if result and (result.get("seeded") or result.get("harvested")):
-                    logger.info("content_filler: getnote done: %s", result)
+                result = await filler.fetch_via_getnote(limit=_GETNOTE_SEED_PER_BATCH)
+                if result:
+                    seeded = int(result.get("seeded") or 0)
+                    if seeded:
+                        await asyncio.to_thread(self._bump_getnote_seeded_today, seeded)
+                    if seeded or result.get("harvested"):
+                        logger.info("content_filler: getnote done: %s", result)
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.debug("content_filler: getnote high-freq tick failed", exc_info=True)
-            await asyncio.sleep(600)  # 每 10 分钟一批
+                logger.debug("content_filler: getnote seed tick failed", exc_info=True)
+            await asyncio.sleep(_GETNOTE_DISPATCH_INTERVAL)
 
-    async def _getnote_check_quota_target(self) -> bool:
-        """检查得到大脑 write_note 今日用量，达到目标后睡到次日并返回 True。"""
-        used = await asyncio.to_thread(self._getnote_daily_write_note_used)
-        if used is None:  # 解析失败，保守放行（由低频调度兜底）
+    async def _loop_content_filler_absorb(self) -> None:
+        """getnote 平台内容吸收（每日一次：全量拉取平台已就绪笔记补录入库）。
+
+        低频执行：将平台上本地没有的笔记新建入库、本地缺正文/摘要的用平台
+        总结补全，避免频次过高在平台留下过多访问痕迹（风控）及占用过重。
+        """
+        raw = getattr(getattr(self, "database", None), "_db_path", None)
+        db_path: str = str(raw) if raw else "data/openbiliclaw.db"
+
+        while True:
+            try:
+                from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+                filler = ContentFiller(db_path)
+                result = await filler.absorb_from_getnote()
+                if result and (result.get("imported") or result.get("harvested")):
+                    logger.info(
+                        "content_filler: getnote absorb done: %s", result
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug(
+                    "content_filler: getnote absorb tick failed", exc_info=True
+                )
+            await asyncio.sleep(_GETNOTE_ABSORB_INTERVAL)  # 每日一次
+
+    async def _getnote_check_quota(self) -> bool:
+        """按当日配额决定是否熔断播种，返回 True 表示已睡到次日。
+
+        双重判断：
+        1. 平台 write_note 今日剩余额度（remaining）够一整个批次才放行，
+           否则直接睡到次日；
+        2. 本服务当日累计播种量（persist 在 self_evolution_state）达
+           ``_GETNOTE_DAILY_TARGET`` 即熔断至次日。
+        """
+        remaining = await asyncio.to_thread(self._getnote_daily_write_note_remaining)
+        if remaining is None:  # 解析失败，保守放行（每批仅 3 条，风险低）
             return False
-        if used >= 250:
-            logger.info("getnote: 今日 write_note 已达目标 %d，暂停播种至次日", used)
-            now = datetime.now()
-            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
-            await asyncio.sleep(max(0, (tomorrow - now).total_seconds()))
+        if remaining < _GETNOTE_SEED_PER_BATCH:
+            logger.info("getnote: 今日 write_note 仅剩 %d，暂停播种至次日", remaining)
+            await self._sleep_until_next_day()
+            return True
+
+        seeded_today = await asyncio.to_thread(self._getnote_seeded_today)
+        if seeded_today >= _GETNOTE_DAILY_TARGET:
+            logger.info(
+                "getnote: 今日已播种 %d ≥ 目标 %d，熔断至次日",
+                seeded_today, _GETNOTE_DAILY_TARGET,
+            )
+            await self._sleep_until_next_day()
             return True
         return False
 
-    def _getnote_daily_write_note_used(self) -> int | None:
-        """解析 ``getnote quota -o json`` 的 write_note 今日用量。
-
-        真实结构：``data.write_note.daily.used``。
-        """
+    def _getnote_daily_write_note_remaining(self) -> int | None:
+        """解析 ``getnote quota -o json`` 的 write_note 今日剩余额度。"""
         import json
         import subprocess
 
         try:
             proc = subprocess.run(
                 ["getnote", "quota", "-o", "json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
+                capture_output=True, text=True, timeout=30,
             )
             if proc.returncode != 0:
                 return None
             payload = json.loads(proc.stdout or "{}")
             data = payload.get("data") if isinstance(payload, dict) else None
             daily = (data or {}).get("write_note", {}).get("daily") or {}
-            used = daily.get("used")
-            return int(used) if used is not None else None
+            remaining = daily.get("remaining")
+            return int(remaining) if remaining is not None else None
         except Exception:
-            logger.debug("content_filler: quota parse failed", exc_info=True)
+            logger.debug("content_filler: getnote quota parse failed", exc_info=True)
             return None
+
+    def _getnote_seeded_today(self) -> int:
+        """返回当日已播种条数（按本地日期分片持久化）。"""
+        day_key = datetime.now().strftime("%Y-%m-%d")
+        try:
+            from openbiliclaw.self_evolution.loop_engine import SelfEvolutionState
+
+            state = SelfEvolutionState(
+                getattr(getattr(self, "database", None), "_db_path", None) or "data/openbiliclaw.db"
+            )
+            val = state.get(f"getnote_seeded_{day_key}")
+            return int(val) if val else 0
+        except Exception:
+            return 0
+
+    def _bump_getnote_seeded_today(self, delta: int) -> None:
+        """累加当日已播种条数，供配额熔断计数。"""
+        if delta <= 0:
+            return
+        now = datetime.now()
+        day_key = now.strftime("%Y-%m-%d")
+        try:
+            from openbiliclaw.self_evolution.loop_engine import SelfEvolutionState
+
+            state = SelfEvolutionState(
+                getattr(getattr(self, "database", None), "_db_path", None) or "data/openbiliclaw.db"
+            )
+            current = int(state.get(f"getnote_seeded_{day_key}") or 0)
+            state.set(f"getnote_seeded_{day_key}", str(current + delta))
+        except Exception:
+            logger.debug("content_filler: bump getnote seeded failed", exc_info=True)
+
+    async def _sleep_until_next_day(self) -> None:
+        """睡到次日 00:05，等平台配额重置。"""
+        now = datetime.now()
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+        await asyncio.sleep(max(0, (tomorrow - now).total_seconds()))
 
     def get_loop_health(self) -> list[dict[str, object]]:
         """Per-loop liveness snapshot for the observability dashboard."""
