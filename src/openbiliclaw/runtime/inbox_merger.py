@@ -77,23 +77,25 @@ def merge_inbox(
     finally:
         pool_conn.close()
 
-    # ── 2. 合并 articles 到主库（带重试）──
+    # ── 2. 合并 articles 到 content.db（带重试）──
+    # v0.4.0+: articles 表迁移到 content.db，与主库锁域隔离
+    content_db_path = Path(main_db_path).with_name("content.db")
     articles_merged = 0
     articles_pending = 0
     for attempt in range(3):
-        main_conn = open_db_conn(str(main_db_path))
+        content_conn = open_db_conn(str(content_db_path))
         try:
-            main_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
-            articles_pending = main_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]
+            content_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
+            articles_pending = content_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]
             if articles_pending > 0:
                 art_cols = "source_type, source_name, title, url, author, content_text, published_at, tags"
-                cursor = main_conn.execute(
+                cursor = content_conn.execute(
                     f"INSERT OR IGNORE INTO articles ({art_cols}) SELECT {art_cols} FROM inbox.articles"
                 )
                 articles_merged = cursor.rowcount
-                main_conn.execute("DELETE FROM inbox.articles")
-                main_conn.commit()
-            main_conn.execute("DETACH DATABASE inbox")
+                content_conn.execute("DELETE FROM inbox.articles")
+                content_conn.commit()
+            content_conn.execute("DETACH DATABASE inbox")
             break  # 成功，跳出重试循环
         except Exception as e:
             if attempt < 2:
@@ -101,13 +103,13 @@ def merge_inbox(
                 time.sleep(2)
             else:
                 logger.error("[%s] articles merge failed after 3 attempts: %s", platform, e)
-            main_conn.rollback()
+            content_conn.rollback()
             try:
-                main_conn.execute("DETACH DATABASE inbox")
+                content_conn.execute("DETACH DATABASE inbox")
             except Exception:
                 pass
         finally:
-            main_conn.close()
+            content_conn.close()
 
     total = cache_pending + articles_pending
     logger.info(
