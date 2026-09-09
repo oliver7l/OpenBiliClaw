@@ -95,7 +95,7 @@ class TLDRGenerator:
     def _ensure_table(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS article_tldrs (
+            CREATE TABLE IF NOT EXISTS content.article_tldrs (
                 article_id INTEGER PRIMARY KEY,
                 title TEXT,
                 url TEXT,
@@ -215,7 +215,7 @@ class TLDRGenerator:
                 query += " AND a.favorited = 1"
 
             if not force:
-                query += " AND a.id NOT IN (SELECT article_id FROM article_tldrs)"
+                query += " AND a.id NOT IN (SELECT article_id FROM content.article_tldrs)"
 
             query += " ORDER BY a.created_at DESC LIMIT ?"
             params.append(limit)
@@ -239,7 +239,7 @@ class TLDRGenerator:
         try:
             self._ensure_table(conn)
             row = conn.execute(
-                "SELECT * FROM article_tldrs WHERE article_id = ?", (article_id,)
+                "SELECT * FROM content.article_tldrs WHERE article_id = ?", (article_id,)
             ).fetchone()
             return self._row_to_tldr(row) if row else None
         finally:
@@ -250,7 +250,7 @@ class TLDRGenerator:
         conn = self._get_conn()
         try:
             self._ensure_table(conn)
-            query = "SELECT * FROM article_tldrs"
+            query = "SELECT * FROM content.article_tldrs"
             params: list[Any] = []
             if source_type:
                 query += " WHERE source_type = ?"
@@ -267,7 +267,7 @@ class TLDRGenerator:
         conn = self._get_conn()
         try:
             self._ensure_table(conn)
-            cursor = conn.execute("DELETE FROM article_tldrs WHERE article_id = ?", (article_id,))
+            cursor = conn.execute("DELETE FROM content.article_tldrs WHERE article_id = ?", (article_id,))
             conn.commit()
             return cursor.rowcount > 0
         finally:
@@ -499,7 +499,7 @@ class TLDRGenerator:
             key_points_json = json.dumps(tldr.key_points, ensure_ascii=False)
             conn.execute(
                 """
-                INSERT OR REPLACE INTO article_tldrs
+                INSERT OR REPLACE INTO content.article_tldrs
                 (article_id, title, url, source_type, key_points_json, conclusion,
                  reading_minutes, word_count, generated_at, model)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
