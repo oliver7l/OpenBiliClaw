@@ -824,7 +824,7 @@ class SelfEvolutionLoopEngine:
 
             filler = ContentFiller(self._db_path)
             result = await filler.fetch_via_getnote()
-            if result and result.get("fetched"):
+            if result and (result.get("seeded") or result.get("harvested")):
                 logger.info("content_filler: getnote done: %s", result)
             return result
         except Exception:
