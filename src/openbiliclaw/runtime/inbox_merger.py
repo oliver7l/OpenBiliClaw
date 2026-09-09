@@ -77,31 +77,37 @@ def merge_inbox(
     finally:
         pool_conn.close()
 
-    # ── 2. 合并 articles 到主库 ──
+    # ── 2. 合并 articles 到主库（带重试）──
     articles_merged = 0
     articles_pending = 0
-    main_conn = sqlite3.connect(str(main_db_path), timeout=60.0)
-    try:
-        main_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
-        articles_pending = main_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]
-        if articles_pending > 0:
-            art_cols = "source_type, source_name, title, url, author, content_text, published_at, tags"
-            cursor = main_conn.execute(
-                f"INSERT OR IGNORE INTO articles ({art_cols}) SELECT {art_cols} FROM inbox.articles"
-            )
-            articles_merged = cursor.rowcount
-            main_conn.execute("DELETE FROM inbox.articles")
-            main_conn.commit()
-        main_conn.execute("DETACH DATABASE inbox")
-    except Exception as e:
-        logger.error("[%s] articles merge failed: %s", platform, e)
-        main_conn.rollback()
+    for attempt in range(3):
+        main_conn = sqlite3.connect(str(main_db_path), timeout=60.0)
         try:
+            main_conn.execute("ATTACH DATABASE ? AS inbox", (str(inbox_path),))
+            articles_pending = main_conn.execute("SELECT COUNT(*) FROM inbox.articles").fetchone()[0]
+            if articles_pending > 0:
+                art_cols = "source_type, source_name, title, url, author, content_text, published_at, tags"
+                cursor = main_conn.execute(
+                    f"INSERT OR IGNORE INTO articles ({art_cols}) SELECT {art_cols} FROM inbox.articles"
+                )
+                articles_merged = cursor.rowcount
+                main_conn.execute("DELETE FROM inbox.articles")
+                main_conn.commit()
             main_conn.execute("DETACH DATABASE inbox")
-        except Exception:
-            pass
-    finally:
-        main_conn.close()
+            break  # 成功，跳出重试循环
+        except Exception as e:
+            if attempt < 2:
+                logger.warning("[%s] articles merge attempt %d failed, retrying: %s", platform, attempt + 1, e)
+                time.sleep(2)
+            else:
+                logger.error("[%s] articles merge failed after 3 attempts: %s", platform, e)
+            main_conn.rollback()
+            try:
+                main_conn.execute("DETACH DATABASE inbox")
+            except Exception:
+                pass
+        finally:
+            main_conn.close()
 
     total = cache_pending + articles_pending
     logger.info(
