@@ -231,7 +231,9 @@ class TestStorageIntegration:
         from openbiliclaw.knowledge_forge.entity_extractor import EntityExtractor
 
         db = self._make_db()
-        conn = sqlite3.connect(db)
+        # P8：entities 独立存于兄弟 knowledge.db
+        knowledge = db.with_name("knowledge.db")
+        conn = sqlite3.connect(knowledge)
         conn.executescript(
             """
             CREATE TABLE entities (
@@ -251,7 +253,7 @@ class TestStorageIntegration:
         e1 = extractor._upsert_entity("AgenticRec", "topic")
         e2 = extractor._upsert_entity("AgenticRec", "concept")  # 同名不同 type → 复用
         assert e1 == e2
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(knowledge)
         n = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
         conn.close()
         assert n == 1
@@ -267,9 +269,6 @@ class TestStorageIntegration:
             CREATE TABLE articles (
                 id INTEGER PRIMARY KEY, source_type TEXT, title TEXT, tags TEXT,
                 content_text TEXT, published_at TEXT, created_at TEXT
-            );
-            CREATE TABLE entities (
-                id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, article_count INTEGER
             );
             CREATE TABLE gap_analysis_tasks (
                 id INTEGER PRIMARY KEY, status TEXT, started_at TEXT, completed_at TEXT,
@@ -291,6 +290,21 @@ class TestStorageIntegration:
         )
         conn.commit()
         conn.close()
+        # P8：entities 独立存于兄弟 knowledge.db
+        knowledge = db.with_name("knowledge.db")
+        kconn = sqlite3.connect(knowledge)
+        kconn.executescript(
+            """
+            CREATE TABLE entities (
+                id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, article_count INTEGER
+            );
+            """
+        )
+        kconn.execute(
+            "INSERT INTO entities (name, type, article_count) VALUES ('冷门主题', 'topic', 2)"
+        )
+        kconn.commit()
+        kconn.close()
 
         result = GapAnalyst(db_path=db).run()
         assert result["gaps_found"] >= 1

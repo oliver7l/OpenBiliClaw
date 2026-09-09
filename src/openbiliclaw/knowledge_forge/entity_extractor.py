@@ -228,7 +228,7 @@ class EntityExtractor:
         conn = self._connect()
         try:
             row = conn.execute(
-                "SELECT id, type, metadata FROM entities WHERE name = ?",
+                "SELECT id, type, metadata FROM knowledge.entities WHERE name = ?",
                 (name,),
             ).fetchone()
             ts = now_cn()
@@ -240,13 +240,13 @@ class EntityExtractor:
                 if metadata:
                     old_meta.update(metadata)
                 conn.execute(
-                    "UPDATE entities SET last_updated_at = ?, metadata = ? WHERE id = ?",
+                    "UPDATE knowledge.entities SET last_updated_at = ?, metadata = ? WHERE id = ?",
                     (ts, json.dumps(old_meta, ensure_ascii=False), entity_id),
                 )
                 conn.commit()
                 return entity_id
             conn.execute(
-                "INSERT INTO entities (name, type, description, article_count,"
+                "INSERT INTO knowledge.entities (name, type, description, article_count,"
                 " first_seen_at, last_updated_at, metadata) "
                 "VALUES (?, ?, '', 0, ?, ?, ?)",
                 (name, etype, ts, ts, json.dumps(metadata or {}, ensure_ascii=False)),
@@ -269,7 +269,7 @@ class EntityExtractor:
             )
             # 计数同步
             conn.execute(
-                "UPDATE entities SET article_count ="
+                "UPDATE knowledge.entities SET article_count ="
                 " (SELECT COUNT(*) FROM article_entities WHERE entity_id = ?)"
                 " WHERE id = ?",
                 (entity_id, entity_id),
@@ -314,7 +314,7 @@ class EntityExtractor:
         conn = self._connect()
         try:
             rows = conn.execute(
-                "SELECT name FROM entities WHERE type = 'topic'"
+                "SELECT name FROM knowledge.entities WHERE type = 'topic'"
                 " ORDER BY article_count DESC LIMIT ?",
                 (limit,),
             ).fetchall()

@@ -466,7 +466,7 @@ class XhsCreatorStore:
         self._ensure_table()
 
     def _ensure_table(self) -> None:
-        self._db.conn.executescript("""
+        self._db._discovery.executescript("""
             CREATE TABLE IF NOT EXISTS xhs_creator_subscriptions (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 creator_id      TEXT NOT NULL UNIQUE,
@@ -484,32 +484,32 @@ class XhsCreatorStore:
         display_name: str,
     ) -> None:
         """Add a subscription (ignore if duplicate creator_id)."""
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "INSERT OR IGNORE INTO xhs_creator_subscriptions "
             "(creator_id, creator_url, display_name) VALUES (?, ?, ?)",
             (creator_id, creator_url, display_name),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
 
     def list_all(self) -> list[dict[str, Any]]:
         """Return all subscriptions."""
-        rows = self._db.conn.execute(
+        rows = self._db._discovery.execute(
             "SELECT * FROM xhs_creator_subscriptions ORDER BY added_at"
         ).fetchall()
         return [dict(r) for r in rows]
 
     def delete(self, sub_id: int) -> bool:
         """Delete a subscription by primary key. Returns True if deleted."""
-        cursor = self._db.conn.execute(
+        cursor = self._db._discovery.execute(
             "DELETE FROM xhs_creator_subscriptions WHERE id = ?",
             (sub_id,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
         return cursor.rowcount > 0
 
     def due_for_fetch(self, *, hours: int = 24) -> list[dict[str, Any]]:
         """Return subscriptions whose last_fetched_at is older than ``hours`` ago."""
-        rows = self._db.conn.execute(
+        rows = self._db._discovery.execute(
             "SELECT * FROM xhs_creator_subscriptions "
             "WHERE last_fetched_at IS NULL "
             "   OR last_fetched_at < datetime('now', ?)",
@@ -519,8 +519,8 @@ class XhsCreatorStore:
 
     def mark_fetched(self, sub_id: int) -> None:
         """Update last_fetched_at to now."""
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "UPDATE xhs_creator_subscriptions SET last_fetched_at = CURRENT_TIMESTAMP WHERE id = ?",
             (sub_id,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()

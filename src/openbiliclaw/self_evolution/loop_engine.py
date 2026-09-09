@@ -197,7 +197,7 @@ class ContentFilter:
         if exclude_with_tldr:
             conditions.append("a.id NOT IN (SELECT article_id FROM content.article_tldrs)")
         if exclude_with_cards:
-            conditions.append("a.id NOT IN (SELECT source_article_id FROM knowledge_cards)")
+            conditions.append("a.id NOT IN (SELECT source_article_id FROM knowledge.knowledge_cards)")
 
         where_clause = " AND ".join(conditions)
 
@@ -233,7 +233,7 @@ class ContentFilter:
               AND a.content_text IS NOT NULL
               AND length(a.content_text) >= ?
               AND a.id NOT IN (SELECT article_id FROM content.article_tldrs)
-              AND a.id NOT IN (SELECT source_article_id FROM knowledge_cards)
+              AND a.id NOT IN (SELECT source_article_id FROM knowledge.knowledge_cards)
             """,
             (since_id, min_chars),
         ).fetchone()

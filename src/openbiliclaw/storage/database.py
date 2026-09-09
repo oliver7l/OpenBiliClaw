@@ -138,7 +138,11 @@ def open_db_conn(
     # 与 Database 自身连接保持一致。ATTACH 别名恒等于子库文件名（pool ↔ pool.db、
     # events ↔ events.db），避免 act/activity 等多套叫法。
     _base = Path(db_path)
-    for _alias, _sibling in (("pool", _base.with_name("pool.db")), ("events", _base.with_name("events.db"))):
+    for _alias, _sibling in (
+        ("pool", _base.with_name("pool.db")),
+        ("events", _base.with_name("events.db")),
+        ("knowledge", _base.with_name("knowledge.db")),
+    ):
         if _sibling.exists():
             conn.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_sibling),))
     return conn
@@ -354,63 +358,8 @@ CREATE TABLE IF NOT EXISTS pool.content_cache (
 -- Unified raw discovery candidate queue.
 -- Producers enqueue platform-specific raw content here; evaluators claim
 -- mixed-source batches and only accepted items advance into content_cache.
-CREATE TABLE IF NOT EXISTS discovery_candidates (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidate_key         TEXT NOT NULL UNIQUE,
-    status                TEXT NOT NULL DEFAULT 'pending_eval',
-    source_platform       TEXT NOT NULL DEFAULT '',
-    source_strategy       TEXT NOT NULL DEFAULT '',
-    source_context        TEXT NOT NULL DEFAULT '',
-    content_type          TEXT NOT NULL DEFAULT 'video',
-    body_text             TEXT NOT NULL DEFAULT '',
-    bvid                  TEXT NOT NULL DEFAULT '',
-    content_id            TEXT NOT NULL DEFAULT '',
-    content_url           TEXT NOT NULL DEFAULT '',
-    title                 TEXT NOT NULL DEFAULT '',
-    author_name           TEXT NOT NULL DEFAULT '',
-    up_name               TEXT NOT NULL DEFAULT '',
-    up_mid                INTEGER NOT NULL DEFAULT 0,
-    description           TEXT NOT NULL DEFAULT '',
-    cover_url             TEXT NOT NULL DEFAULT '',
-    duration              INTEGER NOT NULL DEFAULT 0,
-    view_count            INTEGER NOT NULL DEFAULT 0,
-    like_count            INTEGER NOT NULL DEFAULT 0,
-    favorite_count        INTEGER NOT NULL DEFAULT 0,
-    collect_count         INTEGER NOT NULL DEFAULT 0,
-    comment_count         INTEGER NOT NULL DEFAULT 0,
-    share_count           INTEGER NOT NULL DEFAULT 0,
-    danmaku_count         INTEGER NOT NULL DEFAULT 0,
-    reply_count           INTEGER NOT NULL DEFAULT 0,
-    retweet_count         INTEGER NOT NULL DEFAULT 0,
-    bookmark_count        INTEGER NOT NULL DEFAULT 0,
-    tags                  TEXT NOT NULL DEFAULT '[]',
-    candidate_tier        TEXT NOT NULL DEFAULT 'primary',
-    score_threshold       REAL NOT NULL DEFAULT 0.0,
-    raw_payload           TEXT NOT NULL DEFAULT '{}',
-    source_keyword_id     INTEGER,
-    topic_key             TEXT NOT NULL DEFAULT '',
-    topic_group           TEXT NOT NULL DEFAULT '',
-    style_key             TEXT NOT NULL DEFAULT '',
-    franchise_key         TEXT NOT NULL DEFAULT '',
-    relevance_score       REAL NOT NULL DEFAULT 0.0,
-    relevance_reason      TEXT NOT NULL DEFAULT '',
-    pool_expression       TEXT NOT NULL DEFAULT '',
-    pool_topic_label      TEXT NOT NULL DEFAULT '',
-    eval_error            TEXT NOT NULL DEFAULT '',
-    eval_attempts         INTEGER NOT NULL DEFAULT 0,
-    batch_eval_attempts   INTEGER NOT NULL DEFAULT 0,
-    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_seen_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    claimed_at            TIMESTAMP,
-    evaluated_at          TIMESTAMP,
-    cached_at             TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_discovery_candidates_status_seen
-    ON discovery_candidates(status, last_seen_at, id);
-CREATE INDEX IF NOT EXISTS idx_discovery_candidates_source_status
-    ON discovery_candidates(source_platform, status);
-CREATE INDEX IF NOT EXISTS idx_discovery_candidates_content_id
-    ON discovery_candidates(source_platform, content_id);
+-- discovery_candidates DDL now lives in discovery.db (created via _discovery_conn);
+-- removed from main schema as part of db sharding P5 finalization.
 
 -- Recommendation history
 CREATE TABLE IF NOT EXISTS pool.recommendations (
@@ -455,7 +404,8 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 -- 知识库概念索引：记录每个概念出现在哪些文章中
-CREATE TABLE IF NOT EXISTS knowledge_concepts (
+-- P8：knowledge_concepts/backlinks 独立存于 knowledge.db，故用 knowledge. 前缀
+CREATE TABLE IF NOT EXISTS knowledge.knowledge_concepts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     concept         TEXT NOT NULL,
     concept_type    TEXT NOT NULL DEFAULT '',
@@ -465,17 +415,17 @@ CREATE TABLE IF NOT EXISTS knowledge_concepts (
     context_snippet TEXT NOT NULL DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_concept
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_concepts_concept
     ON knowledge_concepts(concept);
-CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_type
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_concepts_type
     ON knowledge_concepts(concept_type);
-CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_source_article
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_concepts_source_article
     ON knowledge_concepts(source_article_id);
-CREATE INDEX IF NOT EXISTS idx_knowledge_concepts_site
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_concepts_site
     ON knowledge_concepts(source_site);
 
 -- 知识库反向链接：A 文章（source）引用了 B 文章（target）
-CREATE TABLE IF NOT EXISTS knowledge_backlinks (
+CREATE TABLE IF NOT EXISTS knowledge.knowledge_backlinks (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     source_article_id  INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
     source_title    TEXT NOT NULL DEFAULT '',
@@ -487,11 +437,11 @@ CREATE TABLE IF NOT EXISTS knowledge_backlinks (
     context_snippet TEXT NOT NULL DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_source
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_backlinks_source
     ON knowledge_backlinks(source_article_id);
-CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_target
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_backlinks_target
     ON knowledge_backlinks(target_concept);
-CREATE INDEX IF NOT EXISTS idx_knowledge_backlinks_site
+CREATE INDEX IF NOT EXISTS knowledge.idx_knowledge_backlinks_site
     ON knowledge_backlinks(source_site);
 """
 
@@ -649,6 +599,10 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # 独立存放，与主库锁域隔离。
         self._content_db_path = self._db_path.with_name("content.db")
         self._content_conn: sqlite3.Connection | None = None
+        # 知识库 knowledge.db：知识图谱域表（entities/topics/knowledge_cards/
+        # insight_reports/learning_paths 等 11 张）独立存放，与主库锁域隔离。
+        # 主库 ATTACH 为 knowledge，SQL 以 knowledge. 前缀显式访问。P8。
+        self._knowledge_db_path = self._db_path.with_name("knowledge.db")
         self._conn: sqlite3.Connection | None = None
         # v0.3.x: per-thread connection slot. The same Database instance is
         # now touched from more than one OS thread — the FastAPI request
@@ -786,6 +740,23 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS events", (str(self._events_db_path),))
 
+    def _ensure_knowledge_database(self) -> None:
+        """Ensure the knowledge sub-database (knowledge.db) exists.
+
+        hosts 知识图谱域 11 张表（entities/topics/knowledge_cards/
+        insight_reports/learning_paths 等），与主库锁域隔离。生产库由
+        scripts/migrate_knowledge_db.py 迁移结构+数据；全新环境首次启动
+        时由主库 _schema_mixin 以 knowledge. 前缀幂等补齐。
+        """
+        self._knowledge_db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(self._knowledge_db_path), timeout=30.0) as k_conn:
+            k_conn.execute("PRAGMA journal_mode=WAL")
+
+    def _attach_knowledge(self, conn: sqlite3.Connection) -> None:
+        """ATTACH the knowledge sub-database to a connection (idempotent, alias knowledge)."""
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS knowledge", (str(self._knowledge_db_path),))
+
     # ── LLM 用量子库（llm.db）──────────────────────────────────────────
     # 极高频写入的 llm_usage 表（每次 LLM 调用都写）独立存放，
     # 与主库锁域隔离，避免 billing 写入阻塞核心业务。
@@ -806,6 +777,62 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         );
         CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
         CREATE INDEX IF NOT EXISTS idx_llm_usage_provider ON llm_usage(provider, model);
+    """
+
+    # discovery_candidates 属于 discovery.db（P5），与主库 schema 解耦。
+    # 全新环境首次启动时幂等建表；生产库由迁移脚本先建好，此处不会覆盖。
+    _DISCOVERY_CANDIDATES_SCHEMA = """
+        CREATE TABLE IF NOT EXISTS discovery_candidates (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_key         TEXT NOT NULL UNIQUE,
+            status                TEXT NOT NULL DEFAULT 'pending_eval',
+            source_platform       TEXT NOT NULL DEFAULT '',
+            source_strategy       TEXT NOT NULL DEFAULT '',
+            source_context        TEXT NOT NULL DEFAULT '',
+            content_type          TEXT NOT NULL DEFAULT 'video',
+            body_text             TEXT NOT NULL DEFAULT '',
+            bvid                  TEXT NOT NULL DEFAULT '',
+            content_id            TEXT NOT NULL DEFAULT '',
+            content_url           TEXT NOT NULL DEFAULT '',
+            title                 TEXT NOT NULL DEFAULT '',
+            author_name           TEXT NOT NULL DEFAULT '',
+            up_name               TEXT NOT NULL DEFAULT '',
+            up_mid                INTEGER NOT NULL DEFAULT 0,
+            description           TEXT NOT NULL DEFAULT '',
+            cover_url             TEXT NOT NULL DEFAULT '',
+            duration              INTEGER NOT NULL DEFAULT 0,
+            view_count            INTEGER NOT NULL DEFAULT 0,
+            like_count            INTEGER NOT NULL DEFAULT 0,
+            favorite_count        INTEGER NOT NULL DEFAULT 0,
+            collect_count         INTEGER NOT NULL DEFAULT 0,
+            comment_count         INTEGER NOT NULL DEFAULT 0,
+            share_count           INTEGER NOT NULL DEFAULT 0,
+            danmaku_count         INTEGER NOT NULL DEFAULT 0,
+            reply_count           INTEGER NOT NULL DEFAULT 0,
+            retweet_count         INTEGER NOT NULL DEFAULT 0,
+            bookmark_count        INTEGER NOT NULL DEFAULT 0,
+            tags                  TEXT NOT NULL DEFAULT '[]',
+            candidate_tier        TEXT NOT NULL DEFAULT 'primary',
+            score_threshold       REAL NOT NULL DEFAULT 0.0,
+            raw_payload           TEXT NOT NULL DEFAULT '{}',
+            source_keyword_id     INTEGER,
+            topic_key             TEXT NOT NULL DEFAULT '',
+            topic_group           TEXT NOT NULL DEFAULT '',
+            style_key             TEXT NOT NULL DEFAULT '',
+            franchise_key         TEXT NOT NULL DEFAULT '',
+            relevance_score       REAL NOT NULL DEFAULT 0.0,
+            relevance_reason      TEXT NOT NULL DEFAULT '',
+            pool_expression       TEXT NOT NULL DEFAULT '',
+            pool_topic_label      TEXT NOT NULL DEFAULT '',
+            eval_error            TEXT NOT NULL DEFAULT '',
+            eval_attempts         INTEGER NOT NULL DEFAULT 0,
+            batch_eval_attempts   INTEGER NOT NULL DEFAULT 0,
+            created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            claimed_at            TIMESTAMP,
+            evaluated_at          TIMESTAMP,
+            cached_at             TIMESTAMP
+        );
     """
 
     def _ensure_llm_database(self) -> None:
@@ -864,9 +891,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             )
         }
         if "discovery_candidates" not in existing:
-            ddl = self._extract_create_table_sql(_SCHEMA_SQL, "discovery_candidates")
-            if ddl:
-                self._discovery_conn.executescript(ddl)
+            self._discovery_conn.executescript(self._DISCOVERY_CANDIDATES_SCHEMA)
             self._discovery_conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_discovery_candidates_status_seen "
                 "ON discovery_candidates(status, last_seen_at, id)"
@@ -965,6 +990,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._attach_events(self._conn)
         with suppress(sqlite3.OperationalError):
             self._conn.execute("PRAGMA events.journal_mode=WAL")
+        # 知识子库：确保 knowledge.db 存在后 ATTACH，使 knowledge.* 前缀落到知识 schema
+        self._ensure_knowledge_database()
+        self._attach_knowledge(self._conn)
         # LLM 用量库：独立连接，极高频写入的 llm_usage 表与主库锁域隔离
         self._init_llm_connection()
         # Discovery 库：独立连接，搜索发现相关表与主库锁域隔离
@@ -1038,6 +1066,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             local_conn.execute("PRAGMA mmap_size = 268435456")
             self._attach_pool(local_conn)
             self._attach_events(local_conn)
+            self._attach_knowledge(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -1058,6 +1087,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         conn.execute("PRAGMA mmap_size = 268435456")
         self._attach_pool(conn)
         self._attach_events(conn)
+        self._attach_knowledge(conn)
         return conn
 
     def _ensure_fresh_read(self) -> None:

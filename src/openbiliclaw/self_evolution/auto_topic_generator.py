@@ -170,7 +170,7 @@ class AutoTopicGenerator:
         with self._get_conn() as conn:
             # 加载最新知识图谱
             row = conn.execute(
-                "SELECT graph_json FROM knowledge_graph ORDER BY id DESC LIMIT 1"
+                "SELECT graph_json FROM knowledge.knowledge_graph ORDER BY id DESC LIMIT 1"
             ).fetchone()
 
             if not row:
@@ -639,7 +639,7 @@ class AutoTopicGenerator:
         now = datetime.now(UTC).isoformat()
 
         cursor = conn.execute(
-            """INSERT INTO topics
+            """INSERT INTO knowledge.topics
                (name, slug, description, keywords, platforms, status, item_count,
                 created_at, updated_at, last_collected_at)
                VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?, ?)""",
@@ -661,7 +661,7 @@ class AutoTopicGenerator:
         if ai_summary:
             full_desc = description + "\n\n" + ai_summary if description else ai_summary
             conn.execute(
-                "UPDATE topics SET description = ? WHERE id = ?",
+                "UPDATE knowledge.topics SET description = ? WHERE id = ?",
                 (full_desc[:2000], topic_id),  # 限制长度
             )
 
@@ -678,7 +678,7 @@ class AutoTopicGenerator:
 
         # 检查是否已存在
         existing = conn.execute(
-            "SELECT id FROM topic_items WHERE topic_id = ? AND content_key = ?",
+            "SELECT id FROM knowledge.topic_items WHERE topic_id = ? AND content_key = ?",
             (topic_id, content_key),
         ).fetchone()
 
@@ -686,7 +686,7 @@ class AutoTopicGenerator:
             return  # 已存在，跳过
 
         conn.execute(
-            """INSERT INTO topic_items
+            """INSERT INTO knowledge.topic_items
                (topic_id, content_key, title, url, source_platform, source_name,
                 summary, topic_label, collected_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -705,7 +705,7 @@ class AutoTopicGenerator:
 
         # 更新专题文章计数
         conn.execute(
-            "UPDATE topics SET item_count = item_count + 1, updated_at = ? WHERE id = ?",
+            "UPDATE knowledge.topics SET item_count = item_count + 1, updated_at = ? WHERE id = ?",
             (now, topic_id),
         )
 
@@ -713,7 +713,7 @@ class AutoTopicGenerator:
         """获取已存在的专题 slug。"""
         try:
             with self._get_conn() as conn:
-                rows = conn.execute("SELECT slug FROM topics").fetchall()
+                rows = conn.execute("SELECT slug FROM knowledge.topics").fetchall()
                 return {r[0] for r in rows if r[0]}
         except Exception:
             return set()

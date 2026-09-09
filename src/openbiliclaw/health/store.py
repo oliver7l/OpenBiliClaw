@@ -75,10 +75,12 @@ from .models import (
     VitalGlucoseContext,
     Vitals,
     VitalsCreate,
+    AllergyUpdate,
 )
 
 if TYPE_CHECKING:
     from ..storage.database import Database
+
 
 _SCHEMA_SQL = """
 -- 患者档案
@@ -518,6 +520,8 @@ class HealthStore:
         return [self._row_to_patient(r) for r in rows]
 
     def _row_to_patient(self, row: sqlite3.Row) -> Patient:
+        # emergency_contact_* 列在旧库可能缺失，用 keys() 容错（sqlite3.Row 无 .get）
+        _keys = set(row.keys())
         return Patient(
             id=row["id"],
             full_name=row["full_name"],
@@ -528,9 +532,9 @@ class HealthStore:
             weight_kg=row["weight_kg"],
             phone=row["phone"],
             relationship=row["relationship"],
-            emergency_contact_name=row.get("emergency_contact_name", ""),
-            emergency_contact_phone=row.get("emergency_contact_phone", ""),
-            emergency_contact_relation=row.get("emergency_contact_relation", ""),
+            emergency_contact_name=row["emergency_contact_name"] if "emergency_contact_name" in _keys else "",
+            emergency_contact_phone=row["emergency_contact_phone"] if "emergency_contact_phone" in _keys else "",
+            emergency_contact_relation=row["emergency_contact_relation"] if "emergency_contact_relation" in _keys else "",
             notes=row["notes"],
             created_at=_parse_dt(row["created_at"]),
             updated_at=_parse_dt(row["updated_at"]),

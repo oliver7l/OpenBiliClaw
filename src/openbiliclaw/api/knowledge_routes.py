@@ -22,15 +22,20 @@ logger = logging.getLogger(__name__)
 
 
 def _conn_with_content(database: Any) -> sqlite3.Connection:
-    """返回 ATTACH 了 content.db 的主库连接（用于跨库 JOIN articles）。"""
-    conn = _conn_with_content(database)
-    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-    with suppress(Exception):
-        db_path = getattr(database, "_db_path", None)
-        if db_path:
-            content_path = Path(str(db_path)).with_name("content.db")
-            if content_path.exists():
+    """返回主库连接并 ATTACH content.db / knowledge.db（用于跨库 JOIN）。"""
+    conn = database.conn
+    db_path = getattr(database, "_db_path", None)
+    if db_path:
+        # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+        content_path = Path(str(db_path)).with_name("content.db")
+        if content_path.exists():
+            with suppress(sqlite3.OperationalError):
                 conn.execute("ATTACH DATABASE ? AS content", (str(content_path),))
+        # P8: knowledge_concepts/backlinks 独立存于 knowledge.db，ATTACH 以便加前缀访问
+        knowledge_path = Path(str(db_path)).with_name("knowledge.db")
+        if knowledge_path.exists():
+            with suppress(sqlite3.OperationalError):
+                conn.execute("ATTACH DATABASE ? AS knowledge", (str(knowledge_path),))
     return conn
 
 
@@ -62,7 +67,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
 
             # 统计
             total = conn.execute(
-                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge_concepts kc WHERE {where_clause}",
+                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge.knowledge_concepts kc WHERE {where_clause}",
                 params,
             ).fetchone()[0]
 
@@ -70,7 +75,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             rows = conn.execute(
                 f"""SELECT kc.concept, kc.concept_type, kc.source_site,
                            COUNT(*) as ref_count
-                    FROM knowledge_concepts kc
+                    FROM knowledge.knowledge_concepts kc
                     WHERE {where_clause}
                     GROUP BY kc.concept, kc.source_site
                     ORDER BY ref_count DESC
@@ -111,7 +116,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             rows = conn.execute(
                 f"""SELECT kb.source_article_id, kb.source_title, kb.source_url,
                            kb.source_site, kb.target_type, a.summary, a.tags
-                    FROM knowledge_backlinks kb
+                    FROM knowledge.knowledge_backlinks kb
                     LEFT JOIN articles a ON kb.source_article_id = a.id
                     WHERE {where_clause}
                     ORDER BY kb.source_site, kb.source_title""",
@@ -122,7 +127,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             concept_type = "concept"
             if source:
                 ct_row = conn.execute(
-                    "SELECT DISTINCT concept_type FROM knowledge_concepts"
+                    "SELECT DISTINCT concept_type FROM knowledge.knowledge_concepts"
                     " WHERE concept = ? AND source_site = ? LIMIT 1",
                     (concept_name, source),
                 ).fetchone()
@@ -130,7 +135,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
                     concept_type = ct_row[0] or "concept"
             else:
                 ct_row = conn.execute(
-                    "SELECT DISTINCT concept_type FROM knowledge_concepts"
+                    "SELECT DISTINCT concept_type FROM knowledge.knowledge_concepts"
                     " WHERE concept = ? LIMIT 1",
                     (concept_name,),
                 ).fetchone()
@@ -174,12 +179,12 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         try:
             conn = _conn_with_content(database)
             total_concepts = conn.execute(
-                "SELECT COUNT(DISTINCT concept) FROM knowledge_concepts"
+                "SELECT COUNT(DISTINCT concept) FROM knowledge.knowledge_concepts"
             ).fetchone()[0]
-            total_backlinks = conn.execute("SELECT COUNT(*) FROM knowledge_backlinks").fetchone()[0]
+            total_backlinks = conn.execute("SELECT COUNT(*) FROM knowledge.knowledge_backlinks").fetchone()[0]
 
             sources = conn.execute(
-                "SELECT source_site, COUNT(*) as cnt FROM knowledge_backlinks "
+                "SELECT source_site, COUNT(*) as cnt FROM knowledge.knowledge_backlinks "
                 "GROUP BY source_site ORDER BY cnt DESC"
             ).fetchall()
             source_stats = {r[0]: r[1] for r in sources}
@@ -206,7 +211,7 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             # 取 TOP 概念作为节点
             nodes_raw = conn.execute(
                 "SELECT concept, concept_type, source_site, COUNT(*) as w "
-                "FROM knowledge_concepts "
+                "FROM knowledge.knowledge_concepts "
                 "GROUP BY concept "
                 "ORDER BY w DESC LIMIT ?",
                 (limit,),
@@ -225,8 +230,8 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
             # 从 backlinks 构建边
             edges_raw = conn.execute(
                 """SELECT kb1.target_concept as c1, kb2.target_concept as c2, COUNT(*) as w
-                FROM knowledge_backlinks kb1
-                JOIN knowledge_backlinks kb2 ON kb1.source_article_id = kb2.source_article_id
+                FROM knowledge.knowledge_backlinks kb1
+                JOIN knowledge.knowledge_backlinks kb2 ON kb1.source_article_id = kb2.source_article_id
                     AND kb1.target_concept < kb2.target_concept
                 WHERE kb1.target_concept IN ({}) AND kb2.target_concept IN ({})
                 GROUP BY c1, c2

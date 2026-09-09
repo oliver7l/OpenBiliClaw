@@ -5690,7 +5690,7 @@ def create_app(
 
             # 统计
             total = conn.execute(
-                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge_concepts kc WHERE {where_clause}",
+                f"SELECT COUNT(DISTINCT kc.concept) FROM knowledge.knowledge_concepts kc WHERE {where_clause}",
                 params,
             ).fetchone()[0]
 
@@ -5698,7 +5698,7 @@ def create_app(
             rows = conn.execute(
                 f"""SELECT kc.concept, kc.concept_type, kc.source_site,
                            COUNT(*) as ref_count
-                    FROM knowledge_concepts kc
+                    FROM knowledge.knowledge_concepts kc
                     WHERE {where_clause}
                     GROUP BY kc.concept, kc.source_site
                     ORDER BY ref_count DESC

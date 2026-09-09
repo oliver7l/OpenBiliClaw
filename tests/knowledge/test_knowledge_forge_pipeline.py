@@ -42,10 +42,6 @@ def _make_db() -> Path:
             completed_at TEXT, total_articles INTEGER, issues_found INTEGER,
             issues_fixed INTEGER, report_path TEXT, details TEXT, created_at TEXT
         );
-        CREATE TABLE entities (
-            id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, description TEXT,
-            article_count INTEGER DEFAULT 0, first_seen_at TEXT, last_updated_at TEXT, metadata TEXT
-        );
         CREATE TABLE article_entities (
             article_id INTEGER, entity_id INTEGER, relevance REAL, context TEXT,
             PRIMARY KEY (article_id, entity_id)
@@ -58,6 +54,25 @@ def _make_db() -> Path:
     )
     conn.commit()
     conn.close()
+    # P8: entities / entity_relations 独立存于兄弟 knowledge.db（代码经 open_db_conn
+    # 附件的 knowledge.* 前缀写入），故在 tmp 目录建一个同名兄弟库承载这两张表。
+    _knowledge = Path(d) / "knowledge.db"
+    kconn = sqlite3.connect(_knowledge)
+    kconn.executescript(
+        """
+        CREATE TABLE entities (
+            id INTEGER PRIMARY KEY, name TEXT UNIQUE, type TEXT, description TEXT,
+            article_count INTEGER DEFAULT 0, first_seen_at TEXT, last_updated_at TEXT, metadata TEXT
+        );
+        CREATE TABLE entity_relations (
+            entity_id_a INTEGER, entity_id_b INTEGER, relation_type TEXT,
+            confidence REAL, description TEXT, co_occur INTEGER,
+            PRIMARY KEY (entity_id_a, entity_id_b, relation_type)
+        );
+        """
+    )
+    kconn.commit()
+    kconn.close()
     return db
 
 
@@ -521,16 +536,21 @@ class TestGapFiller:
 class TestEntityDescriptionUpdater:
     def _seed(self, db: str, *, with_article: bool = True) -> None:
         import sqlite3
+        from pathlib import Path as _Path
 
-        conn = sqlite3.connect(db)
-        conn.execute(
+        # P8：entities 存于兄弟 knowledge.db，articles/article_entities 留在主库
+        kconn = sqlite3.connect(_Path(db).with_name("knowledge.db"))
+        kconn.execute(
             "INSERT INTO entities (name, type, description, article_count, last_updated_at) "
             "VALUES ('RL', 'concept', '', 5, NULL)"
         )
-        conn.execute(
+        kconn.execute(
             "INSERT INTO entities (name, type, description, article_count, last_updated_at) "
             "VALUES ('张佳玮', 'author', '已有简介', 3, '2026-09-01 00:00:00')"
         )
+        kconn.commit()
+        kconn.close()
+        conn = sqlite3.connect(db)
         if with_article:
             conn.execute(
                 "INSERT INTO articles (id, title, url, summary_compact, published_at, created_at) "
@@ -580,7 +600,7 @@ class TestEntityDescriptionUpdater:
 
         stats = asyncio.run(EntityDescriptionUpdater(db_path=db).run(limit=10, refresh_days=30))
         assert stats["updated"] == 1 and calls["chat"] == 1
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(Path(db).with_name("knowledge.db"))
         desc = conn.execute(
             "SELECT description, last_updated_at FROM entities WHERE id=1"
         ).fetchone()
@@ -612,7 +632,7 @@ class TestEntityDescriptionUpdater:
             EntityDescriptionUpdater(db_path=db).run(limit=10, refresh_days=30, dry_run=True)
         )
         assert stats["updated"] == 1 and stats["dry_run"]
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(Path(db).with_name("knowledge.db"))
         desc = conn.execute("SELECT description FROM entities WHERE id=1").fetchone()[0]
         conn.close()
         assert not desc
@@ -648,11 +668,6 @@ class TestEntityRelationBuilder:
 
         db = _make_db()
         conn = sqlite3.connect(db)
-        conn.execute(
-            "CREATE TABLE entity_relations (entity_id_a INTEGER, entity_id_b INTEGER,"
-            " relation_type TEXT, confidence REAL, description TEXT, co_occur INTEGER,"
-            " PRIMARY KEY (entity_id_a, entity_id_b, relation_type))"
-        )
         conn.executemany(
             "INSERT INTO article_entities (article_id, entity_id) VALUES (?, ?)",
             [(1, 1), (1, 2), (2, 1), (2, 2)],
@@ -662,7 +677,7 @@ class TestEntityRelationBuilder:
 
         stats = EntityRelationBuilder(db_path=db).build(min_co_occur=1)
         assert stats["pairs_written"] == 1
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(Path(db).with_name("knowledge.db"))
         row = conn.execute(
             "SELECT entity_id_a, entity_id_b, co_occur, confidence FROM entity_relations"
         ).fetchone()

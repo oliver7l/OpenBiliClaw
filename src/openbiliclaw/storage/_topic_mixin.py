@@ -358,7 +358,7 @@ class TopicMixin:
         import json as _json
 
         cursor = self.conn.execute(
-            """INSERT INTO topics (name, slug, description, keywords, platforms, status)
+            """INSERT INTO knowledge.topics (name, slug, description, keywords, platforms, status)
                VALUES (?, ?, ?, ?, ?, 'active')""",
             (
                 name,
@@ -376,18 +376,18 @@ class TopicMixin:
         where = "" if include_paused else "WHERE status = 'active'"
         rows = self.conn.execute(
             f"""SELECT t.*,
-                       (SELECT COUNT(*) FROM topic_items i WHERE i.topic_id = t.id) AS item_count
-                FROM topics t {where}
+                       (SELECT COUNT(*) FROM knowledge.topic_items i WHERE i.topic_id = t.id) AS item_count
+                FROM knowledge.topics t {where}
                 ORDER BY t.created_at DESC, t.id DESC"""
         ).fetchall()
         return [dict(r) for r in rows]
 
     def get_topic_by_slug(self, slug: str) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT * FROM topics WHERE slug = ?", (slug,)).fetchone()
+        row = self.conn.execute("SELECT * FROM knowledge.topics WHERE slug = ?", (slug,)).fetchone()
         return dict(row) if row else None
 
     def get_topic_by_id(self, topic_id: int) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT * FROM topics WHERE id = ?", (topic_id,)).fetchone()
+        row = self.conn.execute("SELECT * FROM knowledge.topics WHERE id = ?", (topic_id,)).fetchone()
         return dict(row) if row else None
 
     def add_topic_item(self, topic_id: int, item: dict[str, Any]) -> bool:
@@ -397,13 +397,13 @@ class TopicMixin:
         if not content_key or not title:
             return False
         existing = self.conn.execute(
-            "SELECT id FROM topic_items WHERE topic_id = ? AND content_key = ?",
+            "SELECT id FROM knowledge.topic_items WHERE topic_id = ? AND content_key = ?",
             (topic_id, content_key),
         ).fetchone()
         if existing:
             return False
         self.conn.execute(
-            """INSERT INTO topic_items
+            """INSERT INTO knowledge.topic_items
                (topic_id, content_key, title, url, source_platform, source_name,
                 cover_url, summary, topic_label)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -431,7 +431,7 @@ class TopicMixin:
     ) -> list[dict[str, Any]]:
         """Return a topic's collected items, newest first."""
         rows = self.conn.execute(
-            """SELECT * FROM topic_items
+            """SELECT * FROM knowledge.topic_items
                WHERE topic_id = ?
                ORDER BY collected_at DESC, id DESC
                LIMIT ? OFFSET ?""",
@@ -441,7 +441,7 @@ class TopicMixin:
 
     def count_topic_items(self, topic_id: int) -> int:
         row = self.conn.execute(
-            "SELECT COUNT(*) AS n FROM topic_items WHERE topic_id = ?", (topic_id,)
+            "SELECT COUNT(*) AS n FROM knowledge.topic_items WHERE topic_id = ?", (topic_id,)
         ).fetchone()
         return int(row["n"]) if row else 0
 
@@ -449,7 +449,7 @@ class TopicMixin:
         """Stamp last_collected_at and refresh the stored item_count."""
         count = self.count_topic_items(topic_id)
         self.conn.execute(
-            "UPDATE topics SET last_collected_at = CURRENT_TIMESTAMP, "
+            "UPDATE knowledge.topics SET last_collected_at = CURRENT_TIMESTAMP, "
             "item_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (count, topic_id),
         )

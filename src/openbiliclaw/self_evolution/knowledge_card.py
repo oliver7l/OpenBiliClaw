@@ -475,7 +475,7 @@ class KnowledgeCardGenerator:
             now = datetime.now().isoformat()
             rows = conn.execute(
                 """
-                SELECT * FROM knowledge_cards
+                SELECT * FROM knowledge.knowledge_cards
                 WHERE next_review <= ? OR next_review IS NULL OR next_review = ''
                 ORDER BY next_review ASC
                 LIMIT ?
@@ -504,7 +504,7 @@ class KnowledgeCardGenerator:
         conn = self._get_conn()
         try:
             row = conn.execute(
-                "SELECT * FROM knowledge_cards WHERE card_id = ?",
+                "SELECT * FROM knowledge.knowledge_cards WHERE card_id = ?",
                 (card_id,),
             ).fetchone()
 
@@ -517,7 +517,7 @@ class KnowledgeCardGenerator:
             # Update in database
             conn.execute(
                 """
-                UPDATE knowledge_cards
+                UPDATE knowledge.knowledge_cards
                 SET ease_factor = ?, interval_days = ?, repetitions = ?,
                     next_review = ?, last_reviewed = ?
                 WHERE card_id = ?
@@ -545,7 +545,7 @@ class KnowledgeCardGenerator:
         try:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS knowledge_cards (
+                CREATE TABLE IF NOT EXISTS knowledge.knowledge_cards (
                     card_id TEXT PRIMARY KEY,
                     source_article_id INTEGER,
                     source_title TEXT,
@@ -567,7 +567,7 @@ class KnowledgeCardGenerator:
             )
             conn.execute(
                 """
-                INSERT OR REPLACE INTO knowledge_cards
+                INSERT OR REPLACE INTO knowledge.knowledge_cards
                 (card_id, source_article_id, source_title, source_url, card_type,
                  front, back, tags, difficulty, quality, ease_factor, interval_days,
                  repetitions, next_review, last_reviewed, created_at)
@@ -632,12 +632,12 @@ class KnowledgeCardGenerator:
         try:
             if card_type:
                 rows = conn.execute(
-                    "SELECT * FROM knowledge_cards WHERE card_type = ? ORDER BY created_at DESC LIMIT ?",
+                    "SELECT * FROM knowledge.knowledge_cards WHERE card_type = ? ORDER BY created_at DESC LIMIT ?",
                     (card_type, limit),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM knowledge_cards ORDER BY created_at DESC LIMIT ?",
+                    "SELECT * FROM knowledge.knowledge_cards ORDER BY created_at DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
             return [self._row_to_card(row) for row in rows]

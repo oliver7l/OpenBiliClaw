@@ -114,7 +114,7 @@ class EntityDescriptionUpdater:
                 where.append("type = ?")
                 params.append(entity_type)
             rows = conn.execute(
-                f"""SELECT id, name, type FROM entities
+                f"""SELECT id, name, type FROM knowledge.entities
                     WHERE {" AND ".join(where)}
                     ORDER BY article_count DESC LIMIT ?""",
                 [*params, limit],
@@ -171,7 +171,7 @@ class EntityDescriptionUpdater:
         conn = self._connect()
         try:
             conn.execute(
-                "UPDATE entities SET description = ?, last_updated_at = ? WHERE id = ?",
+                "UPDATE knowledge.entities SET description = ?, last_updated_at = ? WHERE id = ?",
                 (description, now_cn(), entity_id),
             )
             conn.commit()

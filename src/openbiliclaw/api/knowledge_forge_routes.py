@@ -67,6 +67,11 @@ def _connect(ctx: RuntimeContext) -> sqlite3.Connection | None:
     if content_path.exists():
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS content", (str(content_path),))
+    # P8: entities/entity_relations 独立存于 knowledge.db，ATTACH 以便加前缀访问
+    knowledge_path = Path(p).with_name("knowledge.db")
+    if knowledge_path.exists():
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS knowledge", (str(knowledge_path),))
     return conn
 
 
@@ -165,11 +170,11 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             size = max(1, min(int(size), 100))
             offset = max(0, (int(page) - 1) * size)
             total = conn.execute(
-                f"SELECT COUNT(*) FROM entities WHERE {' AND '.join(where)}", params
+                f"SELECT COUNT(*) FROM knowledge.entities WHERE {' AND '.join(where)}", params
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT id, name, type, description, article_count, first_seen_at,"
-                f" last_updated_at FROM entities WHERE {' AND '.join(where)}"
+                f" last_updated_at FROM knowledge.entities WHERE {' AND '.join(where)}"
                 f" ORDER BY article_count DESC, id LIMIT ? OFFSET ?",
                 [*params, size, offset],
             ).fetchall()
@@ -190,7 +195,7 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         if isinstance(conn, JSONResponse):
             return conn
         try:
-            row = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
+            row = conn.execute("SELECT * FROM knowledge.entities WHERE id = ?", (entity_id,)).fetchone()
             if row is None:
                 return _err("entity not found", 404)
             entity = dict(row)
@@ -211,8 +216,8 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             try:
                 related_rows = conn.execute(
                     """SELECT e.id, e.name, e.type, er.co_occur AS co_occur
-                       FROM entity_relations er
-                       JOIN entities e ON e.id = CASE
+                       FROM knowledge.entity_relations er
+                       JOIN knowledge.entities e ON e.id = CASE
                          WHEN er.entity_id_a = ? THEN er.entity_id_b
                          ELSE er.entity_id_a END
                        WHERE (er.entity_id_a = ? OR er.entity_id_b = ?)
@@ -227,7 +232,7 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                     """SELECT e.id, e.name, e.type, COUNT(*) AS co_occur
                        FROM article_entities me
                        JOIN article_entities oe ON oe.article_id = me.article_id
-                       JOIN entities e ON e.id = oe.entity_id
+                       JOIN knowledge.entities e ON e.id = oe.entity_id
                        WHERE me.entity_id = ? AND oe.entity_id != ?
                        GROUP BY oe.entity_id ORDER BY co_occur DESC LIMIT 8""",
                     (entity_id, entity_id),
@@ -401,7 +406,7 @@ def register_knowledge_forge_routes(app: FastAPI, ctx: RuntimeContext) -> None:
                 where.append("e.type = ?")
                 params.append(entity_type)
             entities = conn.execute(
-                f"SELECT id, name, type, article_count FROM entities e"
+                f"SELECT id, name, type, article_count FROM knowledge.entities e"
                 f" WHERE {' AND '.join(where)} ORDER BY article_count DESC LIMIT ?",
                 [*params, limit],
             ).fetchall()

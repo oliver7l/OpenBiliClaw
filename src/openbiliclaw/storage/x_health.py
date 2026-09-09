@@ -112,7 +112,7 @@ class XSourceHealthStore:
         self._ensure_table()
 
     def _ensure_table(self) -> None:
-        self._db.conn.executescript(
+        self._db._discovery.executescript(
             """
             CREATE TABLE IF NOT EXISTS x_source_health (
                 key                  TEXT PRIMARY KEY,
@@ -126,17 +126,17 @@ class XSourceHealthStore:
             );
             """
         )
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "INSERT OR IGNORE INTO x_source_health (key, state) VALUES (?, 'ok')",
             (_ROW_KEY,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
 
     # ── reads ────────────────────────────────────────────────────────
 
     def get(self) -> dict[str, Any]:
         """Return the current health row as a JSON-friendly dict."""
-        row = self._db.conn.execute(
+        row = self._db._discovery.execute(
             "SELECT * FROM x_source_health WHERE key = ?",
             (_ROW_KEY,),
         ).fetchone()
@@ -192,7 +192,7 @@ class XSourceHealthStore:
         For-You success additionally lifts the For-You auto-pause.
         """
         feed_clear = self._is_feed(strategy)
-        self._db.conn.execute(
+        self._db._discovery.execute(
             """
             UPDATE x_source_health
                SET state = 'ok',
@@ -206,7 +206,7 @@ class XSourceHealthStore:
             """,
             (1 if feed_clear else 0, 1 if feed_clear else 0, _ROW_KEY),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
 
     def clear_relogin_block(self) -> bool:
         """Clear a re-login block after a fresh valid cookie is synced.
@@ -224,7 +224,7 @@ class XSourceHealthStore:
         """
         if self.get()["state"] not in _RELOGIN_STATES:
             return False
-        self._db.conn.execute(
+        self._db._discovery.execute(
             """
             UPDATE x_source_health
                SET state = 'ok',
@@ -238,7 +238,7 @@ class XSourceHealthStore:
             """,
             (_ROW_KEY,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
         return True
 
     def record_error(self, exc: BaseException, *, strategy: str = "") -> str:
@@ -252,7 +252,7 @@ class XSourceHealthStore:
         is_feed = self._is_feed(strategy)
         current = self.get()
         # feed_failures is an internal counter (not surfaced by get()).
-        raw = self._db.conn.execute(
+        raw = self._db._discovery.execute(
             "SELECT feed_failures FROM x_source_health WHERE key = ?",
             (_ROW_KEY,),
         ).fetchone()
@@ -262,7 +262,7 @@ class XSourceHealthStore:
         feed_paused = bool(current["feed_paused"]) or (
             is_feed and feed_failures >= self._feed_pause_after
         )
-        self._db.conn.execute(
+        self._db._discovery.execute(
             """
             UPDATE x_source_health
                SET state = ?,
@@ -283,17 +283,17 @@ class XSourceHealthStore:
                 _ROW_KEY,
             ),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
         return state
 
     def set_cooldown_until(self, value: str) -> None:
         """Override the cooldown timestamp (test seam / manual recovery)."""
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "UPDATE x_source_health SET cooldown_until = ?, updated_at = CURRENT_TIMESTAMP "
             "WHERE key = ?",
             (str(value or ""), _ROW_KEY),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
 
     @staticmethod
     def _is_feed(strategy: str) -> bool:

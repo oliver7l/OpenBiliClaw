@@ -96,6 +96,39 @@ class QualityAuditor:
         self.config = config or load_kf_config()
         self.audit_cfg: AuditConfig = self.config.audit
         self.db_path = Path(db_path) if db_path else _default_db_path()
+        # 知识审计库位于 knowledge_audit.db（db sharding P3）。audit_config 已随
+        # audit_tasks/audit_issues 一并迁入，初始化时幂等建表与默认值。
+        self._ensure_audit_config()
+
+    def _ensure_audit_config(self) -> None:
+        """确保 knowledge_audit.db 存在 audit_config 表及默认配置行（幂等）。"""
+        conn = open_db_conn(self.db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS audit_config (
+                    id INTEGER PRIMARY KEY,
+                    config_key TEXT UNIQUE,
+                    config_value TEXT,
+                    description TEXT
+                );
+                """
+            )
+            conn.executescript(
+                """
+                INSERT OR IGNORE INTO audit_config (config_key, config_value, description) VALUES
+                ('min_content_length', '200', '最小内容长度（低于此值标记为过短）'),
+                ('min_summary_length', '100', '最小摘要长度（低于此值标记为缺失）'),
+                ('simhash_threshold', '0.9', 'simhash相似度阈值（高于此值标记为重复）'),
+                ('dead_link_timeout', '10', '死链检测超时时间（秒）'),
+                ('batch_size', '500', '批处理大小'),
+                ('auto_fix_enabled', 'false', '是否启用自动修复'),
+                ('dead_link_concurrency', '5', '死链检测并发数');
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------------ 主入口
     def run_full_audit(self, *, task_type: str = "full_audit") -> dict[str, Any]:

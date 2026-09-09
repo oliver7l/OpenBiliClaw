@@ -593,7 +593,7 @@ class KnowledgeGraphBuilder:
         try:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS knowledge_graph (
+                CREATE TABLE IF NOT EXISTS knowledge.knowledge_graph (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     generated_at TEXT,
                     graph_json TEXT
@@ -601,7 +601,7 @@ class KnowledgeGraphBuilder:
                 """
             )
             conn.execute(
-                "INSERT INTO knowledge_graph (generated_at, graph_json) VALUES (?, ?)",
+                "INSERT INTO knowledge.knowledge_graph (generated_at, graph_json) VALUES (?, ?)",
                 (graph.generated_at, json_mod.dumps(graph.to_dict(), ensure_ascii=False)),
             )
             conn.commit()
@@ -615,7 +615,7 @@ class KnowledgeGraphBuilder:
         conn = self._get_conn()
         try:
             row = conn.execute(
-                "SELECT graph_json FROM knowledge_graph ORDER BY generated_at DESC LIMIT 1"
+                "SELECT graph_json FROM knowledge.knowledge_graph ORDER BY generated_at DESC LIMIT 1"
             ).fetchone()
 
             if not row:

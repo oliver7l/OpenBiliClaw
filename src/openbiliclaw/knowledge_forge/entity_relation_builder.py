@@ -98,7 +98,7 @@ class EntityRelationBuilder:
         try:
             confidence = min(1.0, count / 10.0)
             conn.execute(
-                """INSERT INTO entity_relations
+                """INSERT INTO knowledge.entity_relations
                        (entity_id_a, entity_id_b, relation_type, confidence, description, co_occur)
                    VALUES (?, ?, ?, ?, ?, ?)
                    ON CONFLICT (entity_id_a, entity_id_b, relation_type) DO UPDATE SET

@@ -66,14 +66,19 @@ def _get_conn() -> sqlite3.Connection | None:
     if _content_path.exists():
         with _suppress(Exception):
             conn.execute("ATTACH DATABASE ? AS content", (str(_content_path),))
+    # P8: knowledge_concepts/backlinks 独立存于 knowledge.db，ATTACH 以便加前缀访问
+    _knowledge_path = _Path(str(db_path)).with_name("knowledge.db")
+    if _knowledge_path.exists():
+        with _suppress(Exception):
+            conn.execute("ATTACH DATABASE ? AS knowledge", (str(_knowledge_path),))
     logger.info("连接数据库: %s", db_path)
     return conn
 
 
 def _clear_tables(conn: sqlite3.Connection) -> None:
     logger.info("清空已有概念数据...")
-    conn.execute("DELETE FROM knowledge_concepts")
-    conn.execute("DELETE FROM knowledge_backlinks")
+    conn.execute("DELETE FROM knowledge.knowledge_concepts")
+    conn.execute("DELETE FROM knowledge.knowledge_backlinks")
     conn.commit()
 
 
@@ -254,13 +259,13 @@ def _build_learnbuffett(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 context = ""
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url, context_snippet) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url, context_snippet) VALUES (?, ?, ?, ?, ?, ?)",
                     (concept, link_type, "learnbuffett", source_id, source_url, context),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         source_id,
                         source_title,
@@ -335,13 +340,13 @@ def _build_mungermodels(conn: sqlite3.Connection, args: argparse.Namespace) -> t
                 link_href = link["href"].lstrip("./")
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
                     (concept, link_type, "mungermodels", source_id, source_url),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         source_id,
                         source_title,
@@ -427,13 +432,13 @@ def _build_aichainmap(conn: sqlite3.Connection, args: argparse.Namespace) -> tup
                 link_href = link["href"].lstrip("./")
 
                 conn.execute(
-                    "INSERT INTO knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_concepts (concept, concept_type, source_site, source_article_id, source_article_url) VALUES (?, ?, ?, ?, ?)",
                     (concept, link_type, "aichainmap", source_id, source_url),
                 )
                 total_concepts += 1
 
                 conn.execute(
-                    "INSERT INTO knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO knowledge.knowledge_backlinks (source_article_id, source_title, source_url, source_site, target_concept, target_type, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         source_id,
                         source_title,
@@ -503,7 +508,7 @@ def main() -> None:
 
     # TOP 概念
     stat = conn.execute(
-        "SELECT target_concept, COUNT(*) as cnt FROM knowledge_backlinks "
+        "SELECT target_concept, COUNT(*) as cnt FROM knowledge.knowledge_backlinks "
         "GROUP BY target_concept ORDER BY cnt DESC LIMIT 20"
     ).fetchall()
     logger.info("TOP 20 概念:")

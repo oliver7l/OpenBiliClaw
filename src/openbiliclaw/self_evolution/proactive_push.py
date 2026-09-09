@@ -425,7 +425,7 @@ class ProactivePushEngine:
             due_cards = 0
             try:  # noqa: SIM105
                 due_cards = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM knowledge_cards WHERE next_review <= datetime('now')"
+                    "SELECT COUNT(*) as cnt FROM knowledge.knowledge_cards WHERE next_review <= datetime('now')"
                 ).fetchone()["cnt"]
             except Exception:
                 pass  # Table might not exist

@@ -455,6 +455,15 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
         import sqlite3
 
         conn = open_db_conn(db_path)
+        # P8：知识域表独立存于 knowledge.db，统计时加 knowledge. 前缀定位到子库；
+        # 其余表仍在主库，按裸名查询。stats 键保持原名。
+        _knowledge_tables = {
+            "insight_reports",
+            "knowledge_cards",
+            "knowledge_graph",
+            "learning_paths",
+            "content_insights_reports",
+        }
         stats = {}
         for table in [
             "insight_reports",
@@ -470,7 +479,8 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
             "article_snapshots",
         ]:
             try:
-                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                _qualified = f"knowledge.{table}" if table in _knowledge_tables else table
+                count = conn.execute(f"SELECT COUNT(*) FROM {_qualified}").fetchone()[0]
                 stats[table] = count
             except Exception:
                 stats[table] = 0

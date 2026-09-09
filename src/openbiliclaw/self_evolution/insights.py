@@ -176,7 +176,7 @@ class ContentInsightsAnalyzer:
         try:
             self._ensure_table(conn)
             row = conn.execute(
-                "SELECT report_json FROM content_insights_reports ORDER BY generated_at DESC LIMIT 1"
+                "SELECT report_json FROM knowledge.content_insights_reports ORDER BY generated_at DESC LIMIT 1"
             ).fetchone()
             if not row:
                 return None
@@ -433,7 +433,7 @@ class ContentInsightsAnalyzer:
     def _ensure_table(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS content_insights_reports (
+            CREATE TABLE IF NOT EXISTS knowledge.content_insights_reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 generated_at TEXT,
                 report_json TEXT
@@ -447,7 +447,7 @@ class ContentInsightsAnalyzer:
         try:
             self._ensure_table(conn)
             conn.execute(
-                "INSERT INTO content_insights_reports (generated_at, report_json) VALUES (?, ?)",
+                "INSERT INTO knowledge.content_insights_reports (generated_at, report_json) VALUES (?, ?)",
                 (report.generated_at, json.dumps(report.to_dict(), ensure_ascii=False)),
             )
             conn.commit()

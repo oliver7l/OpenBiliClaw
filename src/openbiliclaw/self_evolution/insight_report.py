@@ -945,7 +945,7 @@ class InsightReportGenerator:
         try:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS insight_reports (
+                CREATE TABLE IF NOT EXISTS knowledge.insight_reports (
                     report_id TEXT PRIMARY KEY,
                     period_start TEXT,
                     period_end TEXT,
@@ -957,7 +957,7 @@ class InsightReportGenerator:
             )
             conn.execute(
                 """
-                INSERT OR REPLACE INTO insight_reports
+                INSERT OR REPLACE INTO knowledge.insight_reports
                 (report_id, period_start, period_end, window_days, generated_at, report_json)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
@@ -980,7 +980,7 @@ class InsightReportGenerator:
         try:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS insight_reports (
+                CREATE TABLE IF NOT EXISTS knowledge.insight_reports (
                     report_id TEXT PRIMARY KEY,
                     period_start TEXT,
                     period_end TEXT,
@@ -991,7 +991,7 @@ class InsightReportGenerator:
                 """
             )
             rows = conn.execute(
-                "SELECT report_id, period_start, period_end, window_days, generated_at FROM insight_reports ORDER BY generated_at DESC LIMIT ?",
+                "SELECT report_id, period_start, period_end, window_days, generated_at FROM knowledge.insight_reports ORDER BY generated_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -1003,7 +1003,7 @@ class InsightReportGenerator:
         conn = self._get_conn()
         try:
             row = conn.execute(
-                "SELECT report_json FROM insight_reports WHERE report_id = ?",
+                "SELECT report_json FROM knowledge.insight_reports WHERE report_id = ?",
                 (report_id,),
             ).fetchone()
             if row:

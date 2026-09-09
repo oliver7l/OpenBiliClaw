@@ -160,7 +160,7 @@ class GapAnalyst:
         gaps: list[dict[str, Any]] = []
         try:
             rows = conn.execute(
-                "SELECT name, article_count FROM entities WHERE type='concept'"
+                "SELECT name, article_count FROM knowledge.entities WHERE type='concept'"
             ).fetchall()
             for r in rows:
                 n = int(r["article_count"] or 0)
@@ -348,7 +348,7 @@ class GapAnalyst:
                 """INSERT INTO gap_records
                    (task_id, gap_type, entity_id, severity, description,
                     current_count, suggested_count, suggestion, status, created_at)
-                   VALUES (?, ?, (SELECT id FROM entities WHERE name=? LIMIT 1),
+                   VALUES (?, ?, (SELECT id FROM knowledge.entities WHERE name=? LIMIT 1),
                            ?, ?, ?, ?, ?, 'open', ?)""",
                 [
                     (

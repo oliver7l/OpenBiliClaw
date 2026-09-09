@@ -119,7 +119,7 @@ class LearningPathGenerator:
     def _ensure_table(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS learning_paths (
+            CREATE TABLE IF NOT EXISTS knowledge.learning_paths (
                 path_id TEXT PRIMARY KEY,
                 title TEXT,
                 topic TEXT,
@@ -223,7 +223,7 @@ class LearningPathGenerator:
         conn = self._get_conn()
         try:
             self._ensure_table(conn)
-            query = "SELECT * FROM learning_paths"
+            query = "SELECT * FROM knowledge.learning_paths"
             params: list[Any] = []
             if status:
                 query += " WHERE status = ?"
@@ -241,7 +241,7 @@ class LearningPathGenerator:
         try:
             self._ensure_table(conn)
             row = conn.execute(
-                "SELECT * FROM learning_paths WHERE path_id = ?", (path_id,)
+                "SELECT * FROM knowledge.learning_paths WHERE path_id = ?", (path_id,)
             ).fetchone()
             return self._row_to_path(row) if row else None
         finally:
@@ -282,7 +282,7 @@ class LearningPathGenerator:
         conn = self._get_conn()
         try:
             self._ensure_table(conn)
-            cursor = conn.execute("DELETE FROM learning_paths WHERE path_id = ?", (path_id,))
+            cursor = conn.execute("DELETE FROM knowledge.learning_paths WHERE path_id = ?", (path_id,))
             conn.commit()
             return cursor.rowcount > 0
         finally:
@@ -481,7 +481,7 @@ class LearningPathGenerator:
             steps_json = json.dumps([s.to_dict() for s in path.steps], ensure_ascii=False)
             conn.execute(
                 """
-                INSERT OR REPLACE INTO learning_paths
+                INSERT OR REPLACE INTO knowledge.learning_paths
                 (path_id, title, topic, description, steps_json, status, progress,
                  created_at, updated_at, total_estimated_minutes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

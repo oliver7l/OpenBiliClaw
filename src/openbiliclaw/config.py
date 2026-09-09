@@ -596,6 +596,12 @@ class StorageConfig:
     # 面试复盘子库：interview_reviews 独立存放，与主库锁域隔离，避免转录长文本
     # 与 FTS 写入阻塞核心业务。默认 data/interview.db，可由配置覆盖。
     interview_db_path: str = "data/interview.db"
+    # 健康档案子库：health_* 表独立存放，与主库锁域隔离（db sharding P7）。
+    # 默认 data/health.db，可由配置覆盖。
+    health_db_path: str = "data/health.db"
+    # 知识图谱子库：knowledge_* / entities / topics 等独立存放（db sharding P8）。
+    # 默认 data/knowledge.db，可由配置覆盖。
+    knowledge_db_path: str = "data/knowledge.db"
 
 
 @dataclass
@@ -2543,6 +2549,9 @@ def _render_config_toml(
             "",
             "[storage]",
             f"db_path = {_toml_string(config.storage.db_path)}",
+            f"interview_db_path = {_toml_string(config.storage.interview_db_path)}",
+            f"health_db_path = {_toml_string(config.storage.health_db_path)}",
+            f"knowledge_db_path = {_toml_string(config.storage.knowledge_db_path)}",
             "",
             "[logging]",
             f"level = {_toml_string(config.logging.level)}",

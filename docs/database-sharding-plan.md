@@ -2,7 +2,7 @@
 
 > 版本：v1.0  
 > 创建日期：2026-09-09  
-> 状态：部分实施中 —— P0 基础设施、P1 llm.db、P2 events.db 已完成（含 2026-09-09 收尾：DROP 主库旧表 + 移除双写），P5 discovery 相关由另一方会话推进中  
+> 状态：P0 基础设施、P1 llm.db、P2 events.db、P3 knowledge_audit.db、P5 discovery.db、P6 diary.db 全部完成（含 2026-09-09 收尾 + 续迁移剩余 4 表）。P4 经评审改为"维持现状"：`pool.db` 保留为独立推荐流子库（本已隔离推荐流高频写锁域），不并入 content.db。P7 health.db、P8 knowledge.db 均已完成。主库废弃表清理于 2026-09-09 完成：61 张 `_deprecated_*`（约 668MB）已删除，VACUUM 后主库 1.6G → 58MB。P8 收尾于 2026-09-09 完成（11 张知识表迁入 knowledge.db 并删除主库/audit 库旧表），详见下方 P8 收尾。  
 > 目标：解决 SQLite 主库并发写入锁定问题，按写入频率和领域拆分数据库
 
 ---
@@ -423,6 +423,32 @@ class DatabaseMigrator:
 > **命名口径（v0.4.x 强制）**：事件子库统一为 **`events.db` ↔ ATTACH 别名 `events` ↔ 表 `events`**，
 > SQL 一律 `events.events` / `events.view_history`。不再使用 `activity.db` / `act` 等别名。
 
+### P3–P6 收尾（2026-09-09 已完成可删部分）
+
+核查主库 `openbiliclaw.db` 后确认：audit_issues / audit_tasks / gap_records / gap_analysis_tasks / article_quality_scores / discovery_candidates / diary_entries / diary_analyses 这 8 张表代码已确定性只走子库
+（分别由 `quality_auditor` / `gap_analyst` / `knowledge_forge_routes` 走 `knowledge_audit.db`；`_discovery` 连接走 `discovery.db`；`diary/store.py` 走 `diary.db`），主库同名表均为 0 行空表残留。
+
+- **备份**：DROP 前用 SQLite online backup 备份至 `data/backups/openbiliclaw_pre_finalize_p3p6_*.db`。
+- **DROP 主库 8 张空表**：上列 8 张表全部 0 行，DROP 无数据损失；验证落库后主库不复存在。
+- **主库 schema 去除**：`_schema_mixin.py` 移除 `audit_tasks` / `audit_issues` / `article_quality_scores` / `gap_analysis_tasks` / `gap_records` DDL（保留 `audit_config` 及其默认值）；
+  `database.py` 的 `_SCHEMA_SQL` 移除 `discovery_candidates` DDL，改为 discovery.db 本地 `_DISCOVERY_CANDIDATES_SCHEMA` 类常量（`_init_discovery_connection` 幂等建表）。
+- **顺带修复两处真实 bug**：`_schema_mixin._ensure_discovery_candidate_columns` 原先用主库连接 `self.conn` 对 discovery_candidates 做 `PRAGMA table_info` / `ALTER TABLE`，表迁子库后必崩，已改走 `self._discovery`。
+- **保留在主库（未迁移）**：~~`audit_config`（knowledge_audit.db 尚无此表）、`x_source_health` / `x_creator_subscriptions` / `xhs_creator_subscriptions`（代码仍经主库建表读写）~~ → **已于 2026-09-09 一并迁移（本轮续迁移）**，见下节。
+- **pool.db 处置（2026-09-09 评审定案）**：`pool.db`（180M，含 content_cache/recommendations/user_feedback/xhs_observed_urls）**保留为独立推荐流子库**。它本已通过 ATTACH 别名 `pool` 隔离推荐流高频写锁域、无双写且运行正常；规划 P4"并入 content.db"基于早期主库双写的旧背景，且合并会让推荐流高频写与知识库写入同库竞争，重新引入锁冲突。故 P4 目标改为"维持现状"，`pool.表名` / `pool.` ATTACH 引用路径全部保持。
+
+### P3–P6 收尾追加：迁移剩余 4 表（2026-09-09）
+
+把上节留在主库的 4 张活跃表也迁到对应子库：
+
+- **audit_config → `knowledge_audit.db`**：主库 DDL 从 `_schema_mixin.py` 移除；`quality_auditor.__init__` 新增幂等 `_ensure_audit_config()`（建表 + 7 行默认配置）。注意：知识审计库其余表（audit_issues 等）仍依赖迁移脚本预建，与本次无关。
+- **x_source_health / x_creator_subscriptions / xhs_creator_subscriptions → `discovery.db`**：`x_health.XSourceHealthStore`、`x_tasks.XCreatorStore`、`xhs_tasks.XhsCreatorStore` 的连接从主库 `self._db.conn` 切到 discovery 连接 `self._db._discovery`（表随 store 自建）；xhs_tasks 的 `xhs_tasks` 任务队列表不受影响仍走主库。
+- **数据迁移**：先复制（源主库 4 表建表至子库 + INSERT，非破坏），校验行数一致（health 1、audit_config 7、两个订阅表 0），再备份主库并 DROP 4 张旧表。至此 P3–P6 全部计划表（含 audit_config、x_* 订阅）均已迁出主库。
+- **顺带修复测试未同步**：`tests/x/test_x_producer.py::_kw_statuses` 原用主库连接读 discovery_keywords（已在 discovery.db），改走 `_discovery`。
+
+**验证**：`tests/x/* + tests/xhs/test_xhs_tasks.py + tests/knowledge/test_knowledge_forge.py + tests/api/test_api_x_cookie.py` = **114 passed** 全绿；临时库确认主库不再建 4 表、三 store 读写 discovery.db、audit_config 建入 knowledge_audit.db。
+
+**验证**：`tests/storage/ + tests/discovery/test_discovery_candidate_store.py + tests/discovered_content.py + tests/event/ + tests/llm/test_llm_usage.py` = **226 passed** 全绿；临时库初始化确认主库不再建上述 8 表、audit_config 仍在、discovery_candidates 正确建入 discovery.db。
+
 **修改文件清单**：
 - `src/openbiliclaw/storage/_events_mixin.py` ✅
 - `src/openbiliclaw/storage/_view_history_mixin.py` ✅
@@ -476,6 +502,8 @@ class DatabaseMigrator:
 ---
 
 ### P4：拆分 content.db + 合并 pool.db
+
+> **2026-09-09 评审定案：维持现状，不执行合并。** `pool.db` 保留为独立推荐流子库（见"pool.db 处置"）。本节约描述如下仅作历史背景保留，不再实施。
 
 **目标**：把内容相关表拆到独立库，并合并 pool.db 消除双写
 
@@ -615,17 +643,36 @@ class DatabaseMigrator:
 
 ### P8：拆分 knowledge.db
 
+**状态：✅ 已完成（2026-09-09）**
+
 **目标**：把知识图谱相关表拆到独立库
 
-**表清单**：
+**表清单**（11 张，全部迁入 `knowledge.db`）：
 - knowledge_cards, knowledge_concepts, knowledge_graph
 - knowledge_backlinks, entities, entity_relations
 - topics, topic_items, learning_paths
 - insight_reports, content_insights_reports
 
-**实施步骤**：同 P6
+**实施步骤**：
 
-**验收标准**：知识图谱功能正常
+1. 创建 knowledge.db 并迁移 11 张表结构与数据 ✅（`scripts/migrate_knowledge_db.py`；entity_relations 原在 knowledge_audit.db 的 4712 行一并迁入）
+2. 基础设施：`database.py` 增加 `_knowledge_db_path` + `_ensure_knowledge_database()` + `_attach_knowledge()`，主库连接 / `open_db_conn()` / per-thread 连接均 ATTACH `knowledge` 别名 ✅
+3. 修改 `_schema_mixin.py` / `_topic_mixin.py` DDL，知识表改用 `knowledge.` 前缀 ✅
+4. 修改 self_evolution（knowledge_card / knowledge_graph / insight_report / learning_path / topic_* / api）、knowledge_forge（entity_extractor / entity_relation_builder / entity_description_updater / gap_analyst 等）、api（knowledge_routes `_conn_with_content` 附 knowledge.db）SQL 统一 `knowledge.` 前缀 ✅
+5. 修复 `_conn_with_content` 自递归 bug，附加 knowledge.db ✅
+6. 删除主库 / knowledge_audit.db 旧表 ✅（见下）
+
+**验收标准**：
+- [x] 知识图谱功能正常
+- [x] 11 张知识表全部读写在 knowledge.db，主库不再建这些表
+- [x] 旧表清理完成、数据一致性校验通过
+
+#### P8 收尾（2026-09-09 已完成）
+
+- **数据校验**：knowledge.db 11 张表行数与来源一致（entities 774、entity_relations 4712、topics 8、topic_items 1933、knowledge_cards 234、knowledge_graph 4、learning_paths 2、insight_reports 2、content_insights_reports 2、两个 concept/backlinks 0），其中 entity_relations 从 knowledge_audit.db 迁入。
+- **读写在主库/audit 库的残留 = 0**：全局核查无任何未加 `knowledge.` 前缀的 11 表读写；`FROM articles` / `article_entities` 裸名经 ATTACH content.db 由 SQLite 顺序解析正确落到内容库。
+- **测试修复**：P8 改路由后，`entity_extractor`/`entity_relation_builder`/`entity_description_updater`/`gap_analyst`/`batch_processor` 的测试 fixture 原在主库建 `entities`/`entity_relations`，已改为在 tmp 目录的兄弟 `knowledge.db` 建这两张表（`tests/knowledge/test_knowledge_forge.py`、`tests/knowledge/test_knowledge_forge_pipeline.py`）。`tests/knowledge + tests/storage` = **70 passed** 全绿。
+- **备份与清理**：DROP 前用 fresh 备份至 `data/_backup_p8/openbiliclaw_before_cleanup_*.db`、`knowledge_audit_before_cleanup_*.db`。主库 DROP 11 张旧表（entities/entity_relations/topics/topic_items/knowledge_cards/knowledge_graph/learning_paths/insight_reports/content_insights_reports/knowledge_concepts/knowledge_backlinks），knowledge_audit.db DROP 旧 entity_relations，均无数据损失（数据已在 knowledge.db）。
 
 ---
 

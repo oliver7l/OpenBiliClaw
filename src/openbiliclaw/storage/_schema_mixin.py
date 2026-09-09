@@ -239,7 +239,7 @@ class SchemaMixin:
         """Backfill discovery-candidate lifecycle columns for existing databases."""
         existing_columns = {
             str(row["name"])
-            for row in self.conn.execute("PRAGMA table_info(discovery_candidates)").fetchall()
+            for row in self._discovery.execute("PRAGMA table_info(discovery_candidates)").fetchall()
         }
         required_columns = {
             "score_threshold": "REAL NOT NULL DEFAULT 0.0",
@@ -259,7 +259,7 @@ class SchemaMixin:
         for column_name, column_type in required_columns.items():
             if column_name in existing_columns:
                 continue
-            self.conn.execute(
+            self._discovery.execute(
                 f"ALTER TABLE discovery_candidates ADD COLUMN {column_name} {column_type}"
             )
 
@@ -360,7 +360,7 @@ class SchemaMixin:
                 continue
             try:  # noqa: SIM105
                 self.conn.execute(
-                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON pool.content_cache ({', '.join(cols)})"
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON content_cache ({', '.join(cols)})"
                 )
             except Exception:  # noqa: BLE001 — 单个索引失败不阻断启动
                 pass
@@ -627,7 +627,7 @@ class SchemaMixin:
         ``topic_items``. Multiple topics can coexist (e.g. 广告, 去有风的地方).
         """
         self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS topics (
+            CREATE TABLE IF NOT EXISTS knowledge.topics (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 name        TEXT NOT NULL UNIQUE,
                 slug        TEXT NOT NULL UNIQUE,
@@ -640,7 +640,7 @@ class SchemaMixin:
                 updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_collected_at TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS topic_items (
+            CREATE TABLE IF NOT EXISTS knowledge.topic_items (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 topic_id    INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
                 content_key TEXT NOT NULL,
@@ -654,9 +654,9 @@ class SchemaMixin:
                 collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(topic_id, content_key)
             );
-            CREATE INDEX IF NOT EXISTS idx_topic_items_topic
+            CREATE INDEX IF NOT EXISTS knowledge.idx_topic_items_topic
                 ON topic_items(topic_id, collected_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_topic_items_key
+            CREATE INDEX IF NOT EXISTS knowledge.idx_topic_items_key
                 ON topic_items(content_key);
         """)
 
@@ -692,8 +692,10 @@ class SchemaMixin:
             content_conn.execute(f"ALTER TABLE articles ADD COLUMN {column_name} {column_type}")
 
         # 2. 实体表（3.2.2）
+        # P8：entities/entity_relations 独立存于 knowledge.db，故用 knowledge. 前缀；
+        # article_entities 与 articles 同属内容域，继续留在 content/主库。
         self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS entities (
+            CREATE TABLE IF NOT EXISTS knowledge.entities (
                 id INTEGER PRIMARY KEY,
                 name TEXT UNIQUE,
                 type TEXT,
@@ -703,8 +705,8 @@ class SchemaMixin:
                 last_updated_at TEXT,
                 metadata TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
-            CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+            CREATE INDEX IF NOT EXISTS knowledge.idx_entities_type ON entities(type);
+            CREATE INDEX IF NOT EXISTS knowledge.idx_entities_name ON entities(name);
 
             -- 文章-实体关联
             CREATE TABLE IF NOT EXISTS article_entities (
@@ -720,7 +722,7 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_article_entities_entity ON article_entities(entity_id);
 
             -- 实体间关联
-            CREATE TABLE IF NOT EXISTS entity_relations (
+            CREATE TABLE IF NOT EXISTS knowledge.entity_relations (
                 entity_id_a INTEGER,
                 entity_id_b INTEGER,
                 relation_type TEXT,
@@ -733,10 +735,10 @@ class SchemaMixin:
         # 兼容旧库：entity_relations 补 co_occur 列（幂等）
         _er_columns = {
             str(row["name"])
-            for row in self.conn.execute("PRAGMA table_info(entity_relations)").fetchall()
+            for row in self.conn.execute("PRAGMA knowledge.table_info(entity_relations)").fetchall()
         }
         if "co_occur" not in _er_columns:
-            self.conn.execute("ALTER TABLE entity_relations ADD COLUMN co_occur INTEGER DEFAULT 1")
+            self.conn.execute("ALTER TABLE knowledge.entity_relations ADD COLUMN co_occur INTEGER DEFAULT 1")
 
         # 3. 文章间关联（3.3.2）
         self.conn.executescript("""
@@ -757,95 +759,12 @@ class SchemaMixin:
         """)
 
         # 4. 质量审计表（3.5.3）
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS audit_tasks (
-                id INTEGER PRIMARY KEY,
-                task_type TEXT,
-                status TEXT,
-                started_at TEXT,
-                completed_at TEXT,
-                total_articles INTEGER,
-                issues_found INTEGER,
-                issues_fixed INTEGER,
-                report_path TEXT,
-                created_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_issues (
-                id INTEGER PRIMARY KEY,
-                article_id INTEGER,
-                issue_type TEXT,
-                severity TEXT,
-                description TEXT,
-                details TEXT,
-                status TEXT DEFAULT 'open',
-                fix_suggestion TEXT,
-                fixed_at TEXT,
-                created_at TEXT,
-                FOREIGN KEY (article_id) REFERENCES articles(id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_audit_issues_article ON audit_issues(article_id);
-            CREATE INDEX IF NOT EXISTS idx_audit_issues_type ON audit_issues(issue_type);
-            CREATE INDEX IF NOT EXISTS idx_audit_issues_status ON audit_issues(status);
-
-            CREATE TABLE IF NOT EXISTS article_quality_scores (
-                article_id INTEGER PRIMARY KEY,
-                overall_score REAL,
-                completeness_score REAL,
-                content_score REAL,
-                link_score REAL,
-                uniqueness_score REAL,
-                last_audited_at TEXT,
-                FOREIGN KEY (article_id) REFERENCES articles(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_config (
-                id INTEGER PRIMARY KEY,
-                config_key TEXT UNIQUE,
-                config_value TEXT,
-                description TEXT
-            );
-        """)
-        self.conn.executescript("""
-            INSERT OR IGNORE INTO audit_config (config_key, config_value, description) VALUES
-            ('min_content_length', '200', '最小内容长度（低于此值标记为过短）'),
-            ('min_summary_length', '100', '最小摘要长度（低于此值标记为缺失）'),
-            ('simhash_threshold', '0.9', 'simhash相似度阈值（高于此值标记为重复）'),
-            ('dead_link_timeout', '10', '死链检测超时时间（秒）'),
-            ('batch_size', '500', '批处理大小'),
-            ('auto_fix_enabled', 'false', '是否启用自动修复'),
-            ('dead_link_concurrency', '5', '死链检测并发数');
-        """)
+        # audit_tasks / audit_issues / article_quality_scores / audit_config 已随
+        # db sharding 迁至 knowledge_audit.db（quality_auditor 初始化时幂等建 audit_config），
+        # 主库不再建任何知识审计表。
 
         # 5. 知识缺口分析表（3.4.4）
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS gap_analysis_tasks (
-                id INTEGER PRIMARY KEY,
-                status TEXT,
-                started_at TEXT,
-                completed_at TEXT,
-                report_path TEXT,
-                total_topics INTEGER,
-                gaps_found INTEGER,
-                created_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS gap_records (
-                id INTEGER PRIMARY KEY,
-                task_id INTEGER,
-                gap_type TEXT,
-                entity_id INTEGER,
-                severity TEXT,
-                description TEXT,
-                current_count INTEGER,
-                suggested_count INTEGER,
-                suggestion TEXT,
-                status TEXT DEFAULT 'open',
-                created_at TEXT,
-                FOREIGN KEY (task_id) REFERENCES gap_analysis_tasks(id),
-                FOREIGN KEY (entity_id) REFERENCES entities(id)
-            );
-        """)
+        # gap_analysis_tasks / gap_records 已随 db sharding 迁至 knowledge_audit.db，主库不再建。
 
     # ------------------------------------------------------------------ #
 

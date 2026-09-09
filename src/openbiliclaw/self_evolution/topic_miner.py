@@ -306,7 +306,7 @@ class TopicMiner:
         try:
             # Check if topic already exists
             existing = conn.execute(
-                "SELECT id FROM topics WHERE slug = ? OR name = ?",
+                "SELECT id FROM knowledge.topics WHERE slug = ? OR name = ?",
                 (candidate.topic_slug, candidate.topic_name),
             ).fetchone()
 
@@ -317,7 +317,7 @@ class TopicMiner:
             # Create topic
             conn.execute(
                 """
-                INSERT INTO topics (name, slug, description, created_at, auto_generated)
+                INSERT INTO knowledge.topics (name, slug, description, created_at, auto_generated)
                 VALUES (?, ?, ?, ?, 1)
                 """,
                 (

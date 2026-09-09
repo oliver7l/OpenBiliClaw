@@ -32,7 +32,7 @@ class XCreatorStore:
         self._ensure_table()
 
     def _ensure_table(self) -> None:
-        self._db.conn.executescript("""
+        self._db._discovery.executescript("""
             CREATE TABLE IF NOT EXISTS x_creator_subscriptions (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 handle          TEXT NOT NULL UNIQUE,
@@ -44,31 +44,31 @@ class XCreatorStore:
     def add(self, handle: str) -> None:
         """Add a subscription (idempotent on the normalized handle)."""
         normalized = normalize_handle(handle)
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "INSERT OR IGNORE INTO x_creator_subscriptions (handle) VALUES (?)",
             (normalized,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
 
     def list_all(self) -> list[dict[str, Any]]:
         """Return all subscriptions, oldest first."""
-        rows = self._db.conn.execute(
+        rows = self._db._discovery.execute(
             "SELECT * FROM x_creator_subscriptions ORDER BY added_at"
         ).fetchall()
         return [dict(r) for r in rows]
 
     def delete(self, sub_id: int) -> bool:
         """Delete a subscription by primary key. Returns True if a row was removed."""
-        cursor = self._db.conn.execute(
+        cursor = self._db._discovery.execute(
             "DELETE FROM x_creator_subscriptions WHERE id = ?",
             (sub_id,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()
         return cursor.rowcount > 0
 
     def due_for_fetch(self, *, hours: int = 24) -> list[dict[str, Any]]:
         """Return subscriptions whose ``last_fetched_at`` is older than ``hours`` ago."""
-        rows = self._db.conn.execute(
+        rows = self._db._discovery.execute(
             "SELECT * FROM x_creator_subscriptions "
             "WHERE last_fetched_at IS NULL "
             "   OR last_fetched_at < datetime('now', ?)",
@@ -78,8 +78,8 @@ class XCreatorStore:
 
     def mark_fetched(self, sub_id: int) -> None:
         """Update ``last_fetched_at`` to now."""
-        self._db.conn.execute(
+        self._db._discovery.execute(
             "UPDATE x_creator_subscriptions SET last_fetched_at = CURRENT_TIMESTAMP WHERE id = ?",
             (sub_id,),
         )
-        self._db.conn.commit()
+        self._db._discovery.commit()

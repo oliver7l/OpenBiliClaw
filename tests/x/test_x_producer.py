@@ -429,7 +429,7 @@ class _DiscoveryCfg:
 
 
 def _kw_statuses(db: Database) -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = 'twitter' ORDER BY id"
     ).fetchall()
     return {str(r["keyword"]): str(r["status"]) for r in rows}
