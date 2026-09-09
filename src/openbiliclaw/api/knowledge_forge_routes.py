@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from contextlib import suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Query
@@ -27,17 +29,25 @@ logger = logging.getLogger(__name__)
 
 
 def _db_path(ctx: RuntimeContext) -> str | None:
-    """从运行时上下文解析文章库路径。"""
+    """从运行时上下文解析 knowledge_audit 库路径。
+
+    v0.4.0+: knowledge_forge 相关表（audit_issues/gap_records/
+    article_quality_scores 等）已迁移到独立的 knowledge_audit.db，
+    与主库锁域隔离。
+    """
     database = getattr(ctx, "database", None)
     if database is not None:
         p = getattr(database, "db_path", None) or getattr(database, "path", None)
         if p:
-            return str(p)
+            # 主库路径 -> 替换为 knowledge_audit.db
+            main_path = Path(str(p))
+            return str(main_path.with_name("knowledge_audit.db"))
     config = getattr(ctx, "config", None)
     if config is not None:
         storage = getattr(config, "storage", None)
         if storage is not None and getattr(storage, "db_path", None):
-            return str(storage.db_path)
+            main_path = Path(str(storage.db_path))
+            return str(main_path.with_name("knowledge_audit.db"))
     return None
 
 
@@ -47,6 +57,11 @@ def _connect(ctx: RuntimeContext) -> sqlite3.Connection | None:
         return None
     conn = sqlite3.connect(p, timeout=30.0)
     conn.row_factory = sqlite3.Row
+    # ATTACH 主库，使跨库 JOIN（如 audit_issues JOIN articles）正常工作
+    main_path = Path(p).with_name("openbiliclaw.db")
+    if main_path.exists():
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS main_db", (str(main_path),))
     return conn
 
 

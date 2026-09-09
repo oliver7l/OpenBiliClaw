@@ -42,17 +42,17 @@ logger = logging.getLogger(__name__)
 
 
 def _default_db_path() -> Path:
-    """解析数据库路径（[storage].db_path，缺省 data/openbiliclaw.db）。"""
+    """knowledge_forge 模块使用独立的 knowledge_audit.db（v0.4.0+）。"""
     try:
         from openbiliclaw.config import load_config
 
         cfg = load_config()
         p = getattr(cfg, "storage", None)
         if p is not None and getattr(p, "db_path", None):
-            return Path(str(p.db_path))
+            return Path(str(p.db_path)).with_name("knowledge_audit.db")
     except Exception:  # noqa: BLE001 — 配置不可用回退默认路径
         pass
-    return Path("data/openbiliclaw.db")
+    return Path("data/knowledge_audit.db")
 
 
 class SummaryEngine:
@@ -269,6 +269,13 @@ class SummaryEngine:
     def _connect(self) -> sqlite3.Connection:
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
+        # ATTACH 主库，使跨库查询（如 JOIN articles）正常工作
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _main_path = _Path(str(self.db_path)).with_name('openbiliclaw.db')
+        if _main_path.exists():
+            with _suppress(Exception):
+                conn.execute('ATTACH DATABASE ? AS main_db', (str(_main_path),))
         return conn
 
     def _fetch_row(self, article_id: int) -> dict[str, Any] | None:

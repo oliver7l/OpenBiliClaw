@@ -49,16 +49,20 @@ _PLAIN_UA = "openbiliclaw-knowledge-forge/0.2 (article link check)"
 
 
 def _default_db_path() -> Path:
+    """knowledge_forge 模块使用独立的 knowledge_audit.db（v0.4.0+）。
+
+    从配置的主库路径派生 knowledge_audit.db 路径，保持与主库同目录。
+    """
     try:
         from openbiliclaw.config import load_config
 
         cfg = load_config()
         p = getattr(cfg, "storage", None)
         if p is not None and getattr(p, "db_path", None):
-            return Path(str(p.db_path))
+            return Path(str(p.db_path)).with_name("knowledge_audit.db")
     except Exception:  # noqa: BLE001
         pass
-    return Path("data/openbiliclaw.db")
+    return Path("data/knowledge_audit.db")
 
 
 class DeadLinkChecker:
@@ -307,6 +311,13 @@ class DeadLinkChecker:
     def _connect(self) -> sqlite3.Connection:
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
+        # ATTACH 主库，使跨库查询（如 JOIN articles）正常工作
+        from pathlib import Path as _Path
+        from contextlib import suppress as _suppress
+        _main_path = _Path(str(self.db_path)).with_name('openbiliclaw.db')
+        if _main_path.exists():
+            with _suppress(Exception):
+                conn.execute('ATTACH DATABASE ? AS main_db', (str(_main_path),))
         return conn
 
 
