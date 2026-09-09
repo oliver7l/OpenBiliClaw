@@ -4241,3 +4241,37 @@ body.card-lg { --card-min: 340px; }
 .travel-md-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
 .travel-md-table th, .travel-md-table td { padding: 8px 10px; border: 1px solid var(--border, #e5e7eb); text-align: left; }
 .travel-md-table th { background: var(--bg-secondary, #f9fafb); }
+
+/* 惊喜推荐页面：计数和标签合并到标题行 */
+.delight-page .content-page-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.delight-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: #666;
+}
+.delight-head-meta #delightCount {
+  font-size: 14px;
+  color: #666;
+}
+.delight-page .content-page-head .pill-btn {
+  flex-shrink: 0;
+  align-self: center;
+}
+@media (max-width: 768px) {
+  .delight-page .content-page-head {
+    flex-direction: column;
+    align-items: start;
+  }
+  .delight-page .content-page-head .pill-btn {
+    align-self: flex-end;
+    margin-top: -8px;
+  }
+}
