@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from openbiliclaw.runtime.presence import PresenceTracker
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
 
-_MAX_DISCOVERY_BACKFILL_PER_REFRESH = 60
-_DEFAULT_CANDIDATE_EVAL_BATCH_SIZE = 45
+_MAX_DISCOVERY_BACKFILL_PER_REFRESH = 120
+_DEFAULT_CANDIDATE_EVAL_BATCH_SIZE = 90
 # How often the cover-image disk cache is pruned of consumed + unsaved covers.
 # The bulk one-shot prune runs at API startup; this is the steady-state sweep.
 _IMAGE_CACHE_CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
