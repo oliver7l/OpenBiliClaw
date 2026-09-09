@@ -664,8 +664,12 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout = 30000")
+        # WAL 模式下 NORMAL 已足够安全，写入性能比 FULL 提升明显
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         # 增加页面缓存到 64MB（负数表示 KB），减少磁盘 IO，提升查询性能
         self._conn.execute("PRAGMA cache_size = -65536")
+        # 256MB 内存映射，减少 IO 开销
+        self._conn.execute("PRAGMA mmap_size = 268435456")
         # 提升 WAL 检查点阈值，减少频繁检查点
         self._conn.execute("PRAGMA wal_autocheckpoint = 1000")
         # 推荐流子库：确保 pool.db 存在后 ATTACH，使无前缀 SQL 落到 pool schema
@@ -729,8 +733,10 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             local_conn.row_factory = sqlite3.Row
             local_conn.execute("PRAGMA journal_mode=WAL")
             local_conn.execute("PRAGMA busy_timeout = 30000")
+            local_conn.execute("PRAGMA synchronous=NORMAL")
             # 增加页面缓存到 64MB，减少磁盘 IO
             local_conn.execute("PRAGMA cache_size = -65536")
+            local_conn.execute("PRAGMA mmap_size = 268435456")
             self._attach_pool(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
@@ -748,6 +754,8 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA mmap_size = 268435456")
         self._attach_pool(conn)
         return conn
 
