@@ -52,7 +52,7 @@
 | `obc-discovery` | 内容发现引擎，从 `src/openbiliclaw/discovery/` 提取的独立包 |
 | `obc-soul` | 用户画像引擎，从 `src/openbiliclaw/soul/` 提取的独立包 |
 
-## 辅助脚本（`_scripts/`）
+## 辅助脚本（`scripts/`）
 
 | 脚本 | 说明 |
 |---|---|
