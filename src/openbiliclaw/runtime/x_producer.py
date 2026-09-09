@@ -268,10 +268,16 @@ class XDiscoveryProducer:
             return 0
         return max(0, budget - self._consumed_today(strategy))
 
+    @property
+    def _discovery_conn(self):
+        """获取 discovery.db 连接，回退到主库连接。"""
+        conn = getattr(self.database, '_discovery_conn', None)
+        return conn if conn is not None else self.database.conn
+
     def _consumed_today(self, strategy: str) -> int:
         self._ensure_ledger_table()
         today = datetime.now(UTC).strftime("%Y-%m-%d")
-        row = self.database.conn.execute(
+        row = self._discovery_conn.execute(
             "SELECT COUNT(*) FROM x_discovery_runs WHERE strategy = ? AND created_at >= ?",
             (strategy, today),
         ).fetchone()
@@ -279,14 +285,14 @@ class XDiscoveryProducer:
 
     def _record_run(self, strategy: str) -> None:
         self._ensure_ledger_table()
-        self.database.conn.execute(
+        self._discovery_conn.execute(
             "INSERT INTO x_discovery_runs(strategy) VALUES (?)",
             (strategy,),
         )
-        self.database.conn.commit()
+        self._discovery_conn.commit()
 
     def _ensure_ledger_table(self) -> None:
-        self.database.conn.executescript(
+        self._discovery_conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS x_discovery_runs (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,7 +303,7 @@ class XDiscoveryProducer:
                 ON x_discovery_runs(strategy, created_at);
             """
         )
-        self.database.conn.commit()
+        self._discovery_conn.commit()
 
     def _is_due(self) -> bool:
         if self.min_interval_minutes <= 0:

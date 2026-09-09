@@ -228,11 +228,17 @@ class YoutubeDiscoveryProducer:
                 remaining[strategy] = max(0, budget - self.consumed_today(strategy))
         return remaining
 
+    @property
+    def _discovery_conn(self):
+        """获取 discovery.db 连接，回退到主库连接。"""
+        conn = getattr(self.database, '_discovery_conn', None)
+        return conn if conn is not None else self.database.conn
+
     def consumed_today(self, strategy: str) -> int:
         """Return today's successful execution units for one strategy."""
         self._ensure_ledger_table()
         today = datetime.now(UTC).strftime("%Y-%m-%d")
-        row = self.database.conn.execute(
+        row = self._discovery_conn.execute(
             """
             SELECT COALESCE(SUM(units), 0)
             FROM youtube_discovery_runs
@@ -252,7 +258,7 @@ class YoutubeDiscoveryProducer:
     ) -> None:
         """Record one strategy execution in the daily budget ledger."""
         self._ensure_ledger_table()
-        self.database.conn.execute(
+        self._discovery_conn.execute(
             """
             INSERT INTO youtube_discovery_runs(strategy, units, discovered, reason)
             VALUES (?, ?, ?, ?)
@@ -264,10 +270,10 @@ class YoutubeDiscoveryProducer:
                 reason,
             ),
         )
-        self.database.conn.commit()
+        self._discovery_conn.commit()
 
     def _ensure_ledger_table(self) -> None:
-        self.database.conn.executescript(
+        self._discovery_conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS youtube_discovery_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,7 +287,7 @@ class YoutubeDiscoveryProducer:
                 ON youtube_discovery_runs(strategy, created_at);
             """
         )
-        self.database.conn.commit()
+        self._discovery_conn.commit()
 
     def _is_due(self) -> bool:
         if self.min_interval_minutes <= 0:
