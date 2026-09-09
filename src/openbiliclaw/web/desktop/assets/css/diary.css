@@ -652,11 +652,12 @@
 /* ── 优化后新样式：紧凑日记头部 ── */
 .diary-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 8px;
 }
 .diary-head h2 {
+  display: none;  /* 去页内重复标题，与全站统一：tabbar 的“日记”已定位当前页 */
   margin: 0;
   font-size: 20px;
   font-weight: 600;
