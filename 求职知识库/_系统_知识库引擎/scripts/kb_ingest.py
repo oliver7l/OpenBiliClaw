@@ -478,7 +478,7 @@ def rebuild_fts(conn):
         print("FTS 重建失败：", e)
 
 
-def search(kw, category=None, limit=20):
+def search(kw, category=None, limit=20, chunk_mode=False):
     conn = init_db()
     c = conn.cursor()
     sql_cat = " AND d.category=?" if category else ""
@@ -502,6 +502,16 @@ def search(kw, category=None, limit=20):
             ["%" + kw + "%"] + ([category] if category else []) + [limit]).fetchall()
     for r in rows:
         print("[%s] %s\n    %s\n    %s\n" % (r[2], r[0], r[1], r[3].replace("\n", " ")[:220]))
+        if chunk_mode:
+            # chunk 级定位：在该文档的块里找含关键词的块，显示标题链 + 片段
+            chs = conn.execute(
+                "SELECT header, seq, char_count, substr(text,1,180) s FROM doc_chunk "
+                "WHERE doc_id=(SELECT id FROM doc WHERE rel_path=?) AND text LIKE ? "
+                "ORDER BY char_count DESC LIMIT 3",
+                (r[0], "%" + kw + "%")).fetchall()
+            for ch in chs:
+                head = " > ".join(ch[0].split(" > ")[-2:]) if ch[0] else "(无标题)"
+                print("      ↳ [块%d·%s] %s" % (ch[1], head[-40:], ch[3].replace("\n", " ")[:150]))
     print("命中 %d 条" % len(rows))
 
 
@@ -534,6 +544,7 @@ def main():
     ap.add_argument("--限制", type=int)
     ap.add_argument("--限", type=int, default=20)
     ap.add_argument("--强制", action="store_true")
+    ap.add_argument("--chunk", action="store_true", help="chunk 级定位输出（需已跑 kb_migrate_p1.py 分块）")
     a = ap.parse_args()
     if a.cmd == "运行":
         run(a)
@@ -545,7 +556,7 @@ def main():
         for k, v in cc.most_common():
             print("  %-8s %d" % (k, v))
     elif a.cmd == "查":
-        search(a.kw, a.分类, a.限)
+        search(a.kw, a.分类, a.限, chunk_mode=a.chunk)
     elif a.cmd == "统计":
         stats()
     elif a.cmd == "未处理":

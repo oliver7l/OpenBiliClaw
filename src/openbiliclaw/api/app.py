@@ -638,7 +638,7 @@ def _latest_e2e_event_id(ctx: Any) -> int:
     conn = getattr(database, "conn", None)
     if conn is not None:
         try:
-            row = conn.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM events").fetchone()
+            row = conn.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM events.events").fetchone()
             if row is not None:
                 try:
                     return int(row["max_id"])

@@ -231,7 +231,7 @@ class RecommendationMixin:
             f"""
             WITH dwell AS (
                 SELECT bvid, MAX(MIN(dwell_seconds, 600)) AS dwell_max
-                FROM view_history
+                FROM events.view_history
                 WHERE viewed_at >= ?
                 GROUP BY bvid
             )

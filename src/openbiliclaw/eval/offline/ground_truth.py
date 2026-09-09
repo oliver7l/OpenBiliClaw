@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
 from .content_key import content_key_from_url, to_content_key
 
@@ -74,7 +75,7 @@ def load_positive_samples(
         for ev in event_types:
             if ev not in _POSITIVE_EVENT_WEIGHTS:
                 continue
-            q = "SELECT url, event_type, created_at FROM events WHERE event_type = ?"
+            q = "SELECT url, event_type, created_at FROM events.events WHERE event_type = ?"
             params: list[object] = [ev]
             if eval_after:
                 q += " AND created_at > ?"

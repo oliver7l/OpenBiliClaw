@@ -253,7 +253,7 @@ class InterestDriftDetector:
         rows = conn.execute(
             """
             SELECT e.title, a.tags, a.content_text
-            FROM events e
+            FROM events.events e
             LEFT JOIN articles a ON a.url = e.url
             WHERE e.created_at >= ? AND e.created_at <= ?
               AND e.event_type IN ('view', 'favorite', 'like', 'click')
@@ -288,7 +288,7 @@ class InterestDriftDetector:
         def get_platform_counts(start: datetime, end: datetime) -> dict[str, int]:
             rows = conn.execute(
                 """
-                SELECT url FROM events
+                SELECT url FROM events.events
                 WHERE created_at >= ? AND created_at <= ?
                   AND event_type IN ('view', 'favorite', 'like')
                 """,

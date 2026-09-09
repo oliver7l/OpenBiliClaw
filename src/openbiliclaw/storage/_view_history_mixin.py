@@ -20,35 +20,51 @@ class ViewHistoryMixin:
     _execute_write: Any
 
     def insert_view_history(self, item: dict[str, Any]) -> None:
-        """Record a content view / click."""
-        self.conn.execute(
-            """INSERT INTO view_history
-               (bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds)  # noqa: E501
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                str(item.get("bvid", "")),
-                str(item.get("title", "") or ""),
-                str(item.get("source_platform", "") or ""),
-                str(item.get("topic_group", "") or ""),
-                str(item.get("content_url", "") or ""),
-                str(item.get("up_name", "") or item.get("author_name", "") or ""),
-                float(item.get("quality_score", 0) or 0),
-                float(item.get("fit_score", 0) or 0),
-                float(item.get("dwell_seconds", 0) or 0),
-            ),
+        """Record a content view / click.
+
+        主写 events.db（P2 事件子库，别名 events），双写主库旧 view_history 表
+        供 db sharding 迁移验证期对比；验证后删除主库旧表。
+        """
+        params = (
+            str(item.get("bvid", "")),
+            str(item.get("title", "") or ""),
+            str(item.get("source_platform", "") or ""),
+            str(item.get("topic_group", "") or ""),
+            str(item.get("content_url", "") or ""),
+            str(item.get("up_name", "") or item.get("author_name", "") or ""),
+            float(item.get("quality_score", 0) or 0),
+            float(item.get("fit_score", 0) or 0),
+            float(item.get("dwell_seconds", 0) or 0),
         )
-        self.conn.commit()
+        try:
+            self._execute_write(
+                "INSERT INTO events.view_history "
+                "(bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds) "  # noqa: E501
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params,
+            )
+        except Exception as exc:
+            logger.warning("events.db view_history 主写失败: %s", exc)
+        try:
+            self._execute_write(
+                "INSERT INTO view_history "
+                "(bvid, title, source_platform, topic_group, content_url, up_name, quality_score, fit_score, dwell_seconds) "  # noqa: E501
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params,
+            )
+        except Exception as exc:
+            logger.debug("主库 view_history 双写失败（过渡期可忽略）: %s", exc)
 
     def update_view_dwell(self, bvid: str, dwell_seconds: float) -> bool:
         """Attach dwell seconds to the most recent view of bvid."""
         row = self.conn.execute(
-            "SELECT id FROM view_history WHERE bvid = ? ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM events.view_history WHERE bvid = ? ORDER BY id DESC LIMIT 1",
             (bvid,),
         ).fetchone()
         if not row:
             return False
         self.conn.execute(
-            "UPDATE view_history SET dwell_seconds = ? WHERE id = ?",
+            "UPDATE events.view_history SET dwell_seconds = ? WHERE id = ?",
             (float(dwell_seconds), row["id"]),
         )
         self.conn.commit()
@@ -66,7 +82,7 @@ class ViewHistoryMixin:
                           COUNT(*) AS views,
                           SUM(CASE WHEN dwell_seconds >= 60 THEN 1 ELSE 0 END) AS deep_views,
                           SUM(CASE WHEN dwell_seconds > 0 AND dwell_seconds < 15 THEN 1 ELSE 0 END) AS quick_exits  # noqa: E501
-                   FROM view_history
+                   FROM events.view_history
                    WHERE viewed_at >= ? AND COALESCE(topic_group, '') != ''
                    GROUP BY topic_group""",
                 (cutoff,),
@@ -91,7 +107,7 @@ class ViewHistoryMixin:
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
         try:
             row = self.conn.execute(
-                "SELECT COUNT(*) AS cnt FROM view_history WHERE viewed_at >= ?",
+                "SELECT COUNT(*) AS cnt FROM events.view_history WHERE viewed_at >= ?",
                 (cutoff,),
             ).fetchone()
             return int(row["cnt"]) if row else 0
@@ -142,7 +158,7 @@ class ViewHistoryMixin:
     def get_recent_views(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get the most recent view history."""
         rows = self.conn.execute(
-            """SELECT * FROM view_history
+            """SELECT * FROM events.view_history
                ORDER BY viewed_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
@@ -151,7 +167,7 @@ class ViewHistoryMixin:
     def get_view_count(self, bvid: str) -> int:
         """Get how many times a content item has been viewed."""
         row = self.conn.execute(
-            "SELECT COUNT(*) as cnt FROM view_history WHERE bvid = ?",
+            "SELECT COUNT(*) as cnt FROM events.view_history WHERE bvid = ?",
             (bvid,),
         ).fetchone()
         return row["cnt"] if row else 0
@@ -162,7 +178,7 @@ class ViewHistoryMixin:
 
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
         rows = self.conn.execute(
-            "SELECT DISTINCT bvid FROM view_history WHERE viewed_at >= ?",
+            "SELECT DISTINCT bvid FROM events.view_history WHERE viewed_at >= ?",
             (cutoff,),
         ).fetchall()
         return {r["bvid"] for r in rows}

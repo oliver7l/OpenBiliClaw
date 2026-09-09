@@ -25,7 +25,6 @@ import sqlite3
 import threading
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
 
 from openbiliclaw.storage.database import LockedConnection, open_db_conn
 
@@ -37,10 +36,10 @@ logger = logging.getLogger(__name__)
 TABLE_TO_DB: dict[str, str] = {
     # P1: llm.db
     "llm_usage": "llm",
-    # P2: events.db (not yet migrated, keep in core for now)
-    # "events": "events",
-    # "push_notifications": "events",
-    # "view_history": "events",
+    # P2: events.db
+    "events": "events",
+    "push_notifications": "events",
+    "view_history": "events",
     # P3: knowledge_audit.db (not yet migrated)
     # "audit_issues": "knowledge_audit",
     # "audit_tasks": "knowledge_audit",
@@ -61,7 +60,6 @@ DB_FILES: dict[str, str] = {
     "health": "health.db",
     "knowledge": "knowledge.db",
     "pool": "pool.db",
-    "activity": "activity.db",
 }
 
 

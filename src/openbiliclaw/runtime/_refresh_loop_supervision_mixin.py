@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from openbiliclaw.runtime._refresh_shared import (
@@ -146,6 +146,12 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
                 self._loop_cover_prefetch(),
             ),
             self._spawn_loop(
+                "getnote_filler",
+                "getnote补正文",
+                600,  # 每 10 分钟一批（见 loop_engine._GETNOTE_DISPATCH_INTERVAL）
+                self._loop_content_filler_getnote(),
+            ),
+            self._spawn_loop(
                 "self_evolution",
                 "自进化",
                 3600,
@@ -203,6 +209,71 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
             with suppress(BaseException):
                 await task
             raise
+
+    async def _loop_content_filler_getnote(self) -> None:
+        """getnote 补正文独立高频通道（每 10 分钟）。
+
+        不受自进化 batch 门槛约束，独立调度：每轮播种少量文章并收割已就绪
+        的异步笔记；按得到大脑 ``write_note`` 日配额自动熔断（达成每日目标后
+        暂停至次日），避免撞到平台日上限触发风控。
+        """
+        raw = getattr(getattr(self, "database", None), "_db_path", None)
+        db_path: str = str(raw) if raw else "data/openbiliclaw.db"
+
+        while True:
+            try:
+                if await self._getnote_check_quota_target():
+                    continue  # 已熔断睡到次日，醒后继续
+                from openbiliclaw.self_evolution.content_filler import ContentFiller
+
+                filler = ContentFiller(db_path)
+                result = await filler.fetch_via_getnote()
+                if result and (result.get("seeded") or result.get("harvested")):
+                    logger.info("content_filler: getnote done: %s", result)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("content_filler: getnote high-freq tick failed", exc_info=True)
+            await asyncio.sleep(600)  # 每 10 分钟一批
+
+    async def _getnote_check_quota_target(self) -> bool:
+        """检查得到大脑 write_note 今日用量，达到目标后睡到次日并返回 True。"""
+        used = await asyncio.to_thread(self._getnote_daily_write_note_used)
+        if used is None:  # 解析失败，保守放行（由低频调度兜底）
+            return False
+        if used >= 250:
+            logger.info("getnote: 今日 write_note 已达目标 %d，暂停播种至次日", used)
+            now = datetime.now()
+            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+            await asyncio.sleep(max(0, (tomorrow - now).total_seconds()))
+            return True
+        return False
+
+    def _getnote_daily_write_note_used(self) -> int | None:
+        """解析 ``getnote quota -o json`` 的 write_note 今日用量。
+
+        真实结构：``data.write_note.daily.used``。
+        """
+        import json
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                ["getnote", "quota", "-o", "json"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if proc.returncode != 0:
+                return None
+            payload = json.loads(proc.stdout or "{}")
+            data = payload.get("data") if isinstance(payload, dict) else None
+            daily = (data or {}).get("write_note", {}).get("daily") or {}
+            used = daily.get("used")
+            return int(used) if used is not None else None
+        except Exception:
+            logger.debug("content_filler: quota parse failed", exc_info=True)
+            return None
 
     def get_loop_health(self) -> list[dict[str, object]]:
         """Per-loop liveness snapshot for the observability dashboard."""

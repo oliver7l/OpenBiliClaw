@@ -191,7 +191,7 @@ def feed_profile_event(
     # inferred_satisfaction / satisfaction_reason 与 storage.insert_event
     # 的单一分类口径保持一致（single classification owner）。
     cur.execute(
-        "INSERT INTO events "
+        "INSERT INTO events.events "
         "(event_type, url, title, context, metadata, "
         " inferred_satisfaction, satisfaction_reason) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -223,6 +223,11 @@ def main() -> None:
     print(f"[已读库] 共发现 {len(items)} 条待导入")
 
     conn = sqlite3.connect(args.db)
+    conn.row_factory = sqlite3.Row
+    # events 已拆分到 events.db（与 --db 同目录），attach 为 events 使 events.events 可写
+    events_path = Path(args.db).with_name("events.db")
+    if events_path.exists():
+        conn.execute("ATTACH DATABASE ? AS events", (str(events_path),))
     cur = conn.cursor()
     inserted = updated = skipped = feeded = 0
     for it in items:

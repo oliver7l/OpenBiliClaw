@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class EventsMixin:
@@ -67,22 +70,41 @@ class EventsMixin:
                 classifier_event[top_level_key] = kwargs[top_level_key]
         inferred_satisfaction, satisfaction_reason = classify_event_satisfaction(classifier_event)
 
-        cursor = self._execute_write(
-            "INSERT INTO events "
-            "(event_type, url, title, context, metadata, "
-            " inferred_satisfaction, satisfaction_reason) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                event_type,
-                kwargs.get("url", ""),
-                kwargs.get("title", ""),
-                context_text,
-                json.dumps(metadata_payload, ensure_ascii=False),
-                inferred_satisfaction,
-                satisfaction_reason,
-            ),
+        params = (
+            event_type,
+            kwargs.get("url", ""),
+            kwargs.get("title", ""),
+            context_text,
+            json.dumps(metadata_payload, ensure_ascii=False),
+            inferred_satisfaction,
+            satisfaction_reason,
         )
-        return cursor.lastrowid or 0
+        # 主写：events.db（P2 事件子库，别名 events）。ATTACH 别名恒等于子库
+        # 文件名，SQL 以 events.events 显式落在事件子库，与读路径一致。
+        lastrowid = 0
+        try:
+            cursor = self._execute_write(
+                "INSERT INTO events.events "
+                "(event_type, url, title, context, metadata, "
+                " inferred_satisfaction, satisfaction_reason) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params,
+            )
+            lastrowid = cursor.lastrowid or 0
+        except Exception as exc:
+            logger.warning("events.db 主写失败，事件可能丢失: %s", exc)
+        # 双写：主库旧 events 表（db sharding 迁移双写验证期，验证后删除旧表）
+        try:
+            self._execute_write(
+                "INSERT INTO events "
+                "(event_type, url, title, context, metadata, "
+                " inferred_satisfaction, satisfaction_reason) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params,
+            )
+        except Exception as exc:
+            logger.debug("主库 events 双写失败（过渡期可忽略）: %s", exc)
+        return lastrowid
 
     def get_recent_events(self, limit: int = 100) -> list[dict[str, Any]]:
         """Get recent events.
@@ -95,7 +117,7 @@ class EventsMixin:
 
         """
         cursor = self.conn.execute(
-            "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
+            "SELECT * FROM events.events ORDER BY created_at DESC LIMIT ?", (limit,)
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -121,7 +143,7 @@ class EventsMixin:
         events not yet folded into awareness. Result order is unchanged
         (newest-first); callers that need chronological order reverse it.
         """
-        sql = "SELECT * FROM events"
+        sql = "SELECT * FROM events.events"
         clauses: list[str] = []
         params: list[Any] = []
 
@@ -177,7 +199,7 @@ class EventsMixin:
         end_time: datetime | None = None,
     ) -> dict[str, int]:
         """Count events grouped by event type."""
-        sql = "SELECT event_type, COUNT(*) AS count FROM events"
+        sql = "SELECT event_type, COUNT(*) AS count FROM events.events"
         clauses: list[str] = []
         params: list[Any] = []
 
@@ -210,13 +232,13 @@ class EventsMixin:
         legacy events whose ``metadata`` predates the field.
         """
         cursor = self.conn.execute(
-            "SELECT source_platform, COUNT(*) AS n FROM events GROUP BY source_platform"
+            "SELECT source_platform, COUNT(*) AS n FROM events.events GROUP BY source_platform"
         )
         return {str(row["source_platform"]): int(row["n"]) for row in cursor.fetchall()}
 
     def get_latest_event_id(self) -> int:
         """Return the latest event primary key."""
-        cursor = self.conn.execute("SELECT COALESCE(MAX(id), 0) AS latest_id FROM events")
+        cursor = self.conn.execute("SELECT COALESCE(MAX(id), 0) AS latest_id FROM events.events")
         row = cursor.fetchone()
         return int(row["latest_id"]) if row is not None else 0
 
@@ -233,7 +255,7 @@ class EventsMixin:
         cursor = self.conn.execute(
             f"""
             SELECT *
-            FROM events
+            FROM events.events
             WHERE id > ? AND event_type IN ({placeholders})
             ORDER BY id ASC
             """,

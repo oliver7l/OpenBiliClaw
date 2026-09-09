@@ -401,11 +401,11 @@ class ProactivePushEngine:
             # Count unread favorites (favorited but not viewed)
             unread_favs = conn.execute(
                 """
-                SELECT COUNT(*) as cnt FROM events e1
+                SELECT COUNT(*) as cnt FROM events.events e1
                 WHERE e1.event_type = 'favorite'
                   AND e1.created_at >= datetime('now', '-7 days')
                   AND NOT EXISTS (
-                    SELECT 1 FROM events e2
+                    SELECT 1 FROM events.events e2
                     WHERE e2.event_type = 'view'
                       AND e2.url = e1.url
                       AND e2.created_at > e1.created_at

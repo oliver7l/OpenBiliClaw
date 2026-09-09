@@ -782,7 +782,7 @@ class PoolCandidateMixin:
         cursor = self.conn.execute(
             """
             SELECT url, metadata
-            FROM events
+            FROM events.events
             WHERE event_type = 'view'
             ORDER BY id DESC
             LIMIT ?
@@ -801,7 +801,7 @@ class PoolCandidateMixin:
         cursor = self.conn.execute(
             """
             SELECT url, metadata
-            FROM events
+            FROM events.events
             WHERE event_type = 'view'
             ORDER BY id DESC
             LIMIT ?

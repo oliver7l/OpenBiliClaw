@@ -201,11 +201,11 @@ class ContentFilter:
         query = f"""
             SELECT a.id,
                    CASE WHEN a.favorited = 1 THEN 3
-                        WHEN EXISTS (SELECT 1 FROM events e
+                        WHEN EXISTS (SELECT 1 FROM events.events e
                                      WHERE e.article_id = a.id
                                        AND e.event_type IN ('favorite','like'))
                         THEN 2
-                        WHEN EXISTS (SELECT 1 FROM events e
+                        WHEN EXISTS (SELECT 1 FROM events.events e
                                      WHERE e.article_id = a.id
                                        AND e.event_type = 'view')
                         THEN 1

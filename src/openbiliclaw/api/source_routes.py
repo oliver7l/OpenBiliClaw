@@ -2031,7 +2031,7 @@ def register_source_routes(
             # ── 10. Event stats (combined single query) ──
             event_rows = db.conn.execute("""
                 SELECT event_type, source_platform, inferred_satisfaction, COUNT(*) AS c
-                FROM events
+                FROM events.events
                 GROUP BY event_type, source_platform, inferred_satisfaction
             """).fetchall()
             event_types: dict[str, int] = defaultdict(int)

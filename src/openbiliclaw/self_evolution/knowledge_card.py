@@ -276,7 +276,7 @@ class KnowledgeCardGenerator:
 
                 if only_favorited:
                     query += (
-                        " AND a.id IN (SELECT article_id FROM events WHERE event_type = 'favorite')"
+                        " AND a.id IN (SELECT article_id FROM events.events WHERE event_type = 'favorite')"
                     )
 
                 query += " ORDER BY length(a.content_text) DESC LIMIT ?"

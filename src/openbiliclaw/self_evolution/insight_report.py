@@ -571,7 +571,7 @@ class InsightReportGenerator:
         rows = conn.execute(
             """
             SELECT e.event_type, e.url, e.title, a.tags, a.content_text
-            FROM events e
+            FROM events.events e
             LEFT JOIN articles a ON a.url = e.url
             WHERE e.created_at >= ? AND e.created_at <= ?
               AND e.event_type IN ('view', 'favorite', 'like')
@@ -621,7 +621,7 @@ class InsightReportGenerator:
         prev_rows = conn.execute(
             """
             SELECT e.title, a.tags
-            FROM events e
+            FROM events.events e
             LEFT JOIN articles a ON a.url = e.url
             WHERE e.created_at >= ? AND e.created_at < ?
               AND e.event_type IN ('view', 'favorite', 'like')
@@ -694,7 +694,7 @@ class InsightReportGenerator:
         rows = conn.execute(
             """
             SELECT a.title, a.url, a.source_type, a.reading_percent, a.tags
-            FROM events e
+            FROM events.events e
             JOIN articles a ON a.url = e.url
             WHERE e.event_type = 'favorite'
               AND e.created_at >= ? AND e.created_at <= ?
@@ -735,7 +735,7 @@ class InsightReportGenerator:
                 WHERE ({like_conditions})
                   AND a.created_at >= ?
                   AND a.content_text IS NOT NULL AND length(a.content_text) > 1000
-                  AND a.url NOT IN (SELECT url FROM events WHERE event_type = 'view' AND created_at >= ?)
+                  AND a.url NOT IN (SELECT url FROM events.events WHERE event_type = 'view' AND created_at >= ?)
                 ORDER BY length(a.content_text) DESC
                 LIMIT 5
                 """,

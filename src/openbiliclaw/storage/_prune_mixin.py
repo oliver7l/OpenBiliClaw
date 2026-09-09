@@ -37,9 +37,9 @@ class PruneMixin:
         while True:
             cursor = self._execute_write(
                 f"""
-                DELETE FROM act.events
+                DELETE FROM events.events
                 WHERE id IN (
-                    SELECT id FROM act.events
+                    SELECT id FROM events.events
                     WHERE event_type IN ({placeholders})
                       AND created_at < datetime('now', ?)
                     LIMIT ?
