@@ -183,7 +183,7 @@ class RateLimitGuard:
             remaining = cooldown_end - now
             hours_left = remaining.total_seconds() / 3600
             logger.info(
-                "[%s] rate-limit cooldown active — skipping (%.1f h remaining, %d consecutive failures)",  # noqa: E501
+                "[%s] rate-limit cooldown active — skipping (%.1f h remaining, %d consecutive failures)",
                 self.name,
                 hours_left,
                 self._state.consecutive_failures,

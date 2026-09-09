@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_XIAOHONGSHU as _PLATFORM_XIAOHONGSHU
 from openbiliclaw.sources.xhs_keyword_gen import generate_xhs_keywords
 
@@ -469,7 +469,7 @@ def _run_once() -> dict[str, Any]:
     if not rows:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("xiaohongshu")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

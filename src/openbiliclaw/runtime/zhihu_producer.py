@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib import error, request
 
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_ZHIHU
 from openbiliclaw.sources.zhihu_tasks import (
     ZhihuTaskQueue,
@@ -626,7 +626,7 @@ def _run_once() -> dict[str, Any]:
     if not rows:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("zhihu")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
 logger = logging.getLogger(__name__)
@@ -282,7 +282,7 @@ def _run_once(pages: int = 3, dry_run: bool = False) -> dict[str, Any]:
             "dry_run": True,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("xiaohongshu")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

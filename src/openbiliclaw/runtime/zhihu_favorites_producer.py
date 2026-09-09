@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
 logger = logging.getLogger(__name__)
@@ -307,7 +307,7 @@ def _run_once(max_per_collection: int = 100, dry_run: bool = False) -> dict[str,
             "dry_run": True,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("zhihu")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()
@@ -330,7 +330,7 @@ def run_forever(max_per_collection: int = 100, interval_hours: int = 24) -> None
     )
     guard = RateLimitGuard("zhihu-favorites", state_dir=PROJECT_ROOT / "data" / "rate_limit")
     logger.info(
-        "zhihu favorites producer started (interval=%dh, max_per_collection=%d, rate-limit guard enabled)",  # noqa: E501
+        "zhihu favorites producer started (interval=%dh, max_per_collection=%d, rate-limit guard enabled)",
         interval_hours,
         max_per_collection,
     )

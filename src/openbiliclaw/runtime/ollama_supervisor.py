@@ -181,7 +181,7 @@ def stop_managed_ollama() -> bool:
             # terminate() reaches only `ollama serve`; the model runner is a
             # child process, so use taskkill /T to take down the whole tree.
             subprocess.run(  # noqa: S603
-                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],  # noqa: S607
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                 capture_output=True,
                 check=False,
             )

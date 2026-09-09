@@ -17,18 +17,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-
-def _obc_connect(db_path):
-    """连接主库并 ATTACH 推荐流子库 pool.db（无前缀 content_cache 落到子库）。"""
-    import sqlite3 as _sqlite3
-    from pathlib import Path as _Path
-
-    _conn = _sqlite3.connect(db_path)
-    _conn.execute("PRAGMA journal_mode=WAL")
-    with contextlib.suppress(_sqlite3.OperationalError):
-        _conn.execute("ATTACH DATABASE ? AS pool", (str(_Path(db_path).with_name("pool.db")),))
-    return _conn
-
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +223,7 @@ def _run_once() -> dict[str, Any]:
             "inserted": 0,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("xiaoyuzhou")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

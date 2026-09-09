@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_YOUTUBE as _PLATFORM_YOUTUBE
 
 logger = logging.getLogger(__name__)
@@ -499,7 +499,7 @@ def _run_once() -> dict[str, Any]:
     if not rows:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("youtube")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

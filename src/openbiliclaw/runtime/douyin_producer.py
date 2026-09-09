@@ -52,7 +52,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from openbiliclaw.discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_DOUYIN as _PLATFORM_DOUYIN
 from openbiliclaw.sources.douyin_plugin_search import (
     DouyinBudgetExhausted as _DouyinBudgetExhausted,
@@ -1391,7 +1391,7 @@ def _run_once(
     if _DRY_RUN:
         return {"ok": True, "dry_run": True, "fetched": len(videos), "valid": len(rows)}
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("douyin")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

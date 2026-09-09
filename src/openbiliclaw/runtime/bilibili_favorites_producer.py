@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
 logger = logging.getLogger(__name__)
@@ -370,7 +370,7 @@ def _run_once(
             "dry_run": True,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("bilibili")
     try:
         inserted = _insert_rows(conn, unique_rows)
         conn.commit()
@@ -408,7 +408,7 @@ def run_forever(
         modes.append("history")
     guard = RateLimitGuard("bilibili-favorites", state_dir=PROJECT_ROOT / "data" / "rate_limit")
     logger.info(
-        "bilibili personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",  # noqa: E501
+        "bilibili personal content producer started (modes=%s, interval=%dh, rate-limit guard enabled)",
         ",".join(modes),
         interval_hours,
     )
