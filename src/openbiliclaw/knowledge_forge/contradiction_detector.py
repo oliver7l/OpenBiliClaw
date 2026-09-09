@@ -328,6 +328,11 @@ class ContradictionDetector:
         if _main_path.exists():
             with _suppress(Exception):
                 conn.execute('ATTACH DATABASE ? AS main_db', (str(_main_path),))
+            # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+            _content_path = _Path(str(self.db_path)).with_name('content.db')
+            if _content_path.exists():
+                with _suppress(Exception):
+                    conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
         return conn
 
     def generate_report(self, limit: int = 50) -> str:
