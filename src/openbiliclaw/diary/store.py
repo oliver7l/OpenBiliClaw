@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from contextlib import suppress
 from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
@@ -205,22 +206,36 @@ class DiaryStore:
 
     def __init__(self, database: Database | None = None, db_path: str | Path | None = None) -> None:
         self._database = database
-        self._db_path = Path(db_path) if db_path else None
+        # v0.4.0+: diary 表迁移到独立的 diary.db，与主库锁域隔离
+        if db_path:
+            self._db_path = Path(db_path)
+        elif database is not None:
+            # 从主库路径派生 diary.db 路径（同目录）
+            main_path = getattr(database, '_db_path', None)
+            if main_path is not None:
+                self._db_path = Path(str(main_path)).with_name('diary.db')
+            else:
+                self._db_path = Path('data/diary.db')
+        else:
+            self._db_path = Path('data/diary.db')
         self._thread_local = threading.local()
         self._initialized = False
 
     @property
     def conn(self) -> sqlite3.Connection:
-        """获取当前线程的数据库连接。"""
-        if self._database is not None:
-            return self._database.conn
+        """获取当前线程的数据库连接（diary.db）。"""
         if not hasattr(self._thread_local, "conn") or self._thread_local.conn is None:
-            assert self._db_path is not None
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
             conn = open_db_conn(str(self._db_path))
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout = 30000")
+            # ATTACH 主库，使跨库查询（如 JOIN articles）正常工作
+            if self._database is not None:
+                main_path = getattr(self._database, '_db_path', None)
+                if main_path is not None and Path(str(main_path)).exists():
+                    with suppress(Exception):
+                        conn.execute("ATTACH DATABASE ? AS main_db", (str(main_path),))
             self._thread_local.conn = conn
         return self._thread_local.conn
 
