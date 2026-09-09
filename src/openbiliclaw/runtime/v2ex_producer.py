@@ -58,7 +58,7 @@ from typing import Any, cast
 
 import feedparser
 
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +449,7 @@ def _browser_run_once(limit: int, enrich: bool, proxy: str | None) -> dict[str, 
             "with_body": with_body,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("v2ex")
     try:
         cache_ins, cache_skip, art_ins = _browser_insert_rows(conn, topics)
         conn.commit()
@@ -830,7 +830,7 @@ def _cli_run_once(limit: int, discover_only: bool) -> dict[str, Any]:
             "would_have_body": enriched,
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("v2ex")
     try:
         cache_ins, cache_skip, art_ins = _cli_insert_rows(conn, rows)
         conn.commit()
@@ -1046,7 +1046,7 @@ def _api_run_once() -> dict[str, Any]:
             "would_insert": len(deduped),
         }
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("v2ex")
     try:
         inserted = _api_insert_rows(conn, deduped)
         conn.commit()
@@ -1221,7 +1221,7 @@ def _rss_run_once() -> dict[str, Any]:
         if _DRY_RUN:
             total_inserted += len(rows)
             continue
-        conn = _obc_connect(DB_PATH)
+        conn = _obc_connect("v2ex")
         try:
             inserted, skipped = _rss_insert_rows(conn, rows)
             conn.commit()

@@ -32,3 +32,13 @@ def connect_pool(db_path: str | Path) -> sqlite3.Connection:
     不需要再 ATTACH。
     """
     return sqlite3.connect(str(db_path))
+
+
+def connect_inbox(platform: str, data_dir: str | Path = "data") -> sqlite3.Connection:
+    """连接 platform 的 inbox 子库（用于 producer 写入，避免并发锁总库）。
+
+    子库位置: data/inbox/<platform>.db，自动创建 content_cache 表。
+    合并器定期将 inbox 数据合并到 pool.db。
+    """
+    from openbiliclaw.runtime.inbox_db import connect_inbox as _connect_inbox
+    return _connect_inbox(platform, data_dir)

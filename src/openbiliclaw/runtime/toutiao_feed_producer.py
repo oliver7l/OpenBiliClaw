@@ -43,7 +43,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_main_with_pool as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ def _run_once(limit: int) -> dict[str, Any]:
     if _DRY_RUN:
         return {"ok": True, "dry_run": True, "fetched": len(news), "valid": len(rows)}
 
-    conn = _obc_connect(DB_PATH)
+    conn = _obc_connect("toutiao")
     try:
         cache_ins, art_ins = _insert_rows(conn, rows)
         conn.commit()
