@@ -958,10 +958,17 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
                 ddl = self._extract_create_table_sql(_SCHEMA_SQL, table_name)
                 if ddl:
                     self._content_conn.executescript(ddl)
-        # 主要索引：用户行为表
-        if "favorites" not in existing:
+        # 重新查询已存在的表（创建后可能新增）
+        existing = {
+            str(row["name"])
+            for row in self._content_conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        # 主要索引：用户行为表（仅在表存在时创建）
+        if "favorites" in existing:
             self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_favorites_bvid ON favorites(bvid)")
-        if "watch_later" not in existing:
+        if "watch_later" in existing:
             self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_watch_later_bvid ON watch_later(bvid)")
         self._content_conn.commit()
 
@@ -1002,6 +1009,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._init_discovery_connection()
         # Content 库：独立连接，文章内容相关表与主库锁域隔离
         self._init_content_connection()
+        # 主库连接也 ATTACH content.db，使跨库 JOIN（content_cache JOIN favorites）正常工作
+        with suppress(sqlite3.OperationalError):
+            self._conn.execute("ATTACH DATABASE ? AS content", (str(self._content_db_path),))
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn

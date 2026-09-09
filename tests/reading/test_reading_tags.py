@@ -116,11 +116,12 @@ def _db(tmp_path: Path) -> Database:
 
 
 def _finish_on(db: Database, article_id: int, when: datetime.datetime) -> None:
-    db.conn.execute(
+    # v0.4.0+: articles 表迁移到 content.db
+    db._content_conn.execute(
         "UPDATE articles SET status='finished', updated_at=? WHERE id=?",
         (when.strftime("%Y-%m-%d %H:%M:%S"), article_id),
     )
-    db.conn.commit()
+    db._content_conn.commit()
 
 
 def test_stats_include_week_and_timeline(tmp_path: Path) -> None:

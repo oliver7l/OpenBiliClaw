@@ -411,15 +411,18 @@ class SchemaMixin:
 
     def _ensure_watch_later_table(self) -> None:
         """Create the watch_later bookmarks table for existing databases."""
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS watch_later (
-                bvid     TEXT PRIMARY KEY,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                note     TEXT DEFAULT ''
-            );
-            CREATE INDEX IF NOT EXISTS idx_watch_later_added
-                ON watch_later(added_at DESC);
-        """)
+        # v0.4.0+: watch_later 表迁移到 content.db
+        content_conn = getattr(self, "_content_conn", None)
+        if content_conn is not None:
+            content_conn.executescript("""
+                CREATE TABLE IF NOT EXISTS watch_later (
+                    bvid     TEXT PRIMARY KEY,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    note     TEXT DEFAULT ''
+                );
+                CREATE INDEX IF NOT EXISTS idx_watch_later_added
+                    ON watch_later(added_at DESC);
+            """)
 
     # ── Table creation (favorites / articles / read_archive) ─────
 
@@ -429,19 +432,19 @@ class SchemaMixin:
         from contextlib import suppress
 
         logger = logging.getLogger(__name__)
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS favorites (
-                bvid     TEXT PRIMARY KEY,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                note     TEXT DEFAULT ''
-            );
-            CREATE INDEX IF NOT EXISTS idx_favorites_added
-                ON favorites(added_at DESC);
-        """)
 
-        # v0.4.0+: articles 相关表迁移到 content.db，在 content 连接上创建
+        # v0.4.0+: favorites/watch_later/articles 相关表全部迁移到 content.db
         content_conn = getattr(self, "_content_conn", None)
         if content_conn is not None:
+            content_conn.executescript("""
+                CREATE TABLE IF NOT EXISTS favorites (
+                    bvid     TEXT PRIMARY KEY,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    note     TEXT DEFAULT ''
+                );
+                CREATE INDEX IF NOT EXISTS idx_favorites_added
+                    ON favorites(added_at DESC);
+            """)
             content_conn.executescript("""
                 CREATE TABLE IF NOT EXISTS articles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

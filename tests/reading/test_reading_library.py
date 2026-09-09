@@ -33,22 +33,23 @@ def _make_db() -> tuple[Database, Path]:
 
 
 def _first_article_id(db: Database) -> int:
-    row = db.conn.execute("SELECT id FROM articles LIMIT 1").fetchone()
+    row = db._content_conn.execute("SELECT id FROM articles LIMIT 1").fetchone()
     assert row is not None
     return int(row["id"])
 
 
 def test_articles_table_has_new_columns() -> None:
     db, _ = _make_db()
-    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(articles)").fetchall()}
+    cols = {r["name"] for r in db._content_conn.execute("PRAGMA table_info(articles)").fetchall()}
     assert {"reading_percent", "reading_progress", "favorited", "ai_summary"} <= cols
 
 
 def test_article_notes_table_created() -> None:
     db, _ = _make_db()
+    # v0.4.0+: article_notes 表迁移到 content.db
     tables = {
         r["name"]
-        for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        for r in db._content_conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     assert "article_notes" in tables
 
@@ -150,7 +151,7 @@ def test_hidden_article_is_excluded_from_default_views() -> None:
     assert db.get_recent_articles(limit=10) == []
     assert db.count_articles() == 0
     assert db.search_articles(q="测试文章标题") == []
-    facets = db.conn.execute(
+    facets = db._content_conn.execute(
         "SELECT COUNT(*) AS n FROM articles WHERE COALESCE(status, 'unread') != 'hidden'"
     ).fetchone()
     assert int(facets["n"]) == 0
@@ -285,14 +286,14 @@ def test_daily_reading_summary_excludes_other_days_and_statuses() -> None:
         author="作者B",
         tags=["历史"],
     )
-    row2 = db.conn.execute("SELECT id FROM articles WHERE url = 'https://example.com/2'").fetchone()
+    row2 = db._content_conn.execute("SELECT id FROM articles WHERE url = 'https://example.com/2'").fetchone()
     aid2 = int(row2["id"])
 
     assert db.update_article_status(aid2, "finished") is True
     # 第二篇拨回昨天：只统计今天
     yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
-    db.conn.execute("UPDATE articles SET updated_at = ? WHERE id = ?", (yesterday, aid2))
-    db.conn.commit()
+    db._content_conn.execute("UPDATE articles SET updated_at = ? WHERE id = ?", (yesterday, aid2))
+    db._content_conn.commit()
     # 第一篇保持 unread：不计数
     today = datetime.datetime.now().strftime("%Y-%m-%d")
 
@@ -325,7 +326,7 @@ def test_daily_brief_endpoint_roundtrip(tmp_path) -> None:
         tags=["科技", "历史"],
         content_text="正文。" * 20,
     )
-    aid = int(db.conn.execute("SELECT id FROM articles").fetchone()["id"])
+    aid = int(db._content_conn.execute("SELECT id FROM articles").fetchone()["id"])
     assert db.update_article_status(aid, "finished") is True
     db.upsert_article(
         "rss",

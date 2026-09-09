@@ -36,15 +36,15 @@ def _backdate(db: Database, keyword_id: int, column: str, *, minutes_ago: float)
     """Rewind a timestamp column on one keyword row so lease tests can fire."""
     assert column in {"claimed_at", "executing_at", "used_at", "created_at"}
     ts = (datetime.now(UTC) - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%d %H:%M:%S")
-    db.conn.execute(
+    db._discovery_conn.execute(
         f"UPDATE discovery_keywords SET {column} = ? WHERE id = ?",  # noqa: S608 - fixed column set
         (ts, keyword_id),
     )
-    db.conn.commit()
+    db._discovery_conn.commit()
 
 
 def _status(db: Database, keyword_id: int) -> str:
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE id = ?", (keyword_id,)
     ).fetchone()
     assert row is not None
@@ -55,7 +55,7 @@ class TestKeywordStoreBasics:
     def test_table_and_lock_table_exist(self, db: Database) -> None:
         names = {
             str(row["name"])
-            for row in db.conn.execute(
+            for row in db._discovery_conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
@@ -114,7 +114,7 @@ class TestAtomicClaim:
         db.insert_pending_keywords(_BILI, ["oldest", "middle", "newest"], _DIGEST_A)
         ids = {
             str(r["keyword"]): int(r["id"])
-            for r in db.conn.execute(
+            for r in db._discovery_conn.execute(
                 "SELECT id, keyword FROM discovery_keywords WHERE platform = ?", (_BILI,)
             ).fetchall()
         }
@@ -137,7 +137,7 @@ class TestLifecycleTransitions:
         db.mark_keyword_used(int(row["id"]))
         assert _status(db, int(row["id"])) == "used"
         assert (
-            db.conn.execute(
+            db._discovery_conn.execute(
                 "SELECT used_at FROM discovery_keywords WHERE id = ?", (row["id"],)
             ).fetchone()["used_at"]
             is not None
@@ -164,7 +164,7 @@ class TestLifecycleTransitions:
         db.rollback_keyword_to_pending(int(row["id"]))
         assert _status(db, int(row["id"])) == "pending"
         assert (
-            db.conn.execute(
+            db._discovery_conn.execute(
                 "SELECT claimed_at FROM discovery_keywords WHERE id = ?", (row["id"],)
             ).fetchone()["claimed_at"]
             is None
@@ -195,7 +195,7 @@ class TestLeaseReclaim:
         assert _status(db, int(fresh_claimed["id"])) == "claimed"
         # Reclaimed rows had their lease stamps cleared.
         assert (
-            db.conn.execute(
+            db._discovery_conn.execute(
                 "SELECT claimed_at, executing_at FROM discovery_keywords WHERE id = ?",
                 (stale_claimed["id"],),
             ).fetchone()["claimed_at"]
@@ -345,12 +345,12 @@ class TestPlannerLock:
         assert db.acquire_planner_lock("loop-a", lease_seconds=60) is True
         # Force the lease into the past.
         past = (datetime.now(UTC) - timedelta(seconds=5)).strftime("%Y-%m-%d %H:%M:%S")
-        db.conn.execute(
+        db._discovery_conn.execute(
             "UPDATE discovery_planner_lock SET locked_until = ? "
             "WHERE lock_name = 'keyword_planner'",
             (past,),
         )
-        db.conn.commit()
+        db._discovery_conn.commit()
         assert db.acquire_planner_lock("loop-b", lease_seconds=60) is True
         # loop-b now owns it → loop-a is locked out.
         assert db.acquire_planner_lock("loop-a", lease_seconds=60) is False
@@ -370,7 +370,7 @@ class TestPlannerLock:
 
 def _status_of_keyword(db: Database, keyword: str) -> str | None:
     """Return the status of the single row with this keyword, or None if absent."""
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE keyword = ?", (keyword,)
     ).fetchall()
     if not rows:
@@ -409,21 +409,21 @@ def test_unique_index_is_truly_partial(db: Database) -> None:
     db.mark_keyword_used(int(row["id"]))
     # Two more `used` rows for the same triplet inserted raw — no constraint fires.
     for _ in range(2):
-        db.conn.execute(
+        db._discovery_conn.execute(
             "INSERT INTO discovery_keywords (platform, keyword, profile_kw_digest, status, used_at)"
             " VALUES (?, ?, ?, 'used', CURRENT_TIMESTAMP)",
             (_BILI, "w", _DIGEST_A),
         )
-    db.conn.commit()
+    db._discovery_conn.commit()
     # But a second *pending* row for that triplet must violate the partial index.
-    db.conn.execute(
+    db._discovery_conn.execute(
         "INSERT INTO discovery_keywords (platform, keyword, profile_kw_digest, status)"
         " VALUES (?, ?, ?, 'pending')",
         (_BILI, "w", _DIGEST_A),
     )
-    db.conn.commit()
+    db._discovery_conn.commit()
     with pytest.raises(sqlite3.IntegrityError):
-        db.conn.execute(
+        db._discovery_conn.execute(
             "INSERT INTO discovery_keywords (platform, keyword, profile_kw_digest, status)"
             " VALUES (?, ?, ?, 'pending')",
             (_BILI, "w", _DIGEST_A),
