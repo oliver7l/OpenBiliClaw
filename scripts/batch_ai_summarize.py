@@ -29,14 +29,14 @@ API = "http://127.0.0.1:8420/api"
 
 def _candidates(source: str | None, min_id: int) -> list[tuple[int, str, str]]:
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        con.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            con.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
 
     sql = """SELECT id, source_type, title FROM articles
              WHERE LENGTH(COALESCE(content_text,'')) > 200

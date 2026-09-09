@@ -106,14 +106,15 @@ def main():
     tags = json.dumps(["知乎", "专栏" if kind == "article" else "回答"], ensure_ascii=False)
 
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
+
 
     cur = conn.cursor()
     row = cur.execute("SELECT id, title FROM articles WHERE url=?", (url,)).fetchone()
