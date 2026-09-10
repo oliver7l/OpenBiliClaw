@@ -1336,7 +1336,7 @@
         poolAllPage: () => loadPoolAllItems(),
         poolFilterPage: () => loadPoolFilterItems(),
         poolExplorePage: () => { if (window.loadPoolExploreData) window.loadPoolExploreData(); },
-        clonePage: () => { document.getElementById("cloneRefreshBtn")?.click(); },
+        clonePage: () => loadCloneSites(),
         travelPage: () => { document.getElementById("travelRefreshBtn")?.click(); },
         selfEvolutionPage: () => { document.getElementById("selfEvoRefreshBtn")?.click(); },
       };
@@ -3944,14 +3944,6 @@
       } finally {
         _cloneBtnLoading(btn, false);
       }
-    });
-    safeBind("#cloneRefreshBtn", "click", async () => {
-      const btn = document.getElementById("cloneRefreshBtn");
-      if (btn?.disabled) return;
-      btn.dataset.label = "刷新";
-      _cloneBtnLoading(btn, true);
-      await loadCloneSites();
-      _cloneBtnLoading(btn, false);
     });
     bindStarButton();
     syncTopbarHeight();

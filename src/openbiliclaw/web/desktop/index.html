@@ -939,33 +939,37 @@
       </div>
 
       <section class="clone-page content-page" id="clonePage" aria-label="克隆站点" hidden>
-        <div class="content-page-head">
-          <div>
-            <p class="eyebrow">Clone Sites</p>
-            <h2>🌐 克隆站点</h2>
-            <p class="video-meta">管理和浏览你克隆的网站，一键启动本地预览。</p>
-          </div>
-          <div class="content-page-actions">
-            <button class="pill-btn" id="cloneImportBtn" type="button">扫描导入</button>
-            <button class="pill-btn primary" id="cloneRefreshBtn" type="button">刷新</button>
+        <div class="page-header">
+          <div class="page-header-inner">
+            <div>
+              <h2>🌐 克隆站点</h2>
+              <p class="page-header-subtitle">管理和浏览你克隆的网站，一键启动本地预览</p>
+            </div>
           </div>
         </div>
-        <div class="clone-stats-bar" id="cloneStatsBar">
-          <span class="clone-stat">共 <strong id="cloneTotalCount">0</strong> 个站点</span>
-          <span class="clone-stat">总大小 <strong id="cloneTotalSize">0</strong></span>
-          <span class="clone-stat">总文件 <strong id="cloneTotalFiles">0</strong></span>
-        </div>
-        <div class="clone-filter-bar">
-          <div class="clone-tags" id="cloneTags"></div>
-        </div>
-        <div class="clone-grid" id="cloneGrid">
-          <div class="clone-empty" id="cloneEmpty">
-            <p>还没有克隆站点。点击"扫描导入"从 clone/sites/ 目录导入已有站点，或点击"克隆新站点"添加。</p>
+        <div class="page-subtabbar">
+          <div class="page-subtabbar-inner" style="justify-content: space-between; align-items: center;">
+            <div class="clone-stats-bar" id="cloneStatsBar" style="border: none; padding: 0;">
+              <span class="clone-stat">共 <strong id="cloneTotalCount">0</strong> 个站点</span>
+              <span class="clone-stat">总大小 <strong id="cloneTotalSize">0</strong></span>
+              <span class="clone-stat">总文件 <strong id="cloneTotalFiles">0</strong></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="clone-tags" id="cloneTags"></div>
+              <button class="pill-btn" id="cloneImportBtn" type="button">扫描导入</button>
+            </div>
           </div>
         </div>
-        <div class="clone-loading" id="cloneLoading" hidden>
-          <div class="spinner"></div>
-          <p>正在加载克隆站点...</p>
+        <div class="page-body">
+          <div class="clone-grid" id="cloneGrid">
+            <div class="clone-empty" id="cloneEmpty">
+              <p>还没有克隆站点。点击"扫描导入"从 clone/sites/ 目录导入已有站点，或点击"克隆新站点"添加。</p>
+            </div>
+          </div>
+          <div class="clone-loading" id="cloneLoading" hidden>
+            <div class="spinner"></div>
+            <p>正在加载克隆站点...</p>
+          </div>
         </div>
       </section>
 
