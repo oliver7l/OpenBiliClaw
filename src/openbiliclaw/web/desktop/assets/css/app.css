@@ -3904,3 +3904,21 @@ body.card-lg { --card-min: 340px; }
 .interview-ammo-file:last-child { border-bottom: none; }
 .interview-ammo-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .interview-ammo-file-date { flex-shrink: 0; color: var(--muted); }
+
+/* ── 公司岗位详情卡片 ─────────────────────────────────────── */
+.interview-company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.interview-company-card { padding: 16px; background: var(--bg-hover); border-radius: 10px; border: 1px solid var(--border-soft); transition: all .2s; }
+.interview-company-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+.interview-company-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.interview-company-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.interview-company-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; flex-shrink: 0; }
+.interview-company-position { font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 8px; }
+.interview-company-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
+.interview-company-meta-item { display: flex; align-items: center; gap: 3px; }
+.interview-company-section { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); }
+.interview-company-section-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.interview-company-summary { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 6px; }
+.interview-company-list { font-size: 11px; color: var(--muted); line-height: 1.7; padding-left: 16px; margin: 0; }
+.interview-company-list li { margin-bottom: 2px; }
+.interview-company-resume { font-size: 11px; color: var(--muted); background: var(--bg-elevated); padding: 6px 8px; border-radius: 4px; margin-top: 6px; }
+.interview-company-resume strong { color: var(--text-primary); }

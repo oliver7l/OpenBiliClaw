@@ -108,51 +108,69 @@
     `;
   }
 
-  // ── 加载岗位弹药库 ────────────────────────────────────────
+  // ── 加载公司岗位详情 ──────────────────────────────────────
 
-  function loadAmmoLibrary() {
-    const container = document.getElementById("interviewAmmo");
+  function loadCompanyProfiles() {
+    const container = document.getElementById("interviewCompanies");
     if (!container) return Promise.resolve();
-    container.innerHTML = '<div class="interview-loading">正在加载岗位资料…</div>';
-    return requestJson(API_BASE + "/ammo")
+    container.innerHTML = '<div class="interview-loading">正在加载公司岗位信息…</div>';
+    return requestJson(API_BASE + "/company-profiles")
       .then((data) => {
         const badge = document.getElementById("ammoCount");
-        if (badge) badge.textContent = data.total_companies + " 家公司 · " + data.total_files + " 份资料";
+        if (badge) badge.textContent = data.total + " 家公司";
         if (!data.companies || data.companies.length === 0) {
-          container.innerHTML = '<div class="interview-empty">暂无岗位资料</div>';
+          container.innerHTML = '<div class="interview-empty">暂无公司岗位信息</div>';
           return;
         }
-        container.innerHTML = data.companies.map(renderAmmoCard).join("");
+        container.innerHTML = data.companies.map(renderCompanyCard).join("");
       })
       .catch((err) => {
-        console.error("加载岗位弹药库失败:", err);
+        console.error("加载公司岗位详情失败:", err);
         container.innerHTML = '<div class="interview-empty">加载失败</div>';
       });
   }
 
-  function renderAmmoCard(company) {
-    const catCounts = Object.keys(company.categories || {}).map((cat) => {
-      const files = company.categories[cat] || [];
-      return `${cat}:${files.length}`;
-    }).join(" · ");
-    const keyFiles = (company.key_files || []).slice(0, 3).map((f) => `
-      <div class="interview-ammo-file">
-        <span class="interview-ammo-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-        <span class="interview-ammo-file-date">${escapeHtml(f.mtime)}</span>
-      </div>
-    `).join("");
+  function renderCompanyCard(company) {
+    const statusClass = company.status === "进行中" ? "status-progress" :
+                       company.status === "待面" ? "status-upcoming" : "status-done";
+    const responsibilities = (company.key_responsibilities || []).slice(0, 3).map(
+      (r) => `<li>${escapeHtml(r)}</li>`
+    ).join("");
+    const highlights = (company.match_highlights || []).slice(0, 3).map(
+      (h) => `<li>${escapeHtml(h)}</li>`
+    ).join("");
     return `
-      <div class="interview-ammo-card" data-company="${escapeHtml(company.company)}">
-        <div class="interview-ammo-company">${escapeHtml(company.company)}</div>
-        <div class="interview-ammo-stats">
-          <div class="interview-ammo-stat">📄 <span class="interview-ammo-stat-value">${company.total_files}</span> 份</div>
-          <div class="interview-ammo-stat">💾 <span class="interview-ammo-stat-value">${company.total_size_mb}</span> MB</div>
-          ${company.has_index ? '<div class="interview-ammo-stat">📋 有索引</div>' : ""}
+      <div class="interview-company-card">
+        <div class="interview-company-header">
+          <div class="interview-company-name">${escapeHtml(company.company)}</div>
+          <div class="interview-company-status ${statusClass}">${escapeHtml(company.status || "未知")}</div>
         </div>
-        <div class="interview-ammo-files">
-          <div style="color:var(--text-primary);margin-bottom:4px;">${escapeHtml(catCounts)}</div>
-          ${keyFiles}
+        <div class="interview-company-position">${escapeHtml(company.position || "未知岗位")}</div>
+        <div class="interview-company-meta">
+          ${company.location ? `<div class="interview-company-meta-item">📍 ${escapeHtml(company.location)}</div>` : ""}
+          ${company.interview_time ? `<div class="interview-company-meta-item">📅 ${escapeHtml(company.interview_time)}</div>` : ""}
+          ${company.direction ? `<div class="interview-company-meta-item">🎯 ${escapeHtml(company.direction)}</div>` : ""}
         </div>
+        ${company.job_summary ? `<div class="interview-company-summary">💡 ${escapeHtml(company.job_summary)}</div>` : ""}
+        ${responsibilities ? `
+          <div class="interview-company-section">
+            <div class="interview-company-section-title">📋 核心职责</div>
+            <ul class="interview-company-list">${responsibilities}</ul>
+          </div>
+        ` : ""}
+        ${highlights ? `
+          <div class="interview-company-section">
+            <div class="interview-company-section-title">⭐ 匹配亮点</div>
+            <ul class="interview-company-list">${highlights}</ul>
+          </div>
+        ` : ""}
+        ${company.resume_version || company.resume_file ? `
+          <div class="interview-company-resume">
+            📄 投递简历：<strong>${escapeHtml(company.resume_version || "未记录")}</strong>
+            ${company.resume_file ? `<br><span style="font-size:10px;">${escapeHtml(company.resume_file)}</span>` : ""}
+          </div>
+        ` : ""}
+        ${company.notes ? `<div class="interview-company-summary" style="margin-top:8px;">📝 ${escapeHtml(company.notes)}</div>` : ""}
       </div>
     `;
   }
@@ -312,7 +330,7 @@
 
   function loadInterviewData() {
     bindEvents();
-    return Promise.all([loadStats(), loadSchedule(), loadAmmoLibrary(), loadToday()]);
+    return Promise.all([loadStats(), loadSchedule(), loadCompanyProfiles(), loadToday()]);
   }
 
   // 暴露到全局

@@ -455,6 +455,184 @@ def get_company_ammo(company: str) -> dict[str, Any]:
     return _scan_ammo_dir(company_dir)
 
 
+# ── 公司岗位详情（提取关键信息）──────────────────────────────
+
+def _read_file_safe(path: Path, max_lines: int = 100) -> str:
+    """安全读取文件前N行。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = []
+            for i, line in enumerate(f):
+                if i >= max_lines:
+                    break
+                lines.append(line)
+            return "".join(lines)
+    except Exception:
+        return ""
+
+
+def _extract_company_profile(company_dir: Path, company_name: str) -> dict[str, Any]:
+    """提取公司岗位的结构化信息。"""
+    result = {
+        "company": company_name,
+        "position": "",
+        "location": "",
+        "direction": "",
+        "interview_time": "",
+        "status": "",
+        "resume_version": "",
+        "resume_file": "",
+        "job_summary": "",
+        "key_responsibilities": [],
+        "match_highlights": [],
+        "company_background": "",
+        "interview_rounds": [],
+        "notes": "",
+    }
+
+    # 1. 从 job 表获取基本信息
+    try:
+        conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM job WHERE company LIKE ?", (f"%{company_name}%",)
+        ).fetchone()
+        if row:
+            result["position"] = row["role"] or ""
+            result["interview_time"] = row["interview_at"] or ""
+            result["status"] = row["status"] or ""
+            result["direction"] = row["direction"] or ""
+            result["resume_version"] = row["resume_ver"] or ""
+            result["notes"] = row["note"] or ""
+        conn.close()
+    except Exception:
+        pass
+
+    # 2. 读取投递简历记录
+    resume_file = company_dir / "01_岗位与公司信息" / "投递简历记录.md"
+    if not resume_file.exists():
+        resume_file = company_dir / "01_岗位与公司信息" / "投递简历_游戏数据分析版.md"
+    if resume_file.exists():
+        content = _read_file_safe(resume_file, 50)
+        # 提取投递简历文件
+        for line in content.split("\n"):
+            if "投递简历文件" in line or "简历文件" in line:
+                import re
+                m = re.search(r"`([^`]+)`", line)
+                if m:
+                    result["resume_file"] = m.group(1)
+                break
+
+    # 3. 读取岗位JD拆解与公司背景
+    jd_file = company_dir / "01_岗位与公司信息" / "岗位JD拆解与公司背景.md"
+    if not jd_file.exists():
+        jd_file = company_dir / "01_岗位与公司信息" / "公司背景与JD拆解.md"
+    if not jd_file.exists():
+        jd_file = company_dir / "01_岗位与公司信息" / "JD拆解_拼多多AI算法工程师_电商推荐.md"
+    if jd_file.exists():
+        content = _read_file_safe(jd_file, 120)
+        lines = content.split("\n")
+        # 提取地点
+        for line in lines:
+            if "地点" in line or "工作地点" in line or "base" in line.lower():
+                import re
+                m = re.search(r"[：:]\s*(.+)", line)
+                if m and not result["location"]:
+                    result["location"] = m.group(1).strip()[:50]
+        # 提取职位描述核心一句话
+        in_summary = False
+        for line in lines:
+            if "职位描述" in line or "岗位描述" in line:
+                in_summary = True
+                continue
+            if in_summary and line.startswith(">"):
+                result["job_summary"] = line.lstrip("> ").strip()
+                break
+            if in_summary and line.startswith("###"):
+                break
+        # 提取主要职责
+        in_resp = False
+        for line in lines:
+            if "主要职责" in line or "岗位职责" in line:
+                in_resp = True
+                continue
+            if in_resp:
+                if line.startswith("###") or line.startswith("##"):
+                    break
+                if line.strip().startswith(("1.", "2.", "3.", "4.", "5.")):
+                    import re
+                    m = re.match(r"\d+\.\s*(.+)", line.strip())
+                    if m:
+                        resp = m.group(1).strip()
+                        # 去掉加粗标记
+                        resp = re.sub(r"\*\*(.+?)\*\*", r"\1", resp)
+                        if len(resp) > 10:
+                            result["key_responsibilities"].append(resp[:100])
+                if len(result["key_responsibilities"]) >= 5:
+                    break
+        # 提取公司背景
+        in_bg = False
+        bg_lines = []
+        for line in lines:
+            if "公司背景" in line or "公司整体" in line or "公司介绍" in line:
+                in_bg = True
+                continue
+            if in_bg:
+                if line.startswith("###") or line.startswith("##"):
+                    break
+                if line.strip().startswith("- ") and len(line.strip()) > 5:
+                    bg_lines.append(line.strip().lstrip("- "))
+                if len(bg_lines) >= 4:
+                    break
+        result["company_background"] = "；".join(bg_lines[:3])
+
+    # 4. 读取通用模块索引，提取匹配亮点
+    index_file = company_dir / "04_通用模块索引.md"
+    if index_file.exists():
+        content = _read_file_safe(index_file, 80)
+        # 提取数字口径
+        in_numbers = False
+        for line in content.split("\n"):
+            if "数字口径" in line or "可讲的真实数字" in line:
+                in_numbers = True
+                continue
+            if in_numbers and line.startswith("|") and "---" not in line:
+                import re
+                cells = [c.strip() for c in line.split("|") if c.strip()]
+                if len(cells) >= 2 and cells[0] != "经历":
+                    result["match_highlights"].append(f"{cells[0]}: {cells[1][:60]}")
+                if len(result["match_highlights"]) >= 5:
+                    break
+
+    return result
+
+
+@router.get("/company-profiles")
+def get_company_profiles() -> dict[str, Any]:
+    """获取所有公司的岗位详情（提取关键信息）。"""
+    if not AMMO_DIR.exists():
+        return {"companies": [], "total": 0}
+    profiles = []
+    for d in AMMO_DIR.iterdir():
+        if d.is_dir() and d.name.endswith("-面试准备"):
+            company_name = d.name.replace("-面试准备", "")
+            # 简化公司名（去掉后缀）
+            simple_name = company_name.replace("-广告岗", "").replace("-面试准备", "")
+            profiles.append(_extract_company_profile(d, simple_name))
+    # 按面试时间排序（有面试时间的排前面）
+    profiles.sort(key=lambda x: x["interview_time"] or "", reverse=True)
+    return {"companies": profiles, "total": len(profiles)}
+
+
+@router.get("/company-profiles/{company}")
+def get_company_profile(company: str) -> dict[str, Any]:
+    """获取单个公司的岗位详情。"""
+    company_dir = AMMO_DIR / f"{company}-面试准备"
+    if not company_dir.exists():
+        raise HTTPException(status_code=404, detail=f"未找到 {company}")
+    return _extract_company_profile(company_dir, company)
+
+
 def register_interview_routes(app: Any, ctx: Any) -> None:
     """注册面试题阅读追踪路由。"""
     app.include_router(router)
