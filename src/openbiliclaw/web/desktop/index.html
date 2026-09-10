@@ -1151,21 +1151,22 @@
 
       <!-- 旅行预算：实时机票价格 + 预算概览 + 完整文档 -->
       <section class="travel-page content-page" id="travelPage" aria-label="旅行预算" hidden>
-        <div class="content-page-head travel-head">
-          <div>
-            <p class="eyebrow">Travel</p>
-            <h2>✈️ 新疆旅行预算</h2>
-            <p class="video-meta">实时机票价 + 预算明细 + 完整攻略，一趟算清。</p>
-          </div>
-          <div class="travel-actions">
-            <button class="pill-btn dark" id="travelRefreshBtn" type="button">↻ 刷新</button>
+        <div class="page-header">
+          <div class="page-header-inner">
+            <div>
+              <h2>✈️ 新疆旅行预算</h2>
+              <p class="page-header-subtitle">实时机票价 + 预算明细 + 完整攻略，一趟算清</p>
+            </div>
           </div>
         </div>
-        <div class="travel-subtabs">
-          <button class="travel-subtab active" data-travel-view="flights" type="button">实时机票</button>
-          <button class="travel-subtab" data-travel-view="overview" type="button">预算概览</button>
-          <button class="travel-subtab" data-travel-view="doc" type="button">完整攻略</button>
+        <div class="page-subtabbar">
+          <div class="page-subtabbar-inner">
+            <button class="page-subtab-btn is-active" data-travel-view="flights" type="button">实时机票</button>
+            <button class="page-subtab-btn" data-travel-view="overview" type="button">预算概览</button>
+            <button class="page-subtab-btn" data-travel-view="doc" type="button">完整攻略</button>
+          </div>
         </div>
+        <div class="page-body">
         <div class="travel-view" id="travelFlightsView">
           <div class="travel-alerts" id="travelAlerts" hidden></div>
           <div class="card-grid is-minimal travel-grid" id="travelFlightsGrid"></div>
@@ -1195,6 +1196,7 @@
         <div class="travel-view" id="travelDocView" hidden>
           <div class="travel-doc-content" id="travelDocContent"></div>
           <div class="travel-loading" id="travelDocLoading">加载中...</div>
+        </div>
         </div>
       </section>
 
@@ -1264,8 +1266,8 @@
       </section>
 
       <section class="main-col" id="interviewPage" aria-label="面试" data-od-id="interview-tracker" hidden>
-        <div class="observability-header">
-          <div class="observability-header-inner">
+        <div class="page-header">
+          <div class="page-header-inner">
             <h2>面试备战中心</h2>
           </div>
         </div>

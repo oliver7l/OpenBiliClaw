@@ -1323,9 +1323,11 @@
       if (delightPill) delightPill.hidden = !isDelightPage;
       if (delightTag) delightTag.hidden = !isDelightPage;
       if (delightBtn) delightBtn.hidden = !isDelightPage;
-      if (poolPill) poolPill.style.display = isDelightPage ? "none" : "";
-      if (reshuffleToggle) reshuffleToggle.style.display = isDelightPage ? "none" : "";
-      if (reshuffleBtn) reshuffleBtn.style.display = isDelightPage ? "none" : "";
+      // 推荐流工具只在推荐流页面/首页显示，其他页面隐藏
+      const showFeedTools = isFeedPage || pageId === "homePage";
+      if (poolPill) poolPill.style.display = showFeedTools ? "" : "none";
+      if (reshuffleToggle) reshuffleToggle.style.display = showFeedTools ? "" : "none";
+      if (reshuffleBtn) reshuffleBtn.style.display = showFeedTools ? "" : "none";
       // 面试页面专用工具
       const isInterviewPage = pageId === "interviewPage";
       const interviewBtn = document.getElementById("interviewRefreshBtn");
