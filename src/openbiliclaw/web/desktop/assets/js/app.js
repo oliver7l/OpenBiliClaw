@@ -1272,6 +1272,13 @@
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
       document.body.classList.toggle("settings-page-open", pageId === "settingsPage");
+      document.body.classList.toggle("observability-page-open", pageId === "observabilityPage");
+      document.body.classList.toggle("interview-page-open", pageId === "interviewPage");
+      document.body.classList.toggle("pool-explore-page-open", pageId === "poolExplorePage");
+      document.body.classList.toggle("delight-page-open", pageId === "delightPage");
+      document.body.classList.toggle("clone-page-open", pageId === "clonePage");
+      document.body.classList.toggle("travel-page-open", pageId === "travelPage");
+      document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
       const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));

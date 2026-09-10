@@ -60,7 +60,7 @@
 
   function switchSubtab(subtab) {
     currentSubtab = subtab;
-    document.querySelectorAll(".interview-subtab-btn").forEach((btn) => {
+    document.querySelectorAll(".page-subtab-btn").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.subtab === subtab);
     });
     renderSubtab(subtab);
@@ -460,7 +460,7 @@
 
   function bindEvents() {
     // 二级 tab 切换
-    document.querySelectorAll(".interview-subtab-btn").forEach((btn) => {
+    document.querySelectorAll(".page-subtab-btn").forEach((btn) => {
       btn.addEventListener("click", () => switchSubtab(btn.dataset.subtab));
     });
 
