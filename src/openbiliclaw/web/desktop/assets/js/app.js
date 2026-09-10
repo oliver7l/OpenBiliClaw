@@ -1328,10 +1328,6 @@
       if (poolPill) poolPill.style.display = showFeedTools ? "" : "none";
       if (reshuffleToggle) reshuffleToggle.style.display = showFeedTools ? "" : "none";
       if (reshuffleBtn) reshuffleBtn.style.display = showFeedTools ? "" : "none";
-      // 面试页面专用工具
-      const isInterviewPage = pageId === "interviewPage";
-      const interviewBtn = document.getElementById("interviewRefreshBtn");
-      if (interviewBtn) interviewBtn.hidden = !isInterviewPage;
       // 统一刷新按钮：各页面共用，根据当前页面绑定对应刷新函数
       const refreshMap = {
         observabilityPage: () => scheduleObservabilityRefresh(),
@@ -1339,8 +1335,8 @@
         poolFilterPage: () => loadPoolFilterItems(),
         poolExplorePage: () => { if (window.loadPoolExploreData) window.loadPoolExploreData(); },
         clonePage: () => loadCloneSites(),
-        travelPage: () => { document.getElementById("travelRefreshBtn")?.click(); },
-        selfEvolutionPage: () => { document.getElementById("selfEvoRefreshBtn")?.click(); },
+        travelPage: () => { _travelLoaded = { flights: false, overview: false, doc: false }; loadTravelFlights(); loadTravelOverview(); loadTravelDoc(); },
+        interviewPage: () => { if (window.loadInterviewData) window.loadInterviewData(); },
       };
       const globalRefreshBtn = document.getElementById("globalRefreshBtn");
       if (globalRefreshBtn) {
@@ -1454,7 +1450,7 @@
       closeMobileMenu();
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("interviewPage");
-      if (window.loadInterviewData) window.loadInterviewData();
+      setTimeout(() => { if (window.loadInterviewData) window.loadInterviewData(); }, 50);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -4020,7 +4016,6 @@
     safeBind("#observabilityBtn", "click", () => navigateTo("/web/observability"));
     safeBind("#interviewBtn", "click", () => navigateTo("/web/interview"));
     const scheduleObservabilityRefresh = debounceAsync(() => loadObservabilityData(), 500);
-    safeBind("#interviewRefreshBtn", "click", () => { if (window.loadInterviewData) window.loadInterviewData(); });
     safeBind("#poolExploreBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-explore"); });
     safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
     safeBind("#resetFiltersBtn", "click", () => { state.query = ""; state.filter = "全部"; const input = $("#searchInput"); if (input) input.value = ""; window.reshuffle?.(); });
