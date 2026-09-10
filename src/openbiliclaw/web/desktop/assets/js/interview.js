@@ -108,6 +108,55 @@
     `;
   }
 
+  // ── 加载岗位弹药库 ────────────────────────────────────────
+
+  function loadAmmoLibrary() {
+    const container = document.getElementById("interviewAmmo");
+    if (!container) return Promise.resolve();
+    container.innerHTML = '<div class="interview-loading">正在加载岗位资料…</div>';
+    return requestJson(API_BASE + "/ammo")
+      .then((data) => {
+        const badge = document.getElementById("ammoCount");
+        if (badge) badge.textContent = data.total_companies + " 家公司 · " + data.total_files + " 份资料";
+        if (!data.companies || data.companies.length === 0) {
+          container.innerHTML = '<div class="interview-empty">暂无岗位资料</div>';
+          return;
+        }
+        container.innerHTML = data.companies.map(renderAmmoCard).join("");
+      })
+      .catch((err) => {
+        console.error("加载岗位弹药库失败:", err);
+        container.innerHTML = '<div class="interview-empty">加载失败</div>';
+      });
+  }
+
+  function renderAmmoCard(company) {
+    const catCounts = Object.keys(company.categories || {}).map((cat) => {
+      const files = company.categories[cat] || [];
+      return `${cat}:${files.length}`;
+    }).join(" · ");
+    const keyFiles = (company.key_files || []).slice(0, 3).map((f) => `
+      <div class="interview-ammo-file">
+        <span class="interview-ammo-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+        <span class="interview-ammo-file-date">${escapeHtml(f.mtime)}</span>
+      </div>
+    `).join("");
+    return `
+      <div class="interview-ammo-card" data-company="${escapeHtml(company.company)}">
+        <div class="interview-ammo-company">${escapeHtml(company.company)}</div>
+        <div class="interview-ammo-stats">
+          <div class="interview-ammo-stat">📄 <span class="interview-ammo-stat-value">${company.total_files}</span> 份</div>
+          <div class="interview-ammo-stat">💾 <span class="interview-ammo-stat-value">${company.total_size_mb}</span> MB</div>
+          ${company.has_index ? '<div class="interview-ammo-stat">📋 有索引</div>' : ""}
+        </div>
+        <div class="interview-ammo-files">
+          <div style="color:var(--text-primary);margin-bottom:4px;">${escapeHtml(catCounts)}</div>
+          ${keyFiles}
+        </div>
+      </div>
+    `;
+  }
+
   // ── 渲染题目卡片 ──────────────────────────────────────────
 
   function renderQuestionCard(q) {
@@ -263,7 +312,7 @@
 
   function loadInterviewData() {
     bindEvents();
-    return Promise.all([loadStats(), loadSchedule(), loadToday()]);
+    return Promise.all([loadStats(), loadSchedule(), loadAmmoLibrary(), loadToday()]);
   }
 
   // 暴露到全局

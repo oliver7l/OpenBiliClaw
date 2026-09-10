@@ -2,7 +2,7 @@
 
 > 整理日期：2026-09-10 ｜ 整理人：WorkBuddy
 > 范围：面试相关数据库（求职知识库离线体系 + OpenBiliClaw 主程序面试/知识库体系）
-> 本次整理动作：① 删除根目录 4 个 0B 死壳；② `knowledge.db`(索引) 改名 `file_index.db`；③ `面试处理库.chunk` 路径归一化（孤儿 1310→106）；④ 18GB 历史备份归档到 `data/_archive/`；⑤ 删除 106 个真丢失孤儿 chunk 行（637 行，chunk 13630→12993），FTS 重建；⑥ **结构化数据统一收口到主程序 `data/interview.db`**：把离线侧 `面试弹药库.db` + `幻灯片笔记.db` 全部表合并进 `interview.db`（仅新增表，应用表原样保留），原始库 `面试资料总库.db` 不动；⑦ **书籍单独分库**：`面试资料总库.db` 中 `category ∈ ('书籍','技术书籍')` 的 87 篇文档 + 其 `doc_chunk`(7878) / `doc_content`(80) / `doc_vector`(7878) / `doc_fts` 完整复制进新建的 `书籍库.db`（144.3MB，独立可用全文+语义检索）。**当前为复制（总库书籍仍在），是否从总库移除待用户确认**（见第四节）。
+> 本次整理动作：① 删除根目录 4 个 0B 死壳；② `knowledge.db`(索引) 改名 `file_index.db`；③ `面试处理库.chunk` 路径归一化（孤儿 1310→106）；④ 18GB 历史备份归档到 `data/_archive/`；⑤ 删除 106 个真丢失孤儿 chunk 行（637 行，chunk 13630→12993），FTS 重建；⑥ **结构化数据统一收口到主程序 `data/interview.db`**：把离线侧 `面试弹药库.db` + `幻灯片笔记.db` 全部表合并进 `interview.db`（仅新增表，应用表原样保留），原始库 `面试资料总库.db` 不动；⑦ **书籍单独分库（已从总库移除）**：`面试资料总库.db` 中 `category ∈ ('书籍','技术书籍')` 的 87 篇文档 + 其 `doc_chunk`(7878) / `doc_content`(80) / `doc_vector`(7878) / `doc_fts` 完整复制进新建的 `书籍库.db`（144.3MB，独立可用全文+语义检索），**并已从总库移除这 87 篇**（doc/doc_chunk/doc_content/doc_vector 删除 + `doc_fts` rebuild，外部内容 FTS 不可手动删索引行否则报 malformed，须用 rebuild）。总库由 459MB 瘦身至 289MB。备份：`data/_archive/面试资料总库_移除书籍前_20260910_091332.db`。
 
 ---
 
@@ -12,8 +12,8 @@
 
 | 库 | 大小 | 角色 | 关键表 | 维护脚本 |
 |---|---|---|---|---|
-| 面试资料总库.db | 458.8MB | L0 原始库（全量文档抽取原文 + 整篇 FTS，**含书籍 87 篇**，可后续移除） | doc(2206) / doc_chunk(33471) / doc_content(1893) / doc_fts / doc_vector(33467，已修复) | kb_ingest.py |
-| 书籍库.db | 144.3MB | **书籍专库**（category∈书籍/技术书籍，从总库拆分独立） | doc(87) / doc_chunk(7878) / doc_content(80) / doc_fts / doc_vector(7878) | kb_split_books.py |
+| 面试资料总库.db | 289MB | L0 原始库（全量**非书籍**文档抽取原文 + 整篇 FTS，**书籍已迁至 书籍库.db**） | doc(2119) / doc_chunk(25593) / doc_content(1813) / doc_fts / doc_vector(25589，已修复) | kb_ingest.py |
+| 书籍库.db | 144.3MB | **书籍专库**（category∈书籍/技术书籍，已从总库拆分独立） | doc(87) / doc_chunk(7878) / doc_content(80) / doc_fts / doc_vector(7878) | kb_split_books.py |
 | 面试处理库.db | 174.0MB | L1 分块索引（搜索底层） | chunk(12993) / chunk_fts（外部内容 FTS5） / meta | build_index.py |
 | 面试弹药库.db | 9.4MB | L2 面试弹药（结构化备考） | ammo_doc(105) / concept(33) / project(24) / question(25) / job(6) / log(2) / number(60) | kb*.py |
 | 幻灯片笔记.db | 1.7MB | 幻灯片 OCR 笔记 | slide(435) / source(17) / run_log(52) / processed_notes(7) / unprocessed(5) | slides_*.py |
@@ -58,4 +58,4 @@
 2. **同名规避**：求职知识库的文件索引现名 `file_index.db`（原名 `knowledge.db`，与 `data/knowledge.db` 重名已改）。引用它的脚本：`build_index.py` / `kb.py` / `doctor.py`。
 3. **派生关系**：`面试处理库` 是 `面试资料总库` 的分块索引；`data/interview.db` 由求职知识库导入；不要把它们当独立数据源重复维护。
 4. **备份纪律**：日常备份走 `data/backups/`（自动轮转）；大体积/阶段性手动备份统一进 `data/_archive/`，不要在项目根目录或主 `data/` 散落裸库。
-5. **书籍独立库（2026-09-10）**：书籍体量偏大（87 篇却占全库 23.5% 的 chunk），已拆出独立 `书籍库.db`（自包含 doc/chunk/content/vector/fts，可独立做全文+语义检索）。`kb_split_books.py` 默认从 `面试资料总库.db` **只读复制**，不改动总库；若需"彻底不混"，再单独从总库删除这 87 篇（注意 doc/doc_chunk/doc_vector/doc_fts 联动清理，属破坏性，需用户确认）。
+5. **书籍独立库（2026-09-10）**：书籍体量偏大（87 篇却占全库 23.5% 的 chunk），已拆出独立 `书籍库.db`（自包含 doc/chunk/content/vector/fts，可独立做全文+语义检索），并**已从总库移除**这 87 篇（`kb_remove_books_from_master.py`，先备份总库）。⚠️ **关键坑**：`doc_fts` 是外部内容 FTS5，手动 `DELETE FROM doc_fts` 后紧跟 `DELETE FROM doc` 会报 `database disk image is malformed`；正确做法是删完 doc 后对 `doc_fts` 执行 `INSERT INTO doc_fts(doc_fts) VALUES('rebuild')` 重建索引。移除后可 `VACUUM` 总库回收空闲页（459MB→289MB）。

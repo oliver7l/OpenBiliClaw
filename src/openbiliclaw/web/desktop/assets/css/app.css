@@ -3889,3 +3889,18 @@ body.card-lg { --card-min: 340px; }
 .status-upcoming { background: #dcfce7; color: #16a34a; }
 .status-progress { background: #fef3c7; color: #d97706; }
 .status-done { background: #f3f4f6; color: #6b7280; }
+
+/* ── 岗位弹药库区域 ───────────────────────────────────────── */
+.interview-ammo-section { margin: 16px 0; background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: 12px; padding: 16px; }
+.interview-ammo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.interview-ammo-card { padding: 14px; background: var(--bg-hover); border-radius: 8px; border: 1px solid var(--border-soft); transition: all .2s; cursor: pointer; }
+.interview-ammo-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.06); transform: translateY(-2px); }
+.interview-ammo-company { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+.interview-ammo-stats { display: flex; gap: 12px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.interview-ammo-stat { display: flex; align-items: center; gap: 4px; }
+.interview-ammo-stat-value { font-weight: 600; color: var(--text-primary); }
+.interview-ammo-files { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.interview-ammo-file { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed var(--border-soft); }
+.interview-ammo-file:last-child { border-bottom: none; }
+.interview-ammo-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.interview-ammo-file-date { flex-shrink: 0; color: var(--muted); }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview_questions.db"
 INTERVIEW_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview.db"
+AMMO_DIR = Path(__file__).resolve().parents[3] / "求职知识库" / "03_岗位弹药库"
 
 
 def _get_store() -> InterviewQuestionStore:
@@ -370,6 +372,87 @@ def get_reviews(limit: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
         }
     finally:
         conn.close()
+
+
+# ── 岗位弹药库扫描 ─────────────────────────────────────────
+
+def _scan_ammo_dir(company_dir: Path) -> dict[str, Any]:
+    """扫描单个公司的弹药库目录。"""
+    result = {
+        "company": company_dir.name.replace("-面试准备", ""),
+        "path": str(company_dir),
+        "categories": {},
+        "total_files": 0,
+        "total_size": 0,
+        "key_files": [],
+    }
+    category_map = {
+        "01_岗位与公司信息": "岗位与公司信息",
+        "02_面试备战资料": "面试备战资料",
+        "03_速成包": "速成包",
+    }
+    for cat_dir_name, cat_label in category_map.items():
+        cat_dir = company_dir / cat_dir_name
+        if not cat_dir.exists():
+            continue
+        files = []
+        for f in cat_dir.iterdir():
+            if f.is_file() and not f.name.startswith("."):
+                stat = f.stat()
+                files.append({
+                    "name": f.name,
+                    "size": stat.st_size,
+                    "size_kb": round(stat.st_size / 1024, 1),
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
+                })
+                result["total_files"] += 1
+                result["total_size"] += stat.st_size
+        files.sort(key=lambda x: x["mtime"], reverse=True)
+        result["categories"][cat_label] = files
+        # 收集关键文件（最新的3个）
+        for f in files[:3]:
+            result["key_files"].append({
+                "category": cat_label,
+                "name": f["name"],
+                "mtime": f["mtime"],
+                "size_kb": f["size_kb"],
+            })
+    # 通用模块索引
+    index_file = company_dir / "04_通用模块索引.md"
+    if index_file.exists():
+        result["has_index"] = True
+        result["index_mtime"] = datetime.fromtimestamp(index_file.stat().st_mtime).strftime("%Y-%m-%d")
+    else:
+        result["has_index"] = False
+    result["total_size_mb"] = round(result["total_size"] / 1024 / 1024, 2)
+    return result
+
+
+@router.get("/ammo")
+def get_ammo_library() -> dict[str, Any]:
+    """获取岗位弹药库概览。"""
+    if not AMMO_DIR.exists():
+        return {"companies": [], "total_companies": 0}
+    companies = []
+    for d in AMMO_DIR.iterdir():
+        if d.is_dir() and d.name.endswith("-面试准备"):
+            companies.append(_scan_ammo_dir(d))
+    companies.sort(key=lambda x: x["total_files"], reverse=True)
+    return {
+        "companies": companies,
+        "total_companies": len(companies),
+        "total_files": sum(c["total_files"] for c in companies),
+        "total_size_mb": round(sum(c["total_size"] for c in companies) / 1024 / 1024, 2),
+    }
+
+
+@router.get("/ammo/{company}")
+def get_company_ammo(company: str) -> dict[str, Any]:
+    """获取单个公司的弹药库详情。"""
+    company_dir = AMMO_DIR / f"{company}-面试准备"
+    if not company_dir.exists():
+        raise HTTPException(status_code=404, detail=f"未找到 {company} 的面试准备目录")
+    return _scan_ammo_dir(company_dir)
 
 
 def register_interview_routes(app: Any, ctx: Any) -> None:
