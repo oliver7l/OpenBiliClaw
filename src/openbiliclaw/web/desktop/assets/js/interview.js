@@ -1,9 +1,17 @@
-/* 面试题阅读追踪页面逻辑 */
+/* 面试备战中心页面逻辑 — 三级导航布局 */
 (function () {
   "use strict";
 
   const API_BASE = "/api/interview";
-  let currentTab = "today";
+  let currentSubtab = "schedule";
+  let cachedData = {
+    stats: null,
+    schedule: null,
+    companies: null,
+    today: null,
+    queue: null,
+    all: null,
+  };
 
   // ── 工具函数 ──────────────────────────────────────────────
 
@@ -43,45 +51,77 @@
     other: "其他",
   };
 
-  // ── 加载统计 ──────────────────────────────────────────────
-
-  function loadStats() {
-    return requestJson(API_BASE + "/stats")
-      .then((data) => {
-        const set = (id, val) => {
-          const el = document.getElementById(id);
-          if (el) el.textContent = val;
-        };
-        set("statTotal", data.total);
-        set("statMastered", data.mastered);
-        set("statUnderstood", data.understood);
-        set("statReview", data.need_review);
-        set("statRate", (data.mastery_rate || 0) + "%");
-      })
-      .catch((err) => console.error("加载面试统计失败:", err));
+  function showToast(msg) {
+    if (window.showToast) window.showToast(msg);
+    else console.log("[Toast]", msg);
   }
 
-  // ── 加载面试安排 ──────────────────────────────────────────
+  // ── 二级 Tab 切换 ─────────────────────────────────────────
 
-  function loadSchedule() {
-    const container = document.getElementById("interviewSchedule");
-    if (!container) return Promise.resolve();
-    container.innerHTML = '<div class="interview-loading">正在加载面试安排…</div>';
-    return requestJson(API_BASE + "/schedule")
+  function switchSubtab(subtab) {
+    currentSubtab = subtab;
+    document.querySelectorAll(".interview-subtab-btn").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.subtab === subtab);
+    });
+    renderSubtab(subtab);
+  }
+
+  function renderSubtab(subtab) {
+    const area = document.getElementById("interviewContentArea");
+    if (!area) return;
+    area.innerHTML = '<div class="interview-loading">正在加载…</div>';
+
+    switch (subtab) {
+      case "schedule":
+        renderSchedule(area);
+        break;
+      case "companies":
+        renderCompanies(area);
+        break;
+      case "today":
+        renderToday(area);
+        break;
+      case "queue":
+        renderQueue(area);
+        break;
+      case "all":
+        renderAll(area);
+        break;
+      case "stats":
+        renderStatsPage(area);
+        break;
+    }
+  }
+
+  // ── 面试安排 ──────────────────────────────────────────────
+
+  function renderSchedule(area) {
+    if (cachedData.schedule) {
+      area.innerHTML = renderScheduleHtml(cachedData.schedule);
+      return;
+    }
+    requestJson(API_BASE + "/schedule")
       .then((data) => {
-        const badge = document.getElementById("upcomingCount");
-        if (badge) badge.textContent = data.upcoming_count + " 场待面";
-        const all = (data.upcoming || []).concat(data.history || []);
-        if (all.length === 0) {
-          container.innerHTML = '<div class="interview-empty">暂无面试安排</div>';
-          return;
-        }
-        container.innerHTML = all.map(renderScheduleCard).join("");
+        cachedData.schedule = data;
+        area.innerHTML = renderScheduleHtml(data);
       })
       .catch((err) => {
         console.error("加载面试安排失败:", err);
-        container.innerHTML = '<div class="interview-empty">加载失败</div>';
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
       });
+  }
+
+  function renderScheduleHtml(data) {
+    const all = (data.upcoming || []).concat(data.history || []);
+    if (all.length === 0) return '<div class="interview-empty">暂无面试安排</div>';
+    return `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">
+        📌 共 ${data.total} 场面试，${data.upcoming_count} 场待面
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${all.map(renderScheduleCard).join("")}
+      </div>
+    `;
   }
 
   function renderScheduleCard(job) {
@@ -91,7 +131,6 @@
     const day = datePart ? datePart.split("-")[2] : "?";
     const month = datePart ? datePart.split("-")[1] + "月" : "";
     const statusClass = job.is_upcoming ? (job.status === "进行中" ? "status-progress" : "status-upcoming") : "status-done";
-    const statusText = job.status || "未知";
     return `
       <div class="interview-schedule-card ${job.is_upcoming ? "" : "status-done"}">
         <div class="interview-schedule-date">
@@ -103,31 +142,41 @@
           <div class="interview-schedule-role">${escapeHtml(job.role)}${job.direction ? " · " + escapeHtml(job.direction) : ""}</div>
           ${job.note ? `<div class="interview-schedule-note">${escapeHtml(job.note)}</div>` : ""}
         </div>
-        <div class="interview-schedule-status ${statusClass}">${escapeHtml(statusText)}</div>
+        <div class="interview-schedule-status ${statusClass}">${escapeHtml(job.status || "未知")}</div>
       </div>
     `;
   }
 
-  // ── 加载公司岗位详情 ──────────────────────────────────────
+  // ── 公司岗位信息 ──────────────────────────────────────────
 
-  function loadCompanyProfiles() {
-    const container = document.getElementById("interviewCompanies");
-    if (!container) return Promise.resolve();
-    container.innerHTML = '<div class="interview-loading">正在加载公司岗位信息…</div>';
-    return requestJson(API_BASE + "/company-profiles")
+  function renderCompanies(area) {
+    if (cachedData.companies) {
+      area.innerHTML = renderCompaniesHtml(cachedData.companies);
+      return;
+    }
+    requestJson(API_BASE + "/company-profiles")
       .then((data) => {
-        const badge = document.getElementById("ammoCount");
-        if (badge) badge.textContent = data.total + " 家公司";
-        if (!data.companies || data.companies.length === 0) {
-          container.innerHTML = '<div class="interview-empty">暂无公司岗位信息</div>';
-          return;
-        }
-        container.innerHTML = data.companies.map(renderCompanyCard).join("");
+        cachedData.companies = data;
+        area.innerHTML = renderCompaniesHtml(data);
       })
       .catch((err) => {
-        console.error("加载公司岗位详情失败:", err);
-        container.innerHTML = '<div class="interview-empty">加载失败</div>';
+        console.error("加载公司岗位失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
       });
+  }
+
+  function renderCompaniesHtml(data) {
+    if (!data.companies || data.companies.length === 0) {
+      return '<div class="interview-empty">暂无公司岗位信息</div>';
+    }
+    return `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">
+        🏢 共 ${data.total} 家公司岗位信息
+      </div>
+      <div class="interview-company-grid">
+        ${data.companies.map(renderCompanyCard).join("")}
+      </div>
+    `;
   }
 
   function renderCompanyCard(company) {
@@ -175,7 +224,74 @@
     `;
   }
 
-  // ── 渲染题目卡片 ──────────────────────────────────────────
+  // ── 今日待读 ──────────────────────────────────────────────
+
+  function renderToday(area) {
+    if (cachedData.today) {
+      area.innerHTML = renderQuestionsHtml(cachedData.today.questions, "今日待读");
+      return;
+    }
+    requestJson(API_BASE + "/today")
+      .then((data) => {
+        cachedData.today = data;
+        area.innerHTML = renderQuestionsHtml(data.questions, "今日待读", data.plan);
+      })
+      .catch((err) => {
+        console.error("加载今日待读失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  // ── 待看队列 ──────────────────────────────────────────────
+
+  function renderQueue(area) {
+    if (cachedData.queue) {
+      area.innerHTML = renderQuestionsHtml(cachedData.queue.queue, "待看队列");
+      return;
+    }
+    requestJson(API_BASE + "/queue")
+      .then((data) => {
+        cachedData.queue = data;
+        area.innerHTML = renderQuestionsHtml(data.queue, "待看队列");
+      })
+      .catch((err) => {
+        console.error("加载待看队列失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  // ── 全部题目 ──────────────────────────────────────────────
+
+  function renderAll(area) {
+    if (cachedData.all) {
+      area.innerHTML = renderQuestionsHtml(cachedData.all.questions, "全部题目");
+      return;
+    }
+    requestJson(API_BASE + "/questions?limit=200")
+      .then((data) => {
+        cachedData.all = data;
+        area.innerHTML = renderQuestionsHtml(data.questions, "全部题目");
+      })
+      .catch((err) => {
+        console.error("加载全部题目失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  function renderQuestionsHtml(questions, title, plan) {
+    if (!questions || questions.length === 0) {
+      return `<div class="interview-empty">${title}为空</div>`;
+    }
+    return `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">
+        📖 ${title}：共 ${questions.length} 题
+        ${plan ? ` · 计划：${escapeHtml(plan.name)} · 每日 ${plan.daily_target} 题` : ""}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${questions.map(renderQuestionCard).join("")}
+      </div>
+    `;
+  }
 
   function renderQuestionCard(q) {
     const mastery = q.mastery || "not_started";
@@ -202,65 +318,111 @@
     `;
   }
 
-  function renderQuestions(questions, emptyMsg) {
-    const container = document.getElementById("interviewContent");
-    if (!container) return;
-    if (!questions || questions.length === 0) {
-      container.innerHTML = `<div class="interview-empty">${escapeHtml(emptyMsg || "暂无题目")}</div>`;
+  // ── 学习统计 ──────────────────────────────────────────────
+
+  function renderStatsPage(area) {
+    if (cachedData.stats) {
+      area.innerHTML = renderStatsHtml(cachedData.stats);
       return;
     }
-    container.innerHTML = questions.map(renderQuestionCard).join("");
-  }
-
-  // ── 加载各 tab 数据 ───────────────────────────────────────
-
-  function loadToday() {
-    const container = document.getElementById("interviewContent");
-    if (container) container.innerHTML = '<div class="interview-loading">正在加载今日待读…</div>';
-    return requestJson(API_BASE + "/today")
+    requestJson(API_BASE + "/stats")
       .then((data) => {
-        renderQuestions(data.questions || [], "今日待读已完成！🎉");
+        cachedData.stats = data;
+        area.innerHTML = renderStatsHtml(data);
       })
       .catch((err) => {
-        console.error("加载今日待读失败:", err);
-        const container = document.getElementById("interviewContent");
-        if (container) container.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+        console.error("加载统计失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
       });
   }
 
-  function loadQueue() {
-    const container = document.getElementById("interviewContent");
-    if (container) container.innerHTML = '<div class="interview-loading">正在加载待看队列…</div>';
-    return requestJson(API_BASE + "/queue")
-      .then((data) => {
-        renderQuestions(data.queue || [], "待看队列为空");
-      })
-      .catch((err) => {
-        console.error("加载待看队列失败:", err);
-        const container = document.getElementById("interviewContent");
-        if (container) container.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
-      });
-  }
+  function renderStatsHtml(data) {
+    const maxCat = Math.max(...Object.values(data.by_category || {}), 1);
+    const maxDiff = Math.max(...Object.values(data.by_difficulty || {}), 1);
+    return `
+      <div class="interview-stats-page">
+        <div class="interview-stats-row">
+          <div class="interview-stat-card">
+            <div class="interview-stat-value">${data.total}</div>
+            <div class="interview-stat-label">总题数</div>
+          </div>
+          <div class="interview-stat-card">
+            <div class="interview-stat-value" style="color:#16a34a;">${data.mastered}</div>
+            <div class="interview-stat-label">已掌握</div>
+          </div>
+          <div class="interview-stat-card">
+            <div class="interview-stat-value" style="color:#059669;">${data.understood}</div>
+            <div class="interview-stat-label">已理解</div>
+          </div>
+          <div class="interview-stat-card">
+            <div class="interview-stat-value" style="color:#dc2626;">${data.need_review}</div>
+            <div class="interview-stat-label">需复习</div>
+          </div>
+          <div class="interview-stat-card">
+            <div class="interview-stat-value" style="color:var(--accent);">${data.mastery_rate}%</div>
+            <div class="interview-stat-label">掌握率</div>
+          </div>
+        </div>
 
-  function loadAll() {
-    const container = document.getElementById("interviewContent");
-    if (container) container.innerHTML = '<div class="interview-loading">正在加载全部题目…</div>';
-    return requestJson(API_BASE + "/questions?limit=200")
-      .then((data) => {
-        renderQuestions(data.questions || [], "题库为空");
-      })
-      .catch((err) => {
-        console.error("加载全部题目失败:", err);
-        const container = document.getElementById("interviewContent");
-        if (container) container.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
-      });
-  }
+        <div class="interview-chart-section">
+          <div class="interview-chart-title">📊 按分类分布</div>
+          ${Object.entries(data.by_category || {}).sort((a, b) => b[1] - a[1]).map(([cat, count]) => `
+            <div class="interview-bar-row">
+              <div class="interview-bar-label">${escapeHtml(CATEGORY_LABELS[cat] || cat)}</div>
+              <div class="interview-bar-track">
+                <div class="interview-bar-fill" style="width:${(count / maxCat * 100).toFixed(0)}%">${count}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
 
-  function loadCurrentTab() {
-    if (currentTab === "today") return loadToday();
-    if (currentTab === "queue") return loadQueue();
-    if (currentTab === "all") return loadAll();
-    return Promise.resolve();
+        <div class="interview-chart-section">
+          <div class="interview-chart-title">⭐ 按难度分布</div>
+          ${Object.entries(data.by_difficulty || {}).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([diff, count]) => `
+            <div class="interview-bar-row">
+              <div class="interview-bar-label">${"⭐".repeat(parseInt(diff))}</div>
+              <div class="interview-bar-track">
+                <div class="interview-bar-fill" style="width:${(count / maxDiff * 100).toFixed(0)}%;background:#f59e0b;">${count}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="interview-chart-section">
+          <div class="interview-chart-title">📈 掌握状态分布</div>
+          <div class="interview-bar-row">
+            <div class="interview-bar-label">未开始</div>
+            <div class="interview-bar-track">
+              <div class="interview-bar-fill" style="width:${(data.not_started / data.total * 100).toFixed(0)}%;background:#9ca3af;">${data.not_started}</div>
+            </div>
+          </div>
+          <div class="interview-bar-row">
+            <div class="interview-bar-label">阅读中</div>
+            <div class="interview-bar-track">
+              <div class="interview-bar-fill" style="width:${(data.reading / data.total * 100).toFixed(0)}%;background:#3b82f6;">${data.reading}</div>
+            </div>
+          </div>
+          <div class="interview-bar-row">
+            <div class="interview-bar-label">已理解</div>
+            <div class="interview-bar-track">
+              <div class="interview-bar-fill" style="width:${(data.understood / data.total * 100).toFixed(0)}%;background:#10b981;">${data.understood}</div>
+            </div>
+          </div>
+          <div class="interview-bar-row">
+            <div class="interview-bar-label">已掌握</div>
+            <div class="interview-bar-track">
+              <div class="interview-bar-fill" style="width:${(data.mastered / data.total * 100).toFixed(0)}%;background:#f59e0b;">${data.mastered}</div>
+            </div>
+          </div>
+          <div class="interview-bar-row">
+            <div class="interview-bar-label">需复习</div>
+            <div class="interview-bar-track">
+              <div class="interview-bar-fill" style="width:${(data.need_review / data.total * 100).toFixed(0)}%;background:#ef4444;">${data.need_review}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   // ── 标记操作 ──────────────────────────────────────────────
@@ -279,7 +441,14 @@
     return requestJson(API_BASE + "/questions/" + id + endpoint, { method: "POST", body })
       .then(() => {
         showToast("已更新：" + (MASTERY_LABELS[mastery] || mastery));
-        return Promise.all([loadStats(), loadCurrentTab()]);
+        // 清除缓存，重新加载
+        cachedData.today = null;
+        cachedData.queue = null;
+        cachedData.all = null;
+        cachedData.stats = null;
+        if (currentSubtab === "today" || currentSubtab === "queue" || currentSubtab === "all" || currentSubtab === "stats") {
+          renderSubtab(currentSubtab);
+        }
       })
       .catch((err) => {
         console.error("标记失败:", err);
@@ -287,36 +456,18 @@
       });
   }
 
-  function showToast(msg) {
-    if (window.showToast) {
-      window.showToast(msg);
-    } else {
-      console.log("[Toast]", msg);
-    }
-  }
-
-  // ── Tab 切换 ──────────────────────────────────────────────
-
-  function switchTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll(".interview-tab-btn").forEach((btn) => {
-      btn.classList.toggle("is-active", btn.dataset.tab === tab);
-    });
-    loadCurrentTab();
-  }
-
   // ── 事件绑定 ──────────────────────────────────────────────
 
   function bindEvents() {
-    // Tab 切换
-    document.querySelectorAll(".interview-tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    // 二级 tab 切换
+    document.querySelectorAll(".interview-subtab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => switchSubtab(btn.dataset.subtab));
     });
 
     // 题目操作按钮（事件委托）
-    const content = document.getElementById("interviewContent");
-    if (content) {
-      content.addEventListener("click", (e) => {
+    const area = document.getElementById("interviewContentArea");
+    if (area) {
+      area.addEventListener("click", (e) => {
         const btn = e.target.closest(".interview-action-btn");
         if (!btn) return;
         const id = btn.dataset.id;
@@ -330,16 +481,18 @@
 
   function loadInterviewData() {
     bindEvents();
-    return Promise.all([loadStats(), loadSchedule(), loadCompanyProfiles(), loadToday()]);
+    // 预加载统计数据（其他tab按需加载）
+    requestJson(API_BASE + "/stats").then((data) => { cachedData.stats = data; }).catch(() => {});
+    // 默认渲染第一个tab
+    renderSubtab(currentSubtab);
   }
 
   // 暴露到全局
   window.loadInterviewData = loadInterviewData;
-  window.switchInterviewTab = switchTab;
+  window.switchInterviewSubtab = switchSubtab;
 
-  // DOM 就绪后自动绑定（如果页面已加载）
+  // DOM 就绪后自动绑定
   if (document.readyState !== "loading") {
-    // 延迟绑定，确保元素已存在
     setTimeout(bindEvents, 100);
   } else {
     document.addEventListener("DOMContentLoaded", () => setTimeout(bindEvents, 100));

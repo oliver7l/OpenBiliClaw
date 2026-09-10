@@ -1267,65 +1267,27 @@
       <section class="main-col" id="interviewPage" aria-label="面试" data-od-id="interview-tracker" hidden>
         <div class="observability-header">
           <div class="observability-header-inner">
-            <h2>面试题阅读追踪</h2>
-            <p class="observability-subtitle">系统管理、阅读和消化面试题，追踪掌握进度</p>
+            <h2>面试备战中心</h2>
+            <p class="observability-subtitle">面试安排 · 公司岗位 · 题库阅读 · 全流程追踪</p>
             <div class="observability-actions">
               <button class="pill-btn dark" id="interviewRefreshBtn" type="button">刷新</button>
             </div>
           </div>
         </div>
         <div class="interview-body" id="interviewBody">
-          <div class="interview-schedule-section">
-            <div class="interview-section-header">
-              <h3>📅 面试安排</h3>
-              <span class="interview-section-badge" id="upcomingCount">0 场待面</span>
-            </div>
-            <div class="interview-schedule-list" id="interviewSchedule">
-              <div class="interview-loading">正在加载面试安排…</div>
-            </div>
+          <!-- 第三栏：二级 tabbar -->
+          <div class="interview-subtabbar" id="interviewSubtabbar">
+            <button class="interview-subtab-btn is-active" data-subtab="schedule" type="button">📅 面试安排</button>
+            <button class="interview-subtab-btn" data-subtab="companies" type="button">🏢 公司岗位</button>
+            <button class="interview-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>
+            <button class="interview-subtab-btn" data-subtab="queue" type="button">📋 待看队列</button>
+            <button class="interview-subtab-btn" data-subtab="all" type="button">📚 全部题目</button>
+            <button class="interview-subtab-btn" data-subtab="stats" type="button">📊 学习统计</button>
           </div>
 
-          <div class="interview-ammo-section">
-            <div class="interview-section-header">
-              <h3>🏢 公司岗位详情</h3>
-              <span class="interview-section-badge" id="ammoCount">0 家公司</span>
-            </div>
-            <div class="interview-company-grid" id="interviewCompanies">
-              <div class="interview-loading">正在加载公司岗位信息…</div>
-            </div>
-          </div>
-
-          <div class="interview-stats" id="interviewStats">
-            <div class="interview-stat-card">
-              <div class="interview-stat-value" id="statTotal">0</div>
-              <div class="interview-stat-label">总题数</div>
-            </div>
-            <div class="interview-stat-card">
-              <div class="interview-stat-value" id="statMastered">0</div>
-              <div class="interview-stat-label">已掌握</div>
-            </div>
-            <div class="interview-stat-card">
-              <div class="interview-stat-value" id="statUnderstood">0</div>
-              <div class="interview-stat-label">已理解</div>
-            </div>
-            <div class="interview-stat-card">
-              <div class="interview-stat-value" id="statReview">0</div>
-              <div class="interview-stat-label">需复习</div>
-            </div>
-            <div class="interview-stat-card">
-              <div class="interview-stat-value" id="statRate">0%</div>
-              <div class="interview-stat-label">掌握率</div>
-            </div>
-          </div>
-
-          <div class="interview-tabs">
-            <button class="interview-tab-btn is-active" data-tab="today" type="button">今日待读</button>
-            <button class="interview-tab-btn" data-tab="queue" type="button">待看队列</button>
-            <button class="interview-tab-btn" data-tab="all" type="button">全部题目</button>
-          </div>
-
-          <div class="interview-content" id="interviewContent">
-            <div class="observability-loading">正在加载…</div>
+          <!-- 信息展示区域 -->
+          <div class="interview-content-area" id="interviewContentArea">
+            <div class="interview-loading">正在加载…</div>
           </div>
         </div>
       </section>

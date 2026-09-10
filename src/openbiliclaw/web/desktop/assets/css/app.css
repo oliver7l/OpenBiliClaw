@@ -3922,3 +3922,24 @@ body.card-lg { --card-min: 340px; }
 .interview-company-list li { margin-bottom: 2px; }
 .interview-company-resume { font-size: 11px; color: var(--muted); background: var(--bg-elevated); padding: 6px 8px; border-radius: 4px; margin-top: 6px; }
 .interview-company-resume strong { color: var(--text-primary); }
+
+/* ── 面试页面三级导航布局 ─────────────────────────────────── */
+.interview-body { max-width: 1200px; margin: 0 auto 16px; padding: 0 16px; }
+.interview-subtabbar { display: flex; gap: 4px; margin: 12px 0 16px; padding: 4px; background: var(--bg-hover); border-radius: 10px; overflow-x: auto; flex-wrap: nowrap; }
+.interview-subtab-btn { flex-shrink: 0; padding: 8px 16px; background: none; border: none; border-radius: 8px; color: var(--muted); font-size: 13px; cursor: pointer; transition: all .2s; white-space: nowrap; font-weight: 500; }
+.interview-subtab-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.interview-subtab-btn.is-active { background: var(--accent); color: #fff; font-weight: 600; }
+.interview-content-area { min-height: 400px; }
+
+/* 统计页面样式 */
+.interview-stats-page { display: flex; flex-direction: column; gap: 16px; }
+.interview-stats-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.interview-stat-card { flex: 1 1 120px; min-width: 120px; background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: 12px; padding: 16px; text-align: center; }
+.interview-stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.interview-stat-label { font-size: 12px; color: var(--muted); }
+.interview-chart-section { background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: 12px; padding: 16px; }
+.interview-chart-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+.interview-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.interview-bar-label { width: 100px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
+.interview-bar-track { flex: 1; height: 20px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
+.interview-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: 11px; color: #fff; font-weight: 600; min-width: 30px; }
