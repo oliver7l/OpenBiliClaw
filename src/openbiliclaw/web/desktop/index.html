@@ -116,6 +116,10 @@
           <span class="delight-pill" id="delightTopbarPill" hidden><strong id="delightCountTopbar">0</strong><span>条候选</span></span>
           <span class="xhs-feed-tag" id="delightTopbarTag" hidden>delight</span>
           <button class="pill-btn dark" id="delightRefreshBtn" type="button" hidden>换一换</button>
+          <!-- 面试页面专用工具 -->
+          <button class="pill-btn dark" id="interviewRefreshBtn" type="button" hidden>刷新</button>
+          <!-- 统一刷新按钮（各页面共用） -->
+          <button class="pill-btn dark" id="globalRefreshBtn" type="button" hidden>↻ 刷新</button>
         </div>
       </div>
     </nav>
@@ -1209,9 +1213,6 @@
               </div>
             </div>
             <div class="pool-status-bar" id="poolAllStatusBar"></div>
-            <div class="pool-all-actions">
-              <button class="pill-btn dark" id="poolAllRefreshBtn" type="button">换一批</button>
-            </div>
           </div>
         </div>
         <section data-od-id="recommendations-pool-all">
@@ -1238,9 +1239,6 @@
               </div>
             </div>
             <div class="pool-filter-bar" id="poolFilterBar"></div>
-            <div class="pool-all-actions">
-              <button class="pill-btn dark" id="poolFilterRefreshBtn" type="button">换一批</button>
-            </div>
           </div>
         </div>
         <section data-od-id="recommendations-pool-filter">
@@ -1254,9 +1252,6 @@
           <div class="observability-header-inner">
             <h2>推荐系统观测</h2>
             <p class="observability-subtitle">数据流、打分、抓取、标签 — 全景透视</p>
-            <div class="observability-actions">
-              <button class="pill-btn dark" id="observabilityRefreshBtn" type="button">刷新</button>
-            </div>
           </div>
         </div>
         <div class="observability-body" id="observabilityBody">
@@ -1268,10 +1263,6 @@
         <div class="observability-header">
           <div class="observability-header-inner">
             <h2>面试备战中心</h2>
-            <p class="observability-subtitle">面试安排 · 公司岗位 · 题库阅读 · 全流程追踪</p>
-            <div class="observability-actions">
-              <button class="pill-btn dark" id="interviewRefreshBtn" type="button">刷新</button>
-            </div>
           </div>
         </div>
         <div class="interview-body" id="interviewBody">
@@ -1297,9 +1288,6 @@
           <div class="observability-header-inner">
             <h2>池子探索</h2>
             <p class="observability-subtitle">自定义筛选条件，随机展示 6 条内容</p>
-            <div class="observability-actions">
-              <button class="pill-btn dark" id="poolExploreRefreshBtn" type="button">换一批</button>
-            </div>
           </div>
         </div>
         <div class="observability-body" id="poolExploreBody">

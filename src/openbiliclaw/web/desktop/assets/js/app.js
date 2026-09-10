@@ -1319,6 +1319,31 @@
       if (poolPill) poolPill.style.display = isDelightPage ? "none" : "";
       if (reshuffleToggle) reshuffleToggle.style.display = isDelightPage ? "none" : "";
       if (reshuffleBtn) reshuffleBtn.style.display = isDelightPage ? "none" : "";
+      // 面试页面专用工具
+      const isInterviewPage = pageId === "interviewPage";
+      const interviewBtn = document.getElementById("interviewRefreshBtn");
+      if (interviewBtn) interviewBtn.hidden = !isInterviewPage;
+      // 统一刷新按钮：各页面共用，根据当前页面绑定对应刷新函数
+      const refreshMap = {
+        observabilityPage: () => scheduleObservabilityRefresh(),
+        poolAllPage: () => loadPoolAllItems(),
+        poolFilterPage: () => loadPoolFilterItems(),
+        poolExplorePage: () => { if (window.loadPoolExploreData) window.loadPoolExploreData(); },
+        clonePage: () => { document.getElementById("cloneRefreshBtn")?.click(); },
+        travelPage: () => { document.getElementById("travelRefreshBtn")?.click(); },
+        selfEvolutionPage: () => { document.getElementById("selfEvoRefreshBtn")?.click(); },
+      };
+      const globalRefreshBtn = document.getElementById("globalRefreshBtn");
+      if (globalRefreshBtn) {
+        const refreshFn = refreshMap[pageId];
+        if (refreshFn) {
+          globalRefreshBtn.hidden = false;
+          globalRefreshBtn.onclick = refreshFn;
+        } else {
+          globalRefreshBtn.hidden = true;
+          globalRefreshBtn.onclick = null;
+        }
+      }
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
