@@ -199,18 +199,24 @@
       </section>
 
       <section class="saved-page content-page" id="savedPage" aria-label="收藏" hidden>
+        <div class="page-body">
         <div class="saved-grid" id="savedList"></div>
         <div class="saved-empty" id="savedEmpty" hidden></div>
+        </div>
       </section>
 
       <section class="saved-page content-page" id="watchLaterPage" aria-label="稍后再看" hidden>
+        <div class="page-body">
         <div class="saved-grid" id="watchLaterList"></div>
         <div class="saved-empty" id="watchLaterEmpty" hidden></div>
+        </div>
       </section>
 
       <section class="profile-page content-page" id="profilePage" aria-label="我的画像" hidden>
+        <div class="page-body">
         <div class="profile-list profile-page-list" id="profileDetails"></div>
         <div class="drawer-actions profile-page-actions"><button class="pill-btn dark" id="profileMemoryMoreBtn" type="button" hidden="">加载更多近期记忆</button></div>
+        </div>
       </section>
 
       <!-- 日记系统：记录、浏览、分析个人日记 -->
@@ -971,19 +977,20 @@
       </section>
 
       <section class="chat-page content-page" id="chatPage" aria-label="聊聊口味" hidden>
-        <div class="content-page-head">
-          <div>
-            <p class="eyebrow">Dialogue</p>
-            <h2>聊聊口味</h2>
-            <p class="video-meta">告诉阿B你的偏好、边界和最近想看的方向。</p>
-          </div>
-          <div class="chat-mode-switch" role="tablist" aria-label="聊天模式">
-            <button class="chat-mode-btn is-active" id="chatModeNormal" type="button" role="tab" aria-selected="true">普通聊天</button>
-            <button class="chat-mode-btn" id="chatModeRecommend" type="button" role="tab" aria-selected="false">对话式推荐</button>
+        <!-- 第二栏：模式切换 -->
+        <div class="page-subtabbar">
+          <div class="page-subtabbar-inner" style="justify-content: center; gap: 8px;">
+            <div class="chat-mode-switch" role="tablist" aria-label="聊天模式">
+              <button class="chat-mode-btn is-active" id="chatModeNormal" type="button" role="tab" aria-selected="true">普通聊天</button>
+              <button class="chat-mode-btn" id="chatModeRecommend" type="button" role="tab" aria-selected="false">对话式推荐</button>
+            </div>
           </div>
         </div>
+        <!-- 第三栏：内容区域 -->
+        <div class="page-body">
         <div class="chat-log" id="chatLog"></div>
         <div class="chat-recommend-results" id="chatRecommendResults" hidden></div>
+        </div>
       <form class="chat-input" id="chatForm"><input id="chatInput" placeholder="说说你最近怎么想——你是什么样的人、喜欢什么、讨厌什么，都可以直接说。"><button class="pill-btn primary" type="submit">发送</button></form>
       </section>
 
