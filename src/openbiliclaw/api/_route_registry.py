@@ -233,3 +233,11 @@ def register_all_routes(
         app.include_router(build_review_router())
     except Exception:  # noqa: BLE001
         logger.exception("Interview review routes registration failed")
+
+    # ── 面试题阅读追踪 API ───────────────────────────────────────
+    try:
+        from openbiliclaw.api._interview_routes import register_interview_routes
+
+        register_interview_routes(app, ctx)
+    except Exception:  # noqa: BLE001
+        logger.exception("Interview question tracker routes registration failed")

@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1332,6 +1332,7 @@
       "pool-all": () => openPoolAllPage(),
       "pool-filter": () => openPoolFilterPage(),
       observability: () => openObservabilityPage(),
+      interview: () => openInterviewPage(),
       "pool-explore": () => openPoolExplorePage(),
       delight: () => openDelightPage(),
       saved: () => openSavedPage(),
@@ -1412,6 +1413,14 @@
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("observabilityPage");
       loadObservabilityData();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openInterviewPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("interviewPage");
+      if (window.loadInterviewData) window.loadInterviewData();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -3985,8 +3994,10 @@
     // 显示模式调节已移除：固定网格卡片模式
     setDisplayMode("card");
     safeBind("#observabilityBtn", "click", () => navigateTo("/web/observability"));
+    safeBind("#interviewBtn", "click", () => navigateTo("/web/interview"));
     const scheduleObservabilityRefresh = debounceAsync(() => loadObservabilityData(), 500);
     safeBind("#observabilityRefreshBtn", "click", () => scheduleObservabilityRefresh());
+    safeBind("#interviewRefreshBtn", "click", () => { if (window.loadInterviewData) window.loadInterviewData(); });
     safeBind("#poolExploreBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-explore"); });
     safeBind("#poolExploreRefreshBtn", "click", () => window.loadPoolExploreData());
     safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
@@ -5004,6 +5015,7 @@
       openPoolAllPage,
       openPoolFilterPage,
       openObservabilityPage,
+      openInterviewPage,
       openDelightPage,
       openSavedPage,
       openWatchLaterPage,

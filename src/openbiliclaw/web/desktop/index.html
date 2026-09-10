@@ -70,6 +70,7 @@
           </div>
         </div>
         <button class="tab-btn" id="observabilityBtn" type="button">观测</button>
+        <button class="tab-btn" id="interviewBtn" type="button">面试</button>
         <div class="filter-dropdown" id="feedDropdown">
           <button class="tab-btn filter-dropdown-trigger" id="feedDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">推荐流 ▾</button>
           <div class="filter-dropdown-menu" id="feedDropdownMenu" role="menu" hidden>
@@ -1263,6 +1264,52 @@
         </div>
       </section>
 
+      <section class="main-col" id="interviewPage" aria-label="面试" data-od-id="interview-tracker" hidden>
+        <div class="observability-header">
+          <div class="observability-header-inner">
+            <h2>面试题阅读追踪</h2>
+            <p class="observability-subtitle">系统管理、阅读和消化面试题，追踪掌握进度</p>
+            <div class="observability-actions">
+              <button class="pill-btn dark" id="interviewRefreshBtn" type="button">刷新</button>
+            </div>
+          </div>
+        </div>
+        <div class="interview-body" id="interviewBody">
+          <div class="interview-stats" id="interviewStats">
+            <div class="interview-stat-card">
+              <div class="interview-stat-value" id="statTotal">0</div>
+              <div class="interview-stat-label">总题数</div>
+            </div>
+            <div class="interview-stat-card">
+              <div class="interview-stat-value" id="statMastered">0</div>
+              <div class="interview-stat-label">已掌握</div>
+            </div>
+            <div class="interview-stat-card">
+              <div class="interview-stat-value" id="statUnderstood">0</div>
+              <div class="interview-stat-label">已理解</div>
+            </div>
+            <div class="interview-stat-card">
+              <div class="interview-stat-value" id="statReview">0</div>
+              <div class="interview-stat-label">需复习</div>
+            </div>
+            <div class="interview-stat-card">
+              <div class="interview-stat-value" id="statRate">0%</div>
+              <div class="interview-stat-label">掌握率</div>
+            </div>
+          </div>
+
+          <div class="interview-tabs">
+            <button class="interview-tab-btn is-active" data-tab="today" type="button">今日待读</button>
+            <button class="interview-tab-btn" data-tab="queue" type="button">待看队列</button>
+            <button class="interview-tab-btn" data-tab="all" type="button">全部题目</button>
+          </div>
+
+          <div class="interview-content" id="interviewContent">
+            <div class="observability-loading">正在加载…</div>
+          </div>
+        </div>
+      </section>
+
       <section class="main-col" id="poolExplorePage" aria-label="池子探索" data-od-id="recommendation-home" hidden>
         <div class="observability-header">
           <div class="observability-header-inner">
@@ -1865,6 +1912,7 @@
   </div>
   <script src="/web/assets/js/self-evolution.js" defer></script>
   <script src="/web/assets/js/app.js" defer></script>
+  <script src="/web/assets/js/interview.js" defer></script>
   <script src="/web/assets/js/pool-explore.js" defer></script>
   <script src="/web/assets/js/profile.js" defer></script>
   <script src="/web/assets/js/feed-pages.js" defer></script>
