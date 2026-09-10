@@ -1003,8 +1003,8 @@
   color: var(--fg-2);
 }
 .library-filter-btn.is-active {
-  color: var(--fg);
-  background: var(--surface-active);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 #libraryGrid,
 #readArchiveGrid {
@@ -1012,7 +1012,28 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+}
+/* 阅读库/已读库卡片：等高 + 底部操作对齐 + 摘要限行 */
+.library-page .video-card.is-minimal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.library-page .video-card.is-minimal .video-card-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.library-page .video-card.is-minimal .library-card-actions {
+  margin-top: auto;
+  padding-top: 8px;
+}
+/* 已读库：卡片终止于标签区，让标签贴底对齐（与阅读库底部操作一致） */
+.read-archive-page .video-card.is-minimal .library-card-tags {
+  margin-top: auto;
+  padding-top: 8px;
 }
 .library-page .empty-state {
   padding: 64px 24px;
@@ -1090,8 +1111,8 @@
 }
 .library-tag:hover,
 .library-tag.is-active {
-  background: var(--accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 .library-count {
   flex: 0 0 auto;
@@ -2216,14 +2237,8 @@ body.saved-page-open .tabbar-tools,
 body.settings-page-open .tabbar-tools,
 body.profile-page-open .tabbar-tools,
 body.chat-page-open .tabbar-tools { display: none; }
-/* 但这些页面需要显示统一刷新按钮/专用工具，单独覆盖 */
-body.observability-page-open .tabbar-tools,
-body.interview-page-open .tabbar-tools,
-body.pool-explore-page-open .tabbar-tools,
-body.delight-page-open .tabbar-tools,
-body.clone-page-open .tabbar-tools,
-body.travel-page-open .tabbar-tools,
-body.self-evolution-page-open .tabbar-tools { display: flex !important; }
+/* 惊喜推荐页面需要显示专用工具 */
+body.delight-page-open .tabbar-tools { display: flex !important; }
 .tabbar-actions {
   display: flex;
   align-items: center;
@@ -3913,6 +3928,88 @@ body.card-lg { --card-min: 340px; }
 .interview-ammo-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .interview-ammo-file-date { flex-shrink: 0; color: var(--muted); }
 
+/* ── 弹药库 · 阅读视图 ───────────────────────────────────── */
+.interview-ammo-layout {
+  display: flex; gap: 12px; align-items: stretch;
+  height: calc(100vh - 200px); min-height: 420px;
+}
+.interview-ammo-companies {
+  flex: 0 0 168px; max-width: 20%; min-width: 0; display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border-soft); border-radius: 12px; padding: 8px;
+  background: var(--bg-elevated); height: 100%; overflow-y: auto;
+}
+.interview-ammo-company-btn {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; background: none; border: none; border-radius: 8px; cursor: pointer;
+  font: inherit; color: var(--muted); text-align: left; font-size: 13px;
+}
+.interview-ammo-company-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.interview-ammo-company-btn.is-active { background: var(--accent); color: #fff; font-weight: 600; }
+.interview-ammo-company-btn-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.interview-ammo-company-btn-count { flex-shrink: 0; font-size: 10px; background: var(--bg-hover); color: var(--muted); border-radius: 999px; padding: 1px 7px; }
+.interview-ammo-company-btn.is-active .interview-ammo-company-btn-count { background: rgba(255,255,255,.25); color: #fff; }
+.interview-ammo-files-panel {
+  flex: 0 0 320px; max-width: 34%; min-width: 0;
+  border: 1px solid var(--border-soft); border-radius: 12px; padding: 6px 0;
+  background: var(--bg-elevated); height: 100%; overflow-y: auto;
+}
+.interview-ammo-reader-status { font-size: 10px; padding: 1px 8px; border-radius: 999px; }
+.interview-ammo-reader-status.is-unread { background: var(--bg-hover); color: var(--muted); }
+.interview-ammo-reader-status.is-reading { background: rgba(180,83,9,.14); color: var(--warn); }
+.interview-ammo-reader-status.is-finished { background: rgba(26,127,78,.14); color: var(--ok); }
+.interview-ammo-company-block { margin-bottom: 12px; }
+.interview-ammo-company-title { font-size: 13px; font-weight: 600; color: var(--text-primary); padding: 6px 10px; border-bottom: 1px solid var(--border-soft); }
+.interview-ammo-cat-label { font-size: 11px; color: var(--muted); padding: 6px 10px 2px; }
+.interview-ammo-file-row { display: flex; align-items: center; padding: 0 10px; }
+.interview-ammo-file-row.is-current { background: var(--bg-elevated); border-radius: 6px; }
+.interview-ammo-file-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 4px;
+  background: none; border: none; cursor: pointer; text-align: left; font: inherit;
+}
+.interview-ammo-file-btn:hover .interview-ammo-file-name { color: var(--accent); }
+.interview-ammo-status { flex-shrink: 0; font-size: 10px; padding: 1px 7px; border-radius: 999px; }
+.interview-ammo-status.is-unread { background: var(--bg-hover); color: var(--muted); }
+.interview-ammo-status.is-reading { background: rgba(180,83,9,.12); color: var(--warn); }
+.interview-ammo-status.is-finished { background: rgba(26,127,78,.12); color: var(--ok); }
+.interview-ammo-empty-line { padding: 6px 10px; font-size: 11px; color: var(--faint); }
+
+.interview-ammo-reader {
+  flex: 1 1 auto; min-width: 0; border: 1px solid var(--border-soft); border-radius: 12px;
+  background: var(--bg-elevated); max-height: 72vh; display: flex; flex-direction: column; overflow: hidden;
+}
+.interview-ammo-reader-empty { padding: 48px 20px; text-align: center; color: var(--faint); font-size: 13px; }
+.interview-ammo-reader-loading { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+.interview-ammo-reader-err { padding: 24px 20px; color: var(--warn); font-size: 13px; }
+.interview-ammo-reader-header { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); flex-shrink: 0; }
+.interview-ammo-reader-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.interview-ammo-reader-meta { font-size: 11px; color: var(--muted); margin: 3px 0 8px; }
+.interview-ammo-reader-actions { display: flex; gap: 8px; }
+.interview-ammo-reader-actions .pill-btn { padding: 3px 12px; font-size: 12px; }
+.interview-ammo-reader-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; font-size: 13.5px; line-height: 1.75; color: var(--text-primary); }
+.interview-ammo-reader-body h1, .interview-ammo-reader-body h2, .interview-ammo-reader-body h3,
+.interview-ammo-reader-body h4 { margin: 18px 0 8px; line-height: 1.4; }
+.interview-ammo-reader-body h1 { font-size: 19px; border-bottom: 1px solid var(--border-soft); padding-bottom: 6px; }
+.interview-ammo-reader-body h2 { font-size: 16px; }
+.interview-ammo-reader-body h3 { font-size: 14.5px; }
+.interview-ammo-reader-body p { margin: 8px 0; }
+.interview-ammo-reader-body ul, .interview-ammo-reader-body ol { margin: 8px 0; padding-left: 22px; }
+.interview-ammo-reader-body li { margin: 3px 0; }
+.interview-ammo-reader-body blockquote { margin: 10px 0; padding: 6px 12px; border-left: 3px solid var(--accent); background: var(--bg-hover); color: var(--muted); border-radius: 0 6px 6px 0; }
+.interview-ammo-reader-body pre { margin: 10px 0; padding: 12px; background: var(--bg-hover); border: 1px solid var(--border-soft); border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.6; }
+.interview-ammo-reader-body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg-hover); padding: 1px 4px; border-radius: 4px; font-size: 12px; }
+.interview-ammo-reader-body pre code { padding: 0; background: none; }
+.interview-ammo-reader-body table { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: 12.5px; }
+.interview-ammo-reader-body th, .interview-ammo-reader-body td { border: 1px solid var(--border-soft); padding: 5px 9px; text-align: left; }
+.interview-ammo-reader-body th { background: var(--bg-hover); font-weight: 600; }
+.interview-ammo-reader-body a { color: var(--accent); }
+.interview-ammo-reader-body hr { border: none; border-top: 1px solid var(--border-soft); margin: 14px 0; }
+@media (max-width: 900px) {
+  .interview-ammo-layout { flex-direction: column; height: auto; }
+  .interview-ammo-companies { flex: 1 1 auto; max-width: none; max-height: 30vh; flex-direction: row; flex-wrap: wrap; height: auto; }
+  .interview-ammo-files-panel { flex: 1 1 auto; max-width: none; max-height: 30vh; height: auto; }
+  .interview-ammo-reader { max-height: none; min-height: 50vh; height: auto; }
+}
+
 /* ── 公司岗位详情卡片 ─────────────────────────────────────── */
 .interview-company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
 .interview-company-card { padding: 16px; background: var(--bg-hover); border-radius: 10px; border: 1px solid var(--border-soft); transition: all .2s; }
@@ -4015,4 +4112,127 @@ body.card-lg { --card-min: 340px; }
   max-width: 1200px;
   margin: 0 auto 16px;
   padding: 16px;
+}
+/* 第三栏固定：页面标题栏/子导航栏吸顶到 tabbar 下方，内容在其下方滚动 */
+.page-header,
+.page-subtabbar {
+  position: sticky;
+  top: 124px;
+  z-index: 18;
+}
+
+/* ── 反问话术页面样式 ─────────────────────────────────────── */
+.rebuttals-container { padding: 0; }
+.rebuttals-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.rebuttal-filter-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.rebuttal-filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+.rebuttal-filter-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.rebuttal-group { margin-bottom: 24px; }
+.rebuttal-group-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text-color);
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+.rebuttal-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+  border-left: 3px solid var(--border-color);
+}
+.rebuttal-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transform: translateY(-1px);
+}
+.rebuttal-card.priority-high { border-left-color: #EA6668; }
+.rebuttal-card.priority-mid { border-left-color: #FAAD14; }
+.rebuttal-card.priority-low { border-left-color: #52C41A; }
+.rebuttal-question {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.rebuttal-purpose {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.rebuttal-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.rebuttal-priority {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.rebuttal-card.priority-high .rebuttal-priority { background: rgba(234,102,104,0.1); color: #EA6668; }
+.rebuttal-card.priority-mid .rebuttal-priority { background: rgba(250,173,20,0.1); color: #FAAD14; }
+.rebuttal-card.priority-low .rebuttal-priority { background: rgba(82,196,26,0.1); color: #52C41A; }
+.rebuttal-company {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(155,187,244,0.15);
+  color: var(--accent);
+}
+.rebuttal-tags {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.rebuttal-used {
+  font-size: 11px;
+  color: #52C41A;
+}
+.rebuttal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.rebuttal-action-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.rebuttal-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(155,187,244,0.05);
 }

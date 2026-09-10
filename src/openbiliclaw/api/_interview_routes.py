@@ -446,6 +446,123 @@ def get_ammo_library() -> dict[str, Any]:
     }
 
 
+@router.get("/ammo/reading")
+def get_ammo_reading() -> dict[str, Any]:
+    """获取全部弹药文件阅读状态（unread/reading/finished）。"""
+    conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        _ensure_ammo_reading_table(conn)
+        rows = conn.execute(
+            "SELECT company, category, name, status, updated_at FROM ammo_reading"
+        ).fetchall()
+        items = [
+            {
+                "company": r["company"],
+                "category": r["category"],
+                "name": r["name"],
+                "status": r["status"],
+                "updated_at": r["updated_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+    return {"items": items}
+
+
+@router.post("/ammo/reading")
+def update_ammo_reading(payload: dict[str, Any]) -> dict[str, Any]:
+    """更新单个弹药文件的阅读状态（upsert）。"""
+    from datetime import datetime as _dt
+
+    company = str(payload.get("company") or "").strip()
+    category = str(payload.get("category") or "").strip()
+    name = str(payload.get("name") or "").strip()
+    status = str(payload.get("status") or "unread").strip()
+    if not company or not category or not name:
+        raise HTTPException(status_code=422, detail="company/category/name 均必填")
+    if status not in {"unread", "reading", "finished"}:
+        raise HTTPException(status_code=422, detail="status 仅支持 unread/reading/finished")
+    now = _dt.now().isoformat(timespec="seconds")
+    conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+    try:
+        _ensure_ammo_reading_table(conn)
+        conn.execute(
+            """INSERT INTO ammo_reading (company, category, name, status, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(company, category, name)
+               DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at""",
+            (company, category, name, status, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "company": company, "name": name, "status": status, "updated_at": now}
+
+
+def _ensure_ammo_reading_table(conn: sqlite3.Connection) -> None:
+    """确保弹药阅读状态表存在。"""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ammo_reading (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company TEXT NOT NULL,
+            category TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'unread',
+            updated_at TEXT NOT NULL,
+            UNIQUE(company, category, name)
+        )
+        """
+    )
+    conn.commit()
+
+
+@router.get("/ammo/file")
+def get_ammo_file(company: str, category: str, name: str) -> dict[str, Any]:
+    """读取弹药库内单个文件内容（限岗位弹药库目录，供前端预览）。"""
+    import urllib.parse
+
+    company = urllib.parse.unquote(company)
+    category = urllib.parse.unquote(category)
+    name = urllib.parse.unquote(name)
+    if not company or not category or not name:
+        raise HTTPException(status_code=422, detail="company/category/name 均必填")
+
+    company_dir = (
+        AMMO_DIR / company
+        if company.endswith("-面试准备")
+        else AMMO_DIR / f"{company}-面试准备"
+    )
+    cat_map = {
+        "岗位与公司信息": "01_岗位与公司信息",
+        "面试备战资料": "02_面试备战资料",
+        "速成包": "03_速成包",
+    }
+    rel_cat = cat_map.get(category, category)
+    target = (company_dir / rel_cat / name).resolve()
+    if not str(target).startswith(str(AMMO_DIR.resolve())):
+        raise HTTPException(status_code=404, detail="路径越界，拒绝访问")
+    if not target.is_file() or target.suffix.lower() not in {
+        ".md", ".txt", ".html", ".json", ".csv",
+    }:
+        raise HTTPException(status_code=404, detail="文件不存在或不支持预览")
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raise HTTPException(status_code=500, detail="读取失败")
+    limit = 50000
+    return {
+        "company": company,
+        "category": rel_cat,
+        "name": name,
+        "content": content[:limit],
+        "lines": content.count("\n") + 1,
+        "truncated": len(content) > limit,
+    }
+
+
 @router.get("/ammo/{company}")
 def get_company_ammo(company: str) -> dict[str, Any]:
     """获取单个公司的弹药库详情。"""
@@ -631,6 +748,104 @@ def get_company_profile(company: str) -> dict[str, Any]:
     if not company_dir.exists():
         raise HTTPException(status_code=404, detail=f"未找到 {company}")
     return _extract_company_profile(company_dir, company)
+
+
+# ── 反问话术 API ──────────────────────────────────────────────
+
+class RebuttalRequest(BaseModel):
+    category: str = "HR面"
+    company: str = ""
+    question: str
+    purpose: str = ""
+    priority: str = "中"
+    tags: str = ""
+    note: str = ""
+
+
+def _get_rebuttal_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(INTERVIEW_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@router.get("/rebuttals")
+def get_rebuttals(
+    category: str = Query("", description="分类：HR面/技术面/业务面/通用"),
+    company: str = Query("", description="公司，空表示通用"),
+    priority: str = Query("", description="优先级：高/中/低"),
+) -> dict[str, Any]:
+    """获取反问话术列表。"""
+    conn = _get_rebuttal_conn()
+    cur = conn.cursor()
+    query = "SELECT * FROM interview_rebuttals WHERE 1=1"
+    params: list[Any] = []
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    if company:
+        query += " AND (company = ? OR company = '')"
+        params.append(company)
+    if priority:
+        query += " AND priority = ?"
+        params.append(priority)
+    query += " ORDER BY CASE priority WHEN '高' THEN 1 WHEN '中' THEN 2 ELSE 3 END, category, id"
+    cur.execute(query, params)
+    items = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/rebuttals")
+def create_rebuttal(req: RebuttalRequest) -> dict[str, Any]:
+    """新增反问话术。"""
+    conn = _get_rebuttal_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO interview_rebuttals (category, company, question, purpose, priority, tags, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (req.category, req.company, req.question, req.purpose, req.priority, req.tags, req.note),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return {"id": new_id, "status": "ok"}
+
+
+@router.put("/rebuttals/{rebuttal_id}")
+def update_rebuttal(rebuttal_id: int, req: RebuttalRequest) -> dict[str, Any]:
+    """更新反问话术。"""
+    conn = _get_rebuttal_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE interview_rebuttals SET category=?, company=?, question=?, purpose=?, priority=?, tags=?, note=?
+           WHERE id=?""",
+        (req.category, req.company, req.question, req.purpose, req.priority, req.tags, req.note, rebuttal_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "id": rebuttal_id}
+
+
+@router.delete("/rebuttals/{rebuttal_id}")
+def delete_rebuttal(rebuttal_id: int) -> dict[str, Any]:
+    """删除反问话术。"""
+    conn = _get_rebuttal_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM interview_rebuttals WHERE id=?", (rebuttal_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+@router.post("/rebuttals/{rebuttal_id}/use")
+def mark_rebuttal_used(rebuttal_id: int) -> dict[str, Any]:
+    """标记反问话术已使用（used_count+1）。"""
+    conn = _get_rebuttal_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE interview_rebuttals SET used_count = used_count + 1 WHERE id=?", (rebuttal_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
 
 
 def register_interview_routes(app: Any, ctx: Any) -> None:

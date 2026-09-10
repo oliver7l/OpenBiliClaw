@@ -4,6 +4,12 @@
 
 ---
 
+## v0.3.222: 本地媒体浏览模块（2026-09-10）
+
+- **新增本地媒体浏览模块（视频 + 图片）**：浏览 `[media] roots` 配置的本地媒体目录。桌面端以**内嵌视图**呈现（`mediaPage`，与专题/健康/旅行同款 `card-grid.is-minimal` 3 列小白卡 + 左对齐 subtab），顶栏「🎬 媒体」tab → `/web/media`；另保留独立 `/media` 页兜底。功能：根目录切换、类型/文件名过滤、子目录逐层进入 + 面包屑、图片灯箱轮播、HTML5 视频播放（后端 Range 流式 + ffmpeg 抽帧封面缓存）、**收藏（只看收藏视图）**、**1-5 星评级**、**随机播放（自动连播）**、**删除（移入 `data/media_trash/` 回收站，可找回）**、页面内「添加目录」一键持久化、目录穿越防护。后端：`src/openbiliclaw/media/`（`service.py` 扫描 + `store.py` 收藏/评级 `media_state.db` + `routes.py` `/api/media/roots|list|file|poster|item(GET/POST/DELETE)|favorites`）；新增配置 `[media] roots`。配套 `tests/api/test_api_media.py`（17 例）、`docs/modules/media.md`。媒体为独立查看器，不注入推荐流、不新增 source，架构图/README 无需改动。
+
+---
+
 ## v0.3.221: 系统架构重构 — 巨类拆分与模块化（2026-09-09）
 
 - **db sharding P8 knowledge.db 拆分完成（2026-09-09）**：将 11 张知识图谱域表（`entities` / `entity_relations` / `topics` / `topic_items` / `knowledge_cards` / `knowledge_graph` / `learning_paths` / `insight_reports` / `content_insights_reports` / `knowledge_concepts` / `knowledge_backlinks`）从主库迁入独立子库 `data/knowledge.db`，与主库锁域隔离。数据一致性校验通过（entities 774、entity_relations 4712（原在 knowledge_audit.db 一并迁入）、topics 8、topic_items 1933、knowledge_cards 234、knowledge_graph 4、learning_paths 2、insight_reports 2、content_insights_reports 2）。基础设施：`database.py` 新增 `_knowledge_db_path` + `_ensure_knowledge_database()` + `_attach_knowledge()`，主库连接 / `open_db_conn()` / per-thread 连接均 ATTACH `knowledge` 别名；`_schema_mixin` / `_topic_mixin` 及 self_evolution、knowledge_forge、api（`knowledge_routes`）全部知识表 SQL 统一为 `knowledge.` 前缀，另修复 `_conn_with_content` 自递归 bug。清理：备份主库与 knowledge_audit.db（`data/_backup_p8/`）后 DROP 主库 11 张旧表 + audit 库旧 `entity_relations`，无数据损失。顺带修复 P8 改路由后 stale 的测试 fixture：`entity_extractor` / `entity_relation_builder` / `entity_description_updater` / `gap_analyst` / `batch_processor` 的 `entities` / `entity_relations` 改到 tmp 兄弟 `knowledge.db`（`tests/knowledge/*`）；API 集成测试 `tests/api/test_api_knowledge_forge.py` 的多单库 fixture 重构为符合真实分布的 knowledge.db / content.db / knowledge_audit.db 三子库（路由 home 派生为 knowledge_audit.db、ATTACH 兄弟库）。`tests/api/test_api_knowledge_forge.py + tests/knowledge + tests/storage` = **90 passed** 全绿。详见 `docs/database-sharding-plan.md` 的 "P8 拆分" 与 "P8 收尾" 一节。

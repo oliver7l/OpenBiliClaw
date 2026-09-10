@@ -11,6 +11,7 @@
     today: null,
     queue: null,
     all: null,
+    ammo: null,
   };
 
   // ── 工具函数 ──────────────────────────────────────────────
@@ -78,6 +79,9 @@
       case "companies":
         renderCompanies(area);
         break;
+      case "ammo":
+        renderAmmo(area);
+        break;
       case "today":
         renderToday(area);
         break;
@@ -86,6 +90,9 @@
         break;
       case "all":
         renderAll(area);
+        break;
+      case "rebuttals":
+        renderRebuttals(area);
         break;
       case "stats":
         renderStatsPage(area);
@@ -222,6 +229,264 @@
         ${company.notes ? `<div class="interview-company-summary" style="margin-top:8px;">📝 ${escapeHtml(company.notes)}</div>` : ""}
       </div>
     `;
+  }
+
+  // ── 弹药库（阅读 + 状态跟踪）────────────────────────────
+
+  let ammoReading = {};
+  let ammoCompany = null; // 当前选中的公司
+  let ammoCurrent = null; // 正在阅读的文件 {company, category, name}
+
+  function ammoKey(company, category, name) {
+    return company + "|" + category + "|" + name;
+  }
+
+  function ammoStatusOf(company, category, name) {
+    return ammoReading[ammoKey(company, category, name)] || "unread";
+  }
+
+  function renderAmmo(area) {
+    Promise.all([
+      requestJson("/api/interview/ammo"),
+      requestJson("/api/interview/ammo/reading"),
+    ])
+      .then(([data, reading]) => {
+        cachedData.ammo = data;
+        ammoReading = {};
+        (reading.items || []).forEach((r) => {
+          ammoReading[ammoKey(r.company, r.category, r.name)] = r.status;
+        });
+        area.innerHTML = renderAmmoHtml(data);
+        bindAmmo(area);
+      })
+      .catch((err) => {
+        console.error("加载弹药库失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  function renderAmmoHtml(data) {
+    if (!data.companies || data.companies.length === 0) {
+      return '<div class="interview-empty">暂无弹药库（03_岗位弹药库 下没有「XX-面试准备」目录）</div>';
+    }
+    if (!ammoCompany || !data.companies.some((c) => c.company === ammoCompany)) {
+      ammoCompany = data.companies[0].company;
+    }
+    return `
+      <div class="interview-ammo-layout">
+        <div class="interview-ammo-companies" id="ammoCompanies">
+          ${renderAmmoCompanies(data)}
+        </div>
+        <div class="interview-ammo-files-panel" id="ammoFilesPanel">
+          ${renderAmmoFiles(data, ammoCompany)}
+        </div>
+        <div class="interview-ammo-reader" id="ammoReader">
+          <div class="interview-ammo-reader-empty">← 选择公司，点击弹药文件开始阅读</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAmmoCompanies(data) {
+    return (data.companies || []).map((c) => {
+      const active = c.company === ammoCompany;
+      return `
+        <button type="button" class="interview-ammo-company-btn${active ? " is-active" : ""}" data-company="${escapeHtml(c.company)}">
+          <span class="interview-ammo-company-btn-name">${escapeHtml(c.company)}</span>
+          <span class="interview-ammo-company-btn-count">${c.total_files}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderAmmoFiles(data, companyName) {
+    const company = (data.companies || []).find((c) => c.company === companyName);
+    if (!company) {
+      return '<div class="interview-empty">未找到该公司弹药库</div>';
+    }
+    const categories = company.categories || {};
+    const fileRows = Object.keys(categories).map((label) => {
+      const files = categories[label] || [];
+      if (files.length === 0) return "";
+      return `
+        <div class="interview-ammo-cat-label">${escapeHtml(label)}</div>
+        ${files.map((f) => {
+          const status = ammoStatusOf(company.company, label, f.name);
+          const badge = { unread: "未读", reading: "在读", finished: "已读" }[status];
+          const cls = "interview-ammo-status is-" + status;
+          const isCurrent = ammoCurrent && ammoCurrent.name === f.name &&
+            ammoCurrent.company === company.company && ammoCurrent.category === label;
+          return `
+            <div class="interview-ammo-file-row${isCurrent ? " is-current" : ""}">
+              <button type="button" class="interview-ammo-file-btn"
+                data-company="${escapeHtml(company.company)}"
+                data-category="${escapeHtml(label)}"
+                data-name="${escapeHtml(f.name)}">
+                <span class="${cls}">${badge}</span>
+                <span class="interview-ammo-file-name">${escapeHtml(f.name)}</span>
+              </button>
+            </div>
+          `;
+        }).join("")}
+      `;
+    }).join("");
+    return `
+      <div class="interview-ammo-company-block">
+        <div class="interview-ammo-company-title">${escapeHtml(company.company)}</div>
+        ${fileRows || '<div class="interview-ammo-empty-line">该筛选下无文件</div>'}
+      </div>
+    `;
+  }
+
+  function bindAmmo(area) {
+    area.querySelectorAll(".interview-ammo-company-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        ammoCompany = btn.dataset.company;
+        const panel = area.querySelector("#ammoFilesPanel");
+        const nav = area.querySelector("#ammoCompanies");
+        if (panel) panel.innerHTML = renderAmmoFiles(cachedData.ammo, ammoCompany);
+        if (nav) nav.innerHTML = renderAmmoCompanies(cachedData.ammo);
+        bindAmmo(area);
+        bindAmmoFileButtons(area);
+      });
+    });
+    bindAmmoFileButtons(area);
+  }
+
+  function bindAmmoFileButtons(area) {
+    area.querySelectorAll(".interview-ammo-file-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        loadAmmoFile(area, btn.dataset.company, btn.dataset.category, btn.dataset.name);
+      });
+    });
+    const readBtn = area.querySelector("#ammoMarkRead");
+    if (readBtn) {
+      readBtn.addEventListener("click", () =>
+        setAmmoStatus(area, ammoCurrent, "finished"));
+    }
+    const unreadBtn = area.querySelector("#ammoMarkUnread");
+    if (unreadBtn) {
+      unreadBtn.addEventListener("click", () =>
+        setAmmoStatus(area, ammoCurrent, "unread"));
+    }
+  }
+
+  function loadAmmoFile(area, company, category, name) {
+    ammoCurrent = { company, category, name };
+    const reader = area.querySelector("#ammoReader");
+    if (!reader) return;
+    reader.innerHTML = '<div class="interview-ammo-reader-loading">加载中…</div>';
+    const q = new URLSearchParams({ company, category, name }).toString();
+    requestJson("/api/interview/ammo/file?" + q)
+      .then((d) => {
+        const status = ammoStatusOf(company, category, name);
+        reader.innerHTML = `
+          <div class="interview-ammo-reader-header">
+            <div class="interview-ammo-reader-title">${escapeHtml(d.name)}</div>
+            <div class="interview-ammo-reader-meta">${escapeHtml(d.company)} · ${d.lines} 行${d.truncated ? " · 已截断" : ""} ·
+              <span class="interview-ammo-reader-status is-${status}" id="ammoReaderStatus">${status === "reading" ? "在读" : status === "finished" ? "已读" : "未读"}</span>
+            </div>
+            <div class="interview-ammo-reader-actions">
+              <button type="button" id="ammoMarkRead" class="pill-btn">✅ 标为已读</button>
+              <button type="button" id="ammoMarkUnread" class="pill-btn">↩ 标为未读</button>
+            </div>
+          </div>
+          <div class="interview-ammo-reader-body">${renderMarkdown(d.content)}</div>
+        `;
+        bindAmmoFileButtons(area);
+        if (status !== "finished") setAmmoStatus(area, ammoCurrent, "reading");
+      })
+      .catch((err) => {
+        reader.innerHTML = '<div class="interview-ammo-reader-err">加载失败：' + escapeHtml(err.message) + "</div>";
+      });
+  }
+
+  function setAmmoStatus(area, file, status) {
+    if (!file) return;
+    const prev = ammoStatusOf(file.company, file.category, file.name);
+    ammoReading[ammoKey(file.company, file.category, file.name)] = status;
+    // 局部更新徽标与筛选计数
+    const panel = area.querySelector("#ammoFilesPanel");
+    if (panel) panel.innerHTML = renderAmmoFiles(cachedData.ammo, ammoCompany);
+    const statusEl = area.querySelector("#ammoReaderStatus");
+    if (statusEl) {
+      statusEl.textContent = { unread: "未读", reading: "在读", finished: "已读" }[status] || "未读";
+      statusEl.className = "interview-ammo-reader-status is-" + status;
+    }
+    bindAmmoFileButtons(area);
+    requestJson("/api/interview/ammo/reading", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company: file.company, category: file.category, name: file.name, status }),
+    }).catch((err) => {
+      ammoReading[ammoKey(file.company, file.category, file.name)] = prev;
+      console.error("更新阅读状态失败:", err);
+    });
+  }
+
+  // 轻量 markdown 渲染（转义防 XSS；支持标题/列表/引用/代码块/链接/粗斜体/表格/分隔线）
+  function renderMarkdown(src) {
+    const esc = escapeHtml(src);
+    const lines = esc.split(/\r?\n/);
+    const out = [];
+    let inCode = false, inTable = false, listType = null;
+    const closeList = () => { if (listType) { out.push(listType === "ul" ? "</ul>" : "</ol>"); listType = null; } };
+    const closeTable = () => { if (inTable) { out.push("</tbody></table>"); inTable = false; } };
+    const inline = (s) => s
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>");
+    for (const raw of lines) {
+      const line = raw.replace(/\s+$/, "");
+      if (/^```/.test(line)) {
+        closeList(); closeTable();
+        if (inCode) { out.push("</code></pre>"); inCode = false; }
+        else { out.push("<pre><code>"); inCode = true; }
+        continue;
+      }
+      if (inCode) { out.push(line); continue; }
+      if (/^\|/.test(line) && /\|/.test(line.slice(1))) {
+        if (!inTable) {
+          closeList();
+          out.push("<table><thead><tr>");
+          out.push(line.split("|").slice(1, -1).map((c) => "<th>" + inline(c.trim()) + "</th>").join(""));
+          out.push("</tr></thead><tbody>");
+          inTable = true;
+        } else {
+          if (/^[\s:|-]*-[\s:|-]*$/.test(line.replace(/\|/g, ""))) continue; // 分隔行
+          out.push("<tr>" + line.split("|").slice(1, -1).map((c) => "<td>" + inline(c.trim()) + "</td>").join("") + "</tr>");
+        }
+        continue;
+      }
+      closeTable();
+      if (/^#{1,6} /.test(line)) {
+        closeList();
+        const level = line.indexOf(" ");
+        const text = inline(line.slice(level + 1));
+        out.push("<h" + level + ">" + text + "</h" + level + ">");
+      } else if (/^>\s?/.test(line)) {
+        closeList();
+        out.push("<blockquote>" + inline(line.replace(/^>\s?/, "")) + "</blockquote>");
+      } else if (/^-{3,}$/.test(line) || /^\*{3,}$/.test(line)) {
+        closeList();
+        out.push("<hr/>");
+      } else if (/^[-*] /.test(line)) {
+        if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; }
+        out.push("<li>" + inline(line.replace(/^[-*] /, "")) + "</li>");
+      } else if (/^\d+\. /.test(line)) {
+        if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; }
+        out.push("<li>" + inline(line.replace(/^\d+\. /, "")) + "</li>");
+      } else if (line.trim() === "") {
+        closeList();
+      } else {
+        closeList();
+        out.push("<p>" + inline(line) + "</p>");
+      }
+    }
+    closeList(); closeTable();
+    if (inCode) out.push("</code></pre>");
+    return out.join("\n");
   }
 
   // ── 今日待读 ──────────────────────────────────────────────
@@ -475,6 +740,103 @@
         if (id && action) markQuestion(id, action);
       });
     }
+  }
+
+  // ── 反问话术 ──────────────────────────────────────────────
+
+  function renderRebuttals(area) {
+    if (cachedData.rebuttals) {
+      area.innerHTML = renderRebuttalsHtml(cachedData.rebuttals);
+      bindRebuttalEvents();
+      return;
+    }
+    requestJson(API_BASE + "/rebuttals")
+      .then((data) => {
+        cachedData.rebuttals = data;
+        area.innerHTML = renderRebuttalsHtml(data);
+        bindRebuttalEvents();
+      })
+      .catch(() => {
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  function renderRebuttalsHtml(data) {
+    const items = data.items || [];
+    if (items.length === 0) {
+      return '<div class="interview-empty">暂无反问话术，点击右上角添加</div>';
+    }
+    // 按分类分组
+    const groups = {};
+    items.forEach((item) => {
+      if (!groups[item.category]) groups[item.category] = [];
+      groups[item.category].push(item);
+    });
+    let html = '<div class="rebuttals-container">';
+    // 分类筛选
+    html += '<div class="rebuttals-filter">';
+    html += '<button class="rebuttal-filter-btn is-active" data-category="all" type="button">全部</button>';
+    ["HR面", "技术面", "业务面", "通用"].forEach((cat) => {
+      if (groups[cat]) {
+        html += `<button class="rebuttal-filter-btn" data-category="${cat}" type="button">${cat}(${groups[cat].length})</button>`;
+      }
+    });
+    html += '</div>';
+    // 按分类渲染
+    Object.keys(groups).forEach((cat) => {
+      html += `<div class="rebuttal-group" data-category="${cat}">`;
+      html += `<h3 class="rebuttal-group-title">${cat}</h3>`;
+      groups[cat].forEach((item) => {
+        const priorityClass = item.priority === "高" ? "priority-high" : item.priority === "中" ? "priority-mid" : "priority-low";
+        const companyTag = item.company ? `<span class="rebuttal-company">${item.company}</span>` : "";
+        html += `<div class="rebuttal-card ${priorityClass}" data-id="${item.id}">`;
+        html += `<div class="rebuttal-question">${item.question}</div>`;
+        if (item.purpose) html += `<div class="rebuttal-purpose">💡 ${item.purpose}</div>`;
+        html += '<div class="rebuttal-meta">';
+        html += `<span class="rebuttal-priority">${item.priority}优先级</span>`;
+        if (companyTag) html += companyTag;
+        if (item.tags) html += `<span class="rebuttal-tags">${item.tags}</span>`;
+        if (item.used_count > 0) html += `<span class="rebuttal-used">已用${item.used_count}次</span>`;
+        html += '</div>';
+        html += '<div class="rebuttal-actions">';
+        html += `<button class="rebuttal-action-btn" data-action="use" data-id="${item.id}" type="button">✓ 已用</button>`;
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function bindRebuttalEvents() {
+    // 分类筛选
+    document.querySelectorAll(".rebuttal-filter-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".rebuttal-filter-btn").forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        const cat = btn.dataset.category;
+        document.querySelectorAll(".rebuttal-group").forEach((group) => {
+          group.style.display = cat === "all" || group.dataset.category === cat ? "" : "none";
+        });
+      });
+    });
+    // 标记已用
+    document.querySelectorAll(".rebuttal-action-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        if (btn.dataset.action === "use") {
+          requestJson(API_BASE + `/rebuttals/${id}/use`, { method: "POST" })
+            .then(() => {
+              // 刷新缓存
+              delete cachedData.rebuttals;
+              const area = document.getElementById("interviewContentArea");
+              if (area) renderRebuttals(area);
+            })
+            .catch(() => {});
+        }
+      });
+    });
   }
 
   // ── 主加载函数 ────────────────────────────────────────────

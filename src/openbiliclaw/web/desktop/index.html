@@ -25,6 +25,23 @@
       </form>
       <div class="top-actions" aria-label="状态与消息">
         <button class="pill-btn dark" id="globalRefreshBtn" type="button" hidden style="margin-right:8px;">↻ 刷新</button>
+        <button class="pill-btn" id="topicsNewBtn" type="button" hidden style="margin-right:6px;">＋ 新建专题</button>
+        <button class="pill-btn dark" id="topicsCollectAllBtn" type="button" hidden style="margin-right:6px;">全部收集一次</button>
+        <button class="pill-btn" id="cloneImportBtn" type="button" hidden style="margin-right:6px;">扫描导入</button>
+        <button class="pill-btn primary" id="diaryNewBtn" type="button" hidden style="margin-right:6px;">✏️ 写日记</button>
+        <button class="pill-btn" id="diaryImportBtn" type="button" hidden style="margin-right:6px;">📥 导入</button>
+        <button class="pill-btn" id="diaryAnalyzeBtn" type="button" hidden style="margin-right:6px;">🤖 批量分析</button>
+        <span class="pool-pill" id="metricPoolWrap" title="当前可更换的推荐数" style="margin-right:6px;" hidden><strong id="metricPool">—</strong><span>可换</span></span>
+        <label class="reshuffle-toggle" title="开启：换一批前先将当前显示的推荐标记为忽略；关闭：只重排当前推荐池，不反馈当前内容。" id="dismissOnReshuffleWrap" style="margin-right:6px;" hidden>
+          <input id="dismissOnReshuffleToggle" type="checkbox">
+          <span class="reshuffle-switch" aria-hidden="true"></span>
+          <span>换一批时忽略当前</span>
+        </label>
+        <button class="icon-btn" id="reshuffleBtn" type="button" aria-label="换一批" title="换一批" hidden style="margin-right:6px;">↻</button>
+        <button class="pill-btn" id="resetFiltersBtn" type="button" hidden style="margin-right:6px;">重置筛选</button>
+        <span class="delight-pill" id="delightTopbarPill" hidden><strong id="delightCountTopbar">0</strong><span>条候选</span></span>
+        <span class="xhs-feed-tag" id="delightTopbarTag" hidden>delight</span>
+        <button class="pill-btn dark" id="delightRefreshBtn" type="button" hidden style="margin-right:6px;">换一换</button>
         <button class="gh-star" id="starButton" type="button" hidden title="觉得 OpenBiliClaw 好用的话，在 GitHub 给项目点个 Star" aria-label="觉得好用的话，在 GitHub 给 OpenBiliClaw 点个 Star">
           <span class="gh-star-left">
             <svg class="gh-star-mark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.81.06 1.23.83 1.23.83.72 1.23 1.89.88 2.35.67.07-.52.28-.88.51-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -102,23 +119,9 @@
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="healthBtn" type="button">🏥 健康档案</button>
         <button class="tab-btn" id="travelBtn" type="button">✈️ 旅行</button>
+        <button class="tab-btn" id="mediaBtn" type="button">🎬 媒体</button>
       </div>
-      <div class="tabbar-tools" aria-label="推荐筛选与操作">
-        <div class="tabbar-actions" aria-label="推荐操作">
-          <span class="pool-pill" title="当前可更换的推荐数"><strong id="metricPool">—</strong><span>可换</span></span>
-          <label class="reshuffle-toggle" title="开启：换一批前先将当前显示的推荐标记为忽略；关闭：只重排当前推荐池，不反馈当前内容。">
-            <input id="dismissOnReshuffleToggle" type="checkbox">
-            <span class="reshuffle-switch" aria-hidden="true"></span>
-            <span>换一批时忽略当前</span>
-          </label>
-          <button class="icon-btn" id="reshuffleBtn" type="button" aria-label="换一批" title="换一批">↻</button>
-          <button class="pill-btn" id="resetFiltersBtn" type="button" hidden="">重置筛选</button>
-          <!-- 惊喜推荐页面专用工具 -->
-          <span class="delight-pill" id="delightTopbarPill" hidden><strong id="delightCountTopbar">0</strong><span>条候选</span></span>
-          <span class="xhs-feed-tag" id="delightTopbarTag" hidden>delight</span>
-          <button class="pill-btn dark" id="delightRefreshBtn" type="button" hidden>换一换</button>
-        </div>
-      </div>
+      <!-- 推荐流/惊喜工具按钮已归拢到顶栏右侧 top-actions -->
     </nav>
 
     <aside class="side-drawer" id="sideDrawer" aria-label="侧边菜单" aria-hidden="true" hidden>
@@ -221,15 +224,7 @@
 
       <!-- 日记系统：记录、浏览、分析个人日记 -->
       <section class="diary-page content-page" id="diaryPage" aria-label="日记" hidden>
-        <!-- 紧凑标题栏 -->
-        <div class="diary-head">
-          <h2>📔 我的日记</h2>
-          <div class="diary-head-actions">
-            <button class="pill-btn primary" id="diaryNewBtn" type="button">✏️ 写日记</button>
-            <button class="pill-btn" id="diaryImportBtn" type="button">📥 导入</button>
-            <button class="pill-btn" id="diaryAnalyzeBtn" type="button">🤖 批量分析</button>
-          </div>
-        </div>
+        <!-- 操作按钮(写日记/导入/批量分析)已归拢到顶栏右侧 top-actions -->
 
         <!-- 统计迷你条 -->
         <div class="diary-stats-mini" id="diaryStats">
@@ -942,14 +937,7 @@
       </div>
 
       <section class="clone-page content-page" id="clonePage" aria-label="克隆站点" hidden>
-        <div class="page-header">
-          <div class="page-header-inner">
-            <div>
-              <h2>🌐 克隆站点</h2>
-              <p class="page-header-subtitle">管理和浏览你克隆的网站，一键启动本地预览</p>
-            </div>
-          </div>
-        </div>
+        <!-- 页面标题已由全局导航标识，去重复 -->
         <div class="page-subtabbar">
           <div class="page-subtabbar-inner" style="justify-content: space-between; align-items: center;">
             <div class="clone-stats-bar" id="cloneStatsBar" style="border: none; padding: 0;">
@@ -959,7 +947,6 @@
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <div class="clone-tags" id="cloneTags"></div>
-              <button class="pill-btn" id="cloneImportBtn" type="button">扫描导入</button>
             </div>
           </div>
         </div>
@@ -1143,19 +1130,11 @@
           </div>
           <div class="self-evo-detail-body" id="selfEvoDetailBody"></div>
         </div>
-        </div>
       </section>
 
       <!-- 旅行预算：实时机票价格 + 预算概览 + 完整文档 -->
       <section class="travel-page content-page" id="travelPage" aria-label="旅行预算" hidden>
-        <div class="page-header">
-          <div class="page-header-inner">
-            <div>
-              <h2>✈️ 新疆旅行预算</h2>
-              <p class="page-header-subtitle">实时机票价 + 预算明细 + 完整攻略，一趟算清</p>
-            </div>
-          </div>
-        </div>
+        <!-- 页面标题已由全局导航标识，去重复 -->
         <div class="page-subtabbar">
           <div class="page-subtabbar-inner">
             <button class="page-subtab-btn is-active" data-travel-view="flights" type="button">实时机票</button>
@@ -1196,6 +1175,44 @@
         </div>
         </div>
       </section>
+
+      <!-- 媒体浏览：本地媒体根目录（视频/图片），桌面统一布局 -->
+      <section class="main-col content-page" id="mediaPage" aria-label="媒体浏览" hidden>
+        <div class="page-subtabbar" style="position:static">
+          <div class="page-subtabbar-inner" id="mediaRootTabs"></div>
+        </div>
+        <div class="page-body">
+          <div class="media-toolbar">
+            <div class="media-seg" id="mediaKindSeg">
+              <button class="page-subtab-btn is-active" data-kind="all" type="button">全部</button>
+              <button class="page-subtab-btn" data-kind="video" type="button">视频</button>
+              <button class="page-subtab-btn" data-kind="image" type="button">图片</button>
+            </div>
+            <input class="media-search" id="mediaSearch" type="search" placeholder="按文件名搜索…" autocomplete="off">
+            <button class="small-btn" id="mediaFavToggleBtn" type="button">☆ 只看收藏</button>
+            <button class="small-btn" id="mediaRandomBtn" type="button">🎲 随机播放</button>
+            <button class="small-btn" id="mediaAddRootBtn" type="button">+ 添加目录</button>
+          </div>
+          <div class="media-breadcrumb" id="mediaBreadcrumb"></div>
+          <div class="media-state" id="mediaState"></div>
+          <div class="card-grid is-minimal" id="mediaGrid"></div>
+          <div class="media-load-row"><button class="pill-btn dark" id="mediaLoadMoreBtn" type="button" hidden>加载更多</button></div>
+        </div>
+      </section>
+
+      <!-- 媒体图片灯箱 -->
+      <div class="media-modal" id="mediaImageModal">
+        <button class="media-modal-close" id="mediaImageClose" type="button" aria-label="关闭">×</button>
+        <button class="media-nav prev" id="mediaImagePrev" type="button" aria-label="上一张">‹</button>
+        <img id="mediaImageView" alt="图片预览">
+        <button class="media-nav next" id="mediaImageNext" type="button" aria-label="下一张">›</button>
+      </div>
+      <!-- 媒体视频弹窗 -->
+      <div class="media-modal" id="mediaVideoModal">
+        <button class="media-modal-close" id="mediaVideoClose" type="button" aria-label="关闭">×</button>
+        <video id="mediaVideoView" controls autoplay></video>
+        <div class="media-video-note" id="mediaVideoNote"></div>
+      </div>
 
       <!-- 池子总览：所有池子内容，包括待处理、已过期、已抑制等 -->
       <section class="main-col" id="poolAllPage" aria-label="池子总览" data-od-id="recommendation-home" hidden>
@@ -1265,9 +1282,11 @@
           <div class="page-subtabbar-inner" id="interviewSubtabbar">
             <button class="page-subtab-btn is-active" data-subtab="schedule" type="button">📅 面试安排</button>
             <button class="page-subtab-btn" data-subtab="companies" type="button">🏢 公司岗位</button>
+            <button class="page-subtab-btn" data-subtab="ammo" type="button">🧨 弹药库</button>
             <button class="page-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>
             <button class="page-subtab-btn" data-subtab="queue" type="button">📋 待看队列</button>
             <button class="page-subtab-btn" data-subtab="all" type="button">📚 全部题目</button>
+            <button class="page-subtab-btn" data-subtab="rebuttals" type="button">❓ 反问话术</button>
             <button class="page-subtab-btn" data-subtab="stats" type="button">📊 学习统计</button>
           </div>
         </div>
@@ -1671,14 +1690,7 @@
 
   <!-- 专题：追某个方向的跨平台内容（已并入桌面应用，沿用推荐流卡片风格） -->
   <section class="topics-page content-page" id="topicsPage" aria-label="专题" hidden>
-    <!-- 第二栏：操作按钮 -->
-    <div class="page-subtabbar">
-      <div class="page-subtabbar-inner" style="justify-content: flex-end; gap: 8px;">
-        <button class="pill-btn" id="topicsNewBtn" type="button">＋ 新建专题</button>
-        <button class="pill-btn dark" id="topicsCollectAllBtn" type="button">全部收集一次</button>
-      </div>
-    </div>
-    <!-- 第三栏：内容区域 -->
+    <!-- 操作按钮已归拢到顶栏右侧；专题无第三栏子导航，直接展示内容（两栏布局） -->
     <div class="page-body">
 
     <!-- 新建专题面板（默认隐藏） -->
@@ -1880,6 +1892,7 @@
   <script src="/web/assets/js/feed-pages.js" defer></script>
   <script src="/web/assets/js/topics-app.js" defer></script>
   <script src="/web/assets/js/health-app.js" defer></script>
+  <script src="/web/assets/js/media-app.js" defer></script>
   <!-- 日记模块脚本由 app.js 在进入日记页面时按需动态加载 -->
 
 </body></html>

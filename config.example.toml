@@ -542,3 +542,9 @@ flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 # 留空则按环境变量 OPENBILICLAW_INTERVIEW_ROOT 或内置默认路径
 # （<项目根>/求职知识库/）解析
 root = ""
+
+[media]
+# 本地媒体浏览模块：一组用户本机的媒体根目录（视频 + 图片）
+# 在 /media 独立页里浏览与播放；也可在页面内「添加目录」一键追加。
+# 留空则该页显示"未配置目录"。
+roots = []

@@ -82,6 +82,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 "profile.js",
                 "topics-app.js",
                 "health-app.js",
+                "media-app.js",
             ):
                 src = f'src="/web/assets/js/{script}"'
                 html = html.replace(src, f'src="/web/assets/js/{script}?v={version}"')
@@ -133,6 +134,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "topics",
             "health",
             "interview",
+            "media",
         }
 
         @app.get("/web/{page}", include_in_schema=False)
@@ -276,6 +278,14 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
     _topics_dir = _web_dir / "topics"
     if _topics_dir.is_dir():
         app.mount("/topics", _StaticFiles(directory=_topics_dir, html=True), name="topics-page")
+
+    # ── Standalone Media (媒体浏览) page ──────────────────────────
+    # Bookmarkable /media page browsing the user's configured local media
+    # roots ([media] roots) with an image lightbox + video player; data comes
+    # from the /api/media* endpoints.
+    _media_dir = _web_dir / "media"
+    if _media_dir.is_dir():
+        app.mount("/media", _StaticFiles(directory=_media_dir, html=True), name="media-page")
 
     # ── Self-Evolution (自进化) API endpoints ─────────────────────
     # 已独立为 src/openbiliclaw/self_evolution/api.py，此处仅注册路由

@@ -694,6 +694,18 @@ class InterviewConfig:
 
 
 @dataclass
+class MediaConfig:
+    """本地媒体浏览模块（media）配置。
+
+    指向一组用户本机的本地媒体根目录（视频 + 图片），供 ``/media``
+    独立页浏览与播放。根目录通过页面内「添加目录」写入 ``[media] roots``
+    （见 ``openbiliclaw.media``）。
+    """
+
+    roots: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ApiAuthConfig:
     """Optional password gate for LAN / remote access (see
     ``docs/plans/2026-05-30-web-password-auth-design.md``).
@@ -789,6 +801,7 @@ class Config:
     soul: SoulConfig = field(default_factory=SoulConfig)
     travel: TravelConfig = field(default_factory=TravelConfig)
     interview: InterviewConfig = field(default_factory=InterviewConfig)
+    media: MediaConfig = field(default_factory=MediaConfig)
 
     @property
     def data_path(self) -> Path:
@@ -923,6 +936,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
     interview_raw = raw.get("interview", {})
     if not isinstance(interview_raw, dict):
         interview_raw = {}
+    media_raw = raw.get("media", {})
+    if not isinstance(media_raw, dict):
+        media_raw = {}
 
     embedding_raw = llm_raw.get("embedding", {})
     data_dir_raw = general.get("data_dir", "data")
@@ -1268,6 +1284,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
         interview=InterviewConfig(
             root=str(interview_raw.get("root", "") or ""),
         ),
+        media=MediaConfig(
+            roots=_normalize_string_list(media_raw.get("roots")),
+        ),
     )
 
 
@@ -1484,6 +1503,26 @@ def _coerce_bool(value: object, *, default: bool = False) -> bool:
     if isinstance(value, int | float):
         return bool(value)
     return default
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    """Normalize a TOML/env value into a list of strings.
+
+    Accepts a list of strings, a single string (→ len 1), or None/non-list
+    (→ []). Leading/trailing whitespace and empty entries are dropped so a
+    hand-edited ``[media] roots`` with stray blank lines stays clean.
+    """
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            stripped = item.strip()
+            if stripped:
+                out.append(stripped)
+    return out
 
 
 def _coerce_ttl_hours(value: object) -> int:
@@ -2563,6 +2602,9 @@ def _render_config_toml(
             f"aggregate_budget_mb = {config.logging.aggregate_budget_mb}",
             f"unmanaged_truncate_mb = {config.logging.unmanaged_truncate_mb}",
             f"unmanaged_max_age_days = {config.logging.unmanaged_max_age_days}",
+            "",
+            "[media]",
+            f"roots = {_toml_str_list(config.media.roots)}",
             "",
             "[soul.preference]",
             "# v0.3.x event-satisfaction signal. When true, preference",

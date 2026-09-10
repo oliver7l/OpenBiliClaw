@@ -241,3 +241,16 @@ def register_all_routes(
         register_interview_routes(app, ctx)
     except Exception:  # noqa: BLE001
         logger.exception("Interview question tracker routes registration failed")
+
+    # ── 本地媒体浏览 API ──────────────────────────────────────────
+    try:
+        from openbiliclaw.media.routes import build_media_router
+
+        app.include_router(
+            build_media_router(
+                config=config,
+                config_save_lock=config_save_lock,
+            )
+        )
+    except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
+        logger.exception("Media routes registration failed")

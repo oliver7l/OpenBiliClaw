@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1279,7 +1279,7 @@
       document.body.classList.toggle("clone-page-open", pageId === "clonePage");
       document.body.classList.toggle("travel-page-open", pageId === "travelPage");
       document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1323,11 +1323,11 @@
       if (delightPill) delightPill.hidden = !isDelightPage;
       if (delightTag) delightTag.hidden = !isDelightPage;
       if (delightBtn) delightBtn.hidden = !isDelightPage;
-      // 推荐流工具只在推荐流页面/首页显示，其他页面隐藏
+      // 推荐流工具只在推荐流页面/首页显示，其他页面隐藏（已归拢到顶栏 top-actions）
       const showFeedTools = isFeedPage || pageId === "homePage";
-      if (poolPill) poolPill.style.display = showFeedTools ? "" : "none";
-      if (reshuffleToggle) reshuffleToggle.style.display = showFeedTools ? "" : "none";
-      if (reshuffleBtn) reshuffleBtn.style.display = showFeedTools ? "" : "none";
+      if (poolPill) poolPill.hidden = !showFeedTools;
+      if (reshuffleToggle) reshuffleToggle.hidden = !showFeedTools;
+      if (reshuffleBtn) reshuffleBtn.hidden = !showFeedTools;
       // 统一刷新按钮：各页面共用，根据当前页面绑定对应刷新函数
       const refreshMap = {
         observabilityPage: () => scheduleObservabilityRefresh(),
@@ -1338,6 +1338,7 @@
         travelPage: () => { _travelLoaded = { flights: false, overview: false, doc: false }; loadTravelFlights(); loadTravelOverview(); loadTravelDoc(); },
         interviewPage: () => { if (window.loadInterviewData) window.loadInterviewData(); },
         selfEvolutionPage: () => { if (typeof loadSelfEvoStatus === 'function') loadSelfEvoStatus(); },
+        mediaPage: () => { if (window.reloadMediaPage) window.reloadMediaPage(); },
       };
       const globalRefreshBtn = document.getElementById("globalRefreshBtn");
       if (globalRefreshBtn) {
@@ -1350,6 +1351,19 @@
           globalRefreshBtn.onclick = null;
         }
       }
+      // 页面级操作按钮：归拢到顶栏右侧按钮区，仅对应页展示
+      const pageActionMaps = {
+        topicsPage: ["topicsNewBtn", "topicsCollectAllBtn"],
+        clonePage: ["cloneImportBtn"],
+        diaryPage: ["diaryNewBtn", "diaryImportBtn", "diaryAnalyzeBtn"],
+      };
+      Object.entries(pageActionMaps).forEach(([targetPage, ids]) => {
+        const show = pageId === targetPage;
+        ids.forEach((id) => {
+          const btn = document.getElementById(id);
+          if (btn) btn.hidden = !show;
+        });
+      });
     }
 
     // ── Desktop page routing (independent URLs, no full reload) ──
@@ -3806,6 +3820,7 @@
     safeBind("#topicsBtn", "click", () => { window.navigateTo("/web/topics"); });
     safeBind("#healthBtn", "click", () => { window.navigateTo("/web/health"); });
     safeBind("#travelBtn", "click", () => { window.navigateTo("/web/travel"); });
+    safeBind("#mediaBtn", "click", () => { window.navigateTo("/web/media"); });
     safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });
@@ -4252,12 +4267,7 @@
           document.getElementById("travelDocView").hidden = view !== "doc";
         };
       });
-      document.getElementById("travelRefreshBtn").onclick = () => {
-        _travelLoaded = { flights: false, overview: false, doc: false };
-        loadTravelFlights();
-        loadTravelOverview();
-        loadTravelDoc();
-      };
+      // 旅行页刷新由顶栏统一 globalRefreshBtn 处理（见 showMainPage 的 refreshMap）
       if (!_travelLoaded.flights) loadTravelFlights();
       if (!_travelLoaded.overview) loadTravelOverview();
       if (!_travelLoaded.doc) loadTravelDoc();
