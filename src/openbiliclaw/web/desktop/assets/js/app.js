@@ -3965,8 +3965,6 @@
     });
     safeBind("#poolAllBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-all"); });
     safeBind("#poolFilterBtn", "click", () => navigateTo("/web/pool-filter"));
-    safeBind("#poolAllRefreshBtn", "click", loadPoolAllItems);
-    safeBind("#poolFilterRefreshBtn", "click", loadPoolFilterItems);
     safeBind("#delightRefreshBtn", "click", () => window.shuffleDelights());
     function setCoverVisible(show) {
       document.body.classList.toggle("no-cover", !show);
@@ -4021,10 +4019,8 @@
     safeBind("#observabilityBtn", "click", () => navigateTo("/web/observability"));
     safeBind("#interviewBtn", "click", () => navigateTo("/web/interview"));
     const scheduleObservabilityRefresh = debounceAsync(() => loadObservabilityData(), 500);
-    safeBind("#observabilityRefreshBtn", "click", () => scheduleObservabilityRefresh());
     safeBind("#interviewRefreshBtn", "click", () => { if (window.loadInterviewData) window.loadInterviewData(); });
     safeBind("#poolExploreBtn", "click", () => { closePoolDropdown(); navigateTo("/web/pool-explore"); });
-    safeBind("#poolExploreRefreshBtn", "click", () => window.loadPoolExploreData());
     safeBind("#delightTabBtn", "click", () => navigateTo("/web/delight"));
     safeBind("#resetFiltersBtn", "click", () => { state.query = ""; state.filter = "全部"; const input = $("#searchInput"); if (input) input.value = ""; window.reshuffle?.(); });
     safeBind("#searchInput", "input", (event) => { state.query = event.target.value || ""; window.renderAll(); });

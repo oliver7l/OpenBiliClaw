@@ -132,6 +132,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "travel",
             "topics",
             "health",
+            "interview",
         }
 
         @app.get("/web/{page}", include_in_schema=False)
