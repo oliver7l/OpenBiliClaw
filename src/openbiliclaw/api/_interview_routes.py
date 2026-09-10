@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+import sqlite3
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from openbiliclaw.interview.questions.store import InterviewQuestionStore
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview_questions.db"
+INTERVIEW_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview.db"
 
 
 def _get_store() -> InterviewQuestionStore:
@@ -282,6 +284,92 @@ def create_plan(req: PlanRequest) -> dict[str, Any]:
         "min_difficulty": plan.min_difficulty,
         "max_difficulty": plan.max_difficulty,
     }
+
+
+# ── 面试安排（job 表）──────────────────────────────────────
+
+def _get_interview_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@router.get("/schedule")
+def get_schedule() -> dict[str, Any]:
+    """获取面试安排列表。"""
+    conn = _get_interview_conn()
+    try:
+        rows = conn.execute(
+            "SELECT company, role, interview_at, status, direction, prep_dir, resume_ver, note FROM job ORDER BY interview_at DESC"
+        ).fetchall()
+        jobs = []
+        today = date.today().isoformat()
+        for r in rows:
+            interview_at = r["interview_at"] or ""
+            # 判断是否为即将到来的面试（日期 >= 今天且状态为待面/进行中）
+            is_upcoming = False
+            if interview_at and r["status"] in ("待面", "进行中"):
+                interview_date = interview_at.split()[0] if " " in interview_at else interview_at
+                is_upcoming = interview_date >= today
+            jobs.append({
+                "company": r["company"],
+                "role": r["role"],
+                "interview_at": interview_at,
+                "status": r["status"],
+                "direction": r["direction"] or "",
+                "prep_dir": r["prep_dir"] or "",
+                "resume_ver": r["resume_ver"] or "",
+                "note": r["note"] or "",
+                "is_upcoming": is_upcoming,
+            })
+        upcoming = [j for j in jobs if j["is_upcoming"]]
+        history = [j for j in jobs if not j["is_upcoming"]]
+        return {
+            "upcoming": upcoming,
+            "history": history,
+            "total": len(jobs),
+            "upcoming_count": len(upcoming),
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/reviews")
+def get_reviews(limit: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
+    """获取面试复盘记录。"""
+    conn = _get_interview_conn()
+    try:
+        rows = conn.execute(
+            """SELECT id, company, position, interview_date, round, result, duration_min,
+                      emotion_level, tags, key_questions, self_assessment
+               FROM interview_reviews ORDER BY interview_date DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        reviews = []
+        for r in rows:
+            reviews.append({
+                "id": r["id"],
+                "company": r["company"],
+                "position": r["position"],
+                "interview_date": r["interview_date"],
+                "round": r["round"],
+                "result": r["result"],
+                "duration_min": r["duration_min"],
+                "emotion_level": r["emotion_level"] or "",
+                "tags": r["tags"] or "",
+                "key_questions": r["key_questions"] or "",
+                "self_assessment": r["self_assessment"] or "",
+            })
+        stats = conn.execute(
+            "SELECT result, COUNT(*) as cnt FROM interview_reviews GROUP BY result"
+        ).fetchall()
+        return {
+            "reviews": reviews,
+            "stats": {s["result"]: s["cnt"] for s in stats},
+            "total": len(reviews),
+        }
+    finally:
+        conn.close()
 
 
 def register_interview_routes(app: Any, ctx: Any) -> None:

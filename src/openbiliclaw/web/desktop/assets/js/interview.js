@@ -61,6 +61,53 @@
       .catch((err) => console.error("加载面试统计失败:", err));
   }
 
+  // ── 加载面试安排 ──────────────────────────────────────────
+
+  function loadSchedule() {
+    const container = document.getElementById("interviewSchedule");
+    if (!container) return Promise.resolve();
+    container.innerHTML = '<div class="interview-loading">正在加载面试安排…</div>';
+    return requestJson(API_BASE + "/schedule")
+      .then((data) => {
+        const badge = document.getElementById("upcomingCount");
+        if (badge) badge.textContent = data.upcoming_count + " 场待面";
+        const all = (data.upcoming || []).concat(data.history || []);
+        if (all.length === 0) {
+          container.innerHTML = '<div class="interview-empty">暂无面试安排</div>';
+          return;
+        }
+        container.innerHTML = all.map(renderScheduleCard).join("");
+      })
+      .catch((err) => {
+        console.error("加载面试安排失败:", err);
+        container.innerHTML = '<div class="interview-empty">加载失败</div>';
+      });
+  }
+
+  function renderScheduleCard(job) {
+    const interviewAt = job.interview_at || "";
+    const datePart = interviewAt.split(" ")[0] || "";
+    const timePart = interviewAt.split(" ")[1] || "";
+    const day = datePart ? datePart.split("-")[2] : "?";
+    const month = datePart ? datePart.split("-")[1] + "月" : "";
+    const statusClass = job.is_upcoming ? (job.status === "进行中" ? "status-progress" : "status-upcoming") : "status-done";
+    const statusText = job.status || "未知";
+    return `
+      <div class="interview-schedule-card ${job.is_upcoming ? "" : "status-done"}">
+        <div class="interview-schedule-date">
+          <div class="day">${escapeHtml(day)}</div>
+          <div class="month">${escapeHtml(month)} ${escapeHtml(timePart)}</div>
+        </div>
+        <div class="interview-schedule-info">
+          <div class="interview-schedule-company">${escapeHtml(job.company)}</div>
+          <div class="interview-schedule-role">${escapeHtml(job.role)}${job.direction ? " · " + escapeHtml(job.direction) : ""}</div>
+          ${job.note ? `<div class="interview-schedule-note">${escapeHtml(job.note)}</div>` : ""}
+        </div>
+        <div class="interview-schedule-status ${statusClass}">${escapeHtml(statusText)}</div>
+      </div>
+    `;
+  }
+
   // ── 渲染题目卡片 ──────────────────────────────────────────
 
   function renderQuestionCard(q) {
@@ -216,7 +263,7 @@
 
   function loadInterviewData() {
     bindEvents();
-    return Promise.all([loadStats(), loadToday()]);
+    return Promise.all([loadStats(), loadSchedule(), loadToday()]);
   }
 
   // 暴露到全局

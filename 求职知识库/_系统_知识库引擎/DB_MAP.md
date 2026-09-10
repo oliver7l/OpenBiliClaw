@@ -2,7 +2,7 @@
 
 > 整理日期：2026-09-10 ｜ 整理人：WorkBuddy
 > 范围：面试相关数据库（求职知识库离线体系 + OpenBiliClaw 主程序面试/知识库体系）
-> 本次整理动作：① 删除根目录 4 个 0B 死壳；② `knowledge.db`(索引) 改名 `file_index.db`；③ `面试处理库.chunk` 路径归一化（孤儿 1310→106）；④ 18GB 历史备份归档到 `data/_archive/`；⑤ 删除 106 个真丢失孤儿 chunk 行（637 行，chunk 13630→12993），FTS 重建；⑥ **结构化数据统一收口到主程序 `data/interview.db`**：把离线侧 `面试弹药库.db` + `幻灯片笔记.db` 全部表（ammo_doc/concept/project/question/number/job/log/slide/source/processed_notes/run_log/unprocessed + 各自 FTS）合并进 `interview.db`（仅新增表，应用表 interview_questions/kb_documents/interview_reviews 原样保留），原始库 `面试资料总库.db` 不动。
+> 本次整理动作：① 删除根目录 4 个 0B 死壳；② `knowledge.db`(索引) 改名 `file_index.db`；③ `面试处理库.chunk` 路径归一化（孤儿 1310→106）；④ 18GB 历史备份归档到 `data/_archive/`；⑤ 删除 106 个真丢失孤儿 chunk 行（637 行，chunk 13630→12993），FTS 重建；⑥ **结构化数据统一收口到主程序 `data/interview.db`**：把离线侧 `面试弹药库.db` + `幻灯片笔记.db` 全部表合并进 `interview.db`（仅新增表，应用表原样保留），原始库 `面试资料总库.db` 不动；⑦ **书籍单独分库**：`面试资料总库.db` 中 `category ∈ ('书籍','技术书籍')` 的 87 篇文档 + 其 `doc_chunk`(7878) / `doc_content`(80) / `doc_vector`(7878) / `doc_fts` 完整复制进新建的 `书籍库.db`（144.3MB，独立可用全文+语义检索）。**当前为复制（总库书籍仍在），是否从总库移除待用户确认**（见第四节）。
 
 ---
 
@@ -12,13 +12,14 @@
 
 | 库 | 大小 | 角色 | 关键表 | 维护脚本 |
 |---|---|---|---|---|
-| 面试资料总库.db | 458.8MB | L0 原始库（全量文档抽取原文 + 整篇 FTS） | doc(2206) / doc_chunk(33471) / doc_content(1893) / doc_fts / doc_vector⚠️ | kb_ingest.py |
+| 面试资料总库.db | 458.8MB | L0 原始库（全量文档抽取原文 + 整篇 FTS，**含书籍 87 篇**，可后续移除） | doc(2206) / doc_chunk(33471) / doc_content(1893) / doc_fts / doc_vector(33467，已修复) | kb_ingest.py |
+| 书籍库.db | 144.3MB | **书籍专库**（category∈书籍/技术书籍，从总库拆分独立） | doc(87) / doc_chunk(7878) / doc_content(80) / doc_fts / doc_vector(7878) | kb_split_books.py |
 | 面试处理库.db | 174.0MB | L1 分块索引（搜索底层） | chunk(12993) / chunk_fts（外部内容 FTS5） / meta | build_index.py |
 | 面试弹药库.db | 9.4MB | L2 面试弹药（结构化备考） | ammo_doc(105) / concept(33) / project(24) / question(25) / job(6) / log(2) / number(60) | kb*.py |
 | 幻灯片笔记.db | 1.7MB | 幻灯片 OCR 笔记 | slide(435) / source(17) / run_log(52) / processed_notes(7) / unprocessed(5) | slides_*.py |
 | file_index.db | 2.5MB | 全库文件索引 | file_index(6870) / layer_stats(view) | build_index.py |
 
-> ⚠️ `doc_vector` 依赖 sqlite-vec 的 vec0 模块，本机 **未安装** → 语义/embedding 检索失效，目前仅 FTS 关键词可用。修复需 `pip install sqlite-vec` + 用 bge-m3 重新向量化（CPU 慢，暂未做）。
+> ✅ **`doc_vector` 已修复（2026-09-10）**：根因为本机缺 `sqlite-vec`（vec0 扩展加载不了），并非缺数据——装包后 `doc_vector` 实际已有 32843/33471 向量；再用 `kb_revectorize.py` 幂等补缺 574 块，覆盖率达 **99.99%**（仅 4 个 ≤20 字极短块跳过）。语义/embedding 检索现已可用（bge-m3 1024 维，与表维度一致）。重跑：`cd 求职知识库/_系统_知识库引擎/scripts && ../../.venv/bin/python kb_revectorize.py 执行`（须项目 .venv 的 python 3.11，且 Ollama 已拉 bge-m3）。
 > `面试处理库.chunk.rel_path` 已归一化对齐磁盘（含 `03_工作资料/` 层），与 `面试资料总库.doc.rel_path` 一致；**原 106 个孤儿（源文件确不存在）已于 2026-09-10 清理**（删除 637 行），当前 chunk 表无孤儿。
 
 ---
@@ -57,3 +58,4 @@
 2. **同名规避**：求职知识库的文件索引现名 `file_index.db`（原名 `knowledge.db`，与 `data/knowledge.db` 重名已改）。引用它的脚本：`build_index.py` / `kb.py` / `doctor.py`。
 3. **派生关系**：`面试处理库` 是 `面试资料总库` 的分块索引；`data/interview.db` 由求职知识库导入；不要把它们当独立数据源重复维护。
 4. **备份纪律**：日常备份走 `data/backups/`（自动轮转）；大体积/阶段性手动备份统一进 `data/_archive/`，不要在项目根目录或主 `data/` 散落裸库。
+5. **书籍独立库（2026-09-10）**：书籍体量偏大（87 篇却占全库 23.5% 的 chunk），已拆出独立 `书籍库.db`（自包含 doc/chunk/content/vector/fts，可独立做全文+语义检索）。`kb_split_books.py` 默认从 `面试资料总库.db` **只读复制**，不改动总库；若需"彻底不混"，再单独从总库删除这 87 篇（注意 doc/doc_chunk/doc_vector/doc_fts 联动清理，属破坏性，需用户确认）。

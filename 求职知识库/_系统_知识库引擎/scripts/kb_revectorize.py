@@ -53,7 +53,7 @@ def db():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["检查", "预览", "执行"])
-    ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--limit", type=int, default=0, help="限制处理块数（0=不限制，缺省补全部缺口）")
     ap.add_argument("--doc", type=int, default=0)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--all", action="store_true", help="强制重向量化全部（先 DELETE 现有向量）")
