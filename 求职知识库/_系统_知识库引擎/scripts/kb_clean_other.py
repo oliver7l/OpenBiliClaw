@@ -37,7 +37,7 @@ def connect(db, read_only=False):
 
 def check(c):
     rows = c.execute(
-        "SELECT id, title, ext, count(dc.id) FROM doc d LEFT JOIN doc_chunk dc "
+        "SELECT d.id, d.title, d.ext, count(dc.id) FROM doc d LEFT JOIN doc_chunk dc "
         "ON dc.doc_id=d.id WHERE d.category='其他' GROUP BY d.id ORDER BY 4 DESC"
     ).fetchall()
     print("=== '其他'类当前 7 篇 ===")

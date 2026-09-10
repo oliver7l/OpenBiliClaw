@@ -1664,17 +1664,15 @@
 
   <!-- 专题：追某个方向的跨平台内容（已并入桌面应用，沿用推荐流卡片风格） -->
   <section class="topics-page content-page" id="topicsPage" aria-label="专题" hidden>
-    <div class="content-page-head topics-head">
-      <div>
-        <p class="eyebrow">Topics</p>
-        <h2>专题</h2>
-        <p class="video-meta">把某个方向的跨平台内容聚到一起，一键收集、随时回看。</p>
-      </div>
-      <div class="topics-head-actions">
+    <!-- 第二栏：操作按钮 -->
+    <div class="page-subtabbar">
+      <div class="page-subtabbar-inner" style="justify-content: flex-end; gap: 8px;">
         <button class="pill-btn" id="topicsNewBtn" type="button">＋ 新建专题</button>
         <button class="pill-btn dark" id="topicsCollectAllBtn" type="button">全部收集一次</button>
       </div>
     </div>
+    <!-- 第三栏：内容区域 -->
+    <div class="page-body">
 
     <!-- 新建专题面板（默认隐藏） -->
     <div class="topics-panel" id="topicsNewPanel" hidden>
@@ -1711,6 +1709,7 @@
 
     <!-- 详情视图（默认隐藏） -->
     <div class="topics-detail" id="topicsDetail" hidden></div>
+    </div>
   </section>
 
   <!-- 健康档案：统一并入桌面应用，共享 topbar+tabbar，内部表格/表单配应用主色调 -->
