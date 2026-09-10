@@ -593,7 +593,6 @@ function escapeHtml(text) {
   // ── 初始化（由 app.js 或页面加载时调用）──
   function init() {
     safeBind("#selfEvolutionBtn", "click", () => window.navigateTo("/web/self-evolution"));
-    safeBind("#selfEvoRefreshBtn", "click", loadSelfEvoStatus);
     safeBind("#generateInsightBtn", "click", generateInsightReport);
     safeBind("#analyzeDriftBtn", "click", analyzeDrift);
     safeBind("#mineTopicsBtn", "click", mineTopics);

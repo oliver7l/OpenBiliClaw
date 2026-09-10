@@ -989,47 +989,39 @@
 
       <!-- 自进化中心：系统自动从内容库中挖掘价值 -->
       <section class="self-evolution-page content-page" id="selfEvolutionPage" aria-label="自进化中心" hidden>
-        <div class="content-page-head">
-          <div>
-            <p class="eyebrow">Self-Evolution</p>
-            <h2>🧬 自进化中心</h2>
-            <p class="video-meta">系统自动从你的内容库中挖掘洞察、检测兴趣变化、生成知识卡片、构建知识图谱。</p>
-          </div>
-          <div class="self-evo-actions">
-            <button class="pill-btn" id="selfEvoRefreshBtn" type="button">↻ 刷新状态</button>
-          </div>
-        </div>
-
-        <!-- 状态概览 -->
-        <div class="self-evo-status" id="selfEvoStatus">
-          <div class="self-evo-stat-card">
-            <span class="self-evo-stat-val" id="statInsightReports">—</span>
-            <span class="self-evo-stat-label">洞察报告</span>
-          </div>
-          <div class="self-evo-stat-card">
-            <span class="self-evo-stat-val" id="statDriftReports">—</span>
-            <span class="self-evo-stat-label">漂移分析</span>
-          </div>
-          <div class="self-evo-stat-card">
-            <span class="self-evo-stat-val" id="statTopicMining">—</span>
-            <span class="self-evo-stat-label">专题挖掘</span>
-          </div>
-          <div class="self-evo-stat-card accent">
-            <span class="self-evo-stat-val" id="statKnowledgeCards">—</span>
-            <span class="self-evo-stat-label">知识卡片</span>
-          </div>
-          <div class="self-evo-stat-card">
-            <span class="self-evo-stat-val" id="statKnowledgeGraph">—</span>
-            <span class="self-evo-stat-label">知识图谱</span>
-          </div>
-          <div class="self-evo-stat-card warn">
-            <span class="self-evo-stat-val" id="statNotifications">—</span>
-            <span class="self-evo-stat-label">推送通知</span>
+        <!-- 第二栏：状态概览 -->
+        <div class="page-subtabbar">
+          <div class="page-subtabbar-inner" style="justify-content: flex-start; gap: 12px;">
+            <div class="self-evo-status" id="selfEvoStatus" style="border: none; padding: 0;">
+              <div class="self-evo-stat-card">
+                <span class="self-evo-stat-val" id="statInsightReports">—</span>
+                <span class="self-evo-stat-label">洞察报告</span>
+              </div>
+              <div class="self-evo-stat-card">
+                <span class="self-evo-stat-val" id="statDriftReports">—</span>
+                <span class="self-evo-stat-label">漂移分析</span>
+              </div>
+              <div class="self-evo-stat-card">
+                <span class="self-evo-stat-val" id="statTopicMining">—</span>
+                <span class="self-evo-stat-label">专题挖掘</span>
+              </div>
+              <div class="self-evo-stat-card accent">
+                <span class="self-evo-stat-val" id="statKnowledgeCards">—</span>
+                <span class="self-evo-stat-label">知识卡片</span>
+              </div>
+              <div class="self-evo-stat-card">
+                <span class="self-evo-stat-val" id="statKnowledgeGraph">—</span>
+                <span class="self-evo-stat-label">知识图谱</span>
+              </div>
+              <div class="self-evo-stat-card warn">
+                <span class="self-evo-stat-val" id="statNotifications">—</span>
+                <span class="self-evo-stat-label">推送通知</span>
+              </div>
+            </div>
           </div>
         </div>
-
-        <!-- 模块卡片网格 -->
-        <div class="self-evo-modules">
+        <!-- 第三栏：内容区域 -->
+        <div class="page-body">
           <!-- 1. 周期性洞察报告 -->
           <div class="self-evo-module-card" id="moduleInsight">
             <div class="self-evo-module-head">
@@ -1143,6 +1135,7 @@
             <button class="icon-btn" id="selfEvoDetailClose" type="button" aria-label="关闭">✕</button>
           </div>
           <div class="self-evo-detail-body" id="selfEvoDetailBody"></div>
+        </div>
         </div>
       </section>
 

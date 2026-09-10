@@ -1337,6 +1337,7 @@
         clonePage: () => loadCloneSites(),
         travelPage: () => { _travelLoaded = { flights: false, overview: false, doc: false }; loadTravelFlights(); loadTravelOverview(); loadTravelDoc(); },
         interviewPage: () => { if (window.loadInterviewData) window.loadInterviewData(); },
+        selfEvolutionPage: () => { if (typeof loadSelfEvoStatus === 'function') loadSelfEvoStatus(); },
       };
       const globalRefreshBtn = document.getElementById("globalRefreshBtn");
       if (globalRefreshBtn) {
