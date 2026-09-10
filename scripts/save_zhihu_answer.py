@@ -148,7 +148,7 @@ def main():
 
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT id, title, content_text, tags FROM articles WHERE url = ?", (url,)
+        "SELECT id, title, content_text, tags FROM read_archive WHERE url = ?", (url,)
     ).fetchone()
 
     if row:
@@ -166,7 +166,7 @@ def main():
         new_title = old_title or title
         now_iso = _now_local()
         cur.execute(
-            """UPDATE articles
+            """UPDATE read_archive
                SET title=?, content_text=?, tags=?, summary=?, author=?, published_at=?, updated_at=?
                WHERE id=?""",
             (new_title, content, json.dumps(merged, ensure_ascii=False), summary, author, published_at, now_iso, rid),
@@ -179,12 +179,12 @@ def main():
 
     now_iso = _now_local()
     cur.execute(
-        """INSERT INTO articles
+        """INSERT INTO read_archive
            (source_type, source_name, title, url, author, summary, content_text,
-            published_at, tags, status, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            published_at, tags, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (PLATFORM, author or PLATFORM, title, url, author, summary,
-         content, published_at, json.dumps(tags, ensure_ascii=False), "unread", now_iso, now_iso),
+         content, published_at, json.dumps(tags, ensure_ascii=False), now_iso, now_iso),
     )
     conn.commit()
     conn.close()

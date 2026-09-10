@@ -8,7 +8,7 @@ doctor.py — 求职知识库健康检查
   C2 岗位目录:      01_岗位表.csv 的"备战目录"在 03_岗位弹药库 下是否存在
   C3 日志岗位对齐:  04_面试日志.csv 的公司是否都登记在 01_岗位表
   C4 数字表完整:    03_真实数字表.csv 每行是否数字/口径/来源齐全
-  C5 索引新鲜度:    数据/knowledge.db 记录数与实际文件数是否匹配(仅 --full)
+  C5 索引新鲜度:    数据/file_index.db 记录数与实际文件数是否匹配(仅 --full)
 用法:
   python3 scripts/doctor.py            # 常规检查
   python3 scripts/doctor.py --fix      # 检查 + 修复可自动修复项(重建索引)
@@ -79,7 +79,7 @@ def main():
 
     # C5 索引新鲜度 (仅 --full)
     if full:
-        db = os.path.join(DATA, "knowledge.db")
+        db = os.path.join(DATA, "file_index.db")
         db_count = 0
         if os.path.exists(db):
             conn = sqlite3.connect(db)
@@ -98,7 +98,7 @@ def main():
                     dirs[:] = [d for d in dirs if not d.startswith(".")]
                     actual += sum(1 for fn in files if not _is_junk(fn))
         if db_count != actual:
-            issues.append(f"C5 [索引新鲜度] knowledge.db={db_count} 实际文件={actual}，需重建索引(--fix)")
+            issues.append(f"C5 [索引新鲜度] file_index.db={db_count} 实际文件={actual}，需重建索引(--fix)")
 
     # 报告
     if issues:

@@ -5,7 +5,7 @@
 扫描 01原始资料库 / 02方向知识库 / 03岗位弹药库 全部文件，
 生成:
   - 数据/06_全库文件索引.csv   (便于用表格打开查看)
-  - 数据/knowledge.db          (SQLite 完整数据库,含 index 表)
+  - 数据/file_index.db          (SQLite 完整数据库,含 index 表)
 用法:
   python3 scripts/build_index.py
 """
@@ -77,7 +77,7 @@ def main():
         w.writerows(rows)
 
     # 写 SQLite
-    db_path = os.path.join(DATA, "knowledge.db")
+    db_path = os.path.join(DATA, "file_index.db")
     if os.path.exists(db_path):
         os.remove(db_path)
     conn = sqlite3.connect(db_path)

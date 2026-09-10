@@ -534,8 +534,12 @@ def _xhs_search_due(state: dict) -> bool:
     return (now - last_dt) >= timedelta(hours=_XHS_SEARCH_GAP_HOURS)
 
 
-def _run_cli_json(cmd: list[str], *, timeout: float) -> dict | None:
-    """Run a CLI expecting a JSON blob on stdout; None on any failure."""
+def _run_cli_json(cmd: list[str], *, timeout: float) -> object | None:
+    """Run a CLI expecting a JSON blob on stdout; None on any failure.
+
+    Accepts both dict and list payloads (zhihu-cli ``search article --json``
+    emits a bare JSON array).
+    """
     import subprocess
 
     try:
@@ -554,7 +558,12 @@ def _run_cli_json(cmd: list[str], *, timeout: float) -> dict | None:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return None
-    return payload if isinstance(payload, dict) else None
+    return payload if isinstance(payload, (dict, list)) else None
+
+
+def _strip_ansi(s: str) -> str:
+    """Strip ANSI color/highlight escape sequences from CLI output."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
 
 
 def _zhihu_web_url(obj: dict) -> str:
@@ -575,7 +584,11 @@ def _zhihu_web_url(obj: dict) -> str:
 
 
 def collect_zhihu_cli(db: Database, topic: dict, *, limit: int) -> dict:
-    """Collect via the user's ``zhihu`` CLI search (reverse-engineered API)."""
+    """Collect via the user's ``zhihu`` CLI search (``zhihu search article QUERY --json``).
+
+    NOTE: zhihu-cli 的 search 必须带子命令（article/question/topic/user），
+    ``zhihu search <kw>`` 会报 "No such command"。文章类内容用 article 子命令。
+    """
     stats: dict = {"new": 0, "dup": 0, "failed": 0, "searches": 0, "skipped": 0}
     if not _cli_channel_due("zhihu-cli"):
         stats["skipped"] = 1
@@ -585,36 +598,39 @@ def collect_zhihu_cli(db: Database, topic: dict, *, limit: int) -> dict:
     if not keywords or not os.path.exists(_ZHIHU_BIN):
         return stats
     for kw in keywords[:limit]:
-        payload = _run_cli_json([_ZHIHU_BIN, "search", kw, "--json"], timeout=20)
+        payload = _run_cli_json([_ZHIHU_BIN, "search", "article", kw, "--json", "-n", "15"], timeout=25)
         if payload is None:
             stats["failed"] += 1
             print(f"    ⚠ zhihu-cli[{kw}]: 调用失败/非 JSON")
             continue
+        if not isinstance(payload, list):
+            stats["failed"] += 1
+            print(f"    ⚠ zhihu-cli[{kw}]: 返回结构异常（非列表）")
+            continue
         stats["searches"] += 1
         collected = 0
-        for item in payload.get("data") or []:
-            if item.get("type") != "search_result":
+        for item in payload:
+            if not isinstance(item, dict):
                 continue
-            obj = item.get("object") or {}
-            otype = obj.get("type")
-            if otype not in {"article", "answer", "question"}:
-                continue
-            hl = item.get("highlight") or {}
-            title = re.sub(r"<[^>]+>", "", str(hl.get("title") or obj.get("title") or "")).strip()
-            desc = re.sub(r"<[^>]+>", "", str(hl.get("description") or "")).strip()
+            title = _strip_ansi(str(item.get("title") or "")).strip()
             if not title:
                 continue
             collected += 1
             if collected > limit:
                 break
+            oid = str(item.get("id") or "")
+            url = str(item.get("url") or "")
+            if not oid or not url:
+                continue
+            excerpt = _strip_ansi(str(item.get("excerpt") or item.get("description") or "")).strip()
             item_row = {
-                "content_key": f"zhihu-cli:{otype}:{obj.get('id')}",
+                "content_key": f"zhihu-cli:article:{oid}",
                 "title": title,
-                "url": _zhihu_web_url(obj),
+                "url": url,
                 "source_platform": "zhihu-cli",
                 "source_name": "知乎",
                 "cover_url": "",
-                "summary": desc[:400],
+                "summary": excerpt[:400],
                 "topic_label": "",
             }
             if db.add_topic_item(topic["id"], item_row):

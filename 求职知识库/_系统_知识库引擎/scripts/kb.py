@@ -8,7 +8,7 @@
   python3 kb.py 数字 <关键词>       查真实数字（权威表，只出真实口径）
   python3 kb.py 速记 <公司>         一键生成该公司面试速记卡
   python3 kb.py 方向 <方向>         列出某方向全部方法论文档
-  python3 kb.py 索引 [关键词]       全库文件索引查询（knowledge.db，可加 --层 01/02/03）
+  python3 kb.py 索引 [关键词]       全库文件索引查询（file_index.db，可加 --层 01/02/03）
   python3 kb.py 项目 [关键词]       列出全部项目（或按关键词过滤）
   python3 kb.py 全部                查看系统当前登记的全部岗位/项目/数字
   python3 kb.py 记录 <公司> <轮次> <被问要点>   追加一条面试日志
@@ -190,9 +190,9 @@ def show_direction(d):
         _list_direction(p, os.path.relpath(p, ROOT))
 
 def show_index(keyword=None, layer=None):
-    db = os.path.join(DATA, "knowledge.db")
+    db = os.path.join(DATA, "file_index.db")
     if not os.path.exists(db):
-        print("knowledge.db 不存在，请先运行: python3 scripts/build_index.py")
+        print("file_index.db 不存在，请先运行: python3 scripts/build_index.py")
         return
     conn = sqlite3.connect(db)
     cur = conn.cursor()
