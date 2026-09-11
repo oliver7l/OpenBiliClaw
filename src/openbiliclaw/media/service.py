@@ -34,10 +34,7 @@ class MediaService:
         seen: set[str] = set()
         for root in roots:
             path = Path(root)
-            if not path.is_absolute():
-                path = (Path.cwd() / path).resolve()
-            else:
-                path = path.resolve()
+            path = (Path.cwd() / path).resolve() if not path.is_absolute() else path.resolve()
             key = os.path.normcase(str(path))
             if key not in seen:
                 seen.add(key)
@@ -194,7 +191,10 @@ class MediaService:
         root_path = self.resolve_root(root)
         rel = rel.strip().strip("/\\")
         resolved = (root_path / rel).resolve()
-        if self._is_within(resolved, root_path) and str(resolved) != str(root_path):
-            if resolved.is_file():
-                return resolved
+        if (
+            self._is_within(resolved, root_path)
+            and str(resolved) != str(root_path)
+            and resolved.is_file()
+        ):
+            return resolved
         raise MediaNotFoundError(f"文件不存在或超出范围: {rel}")

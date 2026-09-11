@@ -32,10 +32,10 @@ from obc_soul.awareness_analyzer import AwarenessGenerationError
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from openbiliclaw.memory.manager import MemoryManager
     from obc_soul.awareness_analyzer import AwarenessAnalyzer
     from obc_soul.insight_analyzer import InsightAnalyzer
     from obc_soul.profile import AwarenessNote, InsightHypothesis
+    from openbiliclaw.memory.manager import MemoryManager
 
 from obc_soul.profile import (
     OnionProfile,

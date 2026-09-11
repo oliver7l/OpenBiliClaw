@@ -16,13 +16,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox
+
+# K10：content_cache 入库与 favorites 簇其余 5 个 producer 逐字相同，收口 producer_base
+from openbiliclaw.runtime.producer_base import insert_rows_into_cache as _insert_rows
 from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
 logger = logging.getLogger(__name__)
@@ -175,41 +177,6 @@ def _parse_tweets(tweets: list[dict[str, Any]], source: str) -> list[dict[str, A
 # ---------------------------------------------------------------------------
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
-    """Insert new rows into content_cache, skipping duplicates by bvid."""
-    inserted = 0
-    for row in rows:
-        try:
-            cursor = conn.execute(
-                """INSERT OR IGNORE INTO content_cache (
-                    bvid, title, up_name, author_name, content_url,
-                    source_platform, source, content_type, pool_status,
-                    body_text, like_count, comment_count, favorite_count,
-                    share_count, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    row["bvid"],
-                    row["title"],
-                    row["up_name"],
-                    row["author_name"],
-                    row["content_url"],
-                    row["source_platform"],
-                    row["source"],
-                    row["content_type"],
-                    row["pool_status"],
-                    row["body_text"],
-                    row["like_count"],
-                    row["comment_count"],
-                    row["favorite_count"],
-                    row["share_count"],
-                    row["discovered_at"],
-                ),
-            )
-            if cursor.rowcount > 0:
-                inserted += 1
-        except sqlite3.IntegrityError:
-            continue
-    return inserted
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +238,7 @@ def _run_once(
             "dry_run": True,
         }
 
-    conn = _obc_connect("x")
+    conn = connect_inbox("x")
     try:
         inserted = _insert_rows(conn, unique_rows)
         conn.commit()

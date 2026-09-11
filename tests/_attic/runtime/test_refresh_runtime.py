@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+from tests.discovery.test_search_strategy import _build_profile
 
 from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
 from openbiliclaw.discovery.candidate_pool import DiscoveryCandidateWrite
@@ -18,7 +19,6 @@ from openbiliclaw.runtime.events import RuntimeEventHub
 from openbiliclaw.runtime.presence import PresenceTracker
 from openbiliclaw.runtime.refresh import ContinuousRefreshController
 from openbiliclaw.storage.database import Database
-from tests.discovery.test_search_strategy import _build_profile
 
 if TYPE_CHECKING:
     from pathlib import Path

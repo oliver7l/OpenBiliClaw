@@ -4,7 +4,6 @@
 """
 
 from __future__ import annotations
-from openbiliclaw.storage.database import open_db_conn
 
 import json
 from typing import Any
@@ -12,6 +11,8 @@ from typing import Any
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from openbiliclaw.storage.database import open_db_conn
 
 console = Console()
 

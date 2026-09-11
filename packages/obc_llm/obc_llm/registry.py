@@ -16,7 +16,7 @@ from .openai_provider import DeepSeekProvider, OpenAIProvider
 from .openrouter_provider import OpenRouterProvider
 
 if TYPE_CHECKING:
-    from obc_llm._config import LLMConfig
+    from obc_llm._config import LLMConfig  # noqa: E402
     from obc_llm.embedding import SupportsEmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,8 @@ class RegistrySummary:
     registered_providers: list[str]
 
 
-from obc_llm._config import LLMConfig, LLMProviderConfig
+from obc_llm._config import LLMConfig  # noqa: E402
+
 
 def build_llm_registry(
     config: LLMConfig,

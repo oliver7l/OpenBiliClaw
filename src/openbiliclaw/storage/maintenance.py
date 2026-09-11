@@ -302,10 +302,11 @@ def _backup_base_name(db_path: Path, timestamp: str) -> str:
 def _parse_backup_timestamp(path: Path) -> datetime | None:
     if path.suffix != ".db":
         return None
-    if not path.stem.startswith(_BACKUP_NAME_PREFIX):
-        prefix = f"{path.stem.split('-', 1)[0]}-"
-    else:
-        prefix = _BACKUP_NAME_PREFIX
+    prefix = (
+        f"{path.stem.split('-', 1)[0]}-"
+        if not path.stem.startswith(_BACKUP_NAME_PREFIX)
+        else _BACKUP_NAME_PREFIX
+    )
     stamp = path.stem.removeprefix(prefix)
     try:
         parsed = datetime.strptime(stamp, _BACKUP_TIMESTAMP_FORMAT)

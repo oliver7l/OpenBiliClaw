@@ -25,6 +25,9 @@ def _make_cross_thread_db(tmp_path: Path) -> Database:
     # 必须先确保 pool.db 存在并 ATTACH，否则 _SCHEMA_SQL 里的 pool.* 表会报 unknown database
     db._ensure_pool_database()
     db._attach_pool(db._conn)
+    # _SCHEMA_SQL 里 knowledge.* 前缀的表在 knowledge.db，同样要先建库再 ATTACH
+    db._ensure_knowledge_database()
+    db._attach_knowledge(db._conn)
     db._conn.executescript(_SCHEMA_SQL)
     db._ensure_recommendation_feedback_columns()
     db._ensure_content_cache_runtime_columns()

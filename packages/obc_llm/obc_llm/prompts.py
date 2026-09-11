@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import json
-from typing import TYPE_CHECKING
+import re
 
 from obc_llm._protocols import ToneProfile
 from obc_llm.json_utils import parse_llm_json_tolerant
@@ -229,7 +228,7 @@ def render_preference_summary(preference_summary: dict[str, object]) -> str:
 
 def _category_vocab_line() -> str:
     # Inlined from openbiliclaw.soul.taxonomy
-    CATEGORY_VOCAB = (
+    CATEGORY_VOCAB = (  # noqa: N806
         "娱乐", "生活", "科技", "知识", "游戏", "资讯", "体育",
         "健康", "社会", "音乐", "动漫", "财经", "影视", "美食",
         "教育", "文化", "萌宠", "汽车", "其他",
@@ -2179,7 +2178,7 @@ def build_category_mapping_prompt(
 ) -> list[dict[str, str]]:
     """Build a cache-friendly prompt for mapping categories to the fixed vocab."""
     # Inlined from openbiliclaw.soul.taxonomy
-    CATEGORY_VOCAB = (
+    CATEGORY_VOCAB = (  # noqa: N806
         "娱乐", "生活", "科技", "知识", "游戏", "资讯", "体育",
         "健康", "社会", "音乐", "动漫", "财经", "影视", "美食",
         "教育", "文化", "萌宠", "汽车", "其他",

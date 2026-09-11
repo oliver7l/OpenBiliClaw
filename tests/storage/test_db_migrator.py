@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from openbiliclaw.storage.db_migrator import DatabaseMigrator, MigrationResult
+from openbiliclaw.storage.db_migrator import DatabaseMigrator
 from openbiliclaw.storage.db_router import DatabaseRouter
 
 

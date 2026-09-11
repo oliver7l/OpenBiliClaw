@@ -9,6 +9,9 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol, cast
 
+from obc_llm.json_utils import extract_llm_json_object
+from obc_llm.prompts import build_explore_domains_prompt
+
 from obc_discovery.engine import (
     ContentDiscoveryEngine,
     DiscoveredContent,
@@ -26,11 +29,10 @@ from obc_discovery.strategies._utils import (
     search_cooldown_remaining,
 )
 from obc_discovery.strategies.search import SearchStrategy
-from obc_llm.json_utils import extract_llm_json_object
-from obc_llm.prompts import build_explore_domains_prompt
 
 if TYPE_CHECKING:
     from obc_llm.embedding import SupportsEmbeddingService
+
     from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.storage.database import Database
 
@@ -524,10 +526,10 @@ class ExploreStrategy(DiscoveryStrategy):
                 if isinstance(query, str)
             ],
         ]
-        for anchor in anchor_set:
-            if anchor and any(anchor in haystack for haystack in haystacks):
-                return True
-        return False
+        return any(
+            anchor and any(anchor in haystack for haystack in haystacks)
+            for anchor in anchor_set
+        )
 
     def _clean_queries(self, raw_value: object) -> list[str]:
         if not isinstance(raw_value, list):

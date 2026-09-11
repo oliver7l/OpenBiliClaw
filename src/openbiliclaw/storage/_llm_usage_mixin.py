@@ -10,7 +10,6 @@ v0.4.0+: llm_usage 表迁移到独立的 llm.db，与主库锁域隔离。
 from __future__ import annotations
 
 import logging
-from contextlib import suppress
 from typing import Any
 
 logger = logging.getLogger(__name__)

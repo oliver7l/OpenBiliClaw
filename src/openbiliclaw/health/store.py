@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-
-from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 from .models import (
     Allergy,
@@ -75,7 +75,6 @@ from .models import (
     VitalGlucoseContext,
     Vitals,
     VitalsCreate,
-    AllergyUpdate,
 )
 
 if TYPE_CHECKING:

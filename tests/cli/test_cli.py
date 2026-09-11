@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
+import openbiliclaw.runtime.init_flow as init_flow_module
 from openbiliclaw import cli as cli_module
 from openbiliclaw import config as config_module
 from openbiliclaw.bilibili.auth import AuthStatus
@@ -3121,16 +3122,17 @@ def test_init_includes_xhs_bootstrap_events(
     )
     monkeypatch.setattr(cli_module, "_build_memory_manager", lambda: fake_memory, raising=False)
     monkeypatch.setattr(cli_module, "_build_soul_engine", lambda: fake_soul, raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: fake_database, raising=False)
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: fake_database, raising=False)
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
-    monkeypatch.setattr(cli_module, "_run_with_progress", passthrough_progress)
+    monkeypatch.setattr(init_flow_module, "_run_with_progress", passthrough_progress)
     monkeypatch.setattr(
         cli_module,
         "_run_init_discovery_backfill_async",
         fake_discovery_backfill,
     )
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_build_draft_profile_for_discover",
         lambda memory: SoulProfile(preferences=PreferenceLayer()),
     )
@@ -3141,13 +3143,15 @@ def test_init_includes_xhs_bootstrap_events(
     # branch isn't taken) and collect returns the synthetic event
     # plus the "ok" status.
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_enqueue_xhs_bootstrap_task",
         lambda: "fake-xhs-task-id",
         raising=False,
     )
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_collect_xhs_bootstrap_events",
         lambda task_id, **_: ([xhs_event], {"saved": 1, "liked": 0, "xhs_history": 0}, "ok"),
         raising=False,
@@ -3285,24 +3289,26 @@ def test_init_includes_douyin_bootstrap_events_in_analysis_and_profile(
     )
     monkeypatch.setattr(cli_module, "_build_memory_manager", lambda: fake_memory, raising=False)
     monkeypatch.setattr(cli_module, "_build_soul_engine", lambda: fake_soul, raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: fake_database, raising=False)
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: fake_database, raising=False)
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
-    monkeypatch.setattr(cli_module, "_run_with_progress", passthrough_progress)
+    monkeypatch.setattr(init_flow_module, "_run_with_progress", passthrough_progress)
     monkeypatch.setattr(
         cli_module,
         "_run_init_discovery_backfill_async",
         fake_discovery_backfill,
     )
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_build_draft_profile_for_discover",
         lambda memory: SoulProfile(preferences=PreferenceLayer()),
     )
     monkeypatch.setattr(cli_module, "_notify_running_server_init_completed", lambda: None)
-    monkeypatch.setattr(cli_module, "_enqueue_xhs_bootstrap_task", fail_xhs_enqueue, raising=False)
-    monkeypatch.setattr(cli_module, "_enqueue_dy_bootstrap_task", lambda: "fake-dy-task-id")
+    monkeypatch.setattr(init_flow_module, "_enqueue_xhs_bootstrap_task", fail_xhs_enqueue, raising=False)
+    monkeypatch.setattr(init_flow_module, "_enqueue_dy_bootstrap_task", lambda: "fake-dy-task-id")
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_collect_dy_bootstrap_events",
         lambda task_id, **_: (
             dy_events,
@@ -3368,7 +3374,7 @@ def test_collect_xhs_bootstrap_events_status_branches(
         conn = object()
 
     # Status: ok — task completes with notes
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr(
         "openbiliclaw.sources.xhs_tasks.XhsTaskQueue",
         lambda _db: FakeQueue(
@@ -3450,7 +3456,7 @@ def test_collect_source_bootstrap_events_default_wait_is_180_seconds(
     dy_queue = AlwaysPendingQueue(FakeDatabase())
     monkeypatch.delenv("OPENBILICLAW_XHS_BOOTSTRAP_WAIT_SECONDS", raising=False)
     monkeypatch.delenv("OPENBILICLAW_DY_BOOTSTRAP_WAIT_SECONDS", raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
     monkeypatch.setattr("openbiliclaw.sources.xhs_tasks.XhsTaskQueue", lambda _db: xhs_queue)
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", lambda _db: dy_queue)
@@ -3491,7 +3497,7 @@ def test_enqueue_xhs_bootstrap_task_uses_env_overrides(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.xhs_tasks.XhsTaskQueue", FakeQueue)
     monkeypatch.setenv("OPENBILICLAW_XHS_BOOTSTRAP_SCROLL_ROUNDS", "5")
     monkeypatch.setenv("OPENBILICLAW_XHS_BOOTSTRAP_MAX_ITEMS", "100")
@@ -3525,7 +3531,7 @@ def test_enqueue_xhs_bootstrap_task_defaults_to_300_items_per_scope(
         conn = object()
 
     monkeypatch.delenv("OPENBILICLAW_XHS_BOOTSTRAP_MAX_ITEMS", raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.xhs_tasks.XhsTaskQueue", FakeQueue)
 
     assert _enqueue_xhs_bootstrap_task(force=True) == "task-default"
@@ -3552,7 +3558,7 @@ def test_enqueue_xhs_bootstrap_task_reuses_recent_task_by_default(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.xhs_tasks.XhsTaskQueue", FakeQueue)
 
     assert _enqueue_xhs_bootstrap_task() == "recent-task-id"
@@ -3579,7 +3585,7 @@ def test_enqueue_xhs_bootstrap_task_force_bypasses_recent_task(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.xhs_tasks.XhsTaskQueue", FakeQueue)
 
     assert _enqueue_xhs_bootstrap_task(force=True) == "fresh-task-id"
@@ -3779,7 +3785,7 @@ def test_select_init_source_shares_accepts_suggested_ratios(
 ) -> None:
     from openbiliclaw.cli import _select_init_source_shares
 
-    monkeypatch.setattr(cli_module, "_is_interactive_terminal", lambda: True)
+    monkeypatch.setattr(init_flow_module, "_is_interactive_terminal", lambda: True)
     monkeypatch.setattr(cli_module.typer, "confirm", lambda *args, **kwargs: True)
 
     selected = _select_init_source_shares(
@@ -3815,7 +3821,7 @@ def test_select_init_source_shares_accepts_manual_ratios(
 ) -> None:
     from openbiliclaw.cli import _select_init_source_shares
 
-    monkeypatch.setattr(cli_module, "_is_interactive_terminal", lambda: True)
+    monkeypatch.setattr(init_flow_module, "_is_interactive_terminal", lambda: True)
     monkeypatch.setattr(cli_module.typer, "confirm", lambda *args, **kwargs: False)
     monkeypatch.setattr(
         cli_module.typer,
@@ -4080,10 +4086,13 @@ def test_init_backfills_pool_in_stages_until_target_is_reached(
         lambda: fake_discovery,
         raising=False,
     )
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: fake_database, raising=False)
+    # K6：_get_runtime_database 双读者（cli backfill helper + init_flow），两边都要打补丁
     monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: fake_database, raising=False)
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
+
         "_build_draft_profile_for_discover",
         lambda memory: SoulProfile(
             preferences=PreferenceLayer(
@@ -4621,7 +4630,7 @@ def test_enqueue_dy_bootstrap_task_uses_env_overrides(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
     monkeypatch.setenv("OPENBILICLAW_DY_BOOTSTRAP_SCROLL_ROUNDS", "8")
     monkeypatch.setenv("OPENBILICLAW_DY_BOOTSTRAP_MAX_ITEMS", "120")
@@ -4660,7 +4669,7 @@ def test_enqueue_dy_bootstrap_task_defaults_to_300_items_per_scope(
         conn = object()
 
     monkeypatch.delenv("OPENBILICLAW_DY_BOOTSTRAP_MAX_ITEMS", raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
 
     assert _enqueue_dy_bootstrap_task() == "dy-task-default"
@@ -4687,7 +4696,7 @@ def test_enqueue_dy_bootstrap_task_reuses_recent_task_by_default(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
 
     assert _enqueue_dy_bootstrap_task() == "recent-dy-task-id"
@@ -4725,7 +4734,7 @@ def test_enqueue_yt_bootstrap_task_reuses_recent_task_by_default(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.yt_tasks.YtTaskQueue", FakeQueue)
 
     assert _enqueue_yt_bootstrap_task() == "recent-yt-task-id"
@@ -4752,7 +4761,7 @@ def test_enqueue_yt_bootstrap_task_defaults_to_300_items_per_scope(
         conn = object()
 
     monkeypatch.delenv("OPENBILICLAW_YT_BOOTSTRAP_MAX_ITEMS", raising=False)
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.yt_tasks.YtTaskQueue", FakeQueue)
 
     assert _enqueue_yt_bootstrap_task() == "yt-task-default"
@@ -4818,7 +4827,7 @@ def test_collect_dy_bootstrap_events_extracts_videos_from_completed_task(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
 
     events, counts, status = _collect_dy_bootstrap_events("task-1", max_wait_seconds=0)
@@ -4846,7 +4855,7 @@ def test_collect_dy_bootstrap_events_returns_timeout_when_task_pending(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
 
     _events, _counts, status = _collect_dy_bootstrap_events("task-1", max_wait_seconds=0.05)
@@ -4872,7 +4881,7 @@ def test_collect_dy_bootstrap_events_surfaces_failed_status(
     class FakeDatabase:
         conn = object()
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: FakeDatabase())
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: FakeDatabase())
     monkeypatch.setattr("openbiliclaw.sources.dy_tasks.DyTaskQueue", FakeQueue)
 
     _events, _counts, status = _collect_dy_bootstrap_events("task-1", max_wait_seconds=0)
@@ -5241,8 +5250,8 @@ def test_enqueue_zhihu_bootstrap_requests_activity_by_default(
 
     database = Database(tmp_path / "test.db")
     database.initialize()
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: database)
-    monkeypatch.setattr(cli_module, "_kick_task_dispatcher", lambda source: None)
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: database)
+    monkeypatch.setattr(init_flow_module, "_kick_task_dispatcher", lambda source: None)
 
     task_id = cli_module._enqueue_zhihu_bootstrap_task()
 
@@ -5280,7 +5289,7 @@ def test_collect_zhihu_bootstrap_events_surfaces_login_required(
             "http_status": 400,
         },
     )
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: database)
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: database)
 
     events, counts, status = cli_module._collect_zhihu_bootstrap_events(task_id, max_wait_seconds=0)
 
@@ -5302,7 +5311,7 @@ def test_collect_zhihu_bootstrap_events_marks_in_progress_timeout_failed(
     task_id = queue.enqueue_with_id("bootstrap_events", {"scopes": ["zhihu_read_history"]})
     assert task_id is not None
     assert queue.next_pending() is not None
-    monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: database)
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", lambda: database)
 
     events, _counts, status = cli_module._collect_zhihu_bootstrap_events(
         task_id, max_wait_seconds=0
@@ -6021,9 +6030,10 @@ def _guided_init_pipeline_doubles(monkeypatch) -> dict[str, Any]:
     """Stub the heavy collaborators of run_guided_init for pipeline tests."""
     state: dict[str, Any] = {"propagated": [], "analyzed": None, "profile_history": None}
 
-    monkeypatch.setattr(cli_module, "_enqueue_xhs_bootstrap_task", lambda **kwargs: "xhs-task-1")
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module, "_enqueue_xhs_bootstrap_task", lambda **kwargs: "xhs-task-1")
+    monkeypatch.setattr(
+        init_flow_module,
         "_collect_xhs_bootstrap_events",
         lambda task_id, **kwargs: (
             (list(state.get("xhs_events", [])), {"saved": 1, "liked": 0, "xhs_history": 0}, "ok")
@@ -6032,16 +6042,16 @@ def _guided_init_pipeline_doubles(monkeypatch) -> dict[str, Any]:
         ),
     )
     monkeypatch.setattr(
-        cli_module, "_collect_dy_bootstrap_events", lambda task_id, **kwargs: ([], {}, "skipped")
+        init_flow_module, "_collect_dy_bootstrap_events", lambda task_id, **kwargs: ([], {}, "skipped")
     )
     monkeypatch.setattr(
-        cli_module, "_collect_yt_bootstrap_events", lambda task_id, **kwargs: ([], {}, "skipped")
+        init_flow_module, "_collect_yt_bootstrap_events", lambda task_id, **kwargs: ([], {}, "skipped")
     )
     monkeypatch.setattr(
-        cli_module, "_enqueue_zhihu_bootstrap_task", lambda **kwargs: "zhihu-task-1"
+        init_flow_module, "_enqueue_zhihu_bootstrap_task", lambda **kwargs: "zhihu-task-1"
     )
     monkeypatch.setattr(
-        cli_module,
+        init_flow_module,
         "_collect_zhihu_bootstrap_events",
         lambda task_id, **kwargs: (
             (
@@ -6067,8 +6077,10 @@ def _guided_init_pipeline_doubles(monkeypatch) -> dict[str, Any]:
             )
         ),
     )
-    monkeypatch.setattr(cli_module, "_maybe_update_init_source_shares", lambda counts: None)
-    monkeypatch.setattr(cli_module, "_build_draft_profile_for_discover", lambda memory: object())
+    monkeypatch.setattr(
+        init_flow_module, "_maybe_update_init_source_shares", lambda counts: None)
+    monkeypatch.setattr(
+        init_flow_module, "_build_draft_profile_for_discover", lambda memory: object())
 
     class _Memory:
         async def propagate_event(self, event: dict[str, Any]) -> None:

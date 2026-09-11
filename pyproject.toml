@@ -104,7 +104,7 @@ packages = ["src/openbiliclaw"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -120,8 +120,19 @@ select = [
     "TCH",  # flake8-type-checking
 ]
 
+# 注解专用导入（sqlite3/Path 等）保留在模块顶部：std lib 导入零成本，
+# 且移入 TYPE_CHECKING 有 get_type_hints 运行时解析失败的风险（FastAPI/Pydantic）。
+ignore = ["TC001", "TC002", "TC003"]
+
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E501"]  # Scripts contain long prompt strings
+# 策略注册工厂：函数名即平台策略名（SearchStrategy() 等），大写为公共 API 约定
+"packages/obc-discovery/obc_discovery/strategies/__init__.py" = ["N802", "N813"]
+# 长文本内容文件：题目原文 / LLM prompt / SQL 模板为不可换行的整体字符串
+"src/openbiliclaw/interview/questions/import_questions.py" = ["E501"]
+"packages/obc_llm/obc_llm/prompts.py" = ["E501"]
+"src/openbiliclaw/scripts/build_knowledge_backlinks.py" = ["E501"]
+"src/openbiliclaw/interview/routes.py" = ["E501"]
 # Large files pending refactor/split — E501 will be addressed during restructuring
 "src/openbiliclaw/api/app.py" = ["E501"]
 "src/openbiliclaw/api/recommendation_routes.py" = ["E501"]  # M1 extraction from app.py; formatting deferred

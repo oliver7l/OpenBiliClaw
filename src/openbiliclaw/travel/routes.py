@@ -267,7 +267,8 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
 
             # Get checklist grouped by category
             c.execute(
-                "SELECT id, category, item, owner, done, notes FROM trip_checklist WHERE trip_id = ? ORDER BY category, id",
+                "SELECT id, category, item, owner, done, notes "
+                "FROM trip_checklist WHERE trip_id = ? ORDER BY category, id",
                 (trip_id,),
             )
             checklist = [dict(r) for r in c.fetchall()]

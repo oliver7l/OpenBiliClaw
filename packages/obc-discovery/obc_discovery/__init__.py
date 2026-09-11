@@ -4,18 +4,17 @@ Multi-strategy cross-platform content discovery that finds content matching
 the user's soul profile and preference model.
 """
 
-from .engine import ContentDiscoveryEngine, DiscoveredContent, DiscoveryStrategy
-from .candidate_pipeline import DiscoveryCandidatePipeline
-from .candidate_pool import DiscoveryCandidateWrite, PENDING_EVAL, EVALUATING, EVALUATED
-from .style_keys import STYLE_KEY_DEFINITIONS, VALID_STYLE_KEYS, normalize_style_key
-from .multimodal import set_image_cache
-
 from ._protocols import (
     CandidateStore,
+    CoverFetchError,
     ImageCache,
     SoulProfileReader,
-    CoverFetchError,
 )
+from .candidate_pipeline import DiscoveryCandidatePipeline
+from .candidate_pool import EVALUATED, EVALUATING, PENDING_EVAL, DiscoveryCandidateWrite
+from .engine import ContentDiscoveryEngine, DiscoveredContent, DiscoveryStrategy
+from .multimodal import set_image_cache
+from .style_keys import STYLE_KEY_DEFINITIONS, VALID_STYLE_KEYS, normalize_style_key
 
 __all__ = [
     # Core engine

@@ -124,7 +124,7 @@ def test_fetch_cookie_built_from_kind(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_fetch_diary_uses_rexxar_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     """diary 直连豆瓣 rexxar JSON 接口，带 Referer + cookie，解析 status items。"""
     captured: dict = {}
-    _SAMPLE_TIMELINE = {
+    _SAMPLE_TIMELINE = {  # noqa: N806
         "count": 2,
         "items": [
             {
@@ -194,7 +194,7 @@ def test_fetch_empty_xml(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_fetch_diary_since_filters_old(monkeypatch: pytest.MonkeyPatch) -> None:
     """增量：since 之后的新条目才返回，旧条目被裁掉，且不继续翻页。"""
     calls: list[str] = []
-    _TIMELINE = {
+    _TIMELINE = {  # noqa: N806
         "count": 2,
         "items": [
             {

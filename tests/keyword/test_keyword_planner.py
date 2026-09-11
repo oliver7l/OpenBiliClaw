@@ -175,7 +175,7 @@ def db(tmp_path: Path) -> Database:
 
 
 def _pending(db: Database, platform: str, digest: str) -> list[str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword FROM discovery_keywords "
         "WHERE platform = ? AND status = 'pending' AND profile_kw_digest = ? "
         "ORDER BY id ASC",
@@ -290,7 +290,7 @@ async def test_digest_change_expires_old_and_regenerates(db: Database) -> None:
 
     # Old-digest pending expired (no longer pending).
     assert db.count_pending_keywords(_XHS, old_digest) == 0
-    old_rows = db.conn.execute(
+    old_rows = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE keyword = '旧词1'"
     ).fetchone()
     assert str(old_rows["status"]) == "expired"

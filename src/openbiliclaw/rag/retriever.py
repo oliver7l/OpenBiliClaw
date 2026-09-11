@@ -145,7 +145,6 @@ class ArticleRagRetriever:
             return self._matrix is not None and len(self._ids) > 0
 
     def _load_locked(self) -> None:
-        import sqlite3
 
         from openbiliclaw.storage.database import open_db_conn
 

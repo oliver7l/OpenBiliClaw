@@ -40,28 +40,23 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime h
     from twitter_cli.models import Tweet
 
 
-class XClientError(RuntimeError):
-    """Base class for all X client failures."""
+# X 异常类已迁至 core.x_errors（K5：storage.x_health 捕获方不再反向依赖本模块）。
+# 此处 re-export 保持既有 import 路径与类型身份不变。
+from openbiliclaw.core.x_errors import (  # noqa: E402
+    XAuthError,
+    XBlockedError,
+    XClientError,
+    XMissingCookieError,
+    XRateLimitError,
+)
 
-
-class XMissingCookieError(XClientError):
-    """No usable cookie (``auth_token`` and/or ``ct0`` missing).
-
-    Raised lazily on first use — before any ``twitter_cli`` import — so the
-    disabled / unconfigured path never touches the X dependency.
-    """
-
-
-class XAuthError(XClientError):
-    """Authentication failed (HTTP 401 / ``AuthenticationError``) — cookie expired."""
-
-
-class XBlockedError(XClientError):
-    """Request blocked (HTTP 403) — account/region/endpoint forbidden."""
-
-
-class XRateLimitError(XClientError):
-    """Rate limited (HTTP 429) — back off and retry later."""
+__all__ = [
+    "XAuthError",
+    "XBlockedError",
+    "XClientError",
+    "XMissingCookieError",
+    "XRateLimitError",
+]
 
 
 def _parse_cookie(cookie: str) -> tuple[str, str]:

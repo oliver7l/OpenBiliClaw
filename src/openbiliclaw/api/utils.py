@@ -75,10 +75,11 @@ def article_tags_for_context(value: object, *, max_tags: int = 8) -> str:
     elif isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
-            if isinstance(parsed, list):
-                tags = [str(t).strip() for t in parsed if str(t).strip()]
-            else:
-                tags = []
+            tags = (
+                [str(t).strip() for t in parsed if str(t).strip()]
+                if isinstance(parsed, list)
+                else []
+            )
         except json.JSONDecodeError:
             tags = [t.strip() for t in value.replace("，", ",").split(",") if t.strip()]
     else:

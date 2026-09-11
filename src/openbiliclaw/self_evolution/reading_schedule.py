@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,8 @@ class ReadingScheduler:
         """返回 ATTACH 了 content.db 的连接（v0.4.0+ articles 表迁移）。"""
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(self.db_path)).with_name('content.db')
         if _content_path.exists():
             with _suppress(Exception):

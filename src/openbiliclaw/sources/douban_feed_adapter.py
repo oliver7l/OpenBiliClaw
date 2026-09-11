@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 import requests
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
@@ -194,9 +194,9 @@ class DoubanFeedAdapter:
             time.sleep(random.uniform(_DIARY_SLEEP_MIN, _DIARY_SLEEP_MAX))
         return collected
 
-    def _diary_items(self, raw: list[dict], uid: str, feed_name: str) -> list["DiscoveredContent"]:
+    def _diary_items(self, raw: list[dict], uid: str, feed_name: str) -> list[DiscoveredContent]:
         """把 rexxar items 归一化为 DiscoveredContent。"""
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from openbiliclaw.core.contracts import DiscoveredContent
 
         out: list[DiscoveredContent] = []
         for it in raw:
@@ -242,7 +242,7 @@ class DoubanFeedAdapter:
 
     async def _fetch_diary(
         self, uid: str, feed_name: str, limit: int, since: str = ""
-    ) -> tuple[list["DiscoveredContent"], str]:
+    ) -> tuple[list[DiscoveredContent], str]:
         """增量拉取用户动态，返回 (items, 最新 create_time 水印)。
 
         仅拉取 ``create_time > since`` 的新条目；``since`` 空串时拉全量（限 ``limit``）。
@@ -268,7 +268,7 @@ class DoubanFeedAdapter:
 
     async def fetch_diary_since(
         self, uid: str, feed_name: str, since: str = "", limit: int = 30
-    ) -> tuple[list["DiscoveredContent"], str]:
+    ) -> tuple[list[DiscoveredContent], str]:
         """增量抓取用户动态；返回 (items, 最新水印)。供任务层调用。"""
         return await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit, since=since)
 
@@ -308,7 +308,7 @@ class DoubanFeedAdapter:
             logger.warning("DoubanFeedAdapter: feed 解析失败 %s: %s", url, feed.bozo_exception)
             return []
 
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from openbiliclaw.core.contracts import DiscoveredContent
 
         items: list[DiscoveredContent] = []
         for entry in feed.entries[:limit]:

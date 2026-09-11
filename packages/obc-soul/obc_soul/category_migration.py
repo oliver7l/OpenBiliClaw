@@ -12,6 +12,7 @@ from typing import Any
 
 from obc_llm.json_utils import DEFAULT_STRUCTURED_MAX_TOKENS, parse_llm_json_tolerant
 from obc_llm.prompts import build_category_mapping_prompt
+
 from obc_soul.consolidator import (
     _CHANGELOG_FILENAME,
     _RUNS_DIRNAME,

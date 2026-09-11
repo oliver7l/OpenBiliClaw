@@ -27,7 +27,6 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from openbiliclaw.storage.db_router import DatabaseRouter
 
@@ -296,7 +295,7 @@ class DatabaseMigrator:
             result.error = "Sample row count mismatch"
             return
 
-        for i, (src_row, dst_row) in enumerate(zip(src_rows, dst_rows)):
+        for i, (src_row, dst_row) in enumerate(zip(src_rows, dst_rows, strict=False)):
             if tuple(src_row) != tuple(dst_row):
                 result.error = f"Sample data mismatch at row {i}"
                 return

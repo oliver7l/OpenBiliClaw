@@ -14,8 +14,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from openbiliclaw.interview.questions.models import QuestionCategory, QuestionCreate, Priority
-from openbiliclaw.interview.questions.store import InterviewQuestionStore
+from openbiliclaw.interview.questions.models import (  # noqa: E402
+    Priority,
+    QuestionCategory,
+    QuestionCreate,
+)
+from openbiliclaw.interview.questions.store import InterviewQuestionStore  # noqa: E402
 
 DB_PATH = PROJECT_ROOT / "data" / "interview_questions.db"
 
@@ -93,7 +97,7 @@ def main() -> None:
 
     # 统计
     stats = store.stats()
-    print(f"\n题库统计：")
+    print("\n题库统计：")
     print(f"  总数：{stats.total}")
     print(f"  按分类：{stats.by_category}")
     print(f"  按难度：{stats.by_difficulty}")

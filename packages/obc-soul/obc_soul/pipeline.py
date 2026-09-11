@@ -19,11 +19,11 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from openbiliclaw.memory.manager import MemoryManager
     from obc_soul.avoidance_speculator import AvoidanceSpeculator
     from obc_soul.preference_analyzer import PreferenceAnalyzer
     from obc_soul.profile_builder import ProfileBuilder
     from obc_soul.speculator import InterestSpeculator
+    from openbiliclaw.memory.manager import MemoryManager
 
 from obc_soul.dislike_writeback import (
     apply_new_dislikes,
@@ -384,10 +384,9 @@ def signals_from_events(events: list[dict[str, Any]]) -> list[ProfileSignal]:
     result: list[ProfileSignal] = []
     for event in events:
         event_type = str(event.get("event_type") or event.get("type") or "")
-        if event_type in _ENGAGEMENT_TYPES:
-            sig_type = SignalType.ENGAGEMENT_EVENT
-        else:
-            sig_type = SignalType.BEHAVIOR_EVENT
+        sig_type = (
+            SignalType.ENGAGEMENT_EVENT if event_type in _ENGAGEMENT_TYPES else SignalType.BEHAVIOR_EVENT
+        )
         result.append(_make_signal(sig_type, "events", dict(event)))
     return result
 

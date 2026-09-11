@@ -10,23 +10,26 @@ Provides comprehensive user modeling:
 
 from ._config import SoulConfig
 from ._protocols import (
+    EventNormalizer,
     MemoryStore,
     PoolStore,
-    EventNormalizer,
 )
+
+# Core components
+from .dialogue import SocraticDialogue
+
 # Core engine
 from .engine import (
     SoulEngine,
     SoulProfileNotInitializedError,
 )
+
 # Data models
 from .profile import (
     InterestTag,
     OnionProfile,
     SoulProfile,
 )
-# Core components
-from .dialogue import SocraticDialogue
 from .taxonomy import CATEGORY_VOCAB
 
 __all__ = [

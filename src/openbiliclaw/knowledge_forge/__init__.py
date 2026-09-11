@@ -55,3 +55,11 @@ __all__ = [
 ]
 
 __version__ = "0.2.0"
+
+# K5：向 storage 注册正文清洗器（本包导入时自注册，替代 storage 侧的
+# 反向懒加载 import）。领域→基础设施方向，合法。
+from openbiliclaw.storage._article_cleaning import register_content_cleaner  # noqa: E402
+
+from .content_cleaner import ContentCleaner as _ContentCleaner  # noqa: E402
+
+register_content_cleaner(_ContentCleaner)

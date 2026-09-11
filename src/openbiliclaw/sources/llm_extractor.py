@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ async def extract_content_from_page(
         List of DiscoveredContent items extracted from the page.
 
     """
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
 
     if not page_text or len(page_text.strip()) < 50:
         logger.debug("Page text too short for extraction (%d chars)", len(page_text))

@@ -27,7 +27,7 @@ from openbiliclaw.discovery.strategies._utils import (
 )
 from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
 from openbiliclaw.llm.prompts import build_search_queries_prompt
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BILIBILI
 
 if TYPE_CHECKING:
@@ -219,7 +219,7 @@ def _run_feed_once() -> dict[str, Any]:
     if not rows:
         return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = _obc_connect("bilibili")
+    conn = connect_inbox("bilibili")
     try:
         inserted = _insert_feed_rows(conn, rows)
         conn.commit()

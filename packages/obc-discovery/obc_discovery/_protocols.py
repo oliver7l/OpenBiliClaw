@@ -7,10 +7,7 @@ the main project's implementation details.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
-
-if TYPE_CHECKING:
-    from collections.abc import Awaitable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable

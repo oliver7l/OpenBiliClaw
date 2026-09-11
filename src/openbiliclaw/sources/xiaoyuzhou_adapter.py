@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import feedparser
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class XiaoyuzhouAdapter:
 
         import re
 
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from openbiliclaw.core.contracts import DiscoveredContent
 
         # Get podcast-level metadata from the feed
         podcast_cover = ""

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -127,14 +128,20 @@ class CloneService:
                     size_bytes += f.stat().st_size
                     file_count += 1
 
-            # 尝试读取 SOURCE.txt 获取来源 URL
+            # 尝试读取 SOURCE.txt 获取来源 URL（提取首个干净的 http(s) URL，
+            # 而不是把整个文件内容塞进 source_url 字段）
             source_url = ""
+            source_text = ""
             source_file = item / "SOURCE.txt"
             if source_file.is_file():
-                source_url = source_file.read_text(encoding="utf-8").strip()
+                source_text = source_file.read_text(encoding="utf-8", errors="ignore").strip()
+                source_url = _extract_source_url(source_text)
 
             # 用更友好的方式推断名称
             name = _friendly_name(slug)
+
+            # 从 index.html 提取 <title> 作为描述来源
+            html_title = _extract_html_title(item)
 
             site = self._store.create_site(
                 CloneSiteCreate(
@@ -142,8 +149,8 @@ class CloneService:
                     slug=slug,
                     source_url=source_url,
                     local_path=slug,
-                    description="",
-                    category=_infer_category(slug),
+                    description=html_title,
+                    category=_infer_category(slug, source_url, html_title),
                     status=CloneStatus.CLONED,
                     tags=[],
                 )
@@ -225,15 +232,51 @@ def _friendly_name(slug: str) -> str:
     return " ".join(w.capitalize() for w in name.split())
 
 
-def _infer_category(slug: str) -> str:
-    """根据 slug 推断站点分类。"""
-    slug_lower = slug.lower()
-    if any(w in slug_lower for w in ("test", "quiz", "personality", "mbti", "disc", "心理")):
-        return "tool"
-    if any(w in slug_lower for w in ("game", "play", "card")):
-        return "game"
-    if any(w in slug_lower for w in ("art", "gallery", "design", "photo", "illust")):
-        return "art"
-    if any(w in slug_lower for w in ("travel", "map", "journey")):
+def _infer_category(slug: str, source_url: str = "", html_title: str = "") -> str:
+    """根据 slug、来源 URL 和页面标题推断站点分类。
+
+    三级信号：来源 URL 域名/路径 > 页面标题 > slug 关键词。
+    比只看 slug 猜测可靠得多（旧逻辑会把 aichainmap 猜成 travel）。
+    """
+    # 组合所有可用文本，按可靠性排序
+    signals = [
+        source_url.lower(),
+        html_title.lower(),
+        slug.lower(),
+    ]
+    for text in signals:
+        if any(w in text for w in ("test", "quiz", "personality", "mbti", "disc", "心理", "测评")):
+            return "tool"
+        if any(w in text for w in ("game", "游戏")):
+            return "game"
+        if any(w in text for w in ("art", "gallery", "design", "photo", "illust", "插画", "画廊")):
+            return "art"
+        if any(w in text for w in ("travel", "journey", "旅行", "旅游")):
+            return "travel"
+    # "map" 只对 URL/标题信号生效，不再匹配 slug（aichainmap 之类的误伤源）
+    if any(w in source_url.lower() + html_title.lower() for w in ("map", "地图")):
         return "travel"
     return "website"
+
+
+def _extract_source_url(text: str) -> str:
+    """从 SOURCE.txt 文本中提取首个干净的 http(s) URL。"""
+    match = re.search(r"https?://[^\s\"'<>\)\]]+", text)
+    if not match:
+        return ""
+    url = match.group(0).rstrip(".,;，。")
+    return url
+
+
+def _extract_html_title(site_dir: Path) -> str:
+    """从站点 index.html 提取 <title>，作为 description。"""
+    for name in ("index.html", "index.htm"):
+        html_file = site_dir / name
+        if html_file.is_file():
+            with suppress(OSError, UnicodeDecodeError):
+                head = html_file.read_text(encoding="utf-8", errors="ignore")[:20000]
+                match = re.search(r"<title[^>]*>(.*?)</title>", head, re.IGNORECASE | re.DOTALL)
+                if match:
+                    title = re.sub(r"\s+", " ", match.group(1)).strip()
+                    return title[:200]
+    return ""

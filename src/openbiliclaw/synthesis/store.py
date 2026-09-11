@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-
-from openbiliclaw.storage.database import open_db_conn
 from datetime import UTC, datetime
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 from .models import (
     CrossModulePattern,

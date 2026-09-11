@@ -460,7 +460,7 @@ class _YtCfg:
 
 
 def _yt_statuses(db: Database) -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = 'youtube' ORDER BY id"
     ).fetchall()
     return {str(r["keyword"]): str(r["status"]) for r in rows}

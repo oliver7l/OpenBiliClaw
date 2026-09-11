@@ -782,7 +782,7 @@ class SchemaMixin:
         - native_save_task_items: per-item membership within a sync batch
         - saved_item_removals: history of removed items for retention
         """
-        from openbiliclaw.saved_sync.models import NATIVE_SAVE_STATUSES
+        from openbiliclaw.storage._saved_sync_vocab import NATIVE_SAVE_STATUSES
 
         self.conn.executescript(f"""
             CREATE TABLE IF NOT EXISTS saved_item_removals (

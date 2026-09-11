@@ -126,7 +126,7 @@ class ProfileRenderer(Protocol):
 class ToneProvider(Protocol):
     """Provides tone profile for dialogue rendering."""
 
-    def get_tone_profile(self) -> "ToneProfile | None":
+    def get_tone_profile(self) -> ToneProfile | None:
         ...
 
 

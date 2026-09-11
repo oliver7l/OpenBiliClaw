@@ -5,7 +5,7 @@ Extracted from openbiliclaw.config to decouple obc-soul from main config.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

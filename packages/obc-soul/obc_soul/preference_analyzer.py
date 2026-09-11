@@ -15,6 +15,7 @@ from obc_llm.json_utils import (
 )
 from obc_llm.prompts import build_preference_analysis_prompt
 from obc_llm.service import LLMServiceError
+
 from obc_soul.event_filters import filter_events_by_satisfaction
 from obc_soul.taxonomy import SupportsEmbed, resolve_category
 

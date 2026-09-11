@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -15,18 +13,18 @@ class CyclePayload(BaseModel):
 
     dt: str = Field(..., description="事件日期 YYYY-MM-DD")
     note: str = Field(default="", description="备注")
-    interval_days: Optional[int] = Field(default=None, ge=0, description="距上次天数")
+    interval_days: int | None = Field(default=None, ge=0, description="距上次天数")
 
 
 class CycleStats(BaseModel):
     total: int = 0
-    avg_interval_days: Optional[float] = None
-    max_interval_days: Optional[int] = None
-    min_interval_days: Optional[int] = None
+    avg_interval_days: float | None = None
+    max_interval_days: int | None = None
+    min_interval_days: int | None = None
     months: float = 0
-    monthly_avg: Optional[float] = None
-    first_date: Optional[str] = None
-    last_date: Optional[str] = None
+    monthly_avg: float | None = None
+    first_date: str | None = None
+    last_date: str | None = None
 
 
 __all__ = ["CyclePayload", "CycleStats"]

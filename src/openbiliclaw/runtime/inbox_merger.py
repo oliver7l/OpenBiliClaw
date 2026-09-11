@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from openbiliclaw.runtime.inbox_db import get_inbox_path, list_inbox_platforms
@@ -70,10 +71,8 @@ def merge_inbox(
     except Exception as e:
         logger.error("[%s] content_cache merge failed: %s", platform, e)
         pool_conn.rollback()
-        try:
+        with suppress(Exception):
             pool_conn.execute("DETACH DATABASE inbox")
-        except Exception:
-            pass
     finally:
         pool_conn.close()
 
@@ -104,10 +103,8 @@ def merge_inbox(
             else:
                 logger.error("[%s] articles merge failed after 3 attempts: %s", platform, e)
             content_conn.rollback()
-            try:
+            with suppress(Exception):
                 content_conn.execute("DETACH DATABASE inbox")
-            except Exception:
-                pass
         finally:
             content_conn.close()
 
@@ -159,8 +156,14 @@ def run_forever(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Inbox sub-database merger")
-    parser.add_argument("--pool-db", default="data/pool.db", help="Path to pool.db (default: data/pool.db)")
-    parser.add_argument("--main-db", default="data/openbiliclaw.db", help="Path to main db (default: data/openbiliclaw.db)")
+    parser.add_argument(
+        "--pool-db", default="data/pool.db", help="Path to pool.db (default: data/pool.db)"
+    )
+    parser.add_argument(
+        "--main-db",
+        default="data/openbiliclaw.db",
+        help="Path to main db (default: data/openbiliclaw.db)",
+    )
     parser.add_argument("--data-dir", default="data", help="Data directory (default: data)")
     parser.add_argument("--interval", type=int, default=5, help="Merge interval in minutes (default: 5)")
     parser.add_argument("--once", action="store_true", help="Run only one merge cycle then exit")

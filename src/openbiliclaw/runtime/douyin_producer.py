@@ -44,7 +44,6 @@ import logging
 import math
 import os
 import re
-import sqlite3
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -52,8 +51,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from openbiliclaw.discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_DOUYIN as _PLATFORM_DOUYIN
+
+# K10：content_cache 入库与 favorites 簇其余 5 个 producer 逐字相同，收口 producer_base
+from openbiliclaw.runtime.producer_base import insert_rows_into_cache as _insert_rows
 from openbiliclaw.sources.douyin_plugin_search import (
     DouyinBudgetExhausted as _DouyinBudgetExhausted,
 )
@@ -1312,41 +1314,6 @@ def _to_rows(
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
-    """Insert new rows into content_cache, skipping duplicates by bvid."""
-    inserted = 0
-    for row in rows:
-        try:
-            cursor = conn.execute(
-                """INSERT OR IGNORE INTO content_cache (
-                    bvid, title, up_name, author_name, content_url,
-                    source_platform, source, content_type, pool_status,
-                    body_text, like_count, comment_count, favorite_count,
-                    share_count, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    row["bvid"],
-                    row["title"],
-                    row["up_name"],
-                    row["author_name"],
-                    row["content_url"],
-                    row["source_platform"],
-                    row["source"],
-                    row["content_type"],
-                    row["pool_status"],
-                    row["body_text"],
-                    row["like_count"],
-                    row["comment_count"],
-                    row["favorite_count"],
-                    row["share_count"],
-                    row["discovered_at"],
-                ),
-            )
-            if cursor.rowcount > 0:
-                inserted += 1
-        except sqlite3.IntegrityError:
-            continue
-    return inserted
 
 
 def _run_once(
@@ -1391,7 +1358,7 @@ def _run_once(
     if _DRY_RUN:
         return {"ok": True, "dry_run": True, "fetched": len(videos), "valid": len(rows)}
 
-    conn = _obc_connect("douyin")
+    conn = connect_inbox("douyin")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

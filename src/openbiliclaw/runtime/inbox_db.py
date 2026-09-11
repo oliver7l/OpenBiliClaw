@@ -10,9 +10,9 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from openbiliclaw.storage.database import open_db_conn
-from pathlib import Path
 
 # content_cache 完整 DDL（与 pool.db 保持一致）
 _INBOX_CONTENT_CACHE_DDL = """

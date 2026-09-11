@@ -12,12 +12,12 @@ import asyncio
 import json
 import logging
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from pathlib import Path
 from typing import Any
 
 from openbiliclaw.knowledge_forge.config import KnowledgeForgeConfig, load_kf_config
 from openbiliclaw.knowledge_forge.models import now_cn
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger(__name__)
 
@@ -196,8 +196,8 @@ class Scheduler:
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         # ATTACH 主库，使跨库查询（如 JOIN articles）正常工作
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _main_path = _Path(str(self.db_path)).with_name('openbiliclaw.db')
         if _main_path.exists():
             with _suppress(Exception):

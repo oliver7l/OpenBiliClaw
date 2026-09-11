@@ -17,9 +17,10 @@ import json
 import logging
 import sqlite3
 from contextlib import suppress
-from openbiliclaw.storage.database import open_db_conn
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger("self_evolution.content_filler")
 
@@ -537,7 +538,6 @@ class ContentFiller:
         if not rows:
             return results
 
-        import json
         import subprocess
 
         for row in rows:
@@ -706,7 +706,7 @@ class ContentFiller:
         import subprocess
 
         # 噪声标题：平台 AI 生成的测试帖、纯个人生活流水帐、超短含糊标题
-        _NOISE_PATTERNS = re.compile(
+        _NOISE_PATTERNS = re.compile(  # noqa: N806
             r"^(测试|test|t2|t3|超时测试|统计测试|调试|temp|tmp$)"
             r"|测试(YouTube|知乎|b站|bilibili|视频|链接|save|单篇)"
             r"|^(视频面试-[^·]{0,6}|与\w+的日常|带娃日常|.*趣事|家庭小插曲)"

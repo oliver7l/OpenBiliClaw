@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,9 +14,6 @@ from fastapi.testclient import TestClient
 from openbiliclaw.config import Ed2kConfig, load_config
 from openbiliclaw.ed2k import MuleService
 from openbiliclaw.ed2k.routes import build_ed2k_router
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture()
@@ -32,9 +27,23 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     def _fake(method: str, value: object) -> None:
         monkeypatch.setattr(MuleService, method, lambda self, *a, **k: value)
 
-    _fake("net", {"kad_connected": True, "servers": "--- Connected to 2 servers on the Donkey network ---", "kad_raw": "", "servers_raw": ""})
-    _fake("search", {"query": "test", "count": 1, "results": [{"id": 3, "name": "Some File.mkv", "size": "1.0G", "size_bytes": 1073741824, "sources": 5, "ed2k": "0" * 32}]})
-    _fake("downloads", {"count": 1, "rate": "1.0 MB/s", "downloads": [{"id": 1, "state": "downloading", "name": "dl.mkv", "percent": "42.0%", "size": "1.0G"}]})
+    _fake(
+        "net",
+        {"kad_connected": True, "servers": "--- Connected to 2 servers on the Donkey network ---",
+         "kad_raw": "", "servers_raw": ""},
+    )
+    _fake(
+        "search",
+        {"query": "test", "count": 1,
+         "results": [{"id": 3, "name": "Some File.mkv", "size": "1.0G",
+                      "size_bytes": 1073741824, "sources": 5, "ed2k": "0" * 32}]},
+    )
+    _fake(
+        "downloads",
+        {"count": 1, "rate": "1.0 MB/s",
+         "downloads": [{"id": 1, "state": "downloading", "name": "dl.mkv",
+                        "percent": "42.0%", "size": "1.0G"}]},
+    )
     _fake("download", {"requested": [3], "responses": ["Added"]})
     _fake("download_link", {"ok": True, "output": "Added link : ed2k://..."})
     _fake("cancel", {"ok": True, "output": "Cancelled"})

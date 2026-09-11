@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class MasteryLevel(str, Enum):
+class MasteryLevel(StrEnum):
     """掌握程度。"""
     NOT_STARTED = "not_started"  # 未开始
     READING = "reading"  # 阅读中
@@ -18,7 +17,7 @@ class MasteryLevel(str, Enum):
     NEED_REVIEW = "need_review"  # 需要复习
 
 
-class QuestionCategory(str, Enum):
+class QuestionCategory(StrEnum):
     """题目分类。"""
     RECOMMENDATION = "recommendation"  # 推荐算法
     LLM_ENGINEERING = "llm_engineering"  # 大模型工程
@@ -29,7 +28,7 @@ class QuestionCategory(str, Enum):
     OTHER = "other"  # 其他
 
 
-class Priority(str, Enum):
+class Priority(StrEnum):
     """优先级。"""
     HIGH = "high"  # 高
     MEDIUM = "medium"  # 中
@@ -70,7 +69,7 @@ class ReadingRecord(BaseModel):
     read_date: date  # 阅读日期
     mastery: MasteryLevel = MasteryLevel.READING  # 掌握程度
     review_count: int = 0  # 复习次数
-    last_reviewed: Optional[datetime] = None  # 最后复习时间
+    last_reviewed: datetime | None = None  # 最后复习时间
     notes: str = ""  # 阅读笔记
     time_spent_min: int = 0  # 花费时间（分钟）
     created_at: datetime
@@ -81,7 +80,7 @@ class ReadingPlan(BaseModel):
     id: int
     name: str  # 计划名称
     start_date: date  # 开始日期
-    end_date: Optional[date] = None  # 结束日期
+    end_date: date | None = None  # 结束日期
     daily_target: int = 5  # 每日目标题数
     categories: str = ""  # 目标分类，逗号分隔（空=全部）
     min_difficulty: int = 1  # 最低难度

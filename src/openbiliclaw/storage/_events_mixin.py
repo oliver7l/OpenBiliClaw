@@ -42,7 +42,7 @@ class EventsMixin:
             Inserted row ID.
 
         """
-        from openbiliclaw.sources.event_format import classify_event_satisfaction
+        from openbiliclaw.storage._event_classification import classify_event_satisfaction
 
         raw_context = kwargs.get("context", "")
         if isinstance(raw_context, str):

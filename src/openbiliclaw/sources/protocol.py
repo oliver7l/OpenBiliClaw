@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
     from openbiliclaw.soul.profile import SoulProfile
 
 

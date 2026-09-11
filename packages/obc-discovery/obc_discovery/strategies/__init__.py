@@ -70,5 +70,4 @@ def _init_all_strategies() -> None:
     global ALL_STRATEGIES
     if ALL_STRATEGIES:
         return
-    from .strategies import ALL_STRATEGIES as _all
-    ALL_STRATEGIES = _all
+    from .strategies import ALL_STRATEGIES

@@ -69,8 +69,8 @@ class ChatImporter:
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
         # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(db_path)).with_name("content.db")
         if _content_path.exists():
             with _suppress(Exception):
@@ -288,8 +288,8 @@ class ChatImporter:
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
         # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(db_path)).with_name("content.db")
         if _content_path.exists():
             with _suppress(Exception):

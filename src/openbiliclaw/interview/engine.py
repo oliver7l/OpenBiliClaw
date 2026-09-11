@@ -24,12 +24,12 @@ import csv
 import os
 import re
 import sqlite3
-
-from openbiliclaw.storage.database import open_db_conn
 import time
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 #: 默认求职知识库根目录：随项目走（<项目根>/求职知识库/），
 #: 可被 [interview] root / OPENBILICLAW_INTERVIEW_ROOT 覆盖

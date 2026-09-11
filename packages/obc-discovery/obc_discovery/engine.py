@@ -14,23 +14,32 @@ import json
 import logging
 import re
 import time
-from abc import ABC, abstractmethod
 from collections import Counter
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
-from obc_discovery.strategies._utils import build_profile_summary
-from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
 from obc_llm.json_utils import extract_llm_json_list, parse_llm_json_tolerant
 from obc_llm.service import is_llm_rate_limit_error
+
+from obc_discovery.strategies._utils import build_profile_summary
+from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
+
+# K6b：合同类型已下沉到 openbiliclaw.core.contracts，此处 re-export
+# 保持引擎/策略/测试既有 import 路径与类型身份不变。
+from openbiliclaw.core.contracts import (  # noqa: E402,F401
+    DiscoveredContent,
+    DiscoveryStrategy,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Sequence
 
     from obc_llm.embedding import SupportsEmbeddingService
     from obc_soul.profile import SoulProfile
-    from obc_discovery._protocols import CandidateStore
+
+    from openbiliclaw.storage.database import Database
+
 
 logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
@@ -409,123 +418,6 @@ def _batch_results_by_content_key(
     return matched if saw_identifier else None
 
 
-@dataclass
-class DiscoveredContent:
-    """A piece of content discovered by the engine."""
-
-    bvid: str = ""  # Bilibili video ID (legacy; prefer content_id for new code)
-    title: str = ""
-    up_name: str = ""  # UP主 name (legacy; prefer author_name for new code)
-    up_mid: int = 0  # UP主 ID
-    cover_url: str = ""
-    duration: int = 0  # seconds
-    view_count: int = 0
-    like_count: int = 0
-    favorite_count: int = 0
-    collect_count: int = 0
-    comment_count: int = 0
-    share_count: int = 0
-    danmaku_count: int = 0
-    reply_count: int = 0
-    retweet_count: int = 0
-    bookmark_count: int = 0
-    tags: list[str] = field(default_factory=list)
-    topic_key: str = ""
-    topic_group: str = ""  # Coarse semantic category (e.g. "强化学习") for diversity
-    style_key: str = ""
-    # Franchise / IP / series key tagged by the LLM at evaluation time
-    # (e.g. "原神", "崩坏:星穹铁道", "ChatGPT", "塞尔达传说"). Empty
-    # for general-interest content. Lets the curator down-rank items
-    # in the same IP after a single dislike, and lets the
-    # ``/api/recommendations`` endpoint cap how many same-franchise
-    # items appear in a single response window. Better than the
-    # heuristic title-substring approach (which v0.3.17 briefly tried)
-    # because the LLM already saw title + description + topic and can
-    # infer the IP correctly even when the title is bilingual or coded
-    # ("提瓦特摄影" → 原神, "宝可梦" → 精灵宝可梦, etc.).
-    franchise_key: str = ""
-    description: str = ""
-    source_strategy: str = ""  # Which strategy found this
-    relevance_score: float = 0.0  # 0.0 - 1.0 (based on user soul)
-    relevance_reason: str = ""  # Why this is relevant to the user
-    pool_expression: str = ""  # Precomputed recommendation copy for fast popup paths
-    pool_topic_label: str = ""  # Precomputed personalized topic label for fast popup paths
-    candidate_tier: str = "primary"  # Primary discovery vs backfill supply
-    discovered_at: str = ""  # Cache timestamp for recency-aware ranking
-    last_scored_at: str = ""  # Last relevance scoring timestamp
-
-    # ── Multi-source fields (Phase 0) ───────────────────────────────
-    content_id: str = ""  # Universal content ID; equals bvid for Bilibili content
-    content_url: str = ""  # Direct clickable URL
-    source_platform: str = ""  # "bilibili" | "xiaohongshu" | "web" | ...
-    author_name: str = ""  # Universal author name; equals up_name for Bilibili
-    score_threshold: float = 0.0  # Strategy-specific admission floor for raw candidates
-    body_text: str = ""  # tweet/thread full text; empty for video sources
-    content_type: str = "video"  # shape: "video" | "note" | "tweet" | "thread"
-    # Full article body extracted from the feed (``content:encoded`` /
-    # ``content``). Deliberately NOT part of ``to_cache_kwargs()`` — it feeds
-    # the reading library (``articles.content_text``) only and must not bloat
-    # the recommendation pool.
-    content_text: str = ""
-    # P1.8 yield provenance: the ``discovery_keywords.id`` of the search word
-    # that produced this item (unified keyword planner). ``None`` for every
-    # non-search / legacy / flag-off path — the admit-time yield backfill is a
-    # no-op then, so attribution stays opt-in and byte-compatible.
-    source_keyword_id: int | None = None
-
-    def __post_init__(self) -> None:
-        if not self.content_id and self.bvid:
-            self.content_id = self.bvid
-        if not self.source_platform and self.bvid:
-            self.source_platform = "bilibili"
-        if not self.author_name and self.up_name:
-            self.author_name = self.up_name
-        if not self.content_url and self.bvid:
-            self.content_url = f"https://www.bilibili.com/video/{self.bvid}"
-        if not self.content_url and self.source_platform == "xiaohongshu" and self.content_id:
-            self.content_url = f"https://www.xiaohongshu.com/explore/{self.content_id}"
-
-    def to_cache_kwargs(self) -> dict[str, object]:
-        """Build the kwargs dict for ``Database.cache_content()``.
-
-        Single source of truth for the DiscoveredContent → content_cache
-        field mapping.  Used by discovery's ``_cache_results`` and the
-        recommendation engine's ``classify_pool_backlog`` persist loop.
-        """
-        return {
-            "title": self.title,
-            "up_name": self.up_name,
-            "up_mid": self.up_mid,
-            "duration": self.duration,
-            "tags": self.tags,
-            "topic_key": self.topic_key,
-            "topic_group": self.topic_group,
-            "style_key": self.style_key,
-            "franchise_key": self.franchise_key,
-            "description": self.description,
-            "cover_url": self.cover_url,
-            "view_count": self.view_count,
-            "like_count": self.like_count,
-            "favorite_count": self.favorite_count,
-            "collect_count": self.collect_count,
-            "comment_count": self.comment_count,
-            "share_count": self.share_count,
-            "danmaku_count": self.danmaku_count,
-            "reply_count": self.reply_count,
-            "retweet_count": self.retweet_count,
-            "bookmark_count": self.bookmark_count,
-            "relevance_score": self.relevance_score,
-            "relevance_reason": self.relevance_reason,
-            "candidate_tier": self.candidate_tier,
-            "source": self.source_strategy,
-            "source_platform": self.source_platform or "bilibili",
-            "content_id": self.content_id or self.bvid,
-            "content_url": self.content_url,
-            "author_name": self.author_name or self.up_name,
-            "body_text": self.body_text,
-            "content_type": self.content_type,
-            "source_keyword_id": self.source_keyword_id,
-        }
 
 
 # v0.3.50+: per-batch franchise cap for ``_evaluate_batch``. The LLM
@@ -559,31 +451,6 @@ _POOL_FRANCHISE_QUOTA: int = 10
 _RELATED_CHAIN_PER_UP_CAP: int = 3
 
 
-class DiscoveryStrategy(ABC):
-    """Base class for content discovery strategies."""
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Strategy name."""
-        ...
-
-    @abstractmethod
-    async def discover(self, profile: SoulProfile, limit: int = 20) -> list[DiscoveredContent]:
-        """Execute the discovery strategy.
-
-        Args:
-            profile: Current user soul profile for relevance guidance.
-            limit: Maximum number of items to return.
-
-        Returns:
-            List of discovered content items.
-        """
-        ...
-
-    def create_backfill_strategy(self) -> DiscoveryStrategy | None:
-        """Return an expanded/relaxed variant for supply backfill if supported."""
-        return None
 
 
 def _strategy_declares_param(fn: Any, name: str) -> bool:
@@ -1635,8 +1502,9 @@ class ContentDiscoveryEngine:
         negative_examples: object = _NEGATIVE_EXAMPLES_UNSET,
     ) -> list[float]:
         """Send one LLM call for a batch of items."""
-        from obc_discovery.candidate_pool import resolve_content_type
         from obc_llm.prompts import build_batch_content_evaluation_prompt
+
+        from obc_discovery.candidate_pool import resolve_content_type
 
         profile_data = self._evaluation_profile_summary(profile)
         content_items: list[dict[str, object]] = []

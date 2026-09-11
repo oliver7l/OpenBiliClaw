@@ -139,7 +139,10 @@ class MuleService:
                     "inspect",
                     MLDONKEY_CONTAINER,
                     "--format",
-                    '{{range $i, $m := .Mounts}}{{if eq $m.Destination "/var/lib/mldonkey/incoming/files"}}{{println $m.Source}}{{end}}{{end}}',
+                    # shellcheck disable=SC2016
+                    '{{range $i, $m := .Mounts}}'
+                    '{{if eq $m.Destination "/var/lib/mldonkey/incoming/files"}}{{println $m.Source}}{{end}}'
+                    '{{end}}',
                 ],
                 capture_output=True,
                 text=True,

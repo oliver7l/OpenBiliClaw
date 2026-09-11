@@ -43,7 +43,7 @@ def db(tmp_path: Path) -> Database:
 
 
 def _statuses(db: Database, platform: str = "xiaohongshu") -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = ? ORDER BY id",
         (platform,),
     ).fetchall()

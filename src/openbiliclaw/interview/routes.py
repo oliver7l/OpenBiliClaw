@@ -369,7 +369,7 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         c = conn.cursor()
         now = datetime.now().isoformat()
         c.execute("""
-            INSERT INTO job_positions 
+            INSERT INTO job_positions
             (company, bg, title, city, years_required, education, job_url, job_id,
              description, requirements, match_score, match_points, status, tags, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

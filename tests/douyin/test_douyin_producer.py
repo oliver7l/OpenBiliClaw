@@ -310,7 +310,7 @@ class _DiscoveryCfg:
 
 
 def _dy_statuses(db: Database) -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = 'douyin' ORDER BY id"
     ).fetchall()
     return {str(r["keyword"]): str(r["status"]) for r in rows}

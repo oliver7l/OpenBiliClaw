@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger("self_evolution.tldr")
 
@@ -84,8 +85,8 @@ class TLDRGenerator:
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(self.db_path)).with_name('content.db')
         if _content_path.exists():
             with _suppress(Exception):

@@ -8,17 +8,17 @@ Provides a unified interface to multiple LLM providers:
 - Module-level provider overrides
 """
 
-from ._config import LLMConfig, EmbeddingConfig, LLMProviderConfig
+from ._config import EmbeddingConfig, LLMConfig, LLMProviderConfig
 from ._protocols import (
+    InterestTag,
+    MemorySummarizer,
+    PreferenceLayer,
     ProfileRenderer,
     ToneProfile,
     ToneProvider,
     UsageRecorder,
-    MemorySummarizer,
-    InterestTag,
-    PreferenceLayer,
-    preference_layer_from_dict,
     build_tone_profile,
+    preference_layer_from_dict,
 )
 from .base import (
     HealthCheckResult,
@@ -38,8 +38,8 @@ from .openrouter_provider import OpenRouterProvider
 from .registry import (
     RegistryBuildError,
     RegistrySummary,
-    build_llm_registry,
     build_embedding_service,
+    build_llm_registry,
     summarize_registry,
 )
 from .service import (

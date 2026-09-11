@@ -5,7 +5,6 @@
 """
 
 from __future__ import annotations
-from openbiliclaw.storage.database import open_db_conn
 
 import logging
 from typing import Any
@@ -22,6 +21,7 @@ from openbiliclaw.self_evolution import (
     PushConfig,
     TopicMiner,
 )
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +452,6 @@ def create_self_evolution_router(db_path: str, llm_service: Any = None) -> APIRo
     @router.get("/status")
     async def self_evolution_status():
         """Get self-evolution module status and stats."""
-        import sqlite3
 
         conn = open_db_conn(db_path)
         # P8：知识域表独立存于 knowledge.db，统计时加 knowledge. 前缀定位到子库；

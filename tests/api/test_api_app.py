@@ -9540,7 +9540,7 @@ class TestGuidedInitEndpoints:
     def _capture_run_guided_init(self, monkeypatch):
         """Replace the shared pipeline with an async capture of its kwargs.
 
-        The wrapper imports ``run_guided_init`` lazily from ``openbiliclaw.cli``,
+        The wrapper imports ``run_guided_init`` lazily from ``openbiliclaw.runtime.init_flow`` (K6),
         so patching it there intercepts the API path without running real work.
         """
         captured: dict[str, object] = {}
@@ -9549,7 +9549,7 @@ class TestGuidedInitEndpoints:
             captured.update(kwargs)
             return SimpleNamespace(discovery_error=False)
 
-        monkeypatch.setattr("openbiliclaw.cli.run_guided_init", _fake)
+        monkeypatch.setattr("openbiliclaw.runtime.init_flow.run_guided_init", _fake)
         return captured
 
     def _drive_until(self, client, captured, key="include_xhs"):
@@ -9701,7 +9701,7 @@ class TestGuidedInitEndpoints:
             await coord.stage_done(run_id, 1)
             return SimpleNamespace(discovery_error=False)
 
-        monkeypatch.setattr("openbiliclaw.cli.run_guided_init", fake_run_guided_init)
+        monkeypatch.setattr("openbiliclaw.runtime.init_flow.run_guided_init", fake_run_guided_init)
         app, _ = self._make_app(tmp_path, prereqs=ReadyPrereqs())
 
         with (

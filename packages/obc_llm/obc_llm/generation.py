@@ -69,10 +69,10 @@ def _looks_truncated(resp: LLMResponse | None, max_tokens: int, content: str) ->
     # A hard JSON truncation usually leaves an unbalanced snippet; treat an
     # unterminated array/object as a truncation signal.
     stripped = content.strip()
-    for opener, closer in (("[", "]"), ("{", "}")):
-        if stripped.count(opener) > stripped.count(closer):
-            return True
-    return False
+    return any(
+        stripped.count(opener) > stripped.count(closer)
+        for opener, closer in (("[", "]"), ("{", "}"))
+    )
 
 
 async def _call_once(

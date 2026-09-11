@@ -8,6 +8,9 @@ import re
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from obc_llm.json_utils import parse_llm_json_tolerant
+from obc_llm.prompts import build_search_queries_prompt
+
 from obc_discovery.engine import (
     ContentDiscoveryEngine,
     DiscoveredContent,
@@ -27,8 +30,6 @@ from obc_discovery.strategies._utils import (
     search_cooldown_remaining,
     to_int,
 )
-from obc_llm.json_utils import parse_llm_json_tolerant
-from obc_llm.prompts import build_search_queries_prompt
 
 if TYPE_CHECKING:
     from openbiliclaw.soul.profile import SoulProfile

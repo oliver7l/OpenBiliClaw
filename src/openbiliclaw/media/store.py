@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from typing import Iterable
-
+from collections.abc import Iterable
 from pathlib import Path
 
 _SCHEMA = """
@@ -69,9 +68,9 @@ class MediaStateStore:
             return {}
         keys = [self._key(p) for p in paths]
         with self._connect() as conn:
+            placeholders = ",".join("?" * len(keys))
             rows = conn.execute(
-                "SELECT akey, favorite, rating FROM media_items WHERE akey IN (%s)"
-                % ",".join("?" * len(keys)),
+                f"SELECT akey, favorite, rating FROM media_items WHERE akey IN ({placeholders})",
                 keys,
             ).fetchall()
         by_key = {r["akey"]: {"favorite": int(r["favorite"]), "rating": int(r["rating"])} for r in rows}

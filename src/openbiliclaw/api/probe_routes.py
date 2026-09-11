@@ -110,12 +110,13 @@ def register_probe_routes(
                     latency_ms=int((time.perf_counter() - started) * 1000),
                 )
             probe = getattr(service, "probe", None)
-            if not callable(probe):
-                # Legacy/stub embedding service without a live probe —
-                # building it successfully is the best signal we have.
-                ok = True
-            else:
-                ok = bool(await asyncio.wait_for(probe(), timeout=15.0))
+            # Legacy/stub embedding service without a live probe —
+            # building it successfully is the best signal we have.
+            ok = (
+                True
+                if not callable(probe)
+                else bool(await asyncio.wait_for(probe(), timeout=15.0))
+            )
             return ConfigServiceProbeResponse(
                 ok=ok,
                 kind="embedding",

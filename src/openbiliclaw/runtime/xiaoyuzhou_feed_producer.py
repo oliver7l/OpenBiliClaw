@@ -6,7 +6,6 @@ every 24 hours, and inserts them into ``content_cache``.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -17,7 +16,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +222,7 @@ def _run_once() -> dict[str, Any]:
             "inserted": 0,
         }
 
-    conn = _obc_connect("xiaoyuzhou")
+    conn = connect_inbox("xiaoyuzhou")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

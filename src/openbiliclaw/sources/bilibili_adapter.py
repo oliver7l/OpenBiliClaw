@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent, DiscoveryStrategy
+    from openbiliclaw.core.contracts import DiscoveredContent, DiscoveryStrategy
     from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.sources.protocol import SourceRecipe
 

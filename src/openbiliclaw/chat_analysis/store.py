@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-
-from openbiliclaw.storage.database import open_db_conn
 import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 if TYPE_CHECKING:
     from pathlib import Path

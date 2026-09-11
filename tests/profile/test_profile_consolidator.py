@@ -1223,7 +1223,7 @@ async def test_consolidation_logs_one_summary_for_multi_batch_run(
         data_dir=tmp_path,
     )
 
-    with caplog.at_level(logging.INFO, logger="openbiliclaw.soul.consolidator"):
+    with caplog.at_level(logging.INFO, logger="obc_soul.consolidator"):
         report = await consolidator.run(dry_run=False)
 
     assert report.clusters_sent == 33
@@ -1231,7 +1231,7 @@ async def test_consolidation_logs_one_summary_for_multi_batch_run(
     summaries = [
         record
         for record in caplog.records
-        if record.name == "openbiliclaw.soul.consolidator"
+        if record.name == "obc_soul.consolidator"
         and record.getMessage().startswith("profile consolidation run completed")
     ]
     assert len(summaries) == 1

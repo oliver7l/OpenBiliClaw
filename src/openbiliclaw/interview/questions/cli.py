@@ -40,8 +40,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from openbiliclaw.interview.questions.models import MasteryLevel, Priority
-from openbiliclaw.interview.questions.store import InterviewQuestionStore
+# 需先插入 PROJECT_ROOT 到 sys.path，import 置后
+from openbiliclaw.interview.questions.models import MasteryLevel  # noqa: E402
+from openbiliclaw.interview.questions.store import InterviewQuestionStore  # noqa: E402
 
 DB_PATH = PROJECT_ROOT / "data" / "interview_questions.db"
 
@@ -55,7 +56,10 @@ def cmd_today(args: argparse.Namespace) -> None:
     store = _get_store()
     plan = store.get_active_plan()
     if not plan:
-        print("暂无激活的阅读计划，先创建一个：python -m openbiliclaw.interview.questions.cli plan --name '秋招冲刺' --daily 5")
+        print(
+            "暂无激活的阅读计划，先创建一个："
+            "python -m openbiliclaw.interview.questions.cli plan --name '秋招冲刺' --daily 5"
+        )
         return
     questions = store.get_today_queue(plan)
     print(f"\n📅 今日待读（{date.today().isoformat()}）— 计划：{plan.name}，目标 {plan.daily_target} 题")
@@ -74,15 +78,15 @@ def cmd_today(args: argparse.Namespace) -> None:
         if q.tags:
             print(f"     标签：{q.tags}")
     print(f"\n共 {len(questions)} 题")
-    print(f"\n标记已读：python -m openbiliclaw.interview.questions.cli read <id>")
-    print(f"标记掌握：python -m openbiliclaw.interview.questions.cli master <id>")
+    print("\n标记已读：python -m openbiliclaw.interview.questions.cli read <id>")
+    print("标记掌握：python -m openbiliclaw.interview.questions.cli master <id>")
 
 
 def cmd_stats(args: argparse.Namespace) -> None:
     """查看题库统计。"""
     store = _get_store()
     stats = store.stats()
-    print(f"\n📊 题库统计")
+    print("\n📊 题库统计")
     print("=" * 50)
     print(f"  总题数：{stats.total}")
     print(f"  未开始：{stats.not_started}")
@@ -90,10 +94,10 @@ def cmd_stats(args: argparse.Namespace) -> None:
     print(f"  已理解：{stats.understood}")
     print(f"  已掌握：{stats.mastered}")
     print(f"  需复习：{stats.need_review}")
-    print(f"\n  按分类：")
+    print("\n  按分类：")
     for cat, count in sorted(stats.by_category.items(), key=lambda x: -x[1]):
         print(f"    {cat:20s} {count:3d} 题")
-    print(f"\n  按难度：")
+    print("\n  按难度：")
     for diff in sorted(stats.by_difficulty.keys()):
         print(f"    {'⭐' * diff:10s} {stats.by_difficulty[diff]:3d} 题")
     mastery_pct = (stats.mastered + stats.understood) / stats.total * 100 if stats.total else 0
@@ -106,7 +110,7 @@ def cmd_queue(args: argparse.Namespace) -> None:
     queue = store.get_queue(limit=100)
     print(f"\n📋 待看队列（共 {len(queue)} 题）")
     print("=" * 70)
-    for q, priority, planned in queue:
+    for q, priority, _planned in queue:
         p_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(priority.value, "⚪")
         print(f"  {p_icon} [{q.id:3d}] {'⭐' * q.difficulty} [{q.category.value:15s}] {q.title[:45]}")
 
@@ -127,7 +131,7 @@ def cmd_read(args: argparse.Namespace) -> None:
 def cmd_master(args: argparse.Namespace) -> None:
     """标记掌握。"""
     store = _get_store()
-    record = store.mark_read(args.question_id, mastery=MasteryLevel.MASTERED)
+    store.mark_read(args.question_id, mastery=MasteryLevel.MASTERED)
     q = store.get_question(args.question_id)
     print(f"\n🏆 已标记掌握：[{q.id}] {q.title}")
 
@@ -135,7 +139,7 @@ def cmd_master(args: argparse.Namespace) -> None:
 def cmd_review(args: argparse.Namespace) -> None:
     """标记需要复习。"""
     store = _get_store()
-    record = store.mark_read(args.question_id, mastery=MasteryLevel.NEED_REVIEW)
+    store.mark_read(args.question_id, mastery=MasteryLevel.NEED_REVIEW)
     q = store.get_question(args.question_id)
     print(f"\n🔄 已标记需复习：[{q.id}] {q.title}")
 
@@ -160,7 +164,7 @@ def cmd_show(args: argparse.Namespace) -> None:
         print(f"\n  答案要点：\n{q.answer}")
     records = store.get_records(qid=q.id, limit=5)
     if records:
-        print(f"\n  阅读记录：")
+        print("\n  阅读记录：")
         for r in records:
             print(f"    {r.read_date} - {r.mastery.value}（复习{r.review_count}次）")
 
@@ -175,7 +179,7 @@ def cmd_plan(args: argparse.Namespace) -> None:
         min_difficulty=args.min_diff or 1,
         max_difficulty=args.max_diff or 5,
     )
-    print(f"\n📅 阅读计划已创建")
+    print("\n📅 阅读计划已创建")
     print("=" * 50)
     print(f"  名称：{plan.name}")
     print(f"  每日目标：{plan.daily_target} 题")
@@ -201,7 +205,7 @@ def cmd_progress(args: argparse.Namespace) -> None:
     print("=" * 60)
     print(f"  每日目标：{plan.daily_target} 题")
     print(f"  已理解/掌握：{stats.understood + stats.mastered} / {stats.total}")
-    print(f"\n  最近 7 天：")
+    print("\n  最近 7 天：")
     for d in daily:
         bar_len = min(int(d.questions_read / max(plan.daily_target, 1) * 20), 20)
         bar = "█" * bar_len + "░" * (20 - bar_len)
@@ -232,7 +236,12 @@ def main() -> None:
     # read
     p_read = subparsers.add_parser("read", help="标记已读")
     p_read.add_argument("question_id", type=int, help="题目 ID")
-    p_read.add_argument("--mastery", choices=["reading", "understood", "mastered", "need_review"], default="reading", help="掌握程度")
+    p_read.add_argument(
+        "--mastery",
+        choices=["reading", "understood", "mastered", "need_review"],
+        default="reading",
+        help="掌握程度",
+    )
     p_read.add_argument("--notes", type=str, help="阅读笔记")
     p_read.add_argument("--time", type=int, help="花费时间（分钟）")
     p_read.set_defaults(func=cmd_read)

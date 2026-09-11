@@ -10,7 +10,6 @@ new topic collections.  Provides:
 """
 
 from __future__ import annotations
-from openbiliclaw.storage.database import open_db_conn
 
 import logging
 import re
@@ -19,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from openbiliclaw.self_evolution.insight_report import extract_topics
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger("self_evolution.topic_miner")
 

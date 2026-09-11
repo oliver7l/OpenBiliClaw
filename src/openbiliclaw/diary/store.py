@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from contextlib import suppress
-from openbiliclaw.storage.database import open_db_conn
 import threading
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from openbiliclaw.storage.database import open_db_conn
 
 from .models import (
     DiaryAnalysis,

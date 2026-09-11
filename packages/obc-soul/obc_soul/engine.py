@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from obc_llm.service import ModuleOverride, SupportsComplete
+
     from openbiliclaw.memory.manager import MemoryManager
 
 from obc_llm.service import LLMService

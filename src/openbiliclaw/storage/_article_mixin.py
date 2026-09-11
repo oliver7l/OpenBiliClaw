@@ -62,26 +62,23 @@ class ArticleMixin:
 
         # Knowledge Forge 任务 1.0：入库时同步调用正文清理器，
         # 生成 content_cleaned 及清理质量/验证标记（规则清理，确定性且快速）。
-        # 清理失败不阻断入库，仅降级为新列留空，由批量清理管线后补。
+        # K5：清洗器由 knowledge_forge 包导入时注册（见 _article_cleaning），
+        # storage 不再反向 import 领域模块。未注册/失败时字段留空，管线后补。
         content_cleaned: str | None = None
         content_clean_score: float | None = None
         content_clean_log: str | None = None
         content_verified: int | None = None
         content_verify_result: str | None = None
         if content_text and content_text.strip():
-            try:
-                from openbiliclaw.knowledge_forge.content_cleaner import ContentCleaner
+            from openbiliclaw.storage._article_cleaning import clean_article_content
 
-                cr = ContentCleaner().clean(content_text, title=title, source_type=source_type)
-                content_cleaned = cr.cleaned_text or None
-                content_clean_score = cr.clean_score
-                content_clean_log = json.dumps(cr.operations, ensure_ascii=False, default=str)
-                content_verified = 1 if cr.verified else 0
-                content_verify_result = json.dumps(
-                    cr.verify_issues, ensure_ascii=False, default=str
-                )
-            except Exception:
-                logger.exception("Knowledge Forge clean failed for article: %s", title)
+            cleaned = clean_article_content(content_text, title=title, source_type=source_type)
+            if cleaned is not None:
+                content_cleaned = cleaned["content_cleaned"]
+                content_clean_score = cleaned["content_clean_score"]
+                content_clean_log = cleaned["content_clean_log"]
+                content_verified = cleaned["content_verified"]
+                content_verify_result = cleaned["content_verify_result"]
 
         tag_value = json.dumps(
             tags if tags else ([source_name] if source_name else []),

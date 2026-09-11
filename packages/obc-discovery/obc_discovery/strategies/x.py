@@ -33,9 +33,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from obc_llm.json_utils import parse_llm_json_tolerant
+
 from obc_discovery.strategies._utils import build_profile_summary
 from obc_discovery.x_normalize import normalize_tweet
-from obc_llm.json_utils import parse_llm_json_tolerant
 
 if TYPE_CHECKING:
     from obc_discovery.engine import DiscoveredContent

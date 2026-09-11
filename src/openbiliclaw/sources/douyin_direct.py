@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from openbiliclaw.discovery.engine import DiscoveredContent
+from openbiliclaw.core.contracts import DiscoveredContent
 from openbiliclaw.sources.douyin_signature import XBogusSigner
 
 logger = logging.getLogger(__name__)

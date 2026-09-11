@@ -168,7 +168,7 @@ def zhihu_discovery_items_to_contents(
     :class:`DiscoveredContent` for the shared candidate pool. Bootstrap scopes
     are intentionally ignored here; they only become user behavior events.
     """
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
 
     keyword_ids = source_keyword_ids or {}
     contents: list[DiscoveredContent] = []

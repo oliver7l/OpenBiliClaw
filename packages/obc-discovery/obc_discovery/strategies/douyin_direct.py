@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
+from obc_llm.json_utils import parse_llm_json_tolerant
+
 from obc_discovery.engine import (
     ContentDiscoveryEngine,
     DiscoveredContent,
@@ -17,7 +19,6 @@ from obc_discovery.engine import (
     trim_candidates_for_llm,
 )
 from obc_discovery.strategies._utils import build_profile_summary
-from obc_llm.json_utils import parse_llm_json_tolerant
 
 if TYPE_CHECKING:
     from openbiliclaw.soul.profile import SoulProfile

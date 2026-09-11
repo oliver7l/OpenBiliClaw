@@ -89,7 +89,7 @@ def _task_payloads(db: Database) -> list[dict[str, Any]]:
 
 
 def _kw_statuses(db: Database) -> dict[str, str]:
-    rows = db.conn.execute(
+    rows = db._discovery_conn.execute(
         "SELECT keyword, status FROM discovery_keywords WHERE platform = 'bilibili' ORDER BY id"
     ).fetchall()
     return {str(row["keyword"]): str(row["status"]) for row in rows}

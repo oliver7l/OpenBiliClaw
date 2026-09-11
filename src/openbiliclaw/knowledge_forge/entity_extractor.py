@@ -17,10 +17,11 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 from .config import EntityConfig, KnowledgeForgeConfig, load_kf_config
 from .models import now_cn
@@ -202,8 +203,8 @@ class EntityExtractor:
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
         # ATTACH 主库，使跨库查询（如 JOIN articles）正常工作
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _main_path = _Path(str(self.db_path)).with_name('openbiliclaw.db')
         if _main_path.exists():
             with _suppress(Exception):

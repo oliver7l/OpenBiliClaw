@@ -18,10 +18,11 @@ import asyncio
 import json
 import logging
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 # 商汤日日新配额限制（每 5 小时 60,000 点 ≈ 60M tokens）
 _SENSENOVA_QUOTA_LIMIT = 60000
@@ -66,8 +67,8 @@ class SelfEvolutionState:
         conn.row_factory = sqlite3.Row
 
         # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(self._db_path)).with_name('content.db')
         if _content_path.exists():
             with _suppress(Exception):
@@ -902,6 +903,5 @@ class SelfEvolutionLoopEngine:
 
 async def asyncio_to_thread(fn: Any, *args: Any, **kwargs: Any) -> Any:
     """Run a sync function in a thread so the event loop is not blocked."""
-    import asyncio
 
     return await asyncio.to_thread(fn, *args, **kwargs)

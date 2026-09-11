@@ -59,7 +59,7 @@ import urllib.request
 from datetime import datetime
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
+from openbiliclaw.runtime._db import connect_inbox
 
 logger = logging.getLogger(__name__)
 
@@ -681,7 +681,7 @@ def _run_once(
     if _DRY_RUN:
         return {"ok": True, "dry_run": True, "fetched": len(posts), "valid": len(rows)}
 
-    conn = _obc_connect("hupu")
+    conn = connect_inbox("hupu")
     try:
         inserted = _insert_rows(conn, rows)
         conn.commit()

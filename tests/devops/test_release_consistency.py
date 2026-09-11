@@ -16,7 +16,7 @@ from typing import Any
 
 import openbiliclaw
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _uv_lock_self_entry() -> dict[str, Any]:

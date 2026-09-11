@@ -8,11 +8,11 @@
 from __future__ import annotations
 
 import sqlite3
-
-from openbiliclaw.storage.database import open_db_conn
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 from .review_models import (
     InterviewReview,

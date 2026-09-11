@@ -11,7 +11,6 @@ and builds a queryable knowledge graph.  Provides:
 """
 
 from __future__ import annotations
-from openbiliclaw.storage.database import open_db_conn
 
 import logging
 from collections import defaultdict
@@ -20,6 +19,7 @@ from datetime import datetime
 from typing import Any
 
 from openbiliclaw.self_evolution.insight_report import extract_topics
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger("self_evolution.knowledge_graph")
 

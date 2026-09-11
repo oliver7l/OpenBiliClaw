@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from openbiliclaw.runtime._db import connect_inbox as _obc_connect
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_YOUTUBE as _PLATFORM_YOUTUBE
 
 logger = logging.getLogger(__name__)
@@ -495,29 +494,19 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
     return inserted
 
 
+# K10：单轮循环骨架收口 producer_base（fetch/parse 平台钩子注入）
+from openbiliclaw.runtime.producer_base import run_once_for_platform  # noqa: E402
+
+
 def _run_once() -> dict[str, Any]:
-    """One full fetch cycle. Returns a summary dict."""
-    items = _fetch_feed()
-    if not items:
-        return {"ok": False, "reason": "empty_feed", "items_fetched": 0, "inserted": 0}
+    return run_once_for_platform(
+        "youtube",
+        fetch_feed=_fetch_feed,
+        parse_items=_parse_items,
+        insert_rows=_insert_rows,
+    )
 
-    rows = _parse_items(items)
-    if not rows:
-        return {"ok": False, "reason": "no_valid_items", "items_fetched": len(items), "inserted": 0}
 
-    conn = _obc_connect("youtube")
-    try:
-        inserted = _insert_rows(conn, rows)
-        conn.commit()
-        return {
-            "ok": True,
-            "items_fetched": len(items),
-            "valid_items": len(rows),
-            "inserted": inserted,
-            "skipped_duplicates": len(rows) - inserted,
-        }
-    finally:
-        conn.close()
 
 
 def run_forever() -> None:

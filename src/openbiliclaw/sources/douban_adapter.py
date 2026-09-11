@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class DoubanAdapter:
         limit: int = 20,
     ) -> list[DiscoveredContent]:
         """从 douban.db 返回最近的书影音条目。"""
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from openbiliclaw.core.contracts import DiscoveredContent
 
         items = self._load_items(limit=limit)
         out: list[DiscoveredContent] = []

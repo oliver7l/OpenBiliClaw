@@ -433,11 +433,11 @@ def _default_route_ip() -> str | None:
 
 def _interface_ipv4_candidates() -> list[str]:
     """Best-effort local IPv4 enumeration without extra dependencies."""
-    commands: list[list[str]]
-    if os.name == "nt":
-        commands = [["ipconfig"]]
-    else:
-        commands = [["ifconfig"], ["ip", "-4", "addr", "show", "scope", "global"]]
+    commands: list[list[str]] = (
+        [["ipconfig"]]
+        if os.name == "nt"
+        else [["ifconfig"], ["ip", "-4", "addr", "show", "scope", "global"]]
+    )
 
     candidates: list[str] = []
     seen: set[str] = set()
@@ -2074,7 +2074,9 @@ def create_app(
         :func:`_select_init_platforms`). ``None`` keeps the legacy behaviour of
         using everything enabled.
         """
-        from openbiliclaw.cli import (
+        # K6：guided-init 管线已收口到 runtime/init_flow，api 直接依赖 runtime
+        # （api→runtime 合法），不再反向依赖 cli。
+        from openbiliclaw.runtime.init_flow import (
             _INIT_BILIBILI_FAVORITE_LIMIT,
             _INIT_BILIBILI_FOLLOW_LIMIT,
             _INIT_POOL_TARGET_COUNT,

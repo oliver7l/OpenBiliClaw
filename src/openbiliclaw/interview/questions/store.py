@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from openbiliclaw.storage.database import open_db_conn
 
@@ -206,7 +206,7 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def get_question(self, qid: int) -> Optional[Question]:
+    def get_question(self, qid: int) -> Question | None:
         conn = self._conn()
         try:
             row = conn.execute("SELECT * FROM iq_questions WHERE id = ?", (qid,)).fetchone()
@@ -217,10 +217,10 @@ class InterviewQuestionStore:
     def list_questions(
         self,
         *,
-        category: Optional[QuestionCategory] = None,
-        difficulty_min: Optional[int] = None,
-        difficulty_max: Optional[int] = None,
-        source: Optional[str] = None,
+        category: QuestionCategory | None = None,
+        difficulty_min: int | None = None,
+        difficulty_max: int | None = None,
+        source: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Question]:
@@ -250,7 +250,7 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def update_question(self, qid: int, **kwargs) -> Optional[Question]:
+    def update_question(self, qid: int, **kwargs) -> Question | None:
         if not kwargs:
             return self.get_question(qid)
         kwargs["updated_at"] = datetime.now().isoformat()
@@ -277,7 +277,7 @@ class InterviewQuestionStore:
 
     # ── 待看队列 ───────────────────────────────────────────────
 
-    def add_to_queue(self, qid: int, priority: Priority = Priority.MEDIUM, planned_date: Optional[date] = None) -> bool:
+    def add_to_queue(self, qid: int, priority: Priority = Priority.MEDIUM, planned_date: date | None = None) -> bool:
         now = datetime.now().isoformat()
         conn = self._conn()
         try:
@@ -290,7 +290,7 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def get_queue(self, *, limit: int = 50) -> list[tuple[Question, Priority, Optional[date]]]:
+    def get_queue(self, *, limit: int = 50) -> list[tuple[Question, Priority, date | None]]:
         conn = self._conn()
         try:
             rows = conn.execute(
@@ -363,7 +363,7 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def get_records(self, *, qid: Optional[int] = None, limit: int = 50) -> list[ReadingRecord]:
+    def get_records(self, *, qid: int | None = None, limit: int = 50) -> list[ReadingRecord]:
         sql = "SELECT * FROM iq_records"
         params: list[Any] = []
         if qid:
@@ -399,7 +399,7 @@ class InterviewQuestionStore:
         categories: str = "",
         min_difficulty: int = 1,
         max_difficulty: int = 5,
-        start_date: Optional[date] = None,
+        start_date: date | None = None,
     ) -> ReadingPlan:
         now = datetime.now().isoformat()
         sd = (start_date or date.today()).isoformat()
@@ -418,7 +418,7 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def get_active_plan(self) -> Optional[ReadingPlan]:
+    def get_active_plan(self) -> ReadingPlan | None:
         conn = self._conn()
         try:
             row = conn.execute("SELECT * FROM iq_plans WHERE is_active = 1 ORDER BY id DESC LIMIT 1").fetchone()
@@ -456,12 +456,24 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def record_daily(self, plan_id: int, progress_date: date, *, questions_read: int, questions_mastered: int = 0, target: int = 0, notes: str = "") -> DailyProgress:
+    def record_daily(
+        self,
+        plan_id: int,
+        progress_date: date,
+        *,
+        questions_read: int,
+        questions_mastered: int = 0,
+        target: int = 0,
+        notes: str = "",
+    ) -> DailyProgress:
         now = datetime.now().isoformat()
         conn = self._conn()
         try:
             conn.execute(
-                """INSERT INTO iq_daily (plan_id, progress_date, questions_read, questions_mastered, target, notes, created_at)
+                """INSERT INTO iq_daily (
+                       plan_id, progress_date, questions_read, questions_mastered,
+                       target, notes, created_at
+                   )
                    VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(plan_id, progress_date) DO UPDATE SET
                      questions_read = questions_read + excluded.questions_read,
@@ -497,7 +509,10 @@ class InterviewQuestionStore:
         try:
             total = conn.execute("SELECT COUNT(*) FROM iq_questions").fetchone()[0]
             by_cat = {r[0]: r[1] for r in conn.execute("SELECT category, COUNT(*) FROM iq_questions GROUP BY category")}
-            by_diff = {r[0]: r[1] for r in conn.execute("SELECT difficulty, COUNT(*) FROM iq_questions GROUP BY difficulty")}
+            by_diff = {
+                r[0]: r[1]
+                for r in conn.execute("SELECT difficulty, COUNT(*) FROM iq_questions GROUP BY difficulty")
+            }
             by_mastery = {}
             not_started = total
             reading = understood = mastered = need_review = 0

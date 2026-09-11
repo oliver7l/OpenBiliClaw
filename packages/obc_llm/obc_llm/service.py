@@ -10,14 +10,14 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
 
-from .base import LLMProviderError, LLMRateLimitError
-from .prompts import build_socratic_dialogue_prompt
 from ._protocols import (
     ProfileRenderer,
     ToneProfile,
     build_tone_profile,
     preference_layer_from_dict,
 )
+from .base import LLMProviderError, LLMRateLimitError
+from .prompts import build_socratic_dialogue_prompt
 
 logger = logging.getLogger(__name__)
 DEFAULT_LLM_CONCURRENCY = 3

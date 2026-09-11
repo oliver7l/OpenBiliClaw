@@ -35,7 +35,7 @@ def _default_db_path() -> str:
     """默认数据库路径：data/interview.db（面试复盘子库，独立锁域）。"""
     project_root = Path(__file__).resolve().parents[3]
     try:
-        from openbiliclaw.config import Settings, load_settings
+        from openbiliclaw.config import load_settings
 
         settings = load_settings()
         if settings.storage.interview_db_path:

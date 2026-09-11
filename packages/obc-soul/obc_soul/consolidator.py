@@ -48,6 +48,7 @@ from obc_llm.prompts import build_profile_consolidation_prompt
 
 if TYPE_CHECKING:
     from obc_llm.base import LLMResponse
+
     from openbiliclaw.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)

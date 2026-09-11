@@ -19,16 +19,14 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from openbiliclaw.media.service import MediaNotFoundError, MediaService
-
-if TYPE_CHECKING:
-    from openbiliclaw.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +206,11 @@ def build_media_router(
         # 富化：为每个条目附带收藏/评级状态
         items = cast("list[dict[str, object]]", result.get("items") or [])
         if items:
-            abs_paths = {str(item.get("rel")): str(root_path / str(item.get("rel"))) for item in items if item.get("rel")}
+            abs_paths = {
+                str(item.get("rel")): str(root_path / str(item.get("rel")))
+                for item in items
+                if item.get("rel")
+            }
             states = store.get_states(abs_paths.values())
             for item in items:
                 rel = str(item.get("rel") or "")
@@ -278,11 +280,13 @@ def build_media_router(
         # 清理状态与封面缓存
         store.delete_state(str(file_path))
         if poster_key is not None:
-            try:
+            with suppress(OSError):
                 (_poster_cache_dir(config) / f"{poster_key}.jpg").unlink(missing_ok=True)
-            except OSError:
-                pass
-        return {"deleted": rel_cleaned, "trashed": str(target), "had_favorite": "1" if deleted_state.get("favorite") else "0"}
+        return {
+            "deleted": rel_cleaned,
+            "trashed": str(target),
+            "had_favorite": "1" if deleted_state.get("favorite") else "0",
+        }
 
     @router.get("/favorites")
     def list_favorites(

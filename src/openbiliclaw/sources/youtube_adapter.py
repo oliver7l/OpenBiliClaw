@@ -20,7 +20,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from openbiliclaw.core.contracts import DiscoveredContent
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ class YtDlpAdapter:
             logger.warning("YtDlpAdapter: no data returned for %s/%s", recipe.name, strategy)
             return []
 
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from openbiliclaw.core.contracts import DiscoveredContent
 
         items: list[DiscoveredContent] = []
         for line in lines[:limit]:

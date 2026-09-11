@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from obc_llm.service import LLMService, ModuleOverride, SupportsComplete
+
     from obc_soul.engine import SoulEngine
 
 logger = logging.getLogger(__name__)

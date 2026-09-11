@@ -17,13 +17,14 @@ from obc_llm.json_utils import (
     JSONValue,
     parse_llm_json_tolerant,
 )
+
 from obc_soul.dislike_writeback import purge_pool_for_new_dislikes
 
 if TYPE_CHECKING:
-    from openbiliclaw.memory.manager import MemoryManager
     from obc_soul.preference_analyzer import PreferenceAnalyzer
     from obc_soul.profile import OnionProfile
     from obc_soul.profile_builder import ProfileBuilder
+    from openbiliclaw.memory.manager import MemoryManager
 
 from .pipeline import LayerUpdateResult, OnionLayer
 

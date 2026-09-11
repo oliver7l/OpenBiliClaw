@@ -19,10 +19,11 @@ import json
 import logging
 import re
 import sqlite3
-from openbiliclaw.storage.database import open_db_conn
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+from openbiliclaw.storage.database import open_db_conn
 
 logger = logging.getLogger(__name__)
 
@@ -139,20 +140,19 @@ class AutoTopicGenerator:
 
     def __init__(self, db_path: str, llm_service: Any = None) -> None:
         self.db_path = db_path
+        self.llm_service = llm_service
 
     def _get_conn(self):
         """返回 ATTACH 了 content.db 的连接（v0.4.0+ articles 表迁移）。"""
         conn = open_db_conn(self.db_path)
         conn.row_factory = sqlite3.Row
-        from pathlib import Path as _Path
         from contextlib import suppress as _suppress
+        from pathlib import Path as _Path
         _content_path = _Path(str(self.db_path)).with_name('content.db')
         if _content_path.exists():
             with _suppress(Exception):
                 conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
         return conn
-
-        self.llm_service = llm_service
 
     def discover_candidates(self, min_mentions: int = 20, limit: int = 20) -> list[TopicCandidate]:
         """从知识图谱中发现候选专题主题。

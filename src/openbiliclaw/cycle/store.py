@@ -79,7 +79,6 @@ class CycleStore:
         rows = self.list_records()
         n = len(rows)
         intervals = [r["interval_days"] for r in rows if r.get("interval_days")]
-        total_interval_days = sum(intervals)
         result: dict[str, Any] = {
             "total": 0,
             "avg_interval_days": None,
@@ -95,10 +94,9 @@ class CycleStore:
         # 用日期差计算实际间隔（对自述 interval_days 缺失的记录做兜底）
         dates = [datetime.strptime(r["dt"], "%Y-%m-%d") for r in rows]
         real_spans: list[int] = []
-        for a, b in zip(dates, dates[1:]):
+        for a, b in zip(dates, dates[1:], strict=False):
             real_spans.append((b - a).days)
         real_spans = [s for s in real_spans if s > 0]
-        all_spans = [s for s in intervals if s and s > 0] or real_spans
         span_source = real_spans if real_spans else intervals
         result["total"] = n
         result["first_date"] = rows[0]["dt"]

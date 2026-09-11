@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from obc_llm.json_utils import DEFAULT_STRUCTURED_MAX_TOKENS, parse_llm_json_tolerant
+
 from obc_soul.speculator import (
     _build_event_text,
     _has_probe_term_overlap,

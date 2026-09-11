@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from openbiliclaw.storage.db_router import (
     DatabaseRouter,
-    TABLE_TO_DB,
     get_global_router,
     reset_global_router,
 )

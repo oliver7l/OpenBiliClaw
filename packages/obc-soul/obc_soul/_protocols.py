@@ -5,11 +5,7 @@ Main project implements these protocols and injects them into SoulEngine.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
-
-if TYPE_CHECKING:
-    from datetime import datetime
-
+from typing import Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Protocol interfaces (implemented by main project)

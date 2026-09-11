@@ -3,36 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+# K5：词表唯一事实在 storage._saved_sync_vocab（DDL CHECK 归 storage 所有），
+# 此处 re-export 保持 api 侧既有 import 路径不变。领域→基础设施方向，合法。
+from openbiliclaw.storage._saved_sync_vocab import (  # noqa: E402,TC001,F401
+    NATIVE_SAVE_STATUSES,
+    NATIVE_SAVE_TERMINAL_STATUSES,
+    NativeSaveStatus,
+)
+
 from .identity import canonical_source_platform, make_item_key
 
 SavedListKind = Literal["favorite", "watch_later"]
 NativeSaveAction = Literal["favorite", "watch_later"]
-NativeSaveStatus = Literal[
-    "pending",
-    "syncing",
-    "synced",
-    "already_synced",
-    "login_required",
-    "unsupported",
-    "rate_limited",
-    "extension_required",
-    "failed",
-]
-
-NATIVE_SAVE_TERMINAL_STATUSES: frozenset[NativeSaveStatus] = frozenset(
-    {
-        "synced",
-        "already_synced",
-        "login_required",
-        "unsupported",
-        "rate_limited",
-        "extension_required",
-        "failed",
-    }
-)
-NATIVE_SAVE_STATUSES: frozenset[NativeSaveStatus] = frozenset(
-    {"pending", "syncing", *NATIVE_SAVE_TERMINAL_STATUSES}
-)
 
 
 @dataclass(frozen=True, slots=True)

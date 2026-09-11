@@ -33,7 +33,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from openbiliclaw.sources.x_client import (
+from openbiliclaw.core.x_errors import (
     XAuthError,
     XBlockedError,
     XClientError,

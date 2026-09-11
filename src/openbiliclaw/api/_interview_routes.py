@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -302,7 +301,8 @@ def get_schedule() -> dict[str, Any]:
     conn = _get_interview_conn()
     try:
         rows = conn.execute(
-            "SELECT company, role, interview_at, status, direction, prep_dir, resume_ver, note FROM job ORDER BY interview_at DESC"
+            "SELECT company, role, interview_at, status, direction, prep_dir, resume_ver, note "
+            "FROM job ORDER BY interview_at DESC"
         ).fetchall()
         jobs = []
         today = date.today().isoformat()
@@ -550,8 +550,8 @@ def get_ammo_file(company: str, category: str, name: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="文件不存在或不支持预览")
     try:
         content = target.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        raise HTTPException(status_code=500, detail="读取失败")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="读取失败") from exc
     limit = 50000
     return {
         "company": company,
@@ -577,7 +577,7 @@ def get_company_ammo(company: str) -> dict[str, Any]:
 def _read_file_safe(path: Path, max_lines: int = 100) -> str:
     """安全读取文件前N行。"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             lines = []
             for i, line in enumerate(f):
                 if i >= max_lines:
