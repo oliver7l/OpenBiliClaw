@@ -410,9 +410,6 @@ class AutostartConfig:
 
     enabled: bool = False
     manage_ollama: bool = True
-    # 是否在启动时用 Docker 自动拉起本机 RSSHub（供豆瓣 feed 等聚合源）。
-    # 默认关，显式开启才自部署；需本机有 Docker。
-    manage_rsshub: bool = False
 
 
 @dataclass
@@ -578,8 +575,6 @@ class DoubanSourceConfig:
 
     enabled: bool = False
     cookie_env: str = "OPENBILICLAW_DOUBAN_COOKIE"
-    # 自部署 RSSHub 实例地址（供豆瓣 feed 聚合源）。空则用官方（已被限制，仅作回退）。
-    rsshub_url: str = "http://127.0.0.1:1200"
 
 
 @dataclass
@@ -1173,7 +1168,6 @@ def _build_config(raw: dict[str, Any]) -> Config:
         douban=DoubanSourceConfig(
             enabled=bool(douban_raw.get("enabled", False)),
             cookie_env=str(douban_raw.get("cookie_env", "OPENBILICLAW_DOUBAN_COOKIE")),
-            rsshub_url=str(douban_raw.get("rsshub_url", "http://127.0.0.1:1200")),
         ),
     )
 
@@ -1318,7 +1312,6 @@ def _build_config(raw: dict[str, Any]) -> Config:
         autostart=AutostartConfig(
             enabled=_coerce_bool(autostart_raw.get("enabled"), default=False),
             manage_ollama=_coerce_bool(autostart_raw.get("manage_ollama"), default=True),
-            manage_rsshub=_coerce_bool(autostart_raw.get("manage_rsshub"), default=False),
         ),
         storage=StorageConfig(**store_raw),
         logging=LoggingConfig(**logging_raw),

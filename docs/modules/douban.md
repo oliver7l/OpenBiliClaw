@@ -33,7 +33,7 @@
 | 统计画像 | ✅ | `/api/douban/analytics` 按年份/分类/分布聚合（纯数据，不调 LLM） |
 | 深度画像报告 | ✅ | `POST /api/douban/insight` 让 LLM 生成"我的观影/读书画像"报告，可缓存 |
 | 内容源 | 🔶 | `DoubanAdapter` 已实现，默认关闭不注入推荐流 |
-| 文章 feed 阅读源 | 🔶 | `DoubanFeedAdapter` 拉豆瓣 RSS（评论/小组/日记）写入阅读库；需配置订阅；豆瓣官方 RSS 覆盖有限，`diary` 走本地自部署 RSSHub（`[sources.douban].rsshub_url`） |
+| 文章 feed 阅读源 | 🔶 | `DoubanFeedAdapter` 拉豆瓣内容写入阅读库；`diary`（动态）直连豆瓣 rexxar 接口（登录 cookie + Referer），其余走官方 RSS；需配置订阅 |
 
 ## 公开 API
 
@@ -108,13 +108,12 @@ douban_db_path = "data/douban.db"
 [sources.douban]
 enabled = false          # true 时注册 douban source adapter 与 feed adapter
 cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"  # 仅重新抓取清单时需要
-rsshub_url = "http://127.0.0.1:1200"       # 本地自部署 RSSHub，diary 等聚合 feed 用
 ```
 
 `douban_feed_subscriptions` 订阅条目（`[scheduler]`）里 `feed_kind` 为
-`comment` / `review` / `group` / `diary`；其中 `diary`（个人动态）走上方
-`rsshub_url` 指定的 RSSHub，其余走豆瓣官方 RSS。RSSHub 由本地 Docker 自部署，
-`[autostart].manage_rsshub=true` 时 `openbiliclaw start` 会自动拉起（默认关）。
+`comment` / `review` / `group` / `diary`：其中 `diary`（个人动态/广播）由
+`DoubanFeedAdapter` **直连豆瓣 rexxar JSON 接口**（带登录 cookie + 精确
+`Referer`，页间温和限频）；其余走豆瓣官方 RSS。
 
 ## 数据导入
 

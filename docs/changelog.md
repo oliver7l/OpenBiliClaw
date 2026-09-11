@@ -4,6 +4,47 @@
 
 ---
 
+## v0.3.234: 豆瓣动态源自研直连 + 移除本地 RSSHub 瘦身（2026-09-11）
+
+- **`diary`（用户动态/广播）源自研直连**：`DoubanFeedAdapter` 不再依赖 RSSHub 的
+  status 路由（其上游未带 Referer 已被豆瓣反爬拦），改直连
+  `m.douban.com/rexxar/api/v2/status/user_timeline/{uid}`，带移动端 UA + 精确
+  Referer + 登录 cookie（`OPENBILICLAW_DOUBAN_COOKIE`），页间温和限频，归一化为
+  `DiscoveredContent` 喂阅读库。已实测拉到真实动态。
+- **移除本地 RSSHub 自部署**：删除 `runtime/rsshub.py`、`tests/runtime/test_rsshub.py`，
+  及 `[autostart].manage_rsshub`、`[sources.douban].rsshub_url`、CLI `start` 的
+  RSSHub 预检、`cli/__init__.py` 引用。豆瓣 feed 不再需要本地 RSSHub（`diary` 直连、
+  其余走官方 RSS）。线上 `rsshub.bestblogs.dev` 镜像订阅不受影响。
+- **tests**：diary 改为 mock rexxar 接口断言 URL/Referer/cookie 解析。
+
+---
+
+## v0.3.233: 克隆站点元数据整理 + 导入根因修复（2026-09-11）
+
+> 缘起：`data/clone-sites`（3.0G / 22 个站点目录）为珍贵数据，**只整理、绝不删除**。摸底后发现克隆系统元数据大量缺失/失真，且根因在导入逻辑。
+
+### 前提确认：目录与数据完好
+- `data/clone-sites/` 3.0G / 22 个站点目录全部完好，本轮**未移动、未重命名、未删除任何目录**。
+- `clone_sites` 表 21 行，`local_path` 恒等于 slug（目录名），App 靠它提供站点服务 —— 这是目录不可移动的硬约束。
+- 改动前全表备份：`data/backups/clone_sites_meta_before_tidy_20260911.json`（可回滚）。
+
+### 元数据整理（走 App 自己的 CloneStore API，只改数据不动目录）
+- **description** 0/21 → **21/21**：逐个从站点 `index.html` 的 `<title>` 提取，卡片不再光秃秃。
+- **tags** 0/21 → **21/21**：按站点身份打标（工具/游戏/艺术/旅行/官网等）。
+- **source_url** 7 段乱文本（SOURCE.txt 全文被整段塞入）→ **10 条干净 URL**。
+- **category** 修正自动瞎猜（`aichainmap` 含 "map"→travel、`apesk-playwright` 含 "play"→game、`biao-card` 含 "card"→game）→ 按真实身份重分。
+- 验证：`local_path` 未变 ✅、22 个目录全在 ✅。
+
+### 根因修复：`clone/service.py` 导入逻辑 4 处（未来导入自动整理）
+1. `source_url` 塞 SOURCE.txt 全文 → 新增 `_extract_source_url()` 提取首个干净 http(s) URL。
+2. `description` 恒空 → 新增 `_extract_html_title()` 从 index.html 提取 `<title>`（截断 200 字符，容错编码）。
+3. `category` 只按 slug 关键词瞎猜 → `_infer_category()` 升级为**三级信号**：来源 URL/页面标题 > slug；"map" 等易误伤关键词只对 URL/标题信号生效。
+4. `tags` 恒空（随本次元数据一并补齐）。
+- 验证：真实站点数据回归 ✅（aichainmap→website、apesk-playwright→website、yeguozi 提出干净 URL、biaoleme 提出"彪了么 - 德彪语录"）；ruff/mypy 全过。
+- 注：`tests/devops/test_install_contract_docs.py` 等 12 例失败为**存量问题**（缺 `tests/docs/modules/*.md`，git stash 对照确认），与本轮改动无关。
+
+---
+
 ## v0.3.232: 修复 4 个存量真 bug（拆库/提取遗留）+ tests/api 清零（2026-09-11）
 
 > 缘起：全量 `tests/api` 有 25 例存量失败。逐组诊断后发现 **4 例是产品真 bug**（拆库与模块提取的"做了一半"），其余为测试自身过时。**25 failed → 0**（末次全量 `tests/api`：**0 failed / 498 passed**，2:57）。

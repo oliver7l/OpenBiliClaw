@@ -353,9 +353,6 @@ min_interval_minutes = 60               # ZhihuDiscoveryProducer 两次执行最
 # Cookie 只在你需要重新抓取豆瓣清单时使用（见 data/douban/），不要写进 config.toml。
 enabled = false
 cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"
-# 本地自部署 RSSHub base：diary 等聚合 feed 用它（官方实例已限流）。
-# 开启 [autostart].manage_rsshub 后 openbiliclaw start 会自动 docker 拉起。
-rsshub_url = "http://127.0.0.1:1200"
 
 [scheduler]
 # Enable scheduled content discovery
@@ -502,10 +499,6 @@ enabled = false
 # 当 LLM / embedding 使用本机 Ollama 时，后端启动时顺带确保 `ollama serve`
 # 已运行。仅管理本机 localhost:11434，远端 Ollama 不会被拉起。
 manage_ollama = true
-# 是否在后端启动时用 Docker 自动拉起本地 RSSHub（供豆瓣 feed 等聚合源）。
-# 默认关闭；需本机有 Docker。拉起时若探测到 host.docker.internal:7890
-# 代理可达会自动注入 HTTP/HTTPS/ALL_PROXY。
-manage_rsshub = false
 
 [storage]
 # SQLite database path
