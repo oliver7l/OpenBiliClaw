@@ -150,11 +150,32 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
             "fee_note": f"含税=票面+机建{AIRPORT_FEE}+燃油{FUEL_FEE}；儿童=票面5折+燃油半价",
         }
 
+    @router.get("/documents")
+    def list_documents() -> dict[str, Any]:
+        """List all budget markdown documents in the travel data directory."""
+        if base is None or not base.exists():
+            return {"docs": []}
+        docs: list[dict[str, Any]] = []
+        for p in sorted(base.glob("*.md")):
+            try:
+                docs.append(
+                    {
+                        "name": p.name,
+                        "stem": p.stem,
+                        "updated_at": p.stat().st_mtime,
+                        "size": p.stat().st_size,
+                    }
+                )
+            except OSError:
+                continue
+        return {"docs": docs}
+
     @router.get("/doc")
-    def get_budget_doc() -> dict[str, Any]:
-        """Return the raw budget markdown document."""
-        path = _resolve(budget_doc) if base else None
-        if path is None:
+    def get_budget_doc(doc: str = "") -> dict[str, Any]:
+        """Return the raw budget markdown document (optional ?doc=<filename>)."""
+        name = (doc or budget_doc).lstrip("/")
+        path = (base / name) if base else None
+        if path is None or not path.exists():
             raise HTTPException(status_code=404, detail="旅行数据目录未配置或预算文档不存在")
         try:
             content = path.read_text(encoding="utf-8")
@@ -163,16 +184,18 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
             raise HTTPException(status_code=500, detail=f"读取预算文档失败: {exc}") from exc
         return {
             "title": path.stem,
+            "name": path.name,
             "content": content,
             "updated_at": path.stat().st_mtime,
             "source": str(path),
         }
 
     @router.get("/overview")
-    def get_overview() -> dict[str, Any]:
-        """Structured budget summary extracted from the markdown doc."""
-        path = _resolve(budget_doc) if base else None
-        if path is None:
+    def get_overview(doc: str = "") -> dict[str, Any]:
+        """Structured budget summary extracted from the markdown doc (?doc=<filename>)."""
+        name = (doc or budget_doc).lstrip("/")
+        path = (base / name) if base else None
+        if path is None or not path.exists():
             raise HTTPException(status_code=404, detail="旅行数据目录未配置或预算文档不存在")
 
         try:
