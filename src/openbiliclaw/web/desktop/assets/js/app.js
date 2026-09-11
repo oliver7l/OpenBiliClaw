@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "conversationArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1267,7 +1267,7 @@
       const isFeedPage = ["xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage"].includes(pageId);
       document.body.classList.toggle("profile-page-open", pageId === "profilePage");
       document.body.classList.toggle("chat-page-open", pageId === "chatPage");
-      document.body.classList.toggle("library-page-open", pageId === "libraryPage" || pageId === "readArchivePage");
+      document.body.classList.toggle("library-page-open", pageId === "libraryPage" || pageId === "readArchivePage" || pageId === "conversationArchivePage");
       document.body.classList.toggle("pool-all-page-open", pageId === "poolAllPage" || pageId === "poolFilterPage");
       document.body.classList.toggle("custom-filter-page-open", pageId === "customFilterPage");
       document.body.classList.toggle("saved-page-open", pageId === "savedPage" || pageId === "watchLaterPage");
@@ -1279,7 +1279,7 @@
       document.body.classList.toggle("clone-page-open", pageId === "clonePage");
       document.body.classList.toggle("travel-page-open", pageId === "travelPage");
       document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", conversationArchivePage: "convArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1391,6 +1391,7 @@
       "self-evolution": () => { if (window.openSelfEvolutionPage) window.openSelfEvolutionPage(); },
       library: () => openLibraryPage(),
       "read-archive": () => openReadArchivePage(),
+      "conversation-archive": () => openConversationArchivePage(),
       settings: () => openSettingsPage("models"),
       travel: () => openTravelPage(),
       ed2k: () => openEd2kPage(),
@@ -1827,6 +1828,103 @@
       bindReadArchiveOnce();
       void refreshReadArchiveCounts();
       loadReadArchiveItems();
+    }
+
+    // ── 对话归档（用户与 AI 的对话内容）────────────────────────────
+    let _convArchiveBound = false;
+    let _convArchiveQuery = "";
+    const CONV_KIND_LABELS = { zhihu_eval: "知乎评析", concept_explain: "概念讲解" };
+    const CONV_SOURCE_LABELS = { answer: "回答", pin: "想法", article: "文章" };
+
+    function openConversationArchivePage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((drawer) => closePanel(drawer.id));
+      showMainPage("conversationArchivePage");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      bindConversationArchiveOnce();
+      loadConversationArchiveItems();
+    }
+
+    function bindConversationArchiveOnce() {
+      if (_convArchiveBound) return;
+      _convArchiveBound = true;
+      const input = document.getElementById("convArchiveSearchInput");
+      const clearBtn = document.getElementById("convArchiveSearchClear");
+      if (input) {
+        let timer = null;
+        input.addEventListener("input", () => {
+          _convArchiveQuery = input.value;
+          if (clearBtn) clearBtn.hidden = !input.value;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => loadConversationArchiveItems(), 250);
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") { input.value = ""; _convArchiveQuery = ""; if (clearBtn) clearBtn.hidden = true; loadConversationArchiveItems(); }
+        });
+      }
+      if (clearBtn) clearBtn.addEventListener("click", () => {
+        input.value = ""; _convArchiveQuery = ""; clearBtn.hidden = true; loadConversationArchiveItems();
+      });
+    }
+
+    async function loadConversationArchiveItems() {
+      const list = document.getElementById("conversationArchiveList");
+      const countEl = document.getElementById("convArchiveCount");
+      if (!list) return;
+      list.innerHTML = '<div class="empty-state">加载中…</div>';
+      const params = new URLSearchParams({ limit: "100", offset: "0", sort_by: "seq", sort_order: "ASC" });
+      if (_convArchiveQuery) params.set("search", _convArchiveQuery);
+      try {
+        const res = await fetch(`/api/conversation-archive?${params.toString()}`, { headers: { "X-OBC-Auth": "1" } });
+        const data = await res.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (countEl) countEl.textContent = data.total ? String(data.total) : "";
+        if (!items.length) {
+          list.innerHTML = `<div class="empty-state">${_convArchiveQuery ? "没有匹配的对话。" : "还没有归档的对话。"}</div>`;
+          return;
+        }
+        list.innerHTML = items.map(convArchiveCardHtml).join("");
+        for (const det of list.querySelectorAll("details.conv-detail")) {
+          det.addEventListener("toggle", () => {});
+        }
+      } catch (err) {
+        list.innerHTML = '<div class="empty-state">加载对话归档失败，请确认后端服务正常</div>';
+      }
+    }
+
+    function convArchiveCardHtml(item) {
+      const kind = CONV_KIND_LABELS[item.kind] || item.kind || "";
+      const src = CONV_SOURCE_LABELS[item.source_type] || item.source_type || "";
+      const author = escapeHtml(item.author || "");
+      const meta = [
+        item.voteup_count ? `👍 ${item.voteup_count}` : "",
+        item.comment_count ? `💬 ${item.comment_count}` : "",
+        item.published_at ? `🗓 ${escapeHtml(item.published_at)}` : "",
+      ].filter(Boolean).map((m) => `<span class="conv-meta">${m}</span>`).join("");
+      const title = item.question_title ? `<div class="conv-title">${escapeHtml(item.question_title)}</div>` : "";
+      const link = item.source_url ? `<a class="conv-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener noreferrer">查看原文 ↗</a>` : "";
+      const question = item.user_question ? `<div class="conv-question">${escapeHtml(item.user_question)}</div>` : "";
+      const tags = Array.isArray(item.tags) && item.tags.length
+        ? `<div class="conv-tags">${item.tags.map((t) => `<span class="conv-tag">${escapeHtml(t)}</span>`).join("")}</div>`
+        : "";
+      const hasOrig = item.extracted_original_md && item.extracted_original_md.length > 50;
+      const hasAna = item.my_analysis_md && item.my_analysis_md.length > 50;
+      const orig = hasOrig ? `<details class="conv-detail" open><summary>📄 提取的原文</summary><div class="conv-markdown">${renderMarkdown(item.extracted_original_md)}</div></details>` : "";
+      const ana = hasAna ? `<details class="conv-detail" open><summary>💡 我的分析</summary><div class="conv-markdown conv-analysis">${renderMarkdown(item.my_analysis_md)}</div></details>` : "";
+      const badges = [kind ? `<span class="conv-kind">${escapeHtml(kind)}</span>` : "", src ? `<span class="conv-source">${escapeHtml(src)}</span>` : ""].join("");
+      return `<article class="conv-card">
+        <div class="conv-head-row">
+          <span class="conv-seq">${item.seq}</span>
+          ${badges}
+          <span class="conv-author-line"><span class="conv-author">${author}</span>${meta}</span>
+        </div>
+        ${title}
+        ${question}
+        ${link}
+        ${tags}
+        ${orig}
+        ${ana}
+      </article>`;
     }
 
     function bindReadArchiveOnce() {
@@ -3900,6 +3998,7 @@
     safeBind("#chatBtn", "click", () => { closeMineDropdown(); navigateTo("/web/chat"); });
     safeBind("#libraryBtn", "click", () => navigateTo("/web/library"));
     safeBind("#readArchiveBtn", "click", () => navigateTo("/web/read-archive"));
+    safeBind("#convArchiveBtn", "click", () => navigateTo("/web/conversation-archive"));
     safeBind("#libraryPage", "click", (event) => {
       const filterBtn = event.target.closest(".library-filter-btn");
       if (filterBtn) {
@@ -4231,6 +4330,7 @@
     });
     // routeFromPath() 在脚本解析早期执行，页面级状态必须在此之前声明（避免 TDZ）
     let _travelLoaded = { flights: false, overview: false, doc: false };
+    let _travelDoc = ""; // 当前选中的旅行预算文档文件名（空 = 后端默认）
     routeFromPath();
     if (typeof window.__initSelfEvolution === "function") window.__initSelfEvolution();
     restoreBackendEndpoint();
@@ -4283,11 +4383,11 @@
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("travelPage");
       window.scrollTo({ top: 0, behavior: "smooth" });
-      // 子 tab 切换
-      document.querySelectorAll(".travel-subtab").forEach((tab) => {
+      // 子 tab 切换（旅行页使用了统一的 page-subtab-btn，故按 data-travel-view 匹配）
+      document.querySelectorAll("[data-travel-view]").forEach((tab) => {
         tab.onclick = () => {
-          document.querySelectorAll(".travel-subtab").forEach((t) => t.classList.remove("active"));
-          tab.classList.add("active");
+          document.querySelectorAll("[data-travel-view]").forEach((t) => t.classList.remove("is-active"));
+          tab.classList.add("is-active");
           const view = tab.dataset.travelView;
           document.getElementById("travelFlightsView").hidden = view !== "flights";
           document.getElementById("travelOverviewView").hidden = view !== "overview";
@@ -4298,6 +4398,7 @@
       if (!_travelLoaded.flights) loadTravelFlights();
       if (!_travelLoaded.overview) loadTravelOverview();
       if (!_travelLoaded.doc) loadTravelDoc();
+      loadTravelDocs();
     }
 
     async function loadTravelFlights() {
@@ -4347,7 +4448,8 @@
       if (!totalsBody) return;
       loading.hidden = false;
       try {
-        const res = await fetch("/api/travel/overview");
+        const q = _travelDoc ? `?doc=${encodeURIComponent(_travelDoc)}` : "";
+        const res = await fetch("/api/travel/overview" + q);
         const data = await res.json();
         _travelLoaded.overview = true;
         totalsBody.innerHTML = (data.totals || []).map((t) =>
@@ -4369,7 +4471,8 @@
       if (!content) return;
       loading.hidden = false;
       try {
-        const res = await fetch("/api/travel/doc");
+        const q = _travelDoc ? `?doc=${encodeURIComponent(_travelDoc)}` : "";
+        const res = await fetch("/api/travel/doc" + q);
         const data = await res.json();
         _travelLoaded.doc = true;
         // 简单 markdown 渲染（标题、表格、列表、粗体）
@@ -4378,6 +4481,30 @@
         content.innerHTML = `<div class="travel-error">加载失败：${e.message}</div>`;
       } finally {
         loading.hidden = true;
+      }
+    }
+
+    // 加载旅行预算方案列表，并渲染「完整攻略」文档切换器
+    async function loadTravelDocs() {
+      const wrap = document.getElementById("travelDocSwitch");
+      if (!wrap) return;
+      try {
+        const res = await fetch("/api/travel/documents");
+        const data = await res.json();
+        const docs = (data.docs || []).filter((d) => d.name.endsWith(".md"));
+        wrap.innerHTML = docs.map((d) =>
+          `<button class="travel-doc-btn${d.name === _travelDoc ? " is-active" : ""}" data-doc="${encodeURIComponent(d.name)}" type="button">${escapeHtml(d.stem)}</button>`
+        ).join("");
+        wrap.querySelectorAll("[data-doc]").forEach((btn) => {
+          btn.onclick = () => {
+            _travelDoc = decodeURIComponent(btn.dataset.doc);
+            wrap.querySelectorAll(".travel-doc-btn").forEach((b) => b.classList.toggle("is-active", b === btn));
+            loadTravelDoc();
+            loadTravelOverview();
+          };
+        });
+      } catch (e) {
+        wrap.innerHTML = `<span class="travel-error">方案加载失败</span>`;
       }
     }
 

@@ -102,6 +102,7 @@
         </div>
         <button class="tab-btn" id="libraryBtn" type="button">阅读库</button>
         <button class="tab-btn" id="readArchiveBtn" type="button">已读库</button>
+        <button class="tab-btn" id="convArchiveBtn" type="button">对话归档</button>
         <button class="tab-btn" id="delightTabBtn" type="button">惊喜</button>
         <div class="filter-dropdown" id="mineDropdown">
           <button class="tab-btn filter-dropdown-trigger" id="mineDropdownTrigger" type="button" aria-haspopup="true" aria-expanded="false">我的 ▾</button>
@@ -1172,6 +1173,7 @@
           <div class="travel-loading" id="travelOverviewLoading">加载中...</div>
         </div>
         <div class="travel-view" id="travelDocView" hidden>
+          <div class="travel-doc-switch" id="travelDocSwitch" role="group" aria-label="预算方案切换"></div>
           <div class="travel-doc-content" id="travelDocContent"></div>
           <div class="travel-loading" id="travelDocLoading">加载中...</div>
         </div>
@@ -1384,6 +1386,7 @@
             <button class="page-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>
             <button class="page-subtab-btn" data-subtab="queue" type="button">📋 待看队列</button>
             <button class="page-subtab-btn" data-subtab="all" type="button">📚 全部题目</button>
+            <button class="page-subtab-btn" data-subtab="reviews" type="button">📝 复盘</button>
             <button class="page-subtab-btn" data-subtab="rebuttals" type="button">❓ 反问话术</button>
             <button class="page-subtab-btn" data-subtab="stats" type="button">📊 学习统计</button>
           </div>
@@ -1440,6 +1443,19 @@
         <div class="library-more" id="readArchiveMore" hidden>
           <button class="small-btn" id="readArchiveMoreBtn" type="button">加载更多</button>
         </div>
+        </div>
+      </section>
+
+      <section class="conv-archive-page content-page" id="conversationArchivePage" aria-label="对话归档" hidden>
+        <div class="library-toolbar">
+          <div class="library-search">
+            <input type="search" id="convArchiveSearchInput" class="library-search-input" placeholder="搜索问题 / 作者 / 原文 / 分析…" aria-label="搜索对话归档" autocomplete="off">
+            <button type="button" id="convArchiveSearchClear" class="library-search-clear" hidden aria-label="清除搜索">✕</button>
+          </div>
+          <span class="library-count" id="convArchiveCount"></span>
+        </div>
+        <div class="page-body">
+          <div class="conv-archive-list" id="conversationArchiveList" aria-label="对话归档列表"></div>
         </div>
       </section>
 

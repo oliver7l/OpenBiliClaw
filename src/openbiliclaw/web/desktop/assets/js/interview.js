@@ -12,6 +12,7 @@
     queue: null,
     all: null,
     ammo: null,
+    reviews: null,
   };
 
   // ── 工具函数 ──────────────────────────────────────────────
@@ -90,6 +91,9 @@
         break;
       case "all":
         renderAll(area);
+        break;
+      case "reviews":
+        renderReviews(area);
         break;
       case "rebuttals":
         renderRebuttals(area);
@@ -487,6 +491,123 @@
     closeList(); closeTable();
     if (inCode) out.push("</code></pre>");
     return out.join("\n");
+  }
+
+  // ── 复盘（interview_reviews 记录）─────────────────────────
+
+  function renderReviews(area) {
+    if (cachedData.reviews) {
+      area.innerHTML = renderReviewsHtml(cachedData.reviews);
+      bindReviews(area);
+      return;
+    }
+    requestJson("/api/interview/reviews?limit=100")
+      .then((data) => {
+        cachedData.reviews = data || [];
+        area.innerHTML = renderReviewsHtml(cachedData.reviews);
+        bindReviews(area);
+      })
+      .catch((err) => {
+        console.error("加载复盘失败:", err);
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  const REVIEW_RESULT_LABELS = {
+    first_round_done: "一面完成", first: "一面完成", second: "二面完成",
+    pending: "待定", cancelled: "已取消", passed: "通过", rejected: "未通过",
+  };
+  const REVIEW_ROUND_LABELS = { first: "一面", second: "二面", hr: "HR面" };
+
+  function renderReviewsHtml(list) {
+    if (!list || list.length === 0) {
+      return '<div class="interview-empty">暂无复盘记录（面试后把题目和回答整理进来）</div>';
+    }
+    return `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">📝 共 ${list.length} 场面试复盘</div>
+      <div class="interview-company-grid">
+        ${list.map(renderReviewCard).join("")}
+      </div>
+    `;
+  }
+
+  function renderReviewCard(r) {
+    const resultLabel = REVIEW_RESULT_LABELS[r.result] || r.result || "待定";
+    const roundLabel = REVIEW_ROUND_LABELS[r.round] || r.round || "";
+    return `
+      <div class="interview-company-card interview-review-card" data-id="${r.id}" style="cursor:pointer;">
+        <div class="interview-company-header">
+          <div class="interview-company-name">${escapeHtml(r.company)}</div>
+          <div class="interview-company-status status-done">${escapeHtml(resultLabel)}</div>
+        </div>
+        <div class="interview-company-position">${escapeHtml(r.position || "未知岗位")}${roundLabel ? " · " + escapeHtml(roundLabel) : ""}</div>
+        <div class="interview-company-meta">
+          <span>📅 ${escapeHtml(r.interview_date || "")}</span>
+          ${r.duration_min ? `<span>⏱ ${r.duration_min} 分钟</span>` : ""}
+          ${r.emotion_level ? `<span>💬 ${escapeHtml(r.emotion_level)}</span>` : ""}
+        </div>
+        ${r.tags ? `<div class="interview-company-summary" style="margin-top:6px;">🏷 ${escapeHtml(r.tags)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function bindReviews(area) {
+    area.querySelectorAll(".interview-review-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        loadReviewDetail(area, card.dataset.id);
+      });
+    });
+  }
+
+  function loadReviewDetail(area, id) {
+    requestJson("/api/interview/reviews/" + id)
+      .then((r) => {
+        area.innerHTML = renderReviewDetailHtml(r);
+        const back = area.querySelector("#reviewBack");
+        if (back) {
+          back.addEventListener("click", () => {
+            cachedData.reviews = null;
+            renderReviews(area);
+          });
+        }
+      })
+      .catch((err) => {
+        area.innerHTML = '<div class="interview-empty">加载失败：' + escapeHtml(err.message) + "</div>";
+      });
+  }
+
+  function renderReviewDetailHtml(r) {
+    const section = (title, lines, tag) => {
+      const items = (lines || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      if (items.length === 0) return "";
+      return `
+        <div class="interview-company-section">
+          <div class="interview-company-section-title">${title}</div>
+          ${tag === "ul"
+            ? `<ul class="interview-company-list">${items.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
+            : items.map((s) => `<div class="interview-company-summary" style="margin-bottom:4px;">${escapeHtml(s)}</div>`).join("")}
+        </div>
+      `;
+    };
+    return `
+      <div style="margin-bottom:8px;"><button class="pill-btn" id="reviewBack" type="button">← 返回复盘列表</button></div>
+      <div class="interview-company-card">
+        <div class="interview-company-header">
+          <div class="interview-company-name">${escapeHtml(r.company)} · ${escapeHtml(r.position || "未知岗位")}</div>
+          <div class="interview-company-status status-done">${escapeHtml(REVIEW_RESULT_LABELS[r.result] || r.result || "")}</div>
+        </div>
+        <div class="interview-company-meta">
+          <span>📅 ${escapeHtml(r.interview_date || "")}</span>
+          <span>⏱ ${r.duration_min || 0} 分钟</span>
+        </div>
+        ${section("❓ 关键问题", r.key_questions, "ul")}
+        ${section("🤖 AI 评价", r.ai_evaluation)}
+        ${section("✍️ 自评", r.self_assessment)}
+        ${section("🔧 技术复盘", r.technical_review)}
+        ${section("📌 下一步行动", r.action_items, "ul")}
+        ${section("📝 备注", r.notes)}
+      </div>
+    `;
   }
 
   // ── 今日待读 ──────────────────────────────────────────────

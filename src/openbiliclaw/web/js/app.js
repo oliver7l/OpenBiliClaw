@@ -14,6 +14,7 @@ import { initWatchLaterView, initFavoritesView } from "./views/saved.js";
 import { initPreferencesView } from "./views/preferences.js";
 import { initTravelView } from "./views/travel.js";
 import { initInterviewView } from "./views/interview.js";
+import { initConversationView } from "./views/conversation.js";
 
 // ── DOM refs ─────────────────────────────────────────────────
 const $app = document.getElementById("app");
@@ -88,6 +89,7 @@ const TABS = [
   { id: "chat", icon: "\u{1F4AC}", label: "\u5BF9\u8BDD" },
   { id: "travel", icon: "\u2708\uFE0F", label: "\u65C5\u884C" },
   { id: "interview", icon: "\uD83C\uDFAF", label: "\u9762\u8BD5" },
+  { id: "conversation", icon: "\u{1F4AC}", label: "\u5BF9\u8BDD\u5F52\u6863" },
 ];
 
 function renderTabBar() {
@@ -135,6 +137,7 @@ function initActiveView() {
   else if (id === "chat") initChatView(views.chat);
   else if (id === "travel") initTravelView(views.travel);
   else if (id === "interview") initInterviewView(views.interview);
+  else if (id === "conversation") initConversationView(views.conversation);
 }
 
 /**

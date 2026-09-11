@@ -739,3 +739,19 @@ export async function createInterviewResume(data, timeoutMs = DEFAULT_READ_TIMEO
     timeoutMs,
   });
 }
+
+// ── 对话归档（用户与 AI 的对话内容）────────────────────────────
+export async function fetchConversationArchive({ limit = 50, offset = 0, search = "", sortBy = "seq", sortOrder = "ASC" } = {}) {
+  const params = [
+    `limit=${limit}`,
+    `offset=${offset}`,
+    `sort_by=${encodeURIComponent(sortBy)}`,
+    `sort_order=${encodeURIComponent(sortOrder)}`,
+  ];
+  if (search) params.push(`search=${encodeURIComponent(search)}`);
+  return requestJson(`/api/conversation-archive?${params.join("&")}`, { timeoutMs: DEFAULT_READ_TIMEOUT_MS });
+}
+
+export async function fetchConversationArchiveStats(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/conversation-archive/stats", { timeoutMs });
+}

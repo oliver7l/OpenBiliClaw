@@ -3670,6 +3670,10 @@ body.card-lg { --card-min: 340px; }
 .travel-subtab.active { color: var(--accent, #3b82f6); border-bottom-color: var(--accent, #3b82f6); font-weight: 600; }
 .travel-view { position: relative; }
 .travel-loading { text-align: center; padding: 40px; color: var(--text-secondary, #6b7280); }
+.travel-doc-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.travel-doc-btn { padding: 5px 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 999px; background: var(--surface, #fff); color: var(--text-secondary, #6b7280); font-size: 13px; cursor: pointer; transition: all 120ms ease-out; white-space: nowrap; }
+.travel-doc-btn:hover { border-color: var(--text-secondary, #999); color: var(--text-primary, #111); }
+.travel-doc-btn.is-active { border-color: var(--accent, #3b82f6); color: var(--accent, #3b82f6); background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent); font-weight: 600; }
 .travel-error { text-align: center; padding: 20px; color: #ef4444; }
 .travel-alerts { margin-bottom: 16px; }
 .travel-alert { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; color: #92400e; }
@@ -4236,3 +4240,47 @@ body.card-lg { --card-min: 340px; }
   color: var(--accent);
   background: rgba(155,187,244,0.05);
 }
+
+/* ── 对话归档（用户与 AI 对话内容）─────────────────────────── */
+.conv-archive-page .library-toolbar { margin-bottom: 12px; }
+.conv-archive-list { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+.conv-card {
+  border: 1px solid var(--border, #ececec); border-radius: 12px; background: var(--card-bg, #fff);
+  padding: 12px 14px;
+}
+.conv-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.conv-seq {
+  flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px;
+  background: #f3f0fb; color: #7c5cd6; font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.conv-kind { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #eef2ff; color: #5b54d6; }
+.conv-source { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #f1f5f9; color: #64748b; }
+.conv-author-line { font-size: 12px; color: var(--text-secondary, #6b6b6b); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.conv-author { color: var(--text-main, #1c1c1e); font-weight: 600; }
+.conv-meta { color: var(--text-muted, #a8a8a8); }
+.conv-title { font-size: 15px; font-weight: 600; color: var(--text-main, #1c1c1e); margin: 8px 0 4px; line-height: 1.5; }
+.conv-question {
+  font-size: 12.5px; color: var(--text-secondary, #6b6b6b); background: #faf9fb;
+  border-left: 2px solid #e9e2fb; padding: 7px 10px; border-radius: 6px; margin: 8px 0; line-height: 1.55; word-break: break-word;
+}
+.conv-link { display: inline-block; font-size: 12px; color: #7c5cd6; text-decoration: none; margin-bottom: 6px; }
+.conv-link:hover { text-decoration: underline; }
+.conv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.conv-tag { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #f5f5f5; color: #6b6b6b; }
+.conv-detail { margin-top: 8px; border: 1px solid #f0f0f0; border-radius: 8px; }
+.conv-detail > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text-secondary, #6b6b6b);
+  padding: 8px 10px; background: #fafafa; border-radius: 8px 8px 0 0; list-style: none;
+}
+.conv-detail > summary::-webkit-details-marker { display: none; }
+.conv-detail[open] > summary { border-bottom: 1px solid #f0f0f0; }
+.conv-markdown { padding: 10px 12px; font-size: 13px; line-height: 1.7; color: #2b2b2b; overflow-x: auto; }
+.conv-analysis { background: #fcfbff; }
+.conv-markdown :where(h1,h2,h3) { font-size: 15px; margin: 10px 0 6px; }
+.conv-markdown :where(p) { margin: 6px 0; }
+.conv-markdown :where(blockquote) { margin: 8px 0; padding: 4px 10px; border-left: 3px solid #e5e0f5; color: #555; background: #faf9ff; }
+.conv-markdown :where(ul,ol) { padding-left: 20px; margin: 6px 0; }
+.conv-markdown :where(code) { background: #f3f3f3; padding: 1px 4px; border-radius: 4px; font-size: 12px; }
+.conv-markdown :where(pre) { background: #f6f6f6; padding: 10px; border-radius: 8px; overflow-x: auto; }
+.conv-markdown :where(a) { color: #7c5cd6; }
