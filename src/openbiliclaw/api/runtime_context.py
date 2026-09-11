@@ -26,6 +26,7 @@ import asyncio
 import logging
 import os
 import threading
+from pathlib import Path
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
@@ -43,6 +44,27 @@ if TYPE_CHECKING:
     from openbiliclaw.storage.database import Database
 
 logger = logging.getLogger(__name__)
+
+
+def _read_project_env(key: str) -> str:
+    """从项目根 .env 读取单个 KEY=value（小写/大写），未命中返回空串。
+
+    仅用于辅助读本地敏感配置（如豆瓣 cookie），.env 不入库。
+    """
+    try:
+        env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+        if not env_path.exists():
+            return ""
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            k, _, v = stripped.partition("=")
+            if k.strip() == key.strip():
+                return v.strip().strip('"').strip("'")
+    except OSError:
+        logger.warning("读取项目 .env 失败（key=%s）", key)
+    return ""
 
 
 def _pool_source_shares_from_config(config: Any) -> dict[str, int]:
@@ -638,8 +660,10 @@ class RuntimeContext:
             from openbiliclaw.sources.douban_feed_adapter import DoubanFeedAdapter
 
             _cookie_env = getattr(douban_cfg, "cookie_env", "") or "OPENBILICLAW_DOUBAN_COOKIE"
+            # cookie 优先取环境变量；未设时回退读项目根 .env（gitignore，不入库）。
+            douban_cookie = os.environ.get(_cookie_env, "") or _read_project_env(_cookie_env)
             new_discovery_engine.register_adapter(
-                DoubanFeedAdapter(cookie=os.environ.get(_cookie_env, ""))
+                DoubanFeedAdapter(cookie=douban_cookie)
             )
 
         # Register X (Twitter) adapter — server-side cookie replay, like

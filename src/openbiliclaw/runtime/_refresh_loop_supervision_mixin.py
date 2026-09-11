@@ -126,6 +126,9 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
             ),
             self._spawn_loop("wechat_polling", "公众号轮询", 7200, self._loop_wechat_polling()),
             self._spawn_loop(
+                "douban_feed_polling", "豆瓣feed轮询", 7200, self._loop_douban_feed_polling()
+            ),
+            self._spawn_loop(
                 "proactive_push",
                 "主动推送",
                 self.proactive_push_interval_seconds,

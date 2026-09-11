@@ -111,6 +111,27 @@ class PlatformLoopsMixin(RefreshControllerAttrs):
                     )
             await asyncio.sleep(3600)
 
+    async def _loop_douban_feed_polling(self) -> None:
+        """Douban feed polling — fetch douban statuses/articles into reading library.
+
+        ``diary``（用户动态）由 ``DoubanFeedAdapter`` 直连豆瓣 rexxar JSON 接口。
+        Runs on a fixed 2-hour interval.
+        """
+        while True:
+            subscriptions = getattr(self.scheduler_config, "douban_feed_subscriptions", [])
+            if subscriptions and self.rss_adapter_registry is not None:
+                from openbiliclaw.sources.douban_feed_tasks import (
+                    run_douban_feed_polling,
+                )
+
+                with suppress(Exception):
+                    await run_douban_feed_polling(
+                        self.rss_adapter_registry,
+                        cast("Any", self.database),
+                        subscriptions,
+                    )
+            await asyncio.sleep(7200)
+
     async def _loop_xiaoyuzhou_polling(self) -> None:
         """Xiaoyuzhou (小宇宙) podcast polling — fetch episodes from
         configured podcast RSS feeds and inject into recommendation pool.

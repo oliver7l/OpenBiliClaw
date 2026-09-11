@@ -328,6 +328,7 @@ class RefreshControllerAttrs:
     _loop_douyin_producer: Any
     _loop_image_cache_cleanup: Any
     _loop_rss_polling: Any
+    _loop_douban_feed_polling: Any
     _loop_wechat_polling: Any
     _loop_x_producer: Any
     _loop_xhs_producer: Any
