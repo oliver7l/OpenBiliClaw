@@ -16,7 +16,7 @@
 
 | 库 | 大小 | 角色 | 关键表 | 维护脚本 |
 |---|---|---|---|---|
-| 面试资料总库.db | 119.4MB | L0 原始库（全量**非书籍/非方向知识库/非幻灯片笔记/非工作资料**文档抽取原文 + 整篇 FTS，**书籍→书籍库.db、方向知识库→方向知识库.db、幻灯片笔记→幻灯片原始库.db、工作资料→下面 10 个主题库均已迁出**） | doc(297) / doc_chunk(4572) / doc_fts / doc_vector(4572，已修复) | kb_ingest.py |
+| 面试资料总库.db | 119.5MB | L0 原始库（全量**非书籍/非方向知识库/非幻灯片笔记/非工作资料**文档抽取原文 + 整篇 FTS，**书籍→书籍库.db、方向知识库→方向知识库.db、幻灯片笔记→幻灯片原始库.db、工作资料→下面 10 个主题库均已迁出**；2026-09-10 新增字节面试弹药：PDF(童力-百度-数据分析)+飞书链接MD 入 岗位弹药） | doc(299) / doc_chunk(4577) / doc_fts / doc_vector(4577，已修复) | kb_ingest.py |
 | 书籍库.db | 186.8MB | **书籍专库**（category∈书籍/技术书籍，已从总库拆分独立；2026-09-10 另入库 2 本新书：黄佳《大模型应用开发 动手做AI Agent》PDF·449页27万字符、阿耐《大江大河四部曲》EPUB·199万字符） | doc(89) / doc_chunk(9761) / doc_content(82) / doc_fts / doc_vector(9736) | kb_split_books.py / kb_ingest_books_two.py |
 | 方向知识库.db | 26.5MB | **方向知识库专库**（category=方向知识库，已从总库拆分独立） | doc(75) / doc_chunk(2287) / doc_content(73) / doc_fts / doc_vector(2287) | kb_split_direction.py |
 | 幻灯片原始库.db | 27.9MB | **幻灯片笔记源库**（category=幻灯片笔记·文档级原始，已从总库拆分独立） | doc(410) / doc_chunk(1148) / doc_content(234) / doc_fts / doc_vector(1144) | kb_split_slides_original.py |
@@ -24,7 +24,7 @@
 | 算法面试库.db | 25.3MB | **工作资料主题库②**：候选人面试刷题/算法书（leetcode-obsidian 280 + fucking-algorithm 70 + 简历/PDF，355 篇） | doc(355) / doc_chunk(2556) / doc_fts / doc_vector(2556) | kb_split_work_themes.py |
 | 内部资料库.db | 75.2MB | **工作资料主题库③**：2020年09月内部资料（会议/项目文档，255 篇，chunk 占比最大） | doc(255) / doc_chunk(8494) / doc_fts / doc_vector(8494) | kb_split_work_themes.py |
 | 技术分享库.db | 17.0MB | **工作资料主题库④**：2020年08月技术分享（192 篇） | doc(192) / doc_chunk(997) / doc_fts / doc_vector(997) | kb_split_work_themes.py |
-| 看点库.db | 13.4MB | **工作资料主题库⑤**：腾讯看点（图集/搜索，137 篇） | doc(137) / doc_chunk(851) / doc_fts / doc_vector(851) | kb_split_work_themes.py |
+| 看点库.db | 13.5MB | **工作资料主题库⑤**：腾讯看点（图集/搜索 + 小说深度调研，138 篇） | doc(138) / doc_chunk(857) / doc_fts / doc_vector(857) | kb_split_work_themes.py |
 | 十级答辩库.db | 11.8MB | **工作资料主题库⑥**：10 级晋升答辩材料（144 篇） | doc(144) / doc_chunk(657) / doc_fts / doc_vector(657) | kb_split_work_themes.py |
 | 图神经网络库.db | 5.2MB | **工作资料主题库⑦**：图神经网络专题（9 篇） | doc(9) / doc_chunk(140) / doc_fts / doc_vector(140) | kb_split_work_themes.py |
 | UGC推荐库.db | 5.3MB | **工作资料主题库⑧**：UGC 推荐专题（14 篇） | doc(14) / doc_chunk(131) / doc_fts / doc_vector(131) | kb_split_work_themes.py |

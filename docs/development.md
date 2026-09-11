@@ -98,7 +98,10 @@ openbiliclaw config-show
 | `synthesis/` | 跨模块迭代合成 | 5 文件 | ✅ 新模块，ruff 未过（K9） |
 | `chat_analysis/` | 聊天记录分析 | 5 文件（独立数据库） | ✅ |
 | `health/` | 健康管理 | 4 文件 | ✅ |
-| `saved_sync/` | 已读库 / 收藏同步 | 9 文件 + `adapters/` | ✅ |
+| `cycle/` | 周期记录（`cycle_records` 表，独立 `cycle.db`） | 3 文件 | ✅ 新模块（**未提交**） |
+| `saved_sync/` | 已读库 / 收藏同步 | 6 文件 | ✅（`adapters/` 死代码已于 2026-09-11 移除，见 §5 注） |
+| `ed2k/` | ed2k / Kad 下载管理（经 `mule` CLI 驱动 MLDonkey） | 2 文件（`service.py` / `routes.py`） | ✅ 新模块（**未提交**） |
+| `media/` | 本地媒体浏览（视频 + 图片） | 3 文件（`service.py` / `store.py` / `routes.py`） | ✅ |
 | `eval/` | 离线评估 | 24 文件 | ✅ |
 | `integrations/` | OpenClaw 对外集成 | 8 文件 | ✅ 依赖 `api`（轻倒挂） |
 | `bilibili/` / `youtube/` / `agent/` / `web/` 等 | 站点接入 / 编排 / 前端静态资源 | — | ✅ |
@@ -114,10 +117,17 @@ openbiliclaw config-show
 ## 5. 数据与存储
 
 - **主库**：`data/openbiliclaw.db`（events / diary / saved / notes / soul 画像等）
-- **推荐流子库**：`data/pool.db`（`content_cache` / `recommendations` / `user_feedback` / `xhs_observed_urls` 4 表；采集器与 `Database` 连接时自动 `ATTACH pool.db`）
-- **迁移**：`migrations/`（未提交）、`scripts/migrate_pool_db.py`（历史池子库迁移）
+- **子库（db sharding，锁域隔离）**：
+  - `data/pool.db` — 推荐流（`content_cache` / `recommendations` / `user_feedback` / `xhs_observed_urls`）
+  - `data/health.db` — 健康档案（15 张 `health_*` 表；`[storage] health_db_path` 配置，默认 `data/health.db`）
+  - `data/cycle.db` — 周期记录（`cycle_records`，与 health.db 同目录）
+  - `data/content.db` / `data/knowledge.db` / `data/knowledge_audit.db` / `data/events.db` / `data/discovery.db` / `data/llm.db` 等（P2–P9 拆分，详见 [database-sharding-plan.md](database-sharding-plan.md)）
+- **迁移**：`migrations/`（未提交）、`scripts/migrate_*.py`（历史子库迁移，均为一次性脚本）
 - **备份 / 修复**：启动前完整性检查 + 周期冷备到 `data/backups/`；`openbiliclaw db-repair` 手动修复
 - ⚠️ 仓库根目录存在游离 `openbiliclaw.db`（0 字节）与 `pool.db`，疑似本地运行残留，勿提交（K11）
+- ⚠️ `data/` 已整体 gitignore（`.gitignore:36`）。历史上破坏性操作会产生大量 `data/_archive/` 与 `*.bak-pre-*` 冷备，**不会自动清理**，需人工定期归档。
+  - **2026-09-11 已清理 23G**（项目 52G → 29G，`data/` 34G → 9.9G），保留唯一完整单体快照作回滚点 `data/backups/rollback-20260909/`。清单见 [cleanup-manifest-2026-09-11.md](cleanup-manifest-2026-09-11.md)。**后续建议**：迁移脚本跑完后顺手清理其前置备份，勿让 `_archive` 再累积。
+- **`saved_sync/adapters/` 与 `extension_broker.py` 已移除**：`adapters/`（`bilibili.py` / `extension.py` / `__init__.py`）全仓零引用、`NativeSaveRouter()` 以无参方式装配、无测试覆盖；`extension_broker.py` 零引用**且调用了 8 个不存在的 `Database` 方法**（一用即 `AttributeError`）。二者均为重构遗留死代码，已分别于 2026-09-11 移入废纸篓。`saved_sync/` 现为 5 文件
 
 ## 6. 配置体系
 
@@ -129,20 +139,22 @@ openbiliclaw config-show
 ## 7. API 结构现状（重要）
 
 - 全部路由在 `src/openbiliclaw/api/`；`create_app()`（`app.py`）是唯一组装点
-- **实际生效**：`app.py` 内联 ~297 条路由 + 已接线模块（`notes_routes` / `saved_sync_routes` / `knowledge_forge_routes` / `recommendation_routes` / `auth` / `self_evolution.api` / `synthesis.api`）
-- **孤儿死代码**：`diary_routes.py`（87 路由）/ `health_routes.py`（68）/ `source_routes.py`（36）等 13 个文件（共 ~1 万行、319 条路由定义）**从未被注册**，与 app.py 内联路由重复（K3）
-- **侧信道注册**：`cli.py::_run_api_server` 在 `create_app()` 之后手动 `register_chat_analysis_routes(...)`（K3）
-- 新功能约定：应新增 `api/*_routes.py` 并在 `create_app` 末尾调用 `register_*_routes(app, ctx)`，**不要继续往 app.py 里加内联路由**（当前 v0.3.21x 的 Knowledge Forge 功能仍全部内联进 app.py）
+- **路由注册集中在 `api/_route_registry.py::register_all_routes()`**：`app.py` 只保留少量仍内联的存量路由，绝大多数已接线模块都在注册集中区声明
+- **K3 接线状态（2026-09-11 复核）**：`article_routes` / `diary_routes` / `health_routes` / `knowledge_routes` / `library_routes` / `reading_routes` + `source_routes` / `subscription_routes` / `chat_probe_routes` / `chat_recommend_routes` / `config_routes` / `feedback_topics_routes` / `knowledge_forge_routes` / `travel` / `interview*` / `media` / `ed2k` 共 **20+ 个模块均已接入注册**（此前"13 个文件从未被注册"的描述已过时）
+- **注册失败可见性**：单个模块注册失败不阻塞启动，但会被 `_RouteRegistrationFailures` 收集并在注册末尾以聚合 ERROR 日志列出。**不要恢复成静默 `logger.exception` 吞错**——`health_routes` 曾因 `CycleStore` 未 import 而整模块注册失败，55 条路由长期缺失且无人察觉（2026-09-11 已修复）
+- **健康 API 单一来源**：`/api/health/*` 只在 `api/health_routes.py` 定义（68 条路由 / 36 条路径）。`app.py` 曾内联 13 条只读桩作为兜底且读的是主库空壳表，已于 2026-09-11 删除。注意区分 `GET /api/health`（app.py 内联的 embedding readiness 探针，与健康档案无关）
+- 新功能约定：应新增 `api/*_routes.py` 并在 `_route_registry.py` 的 `register_all_routes()` 中注册，**不要继续往 app.py 里加内联路由**
 
-## 8. 测试基线（2026-09-08 实测）
+## 8. 测试基线
 
 ```text
-pytest：3359 passed / 171 failed / 32 skipped / 20 errors（含收集错误）
+（2026-09-08 实测）pytest：3359 passed / 171 failed / 32 skipped / 20 errors（含收集错误）
 ```
 
 - 收集错误：~~`tests/test_llm_prompts.py`（stub 丢失私有名）等 20 个~~ **已修复（2026-09-08）**：`llm/prompts.py` stub 显式 re-export 5 个私有名后，收集 3,675 用例 **0 错误**
 - 失败集中：llm registry/routing、notes、source_recipe、refresh_runtime、openclaw_adapter、profile_consolidator、search_strategy 等，多为抽取（K1）与近期功能未同步测试所致
-- **任何改动合入前请先确认失败面没有扩大**；建议以 `pytest -q --continue-on-collection-errors` 跑全量
+- **（2026-09-11 复核）**：`tests/api` 全量跑存在 **3 例偶发失败**，集中在 config 相关用例；单独跑 `tests/api/test_api_config_guards.py`（7 passed）与 `test_api_config_transactional.py` 均通过，判定为**多进程并发抢同一 SQLite 库**的资源竞争，与代码改动无关，非回归。
+- **任何改动合入前请先确认失败面没有扩大**；建议以 `pytest -q --continue-on-collection-errors` 跑全量，关键模块单独复跑以排除并发干扰
 - 测试组织：`tests/` 扁平 201 个文件 + `tests/js/`、`tests/fixtures/`；命名 `test_<behavior>.py`
 - 插件测试：`cd extension && npm test`（node --test）；`npm run typecheck`（tsc）
 
