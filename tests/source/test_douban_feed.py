@@ -191,6 +191,67 @@ def test_fetch_empty_xml(monkeypatch: pytest.MonkeyPatch) -> None:
     assert items == []
 
 
+def test_fetch_diary_since_filters_old(monkeypatch: pytest.MonkeyPatch) -> None:
+    """增量：since 之后的新条目才返回，旧条目被裁掉，且不继续翻页。"""
+    calls: list[str] = []
+    _TIMELINE = {
+        "count": 2,
+        "items": [
+            {
+                "status": {
+                    "text": "新动态 A",
+                    "create_time": "2026-09-10 10:00:00",
+                    "sharing_url": "https://www.douban.com/people/1/status/a/",
+                    "author": {"name": "T"},
+                }
+            },
+            {
+                "status": {
+                    "text": "旧动态 B",
+                    "create_time": "2026-09-01 09:00:00",
+                    "sharing_url": "https://www.douban.com/people/1/status/b/",
+                    "author": {"name": "T"},
+                }
+            },
+        ],
+    }
+
+    def fake_get(url, cookies=None, params=None, timeout=None, headers=None):  # type: ignore[no-untyped-def]
+        calls.append(str(params or {}))
+        resp = type("R", (), {})()
+        resp.json = lambda: _TIMELINE  # type: ignore[attr-defined]
+        resp.raise_for_status = lambda: None  # type: ignore[attr-defined]
+        return resp
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    adapter = DoubanFeedAdapter(cookie="ck=yU89")
+    items, newest = asyncio.run(
+        adapter.fetch_diary_since("1", "T", since="2026-09-05 00:00:00")
+    )
+    # 只有 create_time > since 的新条目，且只翻一页就停（returned from first page）
+    assert [it.title for it in items] == ["新动态 A"]
+    assert newest == "2026-09-10 10:00:00"
+    assert len(calls) == 1
+
+
+def test_watermarks_persist(tmp_path: pytest.TempPathFactory) -> None:
+    """任务层 watermarks 落盘/读回。"""
+    from openbiliclaw.sources import douban_feed_tasks as tasks
+
+    state_file = tmp_path / "douban_feed_state.json"
+
+    class _FakeDB:
+        _db_path = state_file
+
+    # 初始为空
+    assert tasks._load_watermarks(_FakeDB()) == {}
+    # 写入后读回
+    tasks._save_watermarks(_FakeDB(), {"diary:1": "2026-09-10 10:00:00"})
+    assert tasks._load_watermarks(_FakeDB()) == {"diary:1": "2026-09-10 10:00:00"}
+
+
 def _fake_db(monkeypatch: pytest.MonkeyPatch) -> object:
     """返回记录 upsert_article 调用的假 db。"""
 

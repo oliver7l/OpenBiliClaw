@@ -49,6 +49,11 @@ _MOBILE_UA = (
 _DIARY_PAGE_SLEEP = 1.0
 
 
+def _status_time(item: dict) -> str:
+    """取 rexxar status item 的 create_time 字符串（缺省空串）。"""
+    return ((item or {}).get("status") or {}).get("create_time", "") or ""
+
+
 def _feed_url(kind: str, uid: str = "", group_id: str = "") -> str:
     """按 feed_kind 拼豆瓣 RSS feed URL。
 
@@ -125,11 +130,14 @@ class DoubanFeedAdapter:
         resp.raise_for_status()
         return resp.text
 
-    def _fetch_diary_raw(self, uid: str) -> list[dict]:
+    def _fetch_diary_raw(self, uid: str, since: str = "") -> list[dict]:
         """直连豆瓣 rexxar 用户时间线接口，返回 status items 列表。
 
         带移动端 UA + 精确 Referer + 登录 cookie（缺 Referer 会返回
         ``invalid_request_1284`` 被反爬拦截）。分页拉取，页间温和限频。
+
+        时间线按新→旧排序；``since``（create_time 字符串）非空时，一旦翻到
+        不新于 ``since`` 的条目即停止，实现增量拉取。
         """
         start = 0
         per_page = 30
@@ -156,9 +164,16 @@ class DoubanFeedAdapter:
                 logger.warning("DoubanFeedAdapter: diary 响应非 JSON: %s", url)
                 break
             page_items = data.get("items") or []
-            collected.extend(page_items)
             total = int(data.get("count") or 0)
             start += per_page
+            # 增量截止：若设定了 since，裁掉不新于 since 的条目；一旦被裁即停止翻页。
+            if since and page_items:
+                kept = [it for it in page_items if _status_time(it) > since]
+                collected.extend(kept)
+                if len(kept) < len(page_items):
+                    break
+            else:
+                collected.extend(page_items)
             if not page_items or start >= total or len(collected) >= 90:
                 break
             time.sleep(_DIARY_PAGE_SLEEP)
@@ -200,19 +215,37 @@ class DoubanFeedAdapter:
             )
         return out
 
-    async def _fetch_diary(self, uid: str, feed_name: str, limit: int) -> list["DiscoveredContent"]:
-        """拉取并按 limit 截断用户动态。"""
+    async def _fetch_diary(
+        self, uid: str, feed_name: str, limit: int, since: str = ""
+    ) -> tuple[list["DiscoveredContent"], str]:
+        """增量拉取用户动态，返回 (items, 最新 create_time 水印)。
+
+        仅拉取 ``create_time > since`` 的新条目；``since`` 空串时拉全量（限 ``limit``）。
+        """
         try:
-            raw = await asyncio_run_in_executor(self._fetch_diary_raw, uid)
+            raw = await asyncio_run_in_executor(self._fetch_diary_raw, uid, since)
         except requests.RequestException as exc:
             logger.warning("DoubanFeedAdapter: diary 拉取失败 %s: %s", uid, exc)
-            return []
+            return [], ""
         except Exception as exc:  # noqa: BLE001
             logger.warning("DoubanFeedAdapter: diary 拉取异常 %s: %s", uid, exc)
-            return []
+            return [], ""
         items = self._diary_items(raw, uid, feed_name)
-        logger.info("DoubanFeedAdapter: diary %d items for user %s", len(items), uid)
-        return items[:limit]
+        restricted = items[:limit] if since else items
+        newest = _status_time(raw[0]) if raw else ""
+        logger.info(
+            "DoubanFeedAdapter: diary %d items for user %s (since=%s)",
+            len(restricted),
+            uid,
+            since or "full",
+        )
+        return restricted, newest
+
+    async def fetch_diary_since(
+        self, uid: str, feed_name: str, since: str = "", limit: int = 30
+    ) -> tuple[list["DiscoveredContent"], str]:
+        """增量抓取用户动态；返回 (items, 最新水印)。供任务层调用。"""
+        return await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit, since=since)
 
     async def fetch(
         self,
@@ -229,7 +262,8 @@ class DoubanFeedAdapter:
 
         # diary（用户广播）走 rexxar JSON 接口直连，不走 RSS。
         if feed_kind == "diary" and uid:
-            return await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit)
+            items, _ = await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit)
+            return items
 
         url = _feed_url(feed_kind, uid=uid, group_id=group_id)
 

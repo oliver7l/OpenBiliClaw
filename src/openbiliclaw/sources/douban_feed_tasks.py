@@ -13,8 +13,10 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import hashlib
+import json
 import logging
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,6 +28,39 @@ logger = logging.getLogger(__name__)
 _DB_WRITE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=1, thread_name_prefix="dbwrite-douban"
 )
+
+
+def _state_path(db: Database) -> Path | None:
+    """Derive watermark state file path from the database location."""
+    base = getattr(db, "_db_path", None)
+    if base is None:
+        return None
+    return Path(base).with_name("douban_feed_state.json")
+
+
+def _load_watermarks(db: Database) -> dict[str, str]:
+    """Load {feed_key: latest create_time} persisted incremental watermark."""
+    path = _state_path(db)
+    if not path or not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {k: str(v) for k, v in dict(data).items() if v}
+    except Exception:  # noqa: BLE001
+        logger.warning("豆瓣 feed 增量水印读取失败，重置: %s", path)
+        return {}
+
+
+def _save_watermarks(db: Database, watermarks: dict[str, str]) -> None:
+    path = _state_path(db)
+    if not path:
+        return
+    try:
+        path.write_text(
+            json.dumps(watermarks, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("豆瓣 feed 增量水印写入失败: %s", path)
 
 
 def _persist_items(
@@ -78,7 +113,10 @@ async def run_douban_feed_polling(
     """
     from openbiliclaw.sources.protocol import SourceRecipe
 
+    watermarks = _load_watermarks(db)
+    loop = asyncio.get_running_loop()
     total = 0
+
     for sub in subscriptions:
         feed_kind = sub.get("feed_kind", "review")
         feed_name = sub.get("name", "豆瓣feed")
@@ -98,16 +136,24 @@ async def run_douban_feed_polling(
             continue
 
         try:
-            items = await adapter.fetch(recipe, profile=None, limit=30)
+            # diary（动态）走增量：只拉自上次水印后的新动态。
+            if feed_kind == "diary" and uid and hasattr(adapter, "fetch_diary_since"):
+                key = f"diary:{uid}"
+                since = watermarks.get(key, "")
+                items, newest = await adapter.fetch_diary_since(uid, feed_name, since=since, limit=30)
+                if newest and newest > since:
+                    watermarks[key] = newest
+            else:
+                items = await adapter.fetch(recipe, profile=None, limit=30)
         except Exception:  # noqa: BLE001
             logger.exception("豆瓣 feed 抓取失败 %s", feed_name)
             continue
 
-        loop = asyncio.get_running_loop()
         total += await loop.run_in_executor(
             _DB_WRITE_EXECUTOR, _persist_items, db, items, feed_name
         )
 
+    _save_watermarks(db, watermarks)
     logger.info(
         "豆瓣 feed 轮询完成: %d 篇文章来自 %d 个源", total, len(subscriptions)
     )
