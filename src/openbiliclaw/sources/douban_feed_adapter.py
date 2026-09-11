@@ -189,15 +189,25 @@ class DoubanFeedAdapter:
             if not st:
                 continue
             text = (st.get("text") or "").strip()
-            if not text:
-                continue
+            activity = (st.get("activity") or "").strip()
+            card = st.get("card") or {}
+            card_title = (card.get("title") or "").strip()
+            # 正文为空时（转发/徽章/在读等卡片型动态），用「活动 + 卡片标题」组成可读内容。
+            if text:
+                body = text
+            else:
+                body = "、".join(p for p in (activity, card_title) if p)
+                if not body:
+                    continue
             link = (st.get("sharing_url") or "").strip()
+            if not link:
+                link = (card.get("url") or "").strip()
             if not link:
                 link = f"https://www.douban.com/people/{uid}/statuses"
             author = ((st.get("author") or {}) or {}).get("name") or "豆瓣"
             created = (st.get("create_time") or "").strip()
             # 标题取正文首行（动态通常为短句）
-            title = re.split(r"\s+", text)[:12]
+            title = re.split(r"\s+", body)[:12]
             title = " ".join(t for t in title if t)[:60] or "豆瓣动态"
             content_id = f"douban_diary-{abs(hash(link)) & 0xFFFFFFFF:08x}"
             out.append(
@@ -206,11 +216,11 @@ class DoubanFeedAdapter:
                     content_url=link,
                     source_platform="douban_feed",
                     title=title,
-                    description=text[:300],
+                    description=body[:300],
                     author_name=author,
                     discovered_at=created,
                     up_name=feed_name,
-                    content_text=text[:20000],
+                    content_text=body[:20000],
                 )
             )
         return out
