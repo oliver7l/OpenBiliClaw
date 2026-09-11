@@ -58,6 +58,48 @@ def insert_rows_into_cache(conn: sqlite3.Connection, rows: list[dict[str, Any]])
     return inserted
 
 
+def insert_rows_slim(
+    conn: sqlite3.Connection,
+    rows: list[dict[str, Any]],
+    *,
+    metric: str = "like_count",
+    with_body_text: bool = False,
+) -> int:
+    """Keyword 簇（xhs/youtube/zhihu）的精简 content_cache 入库。
+
+    三者仅差指标列（like_count vs view_count）与是否带 body_text，收口为一份。
+    行为与各平台原先的本地 ``_insert_rows`` 完全一致。
+    """
+    inserted = 0
+    for row in rows:
+        cols = [
+            "bvid", "title", "up_name", "author_name", "content_url",
+            "source_platform", "source", "content_type", "pool_status",
+            metric,
+        ]
+        vals: list[Any] = [
+            row["bvid"], row["title"], row["up_name"], row["author_name"],
+            row["content_url"], row["source_platform"], row["source"],
+            row["content_type"], row["pool_status"], row[metric],
+        ]
+        if with_body_text:
+            cols.append("body_text")
+            vals.append(row["body_text"])
+        cols.append("discovered_at")
+        vals.append(row["discovered_at"])
+        placeholders = ", ".join("?" * len(vals))
+        try:
+            cursor = conn.execute(
+                f"INSERT OR IGNORE INTO content_cache ({', '.join(cols)}) VALUES ({placeholders})",
+                vals,
+            )
+            if cursor.rowcount > 0:
+                inserted += 1
+        except sqlite3.IntegrityError:
+            continue
+    return inserted
+
+
 def run_once_for_platform(
     platform: str,
     *,

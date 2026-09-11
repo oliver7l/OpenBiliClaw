@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import sqlite3
 import subprocess
 import time
 from collections import Counter
@@ -462,40 +461,8 @@ def _parse_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
-    """Insert new rows, skip duplicates by bvid."""
-    inserted = 0
-    for row in rows:
-        try:
-            cursor = conn.execute(
-                """INSERT OR IGNORE INTO content_cache (
-                    bvid, title, up_name, author_name, content_url,
-                    source_platform, source, content_type, pool_status,
-                    view_count, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    row["bvid"],
-                    row["title"],
-                    row["up_name"],
-                    row["author_name"],
-                    row["content_url"],
-                    row["source_platform"],
-                    row["source"],
-                    row["content_type"],
-                    row["pool_status"],
-                    row["view_count"],
-                    row["discovered_at"],
-                ),
-            )
-            if cursor.rowcount > 0:
-                inserted += 1
-        except sqlite3.IntegrityError:
-            continue
-    return inserted
-
-
-# K10：单轮循环骨架收口 producer_base（fetch/parse 平台钩子注入）
-from openbiliclaw.runtime.producer_base import run_once_for_platform  # noqa: E402
+# K10：单轮循环骨架 + 精简入库收口 producer_base（fetch/parse 平台钩子注入）
+from openbiliclaw.runtime.producer_base import insert_rows_slim, run_once_for_platform  # noqa: E402
 
 
 def _run_once() -> dict[str, Any]:
@@ -503,7 +470,7 @@ def _run_once() -> dict[str, Any]:
         "youtube",
         fetch_feed=_fetch_feed,
         parse_items=_parse_items,
-        insert_rows=_insert_rows,
+        insert_rows=lambda conn, rows: insert_rows_slim(conn, rows, metric="view_count"),
     )
 
 

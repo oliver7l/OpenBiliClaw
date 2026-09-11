@@ -4,6 +4,17 @@
 
 ---
 
+## v0.3.241: K10 producer 去重 —— keyword 簇 _insert_rows 收口（2026-09-11）
+
+- `producer_base` 新增 `insert_rows_slim(metric, with_body_text)`，把 xhs/youtube/zhihu
+  三个仅差指标列（like_count / view_count）+ 是否带 body_text 的精简 content_cache
+  入库收口为一份；三平台 `_run_once` 改传 lambda，删除各自 30 行本地 `_insert_rows`。
+- 行为与原先完全一致（等价改写，不改变写列）；顺带清理 youtube/zhihu 未使用的
+  `import sqlite3`。
+- 验证：xhs/youtube/zhihu + feed_producers 测试 69 passed。
+
+---
+
 ## v0.3.240: 修复 save_config 丢失 sources.douban 的渲染缺口（2026-09-11）
 
 - **根因**：`_render_config_toml` 渲染 `[sources.*]` 时漏掉 `[sources.douban]`，导致任何 `save_config`（设置/自启动/媒体写盘等）都会把 douban 的 enabled/cookie_env 从磁盘删掉；运行内存中正常，但下次重启 load_config 读到无 douban → 豆瓣源静默失效。
