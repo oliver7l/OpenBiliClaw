@@ -83,6 +83,8 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 "topics-app.js",
                 "health-app.js",
                 "media-app.js",
+                "ed2k-app.js",
+                "douban-app.js",
             ):
                 src = f'src="/web/assets/js/{script}"'
                 html = html.replace(src, f'src="/web/assets/js/{script}?v={version}"')
@@ -135,6 +137,8 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "health",
             "interview",
             "media",
+            "ed2k",
+            "douban",
         }
 
         @app.get("/web/{page}", include_in_schema=False)
@@ -165,33 +169,8 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
     if _setup_dir.is_dir():
         app.mount("/setup", _StaticFiles(directory=_setup_dir, html=True), name="setup-wizard")
 
-    # ── Standalone Reading Library ───────────────────────────────
-    # Independent, bookmarkable reading-library page. Surfaces the `articles`
-    # table (the 阅读库) with full-text search + source/status/tag filters,
-    # decoupled from the mobile/desktop SPAs so it can be opened on its own.
-    _reading_dir = _web_dir / "reading-library"
-
-    @app.get("/library/{source}", include_in_schema=False)
-    def reading_library_platform(source: str) -> Response:
-        """Bookmarkable per-platform reading page. Reuses the same SPA,
-        injecting the active source so the client filters and labels by it.
-        """
-        import re
-
-        html_path = _reading_dir / "index.html"
-        try:
-            html = html_path.read_text(encoding="utf-8")
-        except Exception:
-            return Response("reading-library page not found", status_code=500)
-        safe = re.sub(r"[^a-zA-Z0-9_]", "", source or "")
-        injected = '<script>window.__SOURCE__="' + safe + '";</script>'
-        html = html.replace("</head>", injected + "</head>", 1)
-        return Response(html, media_type="text/html")
-
-    if _reading_dir.is_dir():
-        app.mount(
-            "/library", _StaticFiles(directory=_reading_dir, html=True), name="reading-library"
-        )
+    # ── Reading Library ─────────────────────────────────────────
+    # 独立 /library 页已并入桌面 /web/library，不再单独挂载。
 
     # ── Knowledge Forge 知识图谱可视化（设计 3.1）─────────────────
     # 独立可书签页面：实体-概念-文章关系网络（ECharts 关系图），
@@ -264,28 +243,11 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             name="clone-sites",
         )
 
-    # ── Standalone Health (健康档案) page ────────────────────────
-    # Personal/family medical records: encounters, conditions, medications,
-    # lab results, procedures, allergies, vitals, immunizations.
-    _health_dir = _web_dir / "health"
-    if _health_dir.is_dir():
-        app.mount("/health", _StaticFiles(directory=_health_dir, html=True), name="health-page")
+    # ── Health（健康档案）─────
+    # 独立 /health 页已并入桌面 /web/health，不再单独挂载。
 
-    # ── Standalone Topics (专题) page ────────────────────────────
-    # Bookmarkable /topics page listing user-curated topic collections with
-    # their continuously collected items; create + collect-now actions hit
-    # the /api/topics* endpoints above.
-    _topics_dir = _web_dir / "topics"
-    if _topics_dir.is_dir():
-        app.mount("/topics", _StaticFiles(directory=_topics_dir, html=True), name="topics-page")
-
-    # ── Standalone Media (媒体浏览) page ──────────────────────────
-    # Bookmarkable /media page browsing the user's configured local media
-    # roots ([media] roots) with an image lightbox + video player; data comes
-    # from the /api/media* endpoints.
-    _media_dir = _web_dir / "media"
-    if _media_dir.is_dir():
-        app.mount("/media", _StaticFiles(directory=_media_dir, html=True), name="media-page")
+    # ── Topics（专题）─────
+    # 独立 /topics 页已并入桌面 /web/topics，不再单独挂载。
 
     # ── Self-Evolution (自进化) API endpoints ─────────────────────
     # 已独立为 src/openbiliclaw/self_evolution/api.py，此处仅注册路由

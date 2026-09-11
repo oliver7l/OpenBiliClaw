@@ -1,6 +1,10 @@
 """路由注册集中区。
 
 所有 API 路由的注册都集中在这里，避免 app.py 中散落大量注册调用。
+
+设计约定：单个路由模块注册失败**不阻塞主 API 启动**（可选模块/插件式路由很常见），
+但**绝不静默**——失败会被收集，并在注册末尾以一条聚合 ERROR 日志列出。
+"静默吞错"曾导致 health_routes 的 55 条路由长期未注册却无人察觉，故此处强制可见。
 """
 
 from __future__ import annotations
@@ -9,6 +13,32 @@ import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class _RouteRegistrationFailures:
+    """收集路由模块注册失败项，供末尾聚合告警。"""
+
+    def __init__(self) -> None:
+        self._items: list[tuple[str, BaseException]] = []
+
+    def record(self, module_name: str, exc: BaseException) -> None:
+        self._items.append((module_name, exc))
+
+    def report(self) -> None:
+        if not self._items:
+            return
+        summary = ", ".join(f"{name}({type(exc).__name__}: {exc})" for name, exc in self._items)
+        logger.error(
+            "%d route module(s) FAILED to register — their endpoints are NOT available: %s",
+            len(self._items),
+            summary,
+        )
+        for name, exc in self._items:
+            logger.error("route module %r registration traceback:", name, exc_info=exc)
+
+    @property
+    def failures(self) -> list[tuple[str, BaseException]]:
+        return list(self._items)
 
 
 def register_all_routes(
@@ -32,7 +62,11 @@ def register_all_routes(
     request_runtime_replenishment: Any,
     build_recommendation_router: Any,
 ) -> None:
-    """Register all API routes on the FastAPI app."""
+    """Register all API routes on the FastAPI app.
+
+    注册失败的模块会被收集，在末尾以聚合 ERROR 日志告警（不再静默吞错）。
+    """
+    _failures = _RouteRegistrationFailures()
 
     # ── Notes CRUD routes ──────────────────────────────────────
     from openbiliclaw.api.notes_routes import register_notes_routes
@@ -91,8 +125,8 @@ def register_all_routes(
         try:
             _mod = __import__(f"openbiliclaw.api.{_mod_name}", fromlist=[_fn_name])
             getattr(_mod, _fn_name)(app, ctx)
-        except Exception:  # noqa: BLE001
-            logger.exception("%s registration failed", _fn_name)
+        except Exception as _exc:  # noqa: BLE001
+            _failures.record(_mod_name, _exc)
 
     # ── 有额外依赖参数的路由注册 ────────────────────────────────
     try:
@@ -104,8 +138,8 @@ def register_all_routes(
             fire_and_forget_tasks=fire_and_forget_tasks,
             serialize_recommendation_items=serialize_recommendation_items,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("chat_probe_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("chat_probe_routes", _exc)
 
     try:
         from openbiliclaw.api.chat_recommend_routes import register_chat_recommend_routes
@@ -115,8 +149,8 @@ def register_all_routes(
             ctx,
             serialize_recommendation_items=serialize_recommendation_items,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("chat_recommend_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("chat_recommend_routes", _exc)
 
     try:
         from openbiliclaw.api.config_routes import register_config_routes
@@ -127,8 +161,8 @@ def register_all_routes(
             config_save_lock=config_save_lock,
             init_active_now=init_active_now,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("config_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("config_routes", _exc)
 
     try:
         from openbiliclaw.api.feedback_topics_routes import (
@@ -142,8 +176,8 @@ def register_all_routes(
             record_exploration_buffer_event=record_exploration_buffer_event,
             recommendation_buffer_domain=recommendation_buffer_domain,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("feedback_topics_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("feedback_topics_routes", _exc)
 
     try:
         from openbiliclaw.api.source_routes import register_source_routes
@@ -158,8 +192,8 @@ def register_all_routes(
             snapshot_config_file=snapshot_config_file,
             restore_config_snapshot=restore_config_snapshot,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("source_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("source_routes", _exc)
 
     try:
         from openbiliclaw.api.subscription_routes import register_subscription_routes
@@ -169,8 +203,8 @@ def register_all_routes(
             ctx,
             config_save_lock=config_save_lock,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("subscription_routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("subscription_routes", _exc)
 
     # ── Knowledge Forge routes ─────────────────────────────────
     try:
@@ -179,8 +213,8 @@ def register_all_routes(
         )
 
         register_knowledge_forge_routes(app, ctx)
-    except Exception:  # noqa: BLE001
-        logger.exception("Knowledge Forge routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Knowledge Forge routes", _exc)
 
     # ── Recommendation feed routes (M1 extraction from this file) ──
     app.include_router(
@@ -210,8 +244,8 @@ def register_all_routes(
                 ),
             )
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("Travel routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Travel routes", _exc)
 
     # ── 求职面试备战 API ─────────────────────────────────────────
     try:
@@ -223,24 +257,24 @@ def register_all_routes(
                 root=str(getattr(_interview_cfg, "root", "") or "") or None,
             )
         )
-    except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
-        logger.exception("Interview routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Interview routes", _exc)
 
     # ── 面试复盘记录 API ─────────────────────────────────────────
     try:
         from openbiliclaw.interview.review_routes import build_review_router
 
         app.include_router(build_review_router())
-    except Exception:  # noqa: BLE001
-        logger.exception("Interview review routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Interview review routes", _exc)
 
     # ── 面试题阅读追踪 API ───────────────────────────────────────
     try:
         from openbiliclaw.api._interview_routes import register_interview_routes
 
         register_interview_routes(app, ctx)
-    except Exception:  # noqa: BLE001
-        logger.exception("Interview question tracker routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Interview question tracker routes", _exc)
 
     # ── 本地媒体浏览 API ──────────────────────────────────────────
     try:
@@ -252,5 +286,29 @@ def register_all_routes(
                 config_save_lock=config_save_lock,
             )
         )
-    except Exception:  # noqa: BLE001 — 可选模块导入失败不阻塞主 API
-        logger.exception("Media routes registration failed")
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Media routes", _exc)
+
+    # ── ed2k / Kad 下载管理 API ───────────────────────────────────
+    try:
+        from openbiliclaw.ed2k.routes import build_ed2k_router
+
+        app.include_router(build_ed2k_router(config=config))
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("ed2k routes", _exc)
+
+    # ── 豆瓣书影音 API ───────────────────────────────────────────
+    try:
+        from openbiliclaw.douban.routes import build_douban_router
+
+        app.include_router(
+            build_douban_router(
+                config=config,
+                llm_service=getattr(ctx, "llm_service", None),
+            )
+        )
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("douban routes", _exc)
+
+    # ── 聚合告警：注册失败的路由模块必须可见（不再静默吞错）──────────
+    _failures.report()
