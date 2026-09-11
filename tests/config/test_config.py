@@ -1101,6 +1101,19 @@ def test_save_config_round_trips_bilibili_source_enabled(tmp_path: Path) -> None
     assert loaded.sources.bilibili.enabled is False
 
 
+def test_save_config_round_trips_douban_source_enabled(tmp_path: Path) -> None:
+    # 回归：渲染器曾漏掉 [sources.douban]，导致 save_config 会把 douban 配置从磁盘删掉。
+    config_path = tmp_path / "config.toml"
+    config = Config()
+    config.sources.douban.enabled = True
+
+    save_config(config, config_path)
+    loaded = load_config(config_path)
+
+    assert loaded.sources.douban.enabled is True
+    assert loaded.sources.douban.cookie_env == "OPENBILICLAW_DOUBAN_COOKIE"
+
+
 def test_save_config_round_trips_pool_source_shares(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config = Config()

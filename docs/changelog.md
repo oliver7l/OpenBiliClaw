@@ -4,6 +4,14 @@
 
 ---
 
+## v0.3.240: 修复 save_config 丢失 sources.douban 的渲染缺口（2026-09-11）
+
+- **根因**：`_render_config_toml` 渲染 `[sources.*]` 时漏掉 `[sources.douban]`，导致任何 `save_config`（设置/自启动/媒体写盘等）都会把 douban 的 enabled/cookie_env 从磁盘删掉；运行内存中正常，但下次重启 load_config 读到无 douban → 豆瓣源静默失效。
+- **修复**：在 render 补 `[sources.douban]`（enabled + cookie_env）；save→reload round-trip 已验证保留 `enabled=true`。
+- **回归**：新增 `test_save_config_round_trips_douban_source_enabled`（140 passed）。
+
+---
+
 ## v0.3.239: 阶段 5 —— K9 ruff 全仓清零（416 → 0，2026-09-11）
 
 ### 自动修复（183 处，--fix）
