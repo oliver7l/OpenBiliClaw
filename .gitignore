@@ -124,3 +124,9 @@ transcript/
 求职知识库/03_岗位弹药库/定制简历/
 求职知识库/03_岗位弹药库/比亚迪-面试准备/
 求职知识库/03_岗位弹药库/深圳灵动-面试准备/
+
+# Cookie / 敏感信息
+data/cookies/
+data/*cookie*.json
+data/*cookies*.txt
+config.toml

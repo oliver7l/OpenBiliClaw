@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sqlite3
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -107,14 +108,10 @@ def main() -> None:
             limit = int(arg)
 
     db = sqlite3.connect(DB)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    _content_db = Path(__file__).resolve().parent.parent / "data" / "content.db"
     if _content_db.exists():
         db.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
 
     db.execute("PRAGMA busy_timeout=15000")
     sql = """SELECT id, url, source_type FROM articles
