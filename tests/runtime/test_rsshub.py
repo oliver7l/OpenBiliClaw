@@ -38,16 +38,17 @@ def test_ensure_rsshub_no_docker_returns_false(monkeypatch) -> None:  # type: ig
 
 
 def test_proxy_env_injected_when_reachable(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """host.docker.internal:7890 可达时注入 HTTP(S)/ALL_PROXY 到容器 env。"""
+    """宿主 127.0.0.1:7890 可达时注入指向 host.docker.internal 的代理 env。"""
     monkeypatch.setattr(
         rsshub,
         "can_connect",
-        lambda host, port, timeout: host == "host.docker.internal" and port == 7890,
+        lambda host, port, timeout: host == "127.0.0.1" and port == 7890,
     )
     env = rsshub._inject_proxy_env()
     assert env.get("HTTP_PROXY") == "http://host.docker.internal:7890"
     assert env.get("HTTPS_PROXY") == "http://host.docker.internal:7890"
     assert "ALL_PROXY" in env
+    assert env.get("NO_PROXY") == "127.0.0.1,localhost"
 
 
 def test_proxy_env_empty_when_unreachable(monkeypatch) -> None:  # type: ignore[no-untyped-def]

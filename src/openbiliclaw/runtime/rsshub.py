@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from openbiliclaw.docker_runtime import can_connect, resolve_optional_proxy_env
+from openbiliclaw.docker_runtime import can_connect
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,31 @@ def _docker_available() -> bool:
 
 
 def _inject_proxy_env() -> dict[str, str]:
-    """探测 host.docker.internal:7890 代理；可达则返回注入容器代理 env。"""
-    return resolve_optional_proxy_env(
-        {},
-        can_connect=can_connect,
-        proxy_host=PROXY_HOST,
-        proxy_port=PROXY_PORT,
-        timeout=1.0,
-    )
+    """探测宿主机代理并可注入容器。
+
+    宿主机代理监听在 ``127.0.0.1:7890``（Clash）；容器通过
+    ``host.docker.internal`` 别名访问宿主。因此：先在宿主机探测
+    ``127.0.0.1:7890`` 是否可达，可达则给容器注入指向
+    ``http://host.docker.internal:7890`` 的 HTTP/HTTPS/ALL_PROXY。
+    """
+    try:
+        reachable = can_connect("127.0.0.1", PROXY_PORT, 1.0)
+    except OSError:
+        reachable = False
+    if not reachable:
+        return {}
+    proxy_url = f"http://{PROXY_HOST}:{PROXY_PORT}"
+    return {
+        "HTTP_PROXY": proxy_url,
+        "HTTPS_PROXY": proxy_url,
+        "ALL_PROXY": proxy_url,
+        "http_proxy": proxy_url,
+        "https_proxy": proxy_url,
+        "all_proxy": proxy_url,
+        # 访问本地 RSSHub 自身不走代理；其余走代理。
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+    }
 
 
 def _start_container(port: int = PORT, image: str = IMAGE) -> bool:

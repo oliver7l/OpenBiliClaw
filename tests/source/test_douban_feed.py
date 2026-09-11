@@ -53,11 +53,11 @@ def test_feed_url_templates() -> None:
     assert _feed_url("comment", uid="60690917") == "https://douban.com/feed/people/60690917/"
     assert _feed_url("review") == "https://douban.com/feed/review/latest"
     assert _feed_url("group", group_id="beijing") == "https://www.douban.com/feed/group/beijing/discussion"
-    # diary 走本地自部署 RSSHub（默认），可显式给 rsshub_url
-    assert _feed_url("diary", uid="60690917") == "http://127.0.0.1:1200/douban/user/60690917/status"
+    # diary 走本地自部署 RSSHub（默认），路由为 /douban/people/:userid/status
+    assert _feed_url("diary", uid="60690917") == "http://127.0.0.1:1200/douban/people/60690917/status"
     assert (
         _feed_url("diary", uid="60690917", rsshub_url="http://192.168.1.5:1200/")
-        == "http://192.168.1.5:1200/douban/user/60690917/status"
+        == "http://192.168.1.5:1200/douban/people/60690917/status"
     )
     # 默认 review
     assert _feed_url("") == "https://douban.com/feed/review/latest"
@@ -146,7 +146,7 @@ def test_fetch_diary_uses_self_hosted_rsshub(monkeypatch: pytest.MonkeyPatch) ->
         cookie="ck=yU89", rsshub_url="http://127.0.0.1:1200/"
     )
     asyncio.run(adapter.fetch(_recipe(feed_kind="diary", uid="60690917"), limit=5))
-    assert captured["url"] == "http://127.0.0.1:1200/douban/user/60690917/status"
+    assert captured["url"] == "http://127.0.0.1:1200/douban/people/60690917/status"
 
 
 def test_fetch_empty_xml(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -54,7 +54,8 @@ def _feed_url(kind: str, uid: str = "", group_id: str = "", rsshub_url: str = ""
         return f"https://www.douban.com/feed/group/{group_id}/discussion"
     if kind == "diary" and uid:
         base = (rsshub_url or "").strip().rstrip("/") or "http://127.0.0.1:1200"
-        return f"{base}/douban/user/{uid}/status"
+        # RSSHub 豆瓣用户广播路由：/douban/people/:userid/status
+        return f"{base}/douban/people/{uid}/status"
     # 默认：全站最新评论
     return "https://douban.com/feed/review/latest"
 
