@@ -57,8 +57,9 @@ def _status_time(item: dict) -> str:
 def _feed_url(kind: str, uid: str = "", group_id: str = "") -> str:
     """按 feed_kind 拼豆瓣 RSS feed URL。
 
-    仅 ``comment`` / ``review`` / ``group`` 用 URL 驱动；``diary`` 走 rexxar
-    JSON 接口（见 :meth:`DoubanFeedAdapter._fetch_diary`），不在此拼 URL。
+    ``comment`` / ``review`` / ``group`` 用 RSS URL 驱动；``diary``（广播动态）
+    走 rexxar JSON 接口（见 :meth:`DoubanFeedAdapter._fetch_diary`），不在此拼 URL。
+    注：笔记(notes)端点 rexxar 1503 + 原生 RSS 会触发反爬，故不做。
     """
     kind = (kind or "review").strip().lower()
     if kind == "comment" and uid:
