@@ -158,10 +158,11 @@ def test_put_config_returns_500_when_rollback_restore_fails(
         raise OSError("restore denied")
 
     monkeypatch.setattr(RuntimeContext, "rebuild_from_config", fail_rebuild)
+    # 注意：回滚用的是 config_routes 自己的模块级 _restore_config_snapshot
+    # （config 路由已从 app.py 提取），patch `openbiliclaw.api.app.*` 不起作用。
     monkeypatch.setattr(
-        "openbiliclaw.api.app._restore_config_snapshot",
+        "openbiliclaw.api.config_routes._restore_config_snapshot",
         fail_restore,
-        raising=False,
     )
 
     response = client.put("/api/config", json={"llm": {"openai": {"model": "gpt-4.1-mini"}}})

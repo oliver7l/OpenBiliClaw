@@ -1,9 +1,10 @@
-"""Travel budget API routes — flight prices and budget document.
+"""Travel budget API routes — flight prices, budget document, and itinerary.
 
 Endpoints:
-- GET /api/travel/flights  — lowest tax-inclusive price per monitored route
-- GET /api/travel/doc      — raw budget markdown (for in-app rendering)
-- GET /api/travel/overview — structured summary (plans, totals, per-person)
+- GET /api/travel/flights    — lowest tax-inclusive price per monitored route
+- GET /api/travel/doc        — raw budget markdown (for in-app rendering)
+- GET /api/travel/overview   — structured summary (plans, totals, per-person)
+- GET /api/travel/itinerary  — trip itinerary, members, and checklist from travel.db
 
 The data directory is configured via ``[travel] data_path`` in config.toml.
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -226,5 +228,59 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
             "plans": plans,
             "doc_updated_at": path.stat().st_mtime,
         }
+
+    @router.get("/itinerary")
+    def get_itinerary() -> dict[str, Any]:
+        """Return trip itinerary, members, and checklist from travel.db."""
+        db_path = Path("data/travel.db")
+        if not db_path.exists():
+            raise HTTPException(status_code=404, detail="旅行数据库不存在")
+
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+
+            # Get latest trip
+            c.execute("SELECT * FROM trips ORDER BY id DESC LIMIT 1")
+            trip_row = c.fetchone()
+            if not trip_row:
+                conn.close()
+                return {"trip": None, "days": [], "members": [], "checklist": []}
+
+            trip = dict(trip_row)
+            trip_id = trip["id"]
+
+            # Get days
+            c.execute(
+                "SELECT * FROM trip_days WHERE trip_id = ? ORDER BY day_number",
+                (trip_id,),
+            )
+            days = [dict(r) for r in c.fetchall()]
+
+            # Get members
+            c.execute(
+                "SELECT id, name, relation, age, notes FROM trip_members WHERE trip_id = ? ORDER BY id",
+                (trip_id,),
+            )
+            members = [dict(r) for r in c.fetchall()]
+
+            # Get checklist grouped by category
+            c.execute(
+                "SELECT id, category, item, owner, done, notes FROM trip_checklist WHERE trip_id = ? ORDER BY category, id",
+                (trip_id,),
+            )
+            checklist = [dict(r) for r in c.fetchall()]
+
+            conn.close()
+            return {
+                "trip": trip,
+                "days": days,
+                "members": members,
+                "checklist": checklist,
+            }
+        except Exception as exc:
+            logger.exception("Failed to read itinerary")
+            raise HTTPException(status_code=500, detail=f"读取行程数据失败: {exc}") from exc
 
     return router

@@ -20,6 +20,9 @@ Endpoints（prefix ``/api/interview``）：
 from __future__ import annotations
 
 import logging
+import sqlite3
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -158,6 +161,290 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=500, detail=f"新建岗位目录失败: {exc}") from exc
         return result
+
+    @router.get("/topics")
+    def interview_topics(company: str | None = None, limit: int = 50) -> dict[str, Any]:
+        """面试专题库（从 interview.db 的 kb_documents 表读取，doc_type=面试专题）。"""
+        db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
+        try:
+            from openbiliclaw.config import load_settings
+            settings = load_settings()
+            if settings.storage.interview_db_path:
+                p = Path(settings.storage.interview_db_path)
+                db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
+        except Exception:
+            pass
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        if company:
+            c.execute(
+                "SELECT id, topic, category, chapter, tags, doc_type, updated, created_at FROM kb_documents WHERE doc_type='面试专题' AND (topic LIKE ? OR tags LIKE ?) ORDER BY updated DESC LIMIT ?",
+                (f"%{company}%", f"%{company}%", limit),
+            )
+        else:
+            c.execute(
+                "SELECT id, topic, category, chapter, tags, doc_type, updated, created_at FROM kb_documents WHERE doc_type='面试专题' ORDER BY updated DESC LIMIT ?",
+                (limit,),
+            )
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.get("/topics/{topic_id}")
+    def interview_topic_detail(topic_id: int) -> dict[str, Any]:
+        """面试专题详情（含完整内容）。"""
+        db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
+        try:
+            from openbiliclaw.config import load_settings
+            settings = load_settings()
+            if settings.storage.interview_db_path:
+                p = Path(settings.storage.interview_db_path)
+                db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
+        except Exception:
+            pass
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM kb_documents WHERE id=?", (topic_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"专题 {topic_id} 不存在")
+        return dict(row)
+
+    def _scripts_db() -> str:
+        db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
+        try:
+            from openbiliclaw.config import load_settings
+            settings = load_settings()
+            if settings.storage.interview_db_path:
+                p = Path(settings.storage.interview_db_path)
+                return str(p if p.is_absolute() else Path(__file__).resolve().parents[3] / p)
+        except Exception:
+            pass
+        return str(db_path)
+
+    @router.get("/scripts")
+    def interview_scripts(
+        script_type: str | None = None,
+        company: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """话术库列表，支持按类型/公司筛选。"""
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        sql = "SELECT id, type, company, position, title, key_points, priority, tags, used_count, created_at, updated_at FROM interview_scripts WHERE 1=1"
+        params: list[Any] = []
+        if script_type:
+            sql += " AND type=?"
+            params.append(script_type)
+        if company:
+            sql += " AND (company=? OR company='通用')"
+            params.append(company)
+        sql += " ORDER BY priority='高' DESC, priority='中' DESC, updated_at DESC LIMIT ?"
+        params.append(limit)
+        c.execute(sql, params)
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.get("/scripts/types")
+    def interview_script_types() -> dict[str, Any]:
+        """话术类型统计。"""
+        conn = sqlite3.connect(_scripts_db())
+        c = conn.cursor()
+        c.execute("SELECT type, COUNT(*) FROM interview_scripts GROUP BY type ORDER BY COUNT(*) DESC")
+        rows = [{"type": r[0], "count": r[1]} for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.get("/scripts/companies")
+    def interview_script_companies() -> dict[str, Any]:
+        """有话术的公司列表。"""
+        conn = sqlite3.connect(_scripts_db())
+        c = conn.cursor()
+        c.execute("SELECT company, COUNT(*) FROM interview_scripts WHERE company!='' GROUP BY company ORDER BY COUNT(*) DESC")
+        rows = [{"company": r[0], "count": r[1]} for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.get("/scripts/{script_id}")
+    def interview_script_detail(script_id: int) -> dict[str, Any]:
+        """话术详情（含完整内容）。"""
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM interview_scripts WHERE id=?", (script_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"话术 {script_id} 不存在")
+        return dict(row)
+
+    # ── 岗位投递管理 ──────────────────────────────────────────
+
+    @router.get("/positions")
+    def interview_positions(
+        company: str | None = None,
+        city: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """岗位列表（支持按公司/城市/状态筛选，默认按匹配度降序）。"""
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        sql = "SELECT * FROM job_positions WHERE 1=1"
+        params: list[Any] = []
+        if company:
+            sql += " AND company=?"
+            params.append(company)
+        if city:
+            sql += " AND city LIKE ?"
+            params.append(f"%{city}%")
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+        sql += " ORDER BY match_score DESC, id DESC LIMIT ?"
+        params.append(limit)
+        c.execute(sql, params)
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.get("/positions/{position_id}")
+    def interview_position_detail(position_id: int) -> dict[str, Any]:
+        """岗位详情（含完整JD和要求）。"""
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM job_positions WHERE id=?", (position_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"岗位 {position_id} 不存在")
+        return dict(row)
+
+    @router.post("/positions/{position_id}/status")
+    def interview_position_update_status(
+        position_id: int, status: str, resume_version: str | None = None, notes: str | None = None
+    ) -> dict[str, Any]:
+        """更新岗位投递状态（待投递/已投递/面试中/已offer/已拒绝/已归档）。"""
+        valid_status = {"待投递", "已投递", "面试中", "已offer", "已拒绝", "已归档"}
+        if status not in valid_status:
+            raise HTTPException(status_code=400, detail=f"状态必须是 {valid_status} 之一")
+        conn = sqlite3.connect(_scripts_db())
+        c = conn.cursor()
+        c.execute("SELECT id FROM job_positions WHERE id=?", (position_id,))
+        if not c.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"岗位 {position_id} 不存在")
+        updates = ["status=?", "updated_at=?"]
+        params: list[Any] = [status, datetime.now().isoformat()]
+        if resume_version:
+            updates.append("resume_version=?")
+            params.append(resume_version)
+        if notes:
+            updates.append("notes=?")
+            params.append(notes)
+        if status == "已投递":
+            updates.append("applied_at=?")
+            params.append(datetime.now().isoformat())
+        params.append(position_id)
+        c.execute(f"UPDATE job_positions SET {', '.join(updates)} WHERE id=?", params)
+        conn.commit()
+        conn.close()
+        return {"ok": True, "id": position_id, "status": status}
+
+    @router.post("/positions", status_code=201)
+    def interview_position_create(data: dict[str, Any]) -> dict[str, Any]:
+        """新增岗位（用于从招聘网站抓取后录入）。"""
+        required = ["company", "title"]
+        for f in required:
+            if f not in data:
+                raise HTTPException(status_code=400, detail=f"缺少必填字段 {f}")
+        conn = sqlite3.connect(_scripts_db())
+        c = conn.cursor()
+        now = datetime.now().isoformat()
+        c.execute("""
+            INSERT INTO job_positions 
+            (company, bg, title, city, years_required, education, job_url, job_id,
+             description, requirements, match_score, match_points, status, tags, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get("company"), data.get("bg"), data.get("title"), data.get("city"),
+            data.get("years_required"), data.get("education"), data.get("job_url"), data.get("job_id"),
+            data.get("description", ""), data.get("requirements", ""),
+            data.get("match_score", 0), data.get("match_points", ""),
+            data.get("status", "待投递"), data.get("tags", ""), now, now
+        ))
+        conn.commit()
+        new_id = c.lastrowid
+        conn.close()
+        return {"ok": True, "id": new_id}
+
+    # ========== 简历管理 ==========
+    @router.get("/resumes")
+    def interview_resumes(
+        company: str = None,
+        position_id: int = None,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        where = []
+        params = []
+        if company:
+            where.append("company = ?")
+            params.append(company)
+        if position_id:
+            where.append("position_id = ?")
+            params.append(position_id)
+        where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+        c.execute(f"SELECT COUNT(*) FROM resumes{where_sql}", params)
+        total = c.fetchone()[0]
+        offset = (page - 1) * page_size
+        c.execute(
+            f"SELECT id, position_id, company, target_position, version_name, highlights, matched_keywords, file_path, created_at, updated_at FROM resumes{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params + [page_size, offset],
+        )
+        items = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+    @router.get("/resumes/{resume_id}")
+    def interview_resume_detail(resume_id: int):
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM resumes WHERE id = ?", (resume_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="简历不存在")
+        return dict(row)
+
+    @router.post("/resumes", status_code=201)
+    def interview_create_resume(data: dict):
+        conn = sqlite3.connect(_scripts_db())
+        c = conn.cursor()
+        now = datetime.now().isoformat()
+        c.execute("""
+            INSERT INTO resumes (position_id, company, target_position, version_name, full_text, highlights, matched_keywords, file_path, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get("position_id"), data.get("company"), data.get("target_position"),
+            data.get("version_name"), data.get("full_text", ""), data.get("highlights", ""),
+            data.get("matched_keywords", ""), data.get("file_path", ""), now, now
+        ))
+        conn.commit()
+        new_id = c.lastrowid
+        conn.close()
+        return {"ok": True, "id": new_id}
 
     return router
 

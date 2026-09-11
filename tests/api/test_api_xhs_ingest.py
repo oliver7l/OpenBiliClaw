@@ -307,7 +307,7 @@ class TestXhsObservedUrls:
         assert body["accepted"] == 1
         assert body["enqueued"] == 1
 
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT source_strategy, source_platform, content_id, content_url, title, up_name, "
             "view_count, like_count, collect_count, comment_count "
             "FROM discovery_candidates WHERE content_id=?",
@@ -330,8 +330,7 @@ class TestXhsObservedUrls:
         from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
         from openbiliclaw.discovery.engine import ContentDiscoveryEngine
         from openbiliclaw.storage.database import Database
-
-        from .test_search_strategy import _build_profile
+        from tests.discovery.test_search_strategy import _build_profile
 
         db = Database(tmp_path / "xhs-e2e.db")
         db.initialize()
@@ -420,8 +419,7 @@ class TestXhsObservedUrls:
         from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
         from openbiliclaw.discovery.engine import ContentDiscoveryEngine
         from openbiliclaw.storage.database import Database
-
-        from .test_search_strategy import _build_profile
+        from tests.discovery.test_search_strategy import _build_profile
 
         db = Database(tmp_path / "xhs-low-score.db")
         db.initialize()
@@ -490,7 +488,7 @@ class TestXhsObservedUrls:
             "SELECT * FROM content_cache WHERE content_id = ?",
             ("xhs-low-score-note",),
         ).fetchone()
-        candidate = db.conn.execute(
+        candidate = db._discovery_conn.execute(
             "SELECT status, relevance_score, eval_error FROM discovery_candidates "
             "WHERE content_id = ?",
             ("xhs-low-score-note",),
@@ -589,7 +587,7 @@ class TestXhsObservedUrls:
         )
         assert resp1.status_code == 200
 
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT content_url FROM discovery_candidates WHERE content_id=?", (note_id,)
         ).fetchone()
         assert row["content_url"] == bare_url  # bare URL enqueued
@@ -602,7 +600,7 @@ class TestXhsObservedUrls:
         )
         assert resp2.status_code == 200
 
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT content_url FROM discovery_candidates WHERE content_id=?", (note_id,)
         ).fetchone()
         assert "xsec_token=ABCXYZ123" in row["content_url"], (
@@ -644,7 +642,7 @@ class TestXhsObservedUrls:
         )
         assert resp.status_code == 200
 
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT content_url FROM discovery_candidates WHERE content_id=?", (note_id,)
         ).fetchone()
         assert "xsec_token=PRIOR456" in row["content_url"], (
@@ -694,7 +692,7 @@ class TestXhsObservedUrls:
 
         bvids = {
             row["content_id"]
-            for row in db.conn.execute(
+            for row in db._discovery_conn.execute(
                 "SELECT content_id FROM discovery_candidates WHERE source_platform='xiaohongshu'"
             ).fetchall()
         }
@@ -747,7 +745,7 @@ class TestXhsObservedUrls:
 
         bvids = {
             row["content_id"]
-            for row in db.conn.execute(
+            for row in db._discovery_conn.execute(
                 "SELECT content_id FROM discovery_candidates WHERE source_platform='xiaohongshu'"
             ).fetchall()
         }
@@ -874,7 +872,7 @@ class TestXhsObservedUrls:
         assert response.status_code == 200
         bvids = {
             row["content_id"]
-            for row in db.conn.execute(
+            for row in db._discovery_conn.execute(
                 "SELECT content_id FROM discovery_candidates WHERE source_platform='xiaohongshu'"
             ).fetchall()
         }
@@ -1178,7 +1176,7 @@ class TestXhsTaskResults:
         result = json.loads(row["result_json"])
         assert result["notes"][0]["note_id"] == "note-task-001"
 
-        candidate_row = db.conn.execute(
+        candidate_row = db._discovery_conn.execute(
             "SELECT title, source_strategy, source_platform, like_count, collect_count, "
             "comment_count FROM discovery_candidates "
             "WHERE content_id=?",
@@ -1303,12 +1301,12 @@ class TestXhsTaskResults:
         assert memory.events[0]["title"] == "手冲咖啡入门"
 
         # Self-authored note dropped from discovery_candidates too.
-        own_row = db.conn.execute(
+        own_row = db._discovery_conn.execute(
             "SELECT content_id FROM discovery_candidates WHERE content_id=?",
             ("own-note-001",),
         ).fetchone()
         assert own_row is None
-        other_row = db.conn.execute(
+        other_row = db._discovery_conn.execute(
             "SELECT content_id FROM discovery_candidates WHERE content_id=?",
             ("other-note-001",),
         ).fetchone()
@@ -1353,7 +1351,7 @@ class TestXhsTokens:
         assert resp.json()["ok"] is True
         assert resp.json()["upgraded"] >= 1
 
-        row = db.conn.execute(
+        row = db._discovery_conn.execute(
             "SELECT content_url FROM discovery_candidates WHERE content_id=?", (note_id,)
         ).fetchone()
         assert "xsec_token=SNIFFED_TOKEN_42" in row["content_url"], (

@@ -661,7 +661,7 @@ def test_validate_runtime_config_rejects_pool_target_count_above_cap() -> None:
         scheduler=SchedulerConfig(
             enabled=True,
             discovery_cron="0 */4 * * *",
-            pool_target_count=6001,
+            pool_target_count=20001,
             account_sync_interval_hours=6,
         ),
     )

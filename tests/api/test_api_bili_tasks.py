@@ -176,7 +176,7 @@ def test_bili_task_result_enqueues_videos_into_discovery_candidates(
 
     assert response.status_code == 200
     assert response.json() == {"ok": True, "enqueued": 1}
-    row = db.conn.execute(
+    row = db._discovery_conn.execute(
         "SELECT * FROM discovery_candidates WHERE candidate_key = 'bilibili:BV1abc'"
     ).fetchone()
     assert row is not None
@@ -225,7 +225,7 @@ def test_bili_task_result_marks_keyword_used_on_terminal_ok(
     )
 
     assert response.status_code == 200
-    status = db.conn.execute(
+    status = db._discovery_conn.execute(
         "SELECT status FROM discovery_keywords WHERE id = ?",
         (int(claimed["id"]),),
     ).fetchone()["status"]
@@ -260,7 +260,7 @@ def test_bili_task_result_marks_failed_and_keyword_failed(
     assert row["status"] == "failed"
     payload = json.loads(str(row["result_json"]))
     assert payload["error"] == "search_page_failed"
-    keyword = db.conn.execute(
+    keyword = db._discovery_conn.execute(
         "SELECT status, attempts FROM discovery_keywords WHERE id = ?",
         (int(claimed["id"]),),
     ).fetchone()

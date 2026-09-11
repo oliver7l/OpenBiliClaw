@@ -5,7 +5,7 @@
  * plan comparison, and the full budget markdown document.
  */
 
-import { fetchTravelFlights, fetchTravelOverview, fetchTravelDoc } from "../api.js";
+import { fetchTravelFlights, fetchTravelOverview, fetchTravelDoc, fetchTravelItinerary } from "../api.js";
 
 let $root = null;
 let loaded = false;
@@ -13,7 +13,8 @@ let loading = false;
 let flightsData = null;
 let overviewData = null;
 let docContent = null;
-let activeSection = "flights"; // flights | overview | doc
+let itineraryData = null;
+let activeSection = "itinerary"; // itinerary | flights | overview | doc
 
 function esc(s) {
   const el = document.createElement("span");
@@ -43,6 +44,7 @@ function fmtPrice(n) {
 // ── Section tabs ───────────────────────────────────────────────
 function renderSectionTabs() {
   const tabs = [
+    { id: "itinerary", label: "🗺️ 行程安排" },
     { id: "flights", label: "✈️ 实时机票" },
     { id: "overview", label: "📊 预算概览" },
     { id: "doc", label: "📄 完整文档" },
@@ -57,6 +59,92 @@ function renderSectionTabs() {
       .join("") +
     `</div>`
   );
+}
+
+// ── Itinerary section ──────────────────────────────────────────
+function renderItinerary() {
+  if (!itineraryData || !itineraryData.trip) {
+    return `<div class="travel-empty">加载行程数据中…</div>`;
+  }
+
+  const { trip, days, members, checklist } = itineraryData;
+  let html = "";
+
+  // Trip overview card
+  html += `<div class="itinerary-overview">
+    <div class="itinerary-title">${esc(trip.title)}</div>
+    <div class="itinerary-meta">
+      <span>📅 ${esc(trip.start_date)} ~ ${esc(trip.end_date)}</span>
+      <span>👥 ${trip.people_count}人</span>
+      <span>📍 ${esc(trip.destination || "")}</span>
+    </div>
+    <div class="itinerary-notes">${esc(trip.notes || "")}</div>
+  </div>`;
+
+  // Members
+  html += `<div class="itinerary-section">
+    <div class="itinerary-section-title">👥 同行人员（${members.length}人）</div>
+    <div class="itinerary-members">`;
+  for (const m of members) {
+    const age = m.age ? `${m.age}岁` : "";
+    html += `<div class="itinerary-member">
+      <span class="member-name">${esc(m.name)}</span>
+      <span class="member-relation">${esc(m.relation)}</span>
+      ${age ? `<span class="member-age">${age}</span>` : ""}
+      ${m.notes ? `<span class="member-notes">${esc(m.notes)}</span>` : ""}
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  // Days timeline
+  html += `<div class="itinerary-section">
+    <div class="itinerary-section-title">🗓️ 每日行程（${days.length}天）</div>
+    <div class="itinerary-timeline">`;
+  for (const d of days) {
+    html += `<div class="itinerary-day">
+      <div class="day-header">
+        <span class="day-num">Day ${d.day_number}</span>
+        <span class="day-date">${esc(d.date || "")}</span>
+        <span class="day-title">${esc(d.title)}</span>
+      </div>
+      <div class="day-body">
+        <div class="day-desc">${esc(d.description || "")}</div>
+        <div class="day-meta">
+          ${d.transport ? `<span class="meta-item">🚗 ${esc(d.transport)}</span>` : ""}
+          ${d.accommodation ? `<span class="meta-item">🏨 ${esc(d.accommodation)}</span>` : ""}
+          ${d.meals ? `<span class="meta-item">🍽️ ${esc(d.meals)}</span>` : ""}
+        </div>
+        ${d.highlights ? `<div class="day-highlights">✨ ${esc(d.highlights)}</div>` : ""}
+      </div>
+    </div>`;
+  }
+  html += `</div></div>`;
+
+  // Checklist
+  if (checklist && checklist.length > 0) {
+    const categories = [...new Set(checklist.map((c) => c.category))];
+    html += `<div class="itinerary-section">
+      <div class="itinerary-section-title">✅ 准备清单（${checklist.length}项）</div>`;
+    for (const cat of categories) {
+      const items = checklist.filter((c) => c.category === cat);
+      const doneCount = items.filter((c) => c.done).length;
+      html += `<div class="checklist-category">
+        <div class="checklist-cat-title">${esc(cat)}（${doneCount}/${items.length}）</div>
+        <div class="checklist-items">`;
+      for (const item of items) {
+        html += `<div class="checklist-item${item.done ? " done" : ""}">
+          <span class="check-icon">${item.done ? "✅" : "⬜"}</span>
+          <span class="check-text">${esc(item.item)}</span>
+          <span class="check-owner">${esc(item.owner || "")}</span>
+          ${item.notes ? `<span class="check-notes">${esc(item.notes)}</span>` : ""}
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+    html += `</div>`;
+  }
+
+  return html;
 }
 
 // ── Flights section ────────────────────────────────────────────
@@ -205,7 +293,8 @@ function render() {
   }
 
   let content = "";
-  if (activeSection === "flights") content = renderFlights();
+  if (activeSection === "itinerary") content = renderItinerary();
+  else if (activeSection === "flights") content = renderFlights();
   else if (activeSection === "overview") content = renderOverview();
   else if (activeSection === "doc") content = renderDoc();
 
@@ -240,15 +329,17 @@ async function loadData(force = false) {
   if (force || !flightsData) render();
 
   try {
-    const [flights, overview, doc] = await Promise.all([
+    const [flights, overview, doc, itinerary] = await Promise.all([
       fetchTravelFlights().catch((e) => ({ error: String(e) })),
       fetchTravelOverview().catch((e) => ({ error: String(e) })),
       fetchTravelDoc().catch((e) => ({ error: String(e) })),
+      fetchTravelItinerary().catch((e) => ({ error: String(e) })),
     ]);
 
     if (!flights.error) flightsData = flights;
     if (!overview.error) overviewData = overview;
     if (!doc.error) docContent = doc;
+    if (!itinerary.error) itineraryData = itinerary;
   } catch (err) {
     console.error("Travel data load failed:", err);
   } finally {

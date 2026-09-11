@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from fastapi.testclient import TestClient
 
-from openbiliclaw.api import app as api_app
+from openbiliclaw.api import reading_routes
 from openbiliclaw.api.app import create_app
 from openbiliclaw.storage.database import Database
 
@@ -42,7 +42,9 @@ def client(db: Database) -> TestClient:
 
 
 def test_auto_tag_merges_interest_tags(client: TestClient, db: Database, monkeypatch) -> None:
-    monkeypatch.setattr(api_app, "_load_interest_keywords", lambda: [("机器学习", 0.9)])
+    # auto-tag 路由直接绑定 `openbiliclaw.api.utils.load_interest_keywords`，
+    # 必须 patch reading_routes 的模块全局；patch api.app 是无效的（曾静默不生效）。
+    monkeypatch.setattr(reading_routes, "_load_interest_keywords", lambda: [("机器学习", 0.9)])
     art_id = db.upsert_article(
         "zhihu", "知乎", "机器学习实践", "http://a/1", content_text="深入讲解机器学习模型"
     )
@@ -56,7 +58,7 @@ def test_auto_tag_merges_interest_tags(client: TestClient, db: Database, monkeyp
 
 
 def test_auto_tag_idempotent(client: TestClient, db: Database, monkeypatch) -> None:
-    monkeypatch.setattr(api_app, "_load_interest_keywords", lambda: [("机器学习", 0.9)])
+    monkeypatch.setattr(reading_routes, "_load_interest_keywords", lambda: [("机器学习", 0.9)])
     art_id = db.upsert_article("zhihu", "知乎", "机器学习", "http://a/2", content_text="机器学习")
     client.post("/api/reading/auto-tag")
     first = _tags(db, art_id)
@@ -65,7 +67,7 @@ def test_auto_tag_idempotent(client: TestClient, db: Database, monkeypatch) -> N
 
 
 def test_auto_tag_no_profile_is_noop(client: TestClient, db: Database, monkeypatch) -> None:
-    monkeypatch.setattr(api_app, "_load_interest_keywords", lambda: [])
+    monkeypatch.setattr(reading_routes, "_load_interest_keywords", lambda: [])
     db.upsert_article("zhihu", "知乎", "某文章", "http://a/3", content_text="正文")
     r = client.post("/api/reading/auto-tag")
     body = r.json()
