@@ -32,6 +32,11 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
 
         app.mount("/m", _StaticFiles(directory=_web_dir, html=True), name="mobile-web")
 
+        # Shared browser helpers (markdown renderer etc.) used by the mobile SPA.
+        _shared_dir = _web_dir / "shared"
+        if _shared_dir.is_dir():
+            app.mount("/shared", _StaticFiles(directory=_shared_dir, html=True), name="shared-assets")
+
     # ── Desktop Web UI ───────────────────────────────────────────
     _desktop_dir = _web_dir / "desktop"
     if _desktop_dir.is_dir():
@@ -139,6 +144,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "media",
             "ed2k",
             "douban",
+            "conversation-archive",
         }
 
         @app.get("/web/{page}", include_in_schema=False)

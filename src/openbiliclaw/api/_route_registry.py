@@ -73,6 +73,13 @@ def register_all_routes(
 
     register_notes_routes(app, ctx)
 
+    # ── Conversation archive routes (用户与 AI 对话内容归档) ──
+    from openbiliclaw.api.conversation_archive_routes import (
+        register_conversation_archive_routes,
+    )
+
+    register_conversation_archive_routes(app, ctx)
+
     # ── Saved-sync (reading library) routes ─────────────────────
     from openbiliclaw.api.saved_sync_routes import register_saved_sync_routes
 
