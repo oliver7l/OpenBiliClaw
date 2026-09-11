@@ -63,23 +63,28 @@ class WatchLaterMixin:
         return int(row[0]) if row else 0
 
     def list_watch_later(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Return bookmarked videos, newest first.
+        """Return bookmarked videos with metadata, newest first.
 
-        v0.4.0+: watch_later 表迁移到 content.db，content_cache 在 pool.db，
-        暂不跨库 JOIN，只返回 watch_later 基础字段。
+        ``watch_later`` 在 content.db，``content_cache`` 在 pool.db。主连接（以及每线程
+        连接 / open_connection）都同时 ATTACH 了这两个子库，故走 ``self.conn`` 做跨库
+        LEFT JOIN 取回标题/UP/封面等元数据。
+
+        注意：不要再退回 ``self._content`` —— 那是 content.db 的独立连接，未 ATTACH pool，
+        曾导致本方法只能返回空字符串元数据（v0.4.0 拆库遗留的功能回退）。
         """
-        cursor = self._content.execute(
+        cursor = self.conn.execute(
             """
             SELECT
                 w.bvid,
                 w.added_at,
                 w.note,
-                '' AS title,
-                '' AS up_name,
-                '' AS cover_url,
-                '' AS content_url,
-                '' AS source_platform
-            FROM watch_later AS w
+                COALESCE(c.title, '')           AS title,
+                COALESCE(c.up_name, '')         AS up_name,
+                COALESCE(c.cover_url, '')       AS cover_url,
+                COALESCE(c.content_url, '')     AS content_url,
+                COALESCE(c.source_platform, '') AS source_platform
+            FROM content.watch_later AS w
+            LEFT JOIN pool.content_cache AS c ON c.bvid = w.bvid
             ORDER BY w.added_at DESC
             LIMIT ? OFFSET ?
             """,

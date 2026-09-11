@@ -111,9 +111,12 @@ def _get_count_events_by_source_platform(database: Any) -> dict[str, int]:
 
 
 def _get_x_required_cookie_names() -> tuple[str, ...]:
-    from openbiliclaw.api.app import _X_REQUIRED_COOKIE_NAMES
+    # 常量真身在 sources/x_auth.py（api/_cookie_routes.py 也用它）。
+    # 此前从 api.app 导入一个从未存在过的 `_X_REQUIRED_COOKIE_NAMES`，
+    # 导致 PUT /api/config 更新 X cookie 时抛 ImportError。
+    from openbiliclaw.sources.x_auth import X_REQUIRED_COOKIE_NAMES
 
-    return _X_REQUIRED_COOKIE_NAMES
+    return X_REQUIRED_COOKIE_NAMES
 
 
 # ── Route registration ───────────────────────────────────────────

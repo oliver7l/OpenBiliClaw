@@ -4,16 +4,20 @@
 
 ## 概述
 
-`health/` 包实现了完整的个人健康档案管理系统，支持患者档案、就诊记录、健康问题追踪、用药管理、化验结果（含项目明细）、检查记录、过敏史、生命体征、疫苗接种、医生信息、文档附件、AI报告解读、健康时间线等十三大模块。数据存储于项目主 SQLite 数据库，表名使用 `health_` 前缀。
+`health/` 包实现了完整的个人健康档案管理系统，支持患者档案、就诊记录、健康问题追踪、用药管理、化验结果（含项目明细）、检查记录、过敏史、生命体征、疫苗接种、医生信息、文档附件、AI报告解读、健康时间线等十三大模块。数据存储于**独立子库 `data/health.db`**（db sharding P7，与主库锁域隔离），表名使用 `health_` 前缀。
 
 | 组件 | 职责 | 核心文件 |
 |------|------|----------|
 | 数据模型 | 13 类医疗实体的 Pydantic 模型与枚举 | `models.py` |
 | 存储层 | 13 张 SQLite 表管理、CRUD、检索、统计、时间线 | `store.py` |
 | 业务层 | HealthService 封装存储，提供患者摘要、化验趋势、AI解读 | `service.py` |
-| API 层 | 50+ RESTful 接口（在 `api/app.py` 中） | `api/app.py` |
-| 前端页面 | 独立健康档案管理页面（12 个标签页） | `web/health/index.html` |
+| API 层 | 68 条 RESTful 接口，**单一来源** `register_health_routes(app, ctx)` | `api/health_routes.py` |
+| 周期记录 | 独立的经期/周期事件记录（`cycle_records` 表，存 `data/cycle.db`） | `cycle/store.py` |
+| 前端页面 | 桌面内嵌健康档案管理页面（12 个标签页，`healthPage` 视图） | `web/desktop/assets/js/health-app.js` |
 | 数据导入 | 用户真实看病资料批量导入脚本 | `scripts/import_health_data.py` |
+
+> **API 单一来源说明（2026-09-11 修正）**：健康 API **只在 `api/health_routes.py` 中定义**，由 `api/_route_registry.py` 统一注册。历史上 `api/app.py` 曾内联 13 条只读列表路由作为临时兜底，且因构造 `HealthService(database=...)` 读的是主库中已拆空的 `health_` 空壳表（0 行），页面一直显示空数据 —— 该内联段已于 2026-09-11 删除。
+
 
 ## 已实现功能
 
@@ -35,10 +39,20 @@
 | 统计概览 | ✅ | 各模块计数、待复查提醒、活跃问题/用药 |
 | 患者摘要 | ✅ | 单患者完整档案汇总（各模块数量+活跃项） |
 | 化验趋势 | ✅ | 按项目名查询历史数值变化 |
-| 前端页面 | ✅ | 独立 `/health` 页面，12 标签页，表单录入，AI解读按钮 |
+| 前端页面 | ✅ | 桌面内嵌 `healthPage`，12 标签页，表单录入，AI解读按钮 |
+| 周期记录 | ✅ | 独立 `cycle/` 模块，`cycle_records` 表（日期/间隔天数/备注），存 `data/cycle.db` |
 | 数据导入 | ✅ | 脚本批量导入用户真实看病资料 |
 
 ## 数据模型
+
+### 存储位置
+
+| 数据库 | 内容 | 连接方式 |
+|--------|------|----------|
+| `data/health.db` | 15 张 `health_*` 表（13 类实体 + 化验明细 + 时间线辅助） | `HealthService(db_path=...)`，独立连接 + PRAGMA（WAL / busy_timeout / synchronous） |
+| `data/cycle.db` | `cycle_records`（周期事件） | `CycleStore(db_path=...)`，与 health.db 同目录，隔离锁域 |
+
+> 主库 `data/openbiliclaw.db` 中**不再保留**可用的 `health_*` 表（P7/P9 拆分时已迁出，残留空壳表已清理）。路径解析优先级：`config.storage.health_db_path` > 主库同目录 `health.db` > `data/health.db`。
 
 ### 核心实体关系
 
@@ -57,6 +71,7 @@ health_patients (患者)
   └── health_insights (AI洞察) 1:N
 
 health_doctors (医生信息) — 独立表，可被就诊/检查引用
+cycle_records (周期记录) — 独立表，不与 health_patients 关联
 ```
 
 ### Patient（患者档案）
@@ -214,7 +229,7 @@ health_doctors (医生信息) — 独立表，可被就诊/检查引用
 
 ## 前端页面
 
-独立页面挂载在 `/health`，与主 SPA 解耦，可直接通过 `http://localhost:port/health` 访问。
+桌面端**内嵌视图** `healthPage`（顶栏「❤ 健康」tab 进入），与专题/媒体/ed2k 同款统一三栏布局；`health-app.js` 顶部常量 `const API = '/api/health'`，全部请求走该前缀。
 
 页面包含 12 个标签页：
 1. **概览** — 统计卡片、活跃健康问题、当前用药、待复查提醒
@@ -232,7 +247,11 @@ health_doctors (医生信息) — 独立表，可被就诊/检查引用
 
 ## 配置项
 
-无额外配置项。数据库路径复用项目主配置 `db_path`（默认 `data/openbiliclaw.db`）。
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `storage.health_db_path` | `data/health.db` | 健康子库路径（`config.py` 中 `StorageConfig.health_db_path`） |
+
+`data/cycle.db` 与 `health.db` 同目录解析（`config.storage.health_db_path` 同级），无独立配置项。
 
 ## 设计决策
 

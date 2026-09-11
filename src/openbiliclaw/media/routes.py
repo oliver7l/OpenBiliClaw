@@ -192,7 +192,7 @@ def build_media_router(
     @router.get("/list")
     def list_items(
         root: str = Query(..., description="配置根目录绝对路径"),
-        kind: str = Query("all", pattern="^(all|video|image)$"),
+        kind: str = Query("all", pattern="^(all|video|image|dir)$"),
         q: str = Query("", description="文件名包含匹配，忽略大小写"),
         sub: str = Query("", description="根目录下的相对子目录（前端逐层进入）"),
         offset: int = Query(0, ge=0),

@@ -120,6 +120,8 @@
         <button class="tab-btn" id="healthBtn" type="button">🏥 健康档案</button>
         <button class="tab-btn" id="travelBtn" type="button">✈️ 旅行</button>
         <button class="tab-btn" id="mediaBtn" type="button">🎬 媒体</button>
+        <button class="tab-btn" id="ed2kBtn" type="button">⬇ ed2k 下载</button>
+        <button class="tab-btn" id="doubanBtn" type="button">📚 豆瓣</button>
       </div>
       <!-- 推荐流/惊喜工具按钮已归拢到顶栏右侧 top-actions -->
     </nav>
@@ -1176,6 +1178,44 @@
         </div>
       </section>
 
+      <!-- ed2k / Kad 下载管理：搜索 / 下载 / 进度 / 落地目录 -->
+      <section class="main-col ed2k-page" id="ed2kPage" aria-label="ed2k 下载管理" data-od-id="ed2k-download-manager" hidden>
+        <div class="page-body">
+          <div class="ed2k-toolbar">
+            <div class="ed2k-linkrow">
+              <input type="text" id="ed2kLinkInput" class="ed2k-search-input" placeholder="直接粘贴 ed2k 链接（ed2k://…）后回车，或先在下框搜索…" aria-label="粘贴 ed2k 链接" autocomplete="off" spellcheck="false">
+              <button type="button" id="ed2kLinkBtn" class="ed2k-search-btn">下载链接</button>
+            </div>
+            <div class="ed2k-search">
+              <input type="search" id="ed2kSearchInput" class="ed2k-search-input" placeholder="按关键词搜索 ed2k 文件…（Kad 网络，约 30-60s）" aria-label="搜索 ed2k" autocomplete="off">
+              <button type="button" id="ed2kSearchBtn" class="ed2k-search-btn">搜索</button>
+            </div>
+            <div class="ed2k-actions">
+              <button type="button" id="ed2kCommitBtn" class="ed2k-action-btn">Commit 到落地目录</button>
+              <button type="button" id="ed2kRefreshBtn" class="ed2k-action-btn">刷新下载</button>
+            </div>
+          </div>
+          <div class="ed2k-netstrip">
+            <span class="ed2k-net-info">网络：</span><span id="ed2kNetInfo">未连接</span>
+            <span class="ed2k-path-label">落地目录：</span><code id="ed2kPathInfo">—</code>
+          </div>
+          <div class="ed2k-section-head">
+            <h3>搜索/下载中任务</h3>
+            <span class="ed2k-hint">每 3 秒自动刷新进度</span>
+          </div>
+          <div class="ed2k-downloads" id="ed2kDownloadsList">
+            <div class="observability-loading">正在加载…</div>
+          </div>
+          <div class="ed2k-section-head">
+            <h3>搜索结果</h3>
+            <span class="ed2k-hint" id="ed2kSearchHint"></span>
+          </div>
+          <div class="ed2k-results" id="ed2kResultsList">
+            <p class="ed2k-empty">输入关键词后点击「搜索」。结果按来源数排序，id 仅对最近一次搜索有效。</p>
+          </div>
+        </div>
+      </section>
+
       <!-- 媒体浏览：本地媒体根目录（视频/图片），桌面统一布局 -->
       <section class="main-col content-page" id="mediaPage" aria-label="媒体浏览" hidden>
         <div class="page-subtabbar" style="position:static">
@@ -1185,6 +1225,7 @@
           <div class="media-toolbar">
             <div class="media-seg" id="mediaKindSeg">
               <button class="page-subtab-btn is-active" data-kind="all" type="button">全部</button>
+              <button class="page-subtab-btn" data-kind="dir" type="button">目录</button>
               <button class="page-subtab-btn" data-kind="video" type="button">视频</button>
               <button class="page-subtab-btn" data-kind="image" type="button">图片</button>
             </div>
@@ -1200,6 +1241,60 @@
         </div>
       </section>
 
+      <!-- 豆瓣书影音：影视/书/音乐 × 看过/想看/在看，展示清单并跳转原文 -->
+      <section class="main-col content-page" id="doubanPage" aria-label="豆瓣书影音" hidden>
+        <div class="page-subtabbar" style="position:static">
+          <div class="page-subtabbar-inner">
+            <button type="button" class="page-subtab-btn is-active" data-douban-view="list">书影音</button>
+            <button type="button" class="page-subtab-btn" data-douban-view="profile">画像分析</button>
+          </div>
+        </div>
+        <!-- 列表视图 -->
+        <div class="douban-view" id="doubanListView">
+          <div class="page-body">
+            <div class="ed2k-toolbar">
+              <div class="ed2k-search" style="flex:1;min-width:220px;max-width:460px">
+                <input type="search" id="doubanSearchInput" class="ed2k-search-input" placeholder="搜索书名/片名/音乐名…" aria-label="搜索豆瓣清单" autocomplete="off">
+              </div>
+              <div class="ed2k-actions">
+                <button type="button" id="doubanRefreshBtn" class="ed2k-action-btn">刷新</button>
+              </div>
+            </div>
+            <div class="ed2k-netstrip" id="doubanStatsStrip">
+              <span id="doubanStatsInfo">加载中…</span>
+            </div>
+            <div class="section-head" style="margin-top:4px">
+              <h3>书影音清单</h3>
+              <span class="ed2k-hint" id="doubanHint">按分类 / 状态筛选</span>
+            </div>
+            <div class="douban-filters" id="doubanFilters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+              <div class="ed2k-actions" id="doubanCategoryTabs"></div>
+              <div class="ed2k-actions" id="doubanStatusTabs"></div>
+            </div>
+            <div class="card-grid is-minimal" id="doubanGrid"></div>
+            <p class="ed2k-empty" id="doubanEmpty">暂无数据。</p>
+          </div>
+        </div>
+        <!-- 画像视图 -->
+        <div class="douban-view" id="doubanProfileView" hidden>
+          <div class="page-body">
+            <div class="ed2k-netstrip" id="doubanProfileLoading" hidden>画像计算中…</div>
+            <div class="douban-profile-stats" id="doubanProfileStats"></div>
+            <div class="douban-profile-trend" id="doubanProfileTrend"></div>
+            <div class="section-head" style="margin-top:16px">
+              <h3>深度画像报告</h3>
+              <span class="ed2k-hint">由 LLM 基于你的全部书影音清单生成；已有报告 / 可重新生成</span>
+            </div>
+            <div class="ed2k-actions" style="margin-bottom:10px">
+              <button type="button" id="doubanInsightBtn" class="ed2k-search-btn">生成 / 重新生成画像报告</button>
+            </div>
+            <div class="douban-insight-body" id="doubanInsightBody">
+              <p class="ed2k-empty">点击上方按钮，让模型读你的书影音清单，生成一份观影/读书画像报告。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 媒体图片灯箱 -->
       <div class="media-modal" id="mediaImageModal">
         <button class="media-modal-close" id="mediaImageClose" type="button" aria-label="关闭">×</button>
@@ -1209,8 +1304,11 @@
       </div>
       <!-- 媒体视频弹窗 -->
       <div class="media-modal" id="mediaVideoModal">
+        <button class="media-modal-close" id="mediaVideoNext" type="button" style="right:114px" aria-label="下一个">⏭</button>
+        <button class="media-modal-close" id="mediaVideoFav" type="button" style="right:66px" aria-label="收藏">☆</button>
         <button class="media-modal-close" id="mediaVideoClose" type="button" aria-label="关闭">×</button>
         <video id="mediaVideoView" controls autoplay></video>
+        <div class="media-video-rating" id="mediaVideoRating"></div>
         <div class="media-video-note" id="mediaVideoNote"></div>
       </div>
 
@@ -1893,6 +1991,8 @@
   <script src="/web/assets/js/topics-app.js" defer></script>
   <script src="/web/assets/js/health-app.js" defer></script>
   <script src="/web/assets/js/media-app.js" defer></script>
+  <script src="/web/assets/js/ed2k-app.js" defer></script>
+  <script src="/web/assets/js/douban-app.js" defer></script>
   <!-- 日记模块脚本由 app.js 在进入日记页面时按需动态加载 -->
 
 </body></html>

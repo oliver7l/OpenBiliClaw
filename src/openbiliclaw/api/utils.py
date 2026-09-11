@@ -296,6 +296,10 @@ READING_SOURCE_SYNONYMS: dict[str, str] = {
     "reddit": "reddit",
     "豆瓣": "douban",
     "douban": "douban",
+    "豆瓣feed": "douban_feed",
+    "豆瓣评论": "douban_feed",
+    "豆瓣文章": "douban_feed",
+    "豆瓣小组": "douban_feed",
     "已读库": "read-archive",
 }
 READING_STATUS_SYNONYMS: dict[str, str] = {

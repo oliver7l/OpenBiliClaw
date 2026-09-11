@@ -42,7 +42,6 @@ from openbiliclaw.api.models import (
     CognitionUpdateSummary,
     ConfigIssueOut,
     ConfigResponse,
-    ConfigServiceProbeResponse,
     DiscoveryConfigOut,
     DouyinSourceConfigOut,
     EmbeddingConfigOut,
@@ -85,9 +84,6 @@ from openbiliclaw.api.models import (
     ZhihuSourceConfigOut,
 )
 from openbiliclaw.diary import DiaryService
-from openbiliclaw.health import (
-    HealthService,
-)
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
 from openbiliclaw.runtime.image_cache import (
     cleanup_image_cache,
@@ -257,6 +253,10 @@ _READING_SOURCE_SYNONYMS: dict[str, str] = {
     "reddit": "reddit",
     "豆瓣": "douban",
     "douban": "douban",
+    "豆瓣feed": "douban_feed",
+    "豆瓣评论": "douban_feed",
+    "豆瓣文章": "douban_feed",
+    "豆瓣小组": "douban_feed",
     "已读库": "read-archive",
 }
 _READING_STATUS_SYNONYMS: dict[str, str] = {
@@ -638,7 +638,9 @@ def _latest_e2e_event_id(ctx: Any) -> int:
     conn = getattr(database, "conn", None)
     if conn is not None:
         try:
-            row = conn.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM events.events").fetchone()
+            row = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) AS max_id FROM events.events"
+            ).fetchone()
             if row is not None:
                 try:
                     return int(row["max_id"])
@@ -2559,118 +2561,13 @@ def create_app(
                 if "model" in mdata:
                     mod_cfg.model = str(mdata["model"])
 
+    # ── Config service probe（实现在 api/probe_routes.py）──────────────
+    # 此前此处内联的 `_probe_llm_config(cfg: Any)` 因 `Any` 被 FastAPI 判定为
+    # query 参数，导致 POST /api/config/probe-service 恒返回 422；且它抢先注册，
+    # 遮蔽了 probe_routes.py 中的正确实现（该模块的 register 函数此前从未被调用）。
+    from openbiliclaw.api.probe_routes import register_probe_routes
 
-    @app.post("/api/config/probe-service", response_model=ConfigServiceProbeResponse)
-    async def _probe_llm_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS
-        from openbiliclaw.llm.registry import build_llm_registry
-
-        started = time.perf_counter()
-        provider = str(getattr(cfg.llm, "default_provider", "") or "").strip().lower()
-        model = ""
-        try:
-            registry = build_llm_registry(cfg)
-            provider = provider or str(getattr(registry, "default_provider", "") or "")
-            provider_cfg = getattr(cfg.llm, provider, None)
-            model = str(getattr(provider_cfg, "model", "") or "").strip()
-            if not registry.is_chat_capable(provider):
-                return ConfigServiceProbeResponse(
-                    ok=False,
-                    kind="llm",
-                    provider=provider,
-                    model=model,
-                    error=f"LLM provider {provider!r} is not registered or not chat-capable.",
-                    latency_ms=int((time.perf_counter() - started) * 1000),
-                )
-            timeout_s = min(max(float(getattr(cfg.llm, "timeout", 300) or 300), 10.0), 30.0)
-            response = await asyncio.wait_for(
-                registry.complete_provider(
-                    provider,
-                    [
-                        {"role": "system", "content": "Reply with only OK."},
-                        {"role": "user", "content": "OpenBiliClaw connectivity probe."},
-                    ],
-                    temperature=0,
-                    max_tokens=LLM_CONNECTIVITY_PROBE_MAX_TOKENS,
-                    reasoning_effort="",
-                    model=model or None,
-                ),
-                timeout=timeout_s,
-            )
-            ok = bool(str(getattr(response, "content", "") or "").strip())
-            response_model = str(getattr(response, "model", "") or model)
-            return ConfigServiceProbeResponse(
-                ok=ok,
-                kind="llm",
-                provider=provider,
-                model=response_model,
-                message="LLM provider is available." if ok else "",
-                error="" if ok else "LLM provider returned an empty response.",
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-        except Exception as exc:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="llm",
-                provider=provider,
-                model=model,
-                error=str(exc),
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-
-
-    async def _probe_embedding_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLMRegistry
-        from openbiliclaw.llm.registry import build_embedding_service
-
-        started = time.perf_counter()
-        emb_cfg = getattr(getattr(cfg, "llm", None), "embedding", None)
-        provider = str(getattr(emb_cfg, "provider", "") or "").strip().lower()
-        model = str(getattr(emb_cfg, "model", "") or "").strip()
-        if not provider:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="embedding",
-                provider="",
-                model=model,
-                error="Embedding provider is not configured.",
-            )
-        try:
-            service = build_embedding_service(cfg, LLMRegistry())
-            if service is None:
-                return ConfigServiceProbeResponse(
-                    ok=False,
-                    kind="embedding",
-                    provider=provider,
-                    model=model,
-                    error="Embedding service could not be built from the submitted config.",
-                    latency_ms=int((time.perf_counter() - started) * 1000),
-                )
-            probe = getattr(service, "probe", None)
-            if not callable(probe):
-                # Legacy/stub embedding service without a live probe —
-                # building it successfully is the best signal we have.
-                ok = True
-            else:
-                ok = bool(await asyncio.wait_for(probe(), timeout=15.0))
-            return ConfigServiceProbeResponse(
-                ok=ok,
-                kind="embedding",
-                provider=provider,
-                model=model,
-                message="Embedding provider is available." if ok else "",
-                error="" if ok else "Embedding provider returned no vector.",
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
-        except Exception as exc:
-            return ConfigServiceProbeResponse(
-                ok=False,
-                kind="embedding",
-                provider=provider,
-                model=model,
-                error=str(exc),
-                latency_ms=int((time.perf_counter() - started) * 1000),
-            )
+    register_probe_routes(app, apply_llm_update=_apply_llm_update)
 
     def _pick_best_xhs_url(database: Any, note_id: str, incoming: str) -> str:
         """Return the most share-worthy URL for a xhs note.
@@ -2712,7 +2609,7 @@ def create_app(
         except Exception:
             pass
         try:
-            _disc_conn = getattr(database, '_discovery_conn', None) or database.conn
+            _disc_conn = getattr(database, "_discovery_conn", None) or database.conn
             row = _disc_conn.execute(
                 "SELECT content_url FROM discovery_candidates "
                 "WHERE source_platform='xiaohongshu' AND content_id=? "
@@ -2725,7 +2622,6 @@ def create_app(
         except Exception:
             pass
         return incoming
-
 
     def _keyword_judge_sentiment(user_message: str) -> str:
         """Fallback keyword-based sentiment detection."""
@@ -2758,7 +2654,6 @@ def create_app(
         if any(kw in msg for kw in weak_positive_terms):
             return "weak_positive"
         return "neutral"
-
 
     def _get_diary_rag_service():
         """获取或创建日记 RAG 服务实例（懒加载）。"""
@@ -6464,7 +6359,6 @@ def create_app(
 
     # ─── 智能时间线卡片 API ───────────────────────────────────────────
 
-
     @app.get("/api/diary/fragments")
     def diary_fragments_list(
         fragment_date: str | None = None,
@@ -6612,298 +6506,6 @@ def create_app(
         except Exception as exc:
             logger.exception("语义搜索失败")
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
-
-    # ── 健康管理系统 API ───────────────────────────────────────
-
-    _health_service: HealthService | None = None
-
-    def _get_health_service() -> HealthService | None:
-        """获取或创建健康管理服务实例（懒加载）。"""
-        nonlocal _health_service
-        if _health_service is not None:
-            return _health_service
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return None
-        llm_service = getattr(ctx, "llm_service", None)
-        _health_service = HealthService(database=database, llm_service=llm_service)
-        return _health_service
-
-    # ── 统计概览 ──
-
-    # ── 患者档案 ──
-
-    @app.get("/api/health/patients")
-    def health_patients_list() -> JSONResponse:
-        """列出所有患者档案。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        patients = svc.list_patients()
-        return JSONResponse({"ok": True, "items": [p.model_dump(mode="json") for p in patients]})
-
-    # ── 就诊记录 ──
-
-
-    @app.get("/api/health/conditions")
-    def health_conditions_list(
-        patient_id: int | None = None,
-        status: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> JSONResponse:
-        """列出健康问题。"""
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_conditions(
-            patient_id=patient_id,
-            status=status,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [c.model_dump(mode="json") for c in items],
-                "total": total,
-            }
-        )
-
-    # ── 用药记录 ──
-
-    @app.get("/api/health/medications")
-    def health_medications_list(
-        patient_id: int | None = None,
-        status: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_medications(
-            patient_id=patient_id,
-            status=status,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [m.model_dump(mode="json") for m in items],
-                "total": total,
-            }
-        )
-
-    # ── 化验结果 ──
-
-    @app.get("/api/health/lab-results")
-    def health_lab_results_list(
-        patient_id: int | None = None,
-        limit: int = 50,
-        offset: int = 0,
-        search: str | None = None,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_lab_results(
-            patient_id=patient_id,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-            search=search,
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [item.model_dump(mode="json") for item in items],
-                "total": total,
-            }
-        )
-
-    # ── 检查 / 手术 ──
-
-    @app.get("/api/health/procedures")
-    def health_procedures_list(
-        patient_id: int | None = None,
-        procedure_type: str | None = None,
-        needs_follow_up: bool | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_procedures(
-            patient_id=patient_id,
-            procedure_type=procedure_type,
-            needs_follow_up=needs_follow_up,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [p.model_dump(mode="json") for p in items],
-                "total": total,
-            }
-        )
-
-    # ── 过敏史 ──
-
-    @app.get("/api/health/allergies")
-    def health_allergies_list(patient_id: int | None = None) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_allergies(patient_id=patient_id)
-        return JSONResponse({"ok": True, "items": [a.model_dump(mode="json") for a in items]})
-
-    # ── 生命体征 ──
-
-    # ── 疫苗接种 ──
-
-    @app.get("/api/health/immunizations")
-    def health_immunizations_list(patient_id: int | None = None) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_immunizations(patient_id=patient_id)
-        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
-
-    # ── 医生信息 ──
-
-    @app.get("/api/health/doctors")
-    def health_doctors_list(
-        specialty: str | None = None, search: str | None = None
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_doctors(specialty=specialty, search=search)
-        return JSONResponse({"ok": True, "items": [d.model_dump(mode="json") for d in items]})
-
-    # ── 文档 / 附件 ──
-
-    @app.get("/api/health/documents")
-    def health_documents_list(
-        patient_id: int | None = None,
-        document_type: str | None = None,
-        encounter_id: int | None = None,
-        search: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_documents(
-            patient_id=patient_id,
-            document_type=document_type,
-            encounter_id=encounter_id,
-            search=search,
-            limit=max(1, min(int(limit), 200)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [d.model_dump(mode="json") for d in items],
-                "total": total,
-            }
-        )
-
-    # ── AI 健康洞察 ──
-
-    @app.get("/api/health/insights")
-    def health_insights_list(
-        patient_id: int | None = None,
-        target_type: str | None = None,
-        target_id: int | None = None,
-        limit: int = 50,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_insights(
-            patient_id=patient_id,
-            target_type=target_type,
-            target_id=target_id,
-            limit=max(1, min(int(limit), 200)),
-        )
-        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
-
-    # ── 健康时间线 ──
-
-    # ── 预约 / 复诊 ──
-
-    @app.get("/api/health/appointments")
-    def health_appointments_list(
-        patient_id: int | None = None,
-        status: str | None = None,
-        upcoming_only: bool = False,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_appointments(
-            patient_id=patient_id,
-            status=status,
-            upcoming_only=upcoming_only,
-            limit=max(1, min(int(limit), 500)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [a.model_dump(mode="json") for a in items],
-                "total": total,
-            }
-        )
-
-    # ── 服药记录 / 用药依从性 ──
-
-    @app.get("/api/health/medication-logs")
-    def health_medication_logs_list(
-        patient_id: int | None = None,
-        medication_id: int | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_medication_logs(
-            patient_id=patient_id,
-            medication_id=medication_id,
-            start_date=start_date,
-            end_date=end_date,
-            limit=max(1, min(int(limit), 500)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [m.model_dump(mode="json") for m in items],
-                "total": total,
-            }
-        )
-
-    def health_medication_adherence(patient_id: int, days: int = 30) -> JSONResponse:
-        svc = _get_health_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        result = svc.get_medication_adherence(patient_id, max(1, min(int(days), 365)))
-        return JSONResponse({"ok": True, **result})
-
-    # ── 药物相互作用检查 ──
-
-    # ── AI 报告解读 ──
 
     # ── Route registration (集中到 _route_registry.py) ─────────
     register_all_routes(

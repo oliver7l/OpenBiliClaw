@@ -690,7 +690,7 @@ def register_source_routes(
         except Exception:
             pass
         try:
-            _dc = getattr(database, '_discovery_conn', None) or database.conn
+            _dc = getattr(database, "_discovery_conn", None) or database.conn
             row = _dc.execute(
                 "SELECT content_url FROM discovery_candidates "
                 "WHERE source_platform='xiaohongshu' AND content_id=? "
@@ -735,14 +735,31 @@ def register_source_routes(
             except Exception:
                 pass
             try:
-                _dc = getattr(database, '_discovery_conn', None) or database.conn
-                cursor = _dc.execute(
-                    "UPDATE discovery_candidates "
-                    "SET content_url=?, last_seen_at=CURRENT_TIMESTAMP "
-                    "WHERE source_platform='xiaohongshu' AND content_id=? "
-                    "AND (content_url = '' OR content_url NOT LIKE '%xsec_token=%')",
-                    (url, note_id),
-                )
+                # 必须走 _discovery_write（会 commit）。discovery.db 用的是默认隔离级别的
+                # 独立连接，`_dc.execute(UPDATE)` 只开事务不落盘；此前此处直接 execute 且
+                # 只 commit 了主连接，导致 token 回填对其它连接永远不可见（用户点 xhs 推荐
+                # 卡片仍被 300031 登录墙拦住）。
+                _write = getattr(database, "_discovery_write", None)
+                if _write is not None:
+                    cursor = _write(
+                        "UPDATE discovery_candidates "
+                        "SET content_url=?, last_seen_at=CURRENT_TIMESTAMP "
+                        "WHERE source_platform='xiaohongshu' AND content_id=? "
+                        "AND (content_url = '' OR content_url NOT LIKE '%xsec_token=%')",
+                        (url, note_id),
+                    )
+                else:
+                    _dc = getattr(database, "_discovery_conn", None)
+                    if _dc is None:
+                        raise RuntimeError("discovery connection unavailable")
+                    cursor = _dc.execute(
+                        "UPDATE discovery_candidates "
+                        "SET content_url=?, last_seen_at=CURRENT_TIMESTAMP "
+                        "WHERE source_platform='xiaohongshu' AND content_id=? "
+                        "AND (content_url = '' OR content_url NOT LIKE '%xsec_token=%')",
+                        (url, note_id),
+                    )
+                    _dc.commit()
                 updated += cursor.rowcount or 0
             except Exception:
                 continue
@@ -1606,7 +1623,7 @@ def register_source_routes(
                 xhs_fresh = 0
             if xhs_tokens and not xhs_fresh:
                 try:
-                    _dc = getattr(ctx.database, '_discovery_conn', None) or ctx.database.conn
+                    _dc = getattr(ctx.database, "_discovery_conn", None) or ctx.database.conn
                     row = _dc.execute(
                         "SELECT COUNT(*) FROM discovery_candidates "
                         "WHERE source_platform = 'xiaohongshu' "
@@ -1785,7 +1802,6 @@ def register_source_routes(
             zhihu=zhihu,
         )
 
-
     @app.get("/api/observability", response_model=ObservabilityResponse)
     async def observability() -> ObservabilityResponse:
         """Aggregate observability data for the dashboard page."""
@@ -1912,7 +1928,7 @@ def register_source_routes(
             ]
 
             # ── 5. Discovery candidates ──
-            disc_conn = getattr(db, '_discovery_conn', None) or db.conn
+            disc_conn = getattr(db, "_discovery_conn", None) or db.conn
             disc_rows = disc_conn.execute("""
                 SELECT status, COUNT(*) AS c
                 FROM discovery_candidates GROUP BY status ORDER BY c DESC
@@ -1935,7 +1951,7 @@ def register_source_routes(
             pipeline.discovery_candidates_evaluated = disc_evaluated
 
             # ── 6. LLM usage (combined: by_caller covers all 7d, derive today from it) ──
-            llm_conn = getattr(db, '_llm_conn', None) or db.conn
+            llm_conn = getattr(db, "_llm_conn", None) or db.conn
             caller_rows = llm_conn.execute("""
                 SELECT caller, COUNT(*) AS calls,
                        COALESCE(SUM(estimated_cost_cny), 0) AS cost_cny,
@@ -2227,7 +2243,7 @@ def register_source_routes(
     def _latest_xhs_token() -> str:
         if not hasattr(ctx.database, "conn"):
             return ""
-        _dc = getattr(ctx.database, '_discovery_conn', None) or ctx.database.conn
+        _dc = getattr(ctx.database, "_discovery_conn", None) or ctx.database.conn
         queries = (
             (
                 _dc,

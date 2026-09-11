@@ -31,8 +31,7 @@ src/openbiliclaw/media/
 ├── service.py            # MediaService：roots_meta / list_items / resolve_file / resolve_root
 └── routes.py             # build_media_router → /api/media/*
 src/openbiliclaw/web/
-├── media/index.html                  # 独立 /media 页（兜底）
-└── desktop/assets/js/media-app.js    # 桌面 SPA 内嵌页 mediaPage（主入口）
+└── desktop/assets/js/media-app.js    # 桌面 SPA 内嵌页 mediaPage（主入口，/web/media）
 ```
 
 ## 已实现功能
@@ -41,7 +40,8 @@ src/openbiliclaw/web/
 |------|------|------|
 | 根目录管理 | ✅ | `[media] roots` 多根；页面内「+ 添加目录」一键追加并持久化 |
 | 根元信息 | ✅ | 每个根的存在性 + 顶层视频/图片数量（`os.scandir` 非递归计数） |
-| 媒体列表 | ✅ | 分页（offset/limit）、类型过滤（all/video/image）、文件名搜索（忽略大小写） |
+| 媒体列表 | ✅ | 分页（offset/limit）、类型过滤（all/dir/video/image）、文件名搜索（忽略大小写） |
+| 目录筛选 | ✅ | 「目录」分类单列子目录；切到「视频/图片」时不混入目录，目录与文件分开浏览 |
 | 子目录导航 | ✅ | 逐层进入子目录 + 面包屑返回；目录始终展示便于下钻 |
 | 图片浏览 | ✅ | 卡片 `<img loading="lazy">` → 点击灯箱轮播（上一张/下一张） |
 | 视频播放 | ✅ | 灯箱 `<video controls autoplay>`，后端 Range 流式传输，可拖动进度条 |

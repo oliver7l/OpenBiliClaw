@@ -63,23 +63,28 @@ class FavoritesMixin:
         return int(row[0]) if row else 0
 
     def list_favorites(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Return favorited videos, newest first.
+        """Return favorited videos with metadata, newest first.
 
-        v0.4.0+: favorites 表迁移到 content.db，content_cache 在 pool.db，
-        暂不跨库 JOIN，只返回 favorites 基础字段。
+        ``favorites`` 在 content.db，``content_cache`` 在 pool.db。主连接（以及每线程
+        连接 / open_connection）都同时 ATTACH 了这两个子库，故走 ``self.conn`` 做跨库
+        LEFT JOIN 取回标题/UP/封面等元数据。
+
+        注意：不要再退回 ``self._content`` —— 那是 content.db 的独立连接，未 ATTACH pool，
+        曾导致本方法只能返回空字符串元数据（v0.4.0 拆库遗留的功能回退）。
         """
-        cursor = self._content.execute(
+        cursor = self.conn.execute(
             """
             SELECT
                 f.bvid,
                 f.added_at,
                 f.note,
-                '' AS title,
-                '' AS up_name,
-                '' AS cover_url,
-                '' AS content_url,
-                '' AS source_platform
-            FROM favorites AS f
+                COALESCE(c.title, '')           AS title,
+                COALESCE(c.up_name, '')         AS up_name,
+                COALESCE(c.cover_url, '')       AS cover_url,
+                COALESCE(c.content_url, '')     AS content_url,
+                COALESCE(c.source_platform, '') AS source_platform
+            FROM content.favorites AS f
+            LEFT JOIN pool.content_cache AS c ON c.bvid = f.bvid
             ORDER BY f.added_at DESC
             LIMIT ? OFFSET ?
             """,

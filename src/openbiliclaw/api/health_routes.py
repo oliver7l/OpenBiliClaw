@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from openbiliclaw.api.runtime_context import RuntimeContext
+from openbiliclaw.cycle import CycleStore
 from openbiliclaw.health import (
     AllergyCreate,
     AppointmentCreate,
@@ -57,7 +58,7 @@ def _get_health_service(ctx: RuntimeContext) -> HealthService | None:
     db_path: str | None = None
     config = getattr(ctx, "config", None)
     storage = getattr(config, "storage", None)
-    if storage is not None and getattr(storage, "health_db_path", ""):
+    if storage is not None and getattr(storage, "health_db_path", None):
         db_path = str(storage.health_db_path)
     if not db_path:
         main_path = getattr(database, "_db_path", None)
@@ -68,6 +69,32 @@ def _get_health_service(ctx: RuntimeContext) -> HealthService | None:
     llm_service = getattr(ctx, "llm_service", None)
     _health_service = HealthService(db_path=db_path, llm_service=llm_service)
     return _health_service
+
+
+_cycle_store: CycleStore | None = None
+
+
+def _get_cycle_store(ctx: RuntimeContext) -> CycleStore | None:
+    """获取或创建周期记录存储（懒加载；cycle.db 与健康库同目录，隔离锁域）。"""
+    global _cycle_store
+    if _cycle_store is not None:
+        return _cycle_store
+    database = getattr(ctx, "database", None)
+    if database is None:
+        return None
+    db_path: str | None = None
+    config = getattr(ctx, "config", None)
+    storage = getattr(config, "storage", None)
+    if storage is not None and getattr(storage, "health_db_path", None):
+        db_path = str(Path(storage.health_db_path).with_name("cycle.db"))
+    if not db_path:
+        main_path = getattr(database, "_db_path", None)
+        if main_path is not None:
+            db_path = str(Path(main_path).with_name("cycle.db"))
+    if not db_path:
+        db_path = "data/cycle.db"
+    _cycle_store = CycleStore(db_path=db_path)
+    return _cycle_store
 
 
 def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:

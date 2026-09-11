@@ -66,7 +66,8 @@
     loading: false,
     dataVersion: 0,
     loadedOnce: false,
-    randomMode: false
+    randomMode: false,
+    current: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -145,6 +146,55 @@
       .catch(function (err) { alert("删除失败：" + err.message); });
   }
 
+  /* ── 播放弹窗内的收藏 / 评级（⏭ 旁的 ☆ 与底部星级） ── */
+  function bindMediaFav(item) {
+    var favBtn = $("mediaVideoFav");
+    if (!favBtn) return;
+    favBtn.textContent = item.favorite ? "★" : "☆";
+    favBtn.setAttribute("aria-label", item.favorite ? "取消收藏" : "收藏");
+    favBtn.onclick = function (e) {
+      e.stopPropagation();
+      toggleFavorite(item);
+      favBtn.textContent = item.favorite ? "★" : "☆";
+    };
+  }
+  function bindMediaRating(item) {
+    var box = $("mediaVideoRating");
+    if (!box) return;
+    box.innerHTML = "";
+    for (var i = 1; i <= 5; i++) {
+      (function (n) {
+        var s = document.createElement("span");
+        s.className = "media-star" + (item.rating >= n ? " on" : "");
+        s.textContent = "★";
+        s.onclick = function (e) { setRating(item, n, e); bindMediaRating(item); };
+        box.appendChild(s);
+      })(i);
+    }
+  }
+
+  /* ── 「下一个」：随机模式跳另一个，否则按列表顺序播下一个 ── */
+  function mediaVideoList() { return state.items.filter(function (i) { return !i.is_dir && i.kind === "video"; }); }
+  function nextVideo() {
+    var list = mediaVideoList();
+    if (!list.length) return;
+    var v = $("mediaVideoView");
+    var n;
+    if (state.randomMode) {
+      n = list[Math.floor(Math.random() * list.length)];
+      if (list.length > 1 && n === state.current) n = list[(list.indexOf(n) + 1) % list.length];
+    } else {
+      var idx = list.indexOf(state.current);
+      n = list[(idx >= 0 ? idx + 1 : 0) % list.length];
+    }
+    state.current = n;
+    v.src = fileUrl(itemRoot(n), n.rel);
+    v.play();
+    bindMediaFav(n);
+    bindMediaRating(n);
+    v.onended = nextVideo;
+  }
+
   /* ── 随机播放（从当前列表选随机视频并连播） ── */
   function randomVideos() {
     return state.items.filter(function (i) { return !i.is_dir && i.kind === "video"; });
@@ -163,16 +213,22 @@
     if (!pool.length || !state.randomMode) return;
     var item = pool[Math.floor(Math.random() * pool.length)];
     var v = $("mediaVideoView");
+    state.current = item;
     v.src = fileUrl(itemRoot(item), item.rel);
     $("mediaVideoModal").classList.add("open");
+    bindMediaFav(item);
+    bindMediaRating(item);
     // 播完自动切下一个随机
     v.onended = function () {
       if (state.randomMode) {
         var p = randomVideos();
         if (!p.length) { closeModal($("mediaVideoModal")); state.randomMode = false; return; }
         var next = p[Math.floor(Math.random() * p.length)];
+        state.current = next;
         v.src = fileUrl(itemRoot(next), next.rel);
         v.play();
+        bindMediaFav(next);
+        bindMediaRating(next);
       }
     };
   }
@@ -261,7 +317,8 @@
     state.loading = true;
     var version = state.dataVersion;
     var p = new URLSearchParams();
-    p.set("kind", state.kind);
+    // 收藏里没有目录，dir 分类下收藏退化为看全部
+    p.set("kind", state.kind === "dir" ? "all" : state.kind);
     if (state.q) p.set("q", state.q);
     fetch("/api/media/favorites?" + p.toString()).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -419,12 +476,23 @@
   function openVideo(item) {
     var v = $("mediaVideoView");
     var note = $("mediaVideoNote");
+    state.current = item;
     v.src = fileUrl(itemRoot(item), item.rel);
     var ext = item.name.toLowerCase().match(/\.[a-z0-9]+$/);
     var ok = ext ? UNSUPPORTED.indexOf(ext[0]) < 0 : true;
     note.hidden = ok;
     note.textContent = ok ? "" : ("浏览器可能无法直接播放 " + (ext[0] || "").toUpperCase() + "，建议转码为 MP4。");
     $("mediaVideoModal").classList.add("open");
+    bindMediaFav(item);
+    bindMediaRating(item);
+    // 单集播完自动按列表顺序播下一个，直到列表末尾停止
+    v.onended = function () {
+      if (state.randomMode) return;
+      var list = mediaVideoList();
+      var idx = list.indexOf(item);
+      var next = idx >= 0 ? list[idx + 1] : undefined;
+      if (next) openVideo(next);
+    };
   }
   function closeModal(modal) {
     modal.classList.remove("open");
@@ -533,6 +601,7 @@
   });
   bindEl("mediaImageClose", "click", function () { closeModal($("mediaImageModal")); });
   bindEl("mediaVideoClose", "click", function () { closeModal($("mediaVideoModal")); });
+  bindEl("mediaVideoNext", "click", nextVideo);
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
       closeModal($("mediaImageModal"));

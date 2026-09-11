@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1279,7 +1279,7 @@
       document.body.classList.toggle("clone-page-open", pageId === "clonePage");
       document.body.classList.toggle("travel-page-open", pageId === "travelPage");
       document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1339,6 +1339,8 @@
         interviewPage: () => { if (window.loadInterviewData) window.loadInterviewData(); },
         selfEvolutionPage: () => { if (typeof loadSelfEvoStatus === 'function') loadSelfEvoStatus(); },
         mediaPage: () => { if (window.reloadMediaPage) window.reloadMediaPage(); },
+        ed2kPage: () => { if (window.reloadEd2kPage) window.reloadEd2kPage(); },
+        doubanPage: () => { if (window.reloadDoubanPage) window.reloadDoubanPage(); },
       };
       const globalRefreshBtn = document.getElementById("globalRefreshBtn");
       if (globalRefreshBtn) {
@@ -1391,6 +1393,8 @@
       "read-archive": () => openReadArchivePage(),
       settings: () => openSettingsPage("models"),
       travel: () => openTravelPage(),
+      ed2k: () => openEd2kPage(),
+      douban: () => openDoubanPage(),
     };
     window.DESKTOP_PAGE_ROUTES = DESKTOP_PAGE_ROUTES;
 
@@ -1411,6 +1415,10 @@
     }
 
     window.addEventListener("popstate", () => routeFromPath());
+
+    // 初次访问直链 /web/{page}：等待所有 defer 脚本（含各独立页如媒体）
+    // 注册完 DESKTOP_PAGE_ROUTES 后再派发一次路由，避免落到首页。
+    window.addEventListener("DOMContentLoaded", routeFromPath);
 
     function syncTopbarHeight() {
       const topbar = document.querySelector(".topbar");
@@ -1466,6 +1474,23 @@
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("interviewPage");
       setTimeout(() => { if (window.loadInterviewData) window.loadInterviewData(); }, 50);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openEd2kPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("ed2kPage");
+      setTimeout(() => { if (window.reloadEd2kPage) window.reloadEd2kPage(); }, 50);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openDoubanPage() {
+      if (window.initDoubanPage) window.initDoubanPage();
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("doubanPage");
+      setTimeout(() => { if (window.reloadDoubanPage) window.reloadDoubanPage(); }, 50);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -3821,6 +3846,8 @@
     safeBind("#healthBtn", "click", () => { window.navigateTo("/web/health"); });
     safeBind("#travelBtn", "click", () => { window.navigateTo("/web/travel"); });
     safeBind("#mediaBtn", "click", () => { window.navigateTo("/web/media"); });
+    safeBind("#ed2kBtn", "click", () => { window.navigateTo("/web/ed2k"); });
+    safeBind("#doubanBtn", "click", () => { window.navigateTo("/web/douban"); });
     safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });

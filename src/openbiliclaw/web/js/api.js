@@ -617,6 +617,10 @@ export async function fetchTravelOverview(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
   return requestJson("/travel/overview", { timeoutMs });
 }
 
+export async function fetchTravelItinerary(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/itinerary", { timeoutMs });
+}
+
 // ── Interview (求职面试备战) ────────────────────────────────
 export async function fetchInterviewStatus(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
   return requestJson("/api/interview/status", { timeoutMs });
@@ -667,4 +671,71 @@ export async function postInterviewLog(payload, timeoutMs = DEFAULT_READ_TIMEOUT
 
 export async function postInterviewScaffold(payload, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
   return requestJson("/api/interview/scaffold", { ...json(payload), timeoutMs });
+}
+
+export async function fetchInterviewTopics(company = "", limit = 50, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const q = company ? `?company=${encodeURIComponent(company)}&limit=${limit}` : `?limit=${limit}`;
+  return requestJson(`/api/interview/topics${q}`, { timeoutMs });
+}
+
+export async function fetchInterviewTopicDetail(topicId, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/topics/${topicId}`, { timeoutMs });
+}
+
+export async function fetchInterviewScripts(scriptType = "", company = "", limit = 100, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const params = [];
+  if (scriptType) params.push(`type=${encodeURIComponent(scriptType)}`);
+  if (company) params.push(`company=${encodeURIComponent(company)}`);
+  params.push(`limit=${limit}`);
+  return requestJson(`/api/interview/scripts?${params.join("&")}`, { timeoutMs });
+}
+
+export async function fetchInterviewScriptTypes(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/scripts/types", { timeoutMs });
+}
+
+export async function fetchInterviewScriptDetail(scriptId, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/scripts/${scriptId}`, { timeoutMs });
+}
+
+// ── 岗位投递管理 ──
+export async function fetchInterviewPositions(company = "", city = "", status = "", limit = 100, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const params = [];
+  if (company) params.push(`company=${encodeURIComponent(company)}`);
+  if (city) params.push(`city=${encodeURIComponent(city)}`);
+  if (status) params.push(`status=${encodeURIComponent(status)}`);
+  params.push(`limit=${limit}`);
+  return requestJson(`/api/interview/positions?${params.join("&")}`, { timeoutMs });
+}
+
+export async function fetchInterviewPositionDetail(positionId, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/positions/${positionId}`, { timeoutMs });
+}
+
+export async function updateInterviewPositionStatus(positionId, status, resumeVersion = "", notes = "", timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const params = [`status=${encodeURIComponent(status)}`];
+  if (resumeVersion) params.push(`resume_version=${encodeURIComponent(resumeVersion)}`);
+  if (notes) params.push(`notes=${encodeURIComponent(notes)}`);
+  return requestJson(`/api/interview/positions/${positionId}/status?${params.join("&")}`, { method: "POST", timeoutMs });
+}
+
+// ── 简历 ──────────────────────────────────────────────────────
+export async function fetchInterviewResumes(company = "", positionId = null, page = 1, pageSize = 50, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  const params = [`page=${page}`, `page_size=${pageSize}`];
+  if (company) params.push(`company=${encodeURIComponent(company)}`);
+  if (positionId) params.push(`position_id=${positionId}`);
+  return requestJson(`/api/interview/resumes?${params.join("&")}`, { timeoutMs });
+}
+
+export async function fetchInterviewResumeDetail(resumeId, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson(`/api/interview/resumes/${resumeId}`, { timeoutMs });
+}
+
+export async function createInterviewResume(data, timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/api/interview/resumes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+    timeoutMs,
+  });
 }

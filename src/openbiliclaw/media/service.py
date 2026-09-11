@@ -135,7 +135,8 @@ class MediaService:
             name = entry.name
             rel = os.path.normpath(os.path.join(rel_prefix, name)) if rel_prefix else name
             if entry.is_dir(follow_symlinks=True):
-                if not query or query in name.lower():
+                # 目录只在 all / dir 分类下列出；切到 video/image 时不混入目录
+                if kind in ("all", "dir") and (not query or query in name.lower()):
                     items.append(
                         {
                             "name": name,

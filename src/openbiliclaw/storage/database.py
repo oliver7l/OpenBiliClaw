@@ -42,6 +42,7 @@ from openbiliclaw.storage._watch_later_mixin import WatchLaterMixin
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
     pass
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,7 @@ def open_db_conn(
         ("pool", _base.with_name("pool.db")),
         ("events", _base.with_name("events.db")),
         ("knowledge", _base.with_name("knowledge.db")),
+        ("content", _base.with_name("content.db")),
     ):
         if _sibling.exists():
             conn.execute(f"ATTACH DATABASE ? AS {_alias}", (str(_sibling),))
@@ -571,7 +573,32 @@ def _normalize_admission_min_score(value: object) -> float:
     return score
 
 
-class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, SavedMembershipsMixin, ViewHistoryMixin, QualityMixin, PruneMixin, PoolCandidateMixin, TopicMixin, NativeSyncMixin, WatchLaterMixin, DelightMixin, SourceRecipeMixin, CoverMixin, ArticleMixin, FavoritesMixin, UserFeedbackMixin, RecommendationMixin, DiscoveryCandidatesMixin, ContentCacheMixin, ChatTurnMixin, EventsMixin, LLMUsageMixin):
+class Database(
+    AuthMixin,
+    InitRunsMixin,
+    SchemaMixin,
+    DiscoveryKeywordsMixin,
+    SavedMembershipsMixin,
+    ViewHistoryMixin,
+    QualityMixin,
+    PruneMixin,
+    PoolCandidateMixin,
+    TopicMixin,
+    NativeSyncMixin,
+    WatchLaterMixin,
+    DelightMixin,
+    SourceRecipeMixin,
+    CoverMixin,
+    ArticleMixin,
+    FavoritesMixin,
+    UserFeedbackMixin,
+    RecommendationMixin,
+    DiscoveryCandidatesMixin,
+    ContentCacheMixin,
+    ChatTurnMixin,
+    EventsMixin,
+    LLMUsageMixin,
+):
     """Lightweight SQLite wrapper for OpenBiliClaw.
 
     Manages the event log, content cache, and recommendation history.
@@ -682,6 +709,17 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         """ATTACH the recommendation sub-database to a connection (idempotent)."""
         with suppress(sqlite3.OperationalError):
             conn.execute("ATTACH DATABASE ? AS pool", (str(self._pool_db_path),))
+
+    def _attach_content(self, conn: sqlite3.Connection) -> None:
+        """ATTACH the content sub-database to a connection (idempotent).
+
+        使 `content.` 前缀在任意连接上可解析；与 pool/events/knowledge 一视同仁，
+        跨库 JOIN（`pool.content_cache` JOIN `content.watch_later`/`favorites`）不再依赖
+        「恰好是初始化连接」这一隐含前提。此前漏 ATTACH 导致 list_favorites /
+        list_watch_later 在请求线程里读不到元数据。
+        """
+        with suppress(sqlite3.OperationalError):
+            conn.execute("ATTACH DATABASE ? AS content", (str(self._content_db_path),))
 
     _EVENTS_SCHEMA = (
         # 行为事件表：与主库历史 schema 一致（含生成列 source_platform + 索引）
@@ -846,8 +884,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             llm_conn.executescript(self._LLM_USAGE_SCHEMA)
             llm_conn.commit()
             self._logger().warning(
-                "llm.db 不存在，已创建 llm_usage 表。"
-                "若主库存在旧 llm_usage，请先运行迁移脚本。"
+                "llm.db 不存在，已创建 llm_usage 表。若主库存在旧 llm_usage，请先运行迁移脚本。"
             )
         finally:
             llm_conn.close()
@@ -954,9 +991,13 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         }
         # 主要索引：用户行为表（仅在表存在时创建）
         if "favorites" in existing:
-            self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_favorites_bvid ON favorites(bvid)")
+            self._content_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_favorites_bvid ON favorites(bvid)"
+            )
         if "watch_later" in existing:
-            self._content_conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_watch_later_bvid ON watch_later(bvid)")
+            self._content_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_watch_later_bvid ON watch_later(bvid)"
+            )
         self._content_conn.commit()
 
     def _logger(self):
@@ -967,7 +1008,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
     def initialize(self) -> None:
         """Initialize the database and run migrations if needed."""
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
+        self._conn = sqlite3.connect(
+            str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection
+        )
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout = 30000")
@@ -1000,8 +1043,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # Content 库：独立连接，文章内容相关表与主库锁域隔离
         self._init_content_connection()
         # 主库连接也 ATTACH content.db，使跨库 JOIN（content_cache JOIN favorites）正常工作
-        with suppress(sqlite3.OperationalError):
-            self._conn.execute("ATTACH DATABASE ? AS content", (str(self._content_db_path),))
+        self._attach_content(self._conn)
         # Bind the primary connection to the initializing thread so it is
         # reused (not duplicated) by later `self.conn` accesses on this thread.
         self._thread_local.conn = self._conn
@@ -1056,7 +1098,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         # thread reuses the primary connection bound in initialize().
         local_conn = getattr(self._thread_local, "conn", None)
         if local_conn is None:
-            local_conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
+            local_conn = sqlite3.connect(
+                str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection
+            )
             local_conn.row_factory = sqlite3.Row
             local_conn.execute("PRAGMA journal_mode=WAL")
             local_conn.execute("PRAGMA busy_timeout = 30000")
@@ -1067,6 +1111,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
             self._attach_pool(local_conn)
             self._attach_events(local_conn)
             self._attach_knowledge(local_conn)
+            self._attach_content(local_conn)
             self._thread_local.conn = local_conn
         return local_conn
 
@@ -1080,7 +1125,9 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         """
         if self._conn is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
-        conn = sqlite3.connect(str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection)
+        conn = sqlite3.connect(
+            str(self._db_path), timeout=30.0, check_same_thread=False, factory=LockedConnection
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -1088,6 +1135,7 @@ class Database(AuthMixin, InitRunsMixin, SchemaMixin, DiscoveryKeywordsMixin, Sa
         self._attach_pool(conn)
         self._attach_events(conn)
         self._attach_knowledge(conn)
+        self._attach_content(conn)
         return conn
 
     def _ensure_fresh_read(self) -> None:
