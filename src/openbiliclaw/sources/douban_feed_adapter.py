@@ -1,19 +1,15 @@
 """豆瓣（Douban）文章 feed 源 adapter。
 
-拉取豆瓣官方 RSS/ATOM feed（个人新评论 / 全站最新评论 / 小组讨论 / 日记），
-并归一化为 ``DiscoveredContent`` 供阅读库 / 推荐管线消费。
+拉取豆瓣内容并归一化为 ``DiscoveredContent`` 供阅读库 / 推荐管线消费。
 
-与 ``RssAdapter`` 的关键区别：豆瓣个人 / 部分小组 feed 需要登录 cookie，
-这里用 ``requests.get`` 携带 cookie 取原始 XML 后交给 feedparser 解析。
+- ``comment`` / ``review`` / ``group``：拉豆瓣官方 RSS/ATOM feed（需 cookie 的可
+  带 cookie），交给 feedparser 解析。
+- ``diary``（用户广播/短评动态）：**直连豆瓣 rexxar JSON 接口**
+  （``m.douban.com/rexxar/api/v2/status/user_timeline/{uid}``），需要登录 cookie
+  并带精确 ``Referer``——RSSHub 的 status 路由上游未带 Referer 已被豆瓣反爬拦，
+  故不走 RSSHub 自部署，改由本 adapter 自取。
 
-feed URL 由 ``recipe.config`` 按 ``feed_kind`` 拼：
-- ``comment``  → https://douban.com/feed/people/{uid}/
-- ``review``   → https://douban.com/feed/review/latest
-- ``group``    → https://www.douban.com/feed/group/{group_id}/discussion
-- ``diary``    → {rsshub_url}/douban/user/{uid}/status（官方 RSS 有限，走自部署 RSSHub）
-
-diary（及后续 RSSHub 聚合源）URL 的 base 取自 ``[sources.douban].rsshub_url``
-（默认 http://127.0.0.1:1200，本地 Docker 自部署 RSSHub），不直接用官方实例。
+feed URL 由 ``recipe.config`` 按 ``feed_kind`` 拼。
 """
 
 from __future__ import annotations
@@ -21,6 +17,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import re
+import time
 from typing import TYPE_CHECKING
 
 import requests
@@ -43,19 +40,26 @@ _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+# 移动端 UA + Referer 是豆瓣 rexxar 反爬校验的必需头
+_MOBILE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+)
+# 每次翻页之间的等待秒数（温和限频，避免触发豆瓣反爬）
+_DIARY_PAGE_SLEEP = 1.0
 
 
-def _feed_url(kind: str, uid: str = "", group_id: str = "", rsshub_url: str = "") -> str:
-    """按 feed_kind 拼豆瓣 feed URL。diary 走本地自部署 RSSHub（无则回退官方）。"""
+def _feed_url(kind: str, uid: str = "", group_id: str = "") -> str:
+    """按 feed_kind 拼豆瓣 RSS feed URL。
+
+    仅 ``comment`` / ``review`` / ``group`` 用 URL 驱动；``diary`` 走 rexxar
+    JSON 接口（见 :meth:`DoubanFeedAdapter._fetch_diary`），不在此拼 URL。
+    """
     kind = (kind or "review").strip().lower()
     if kind == "comment" and uid:
         return f"https://douban.com/feed/people/{uid}/"
     if kind == "group" and group_id:
         return f"https://www.douban.com/feed/group/{group_id}/discussion"
-    if kind == "diary" and uid:
-        base = (rsshub_url or "").strip().rstrip("/") or "http://127.0.0.1:1200"
-        # RSSHub 豆瓣用户广播路由：/douban/people/:userid/status
-        return f"{base}/douban/people/{uid}/status"
     # 默认：全站最新评论
     return "https://douban.com/feed/review/latest"
 
@@ -63,10 +67,8 @@ def _feed_url(kind: str, uid: str = "", group_id: str = "", rsshub_url: str = ""
 class DoubanFeedAdapter:
     """从豆瓣 RSS feed 拉取文章的 source adapter。"""
 
-    def __init__(self, cookie: str = "", rsshub_url: str = "") -> None:
+    def __init__(self, cookie: str = "") -> None:
         self._cookie = (cookie or "").strip()
-        # 本地自部署 RSSHub base（diary 等聚合源用）；空则 fetch 时回退默认。
-        self._rsshub_url = (rsshub_url or "").strip().rstrip("/")
 
     @property
     def source_type(self) -> str:
@@ -123,21 +125,113 @@ class DoubanFeedAdapter:
         resp.raise_for_status()
         return resp.text
 
+    def _fetch_diary_raw(self, uid: str) -> list[dict]:
+        """直连豆瓣 rexxar 用户时间线接口，返回 status items 列表。
+
+        带移动端 UA + 精确 Referer + 登录 cookie（缺 Referer 会返回
+        ``invalid_request_1284`` 被反爬拦截）。分页拉取，页间温和限频。
+        """
+        start = 0
+        per_page = 30
+        collected: list[dict] = []
+        while True:
+            url = f"https://m.douban.com/rexxar/api/v2/status/user_timeline/{uid}"
+            params = {"start": start, "count": per_page}
+            headers = {
+                "User-Agent": _MOBILE_UA,
+                "Referer": f"https://m.douban.com/people/{uid}/statuses",
+                "Accept": "application/json",
+            }
+            resp = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                cookies=self._cookie_jar(),
+                timeout=20,
+            )
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except ValueError:
+                logger.warning("DoubanFeedAdapter: diary 响应非 JSON: %s", url)
+                break
+            page_items = data.get("items") or []
+            collected.extend(page_items)
+            total = int(data.get("count") or 0)
+            start += per_page
+            if not page_items or start >= total or len(collected) >= 90:
+                break
+            time.sleep(_DIARY_PAGE_SLEEP)
+        return collected
+
+    def _diary_items(self, raw: list[dict], uid: str, feed_name: str) -> list["DiscoveredContent"]:
+        """把 rexxar items 归一化为 DiscoveredContent。"""
+        from openbiliclaw.discovery.engine import DiscoveredContent
+
+        out: list[DiscoveredContent] = []
+        for it in raw:
+            st = (it or {}).get("status") or {}
+            if not st:
+                continue
+            text = (st.get("text") or "").strip()
+            if not text:
+                continue
+            link = (st.get("sharing_url") or "").strip()
+            if not link:
+                link = f"https://www.douban.com/people/{uid}/statuses"
+            author = ((st.get("author") or {}) or {}).get("name") or "豆瓣"
+            created = (st.get("create_time") or "").strip()
+            # 标题取正文首行（动态通常为短句）
+            title = re.split(r"\s+", text)[:12]
+            title = " ".join(t for t in title if t)[:60] or "豆瓣动态"
+            content_id = f"douban_diary-{abs(hash(link)) & 0xFFFFFFFF:08x}"
+            out.append(
+                DiscoveredContent(
+                    content_id=content_id,
+                    content_url=link,
+                    source_platform="douban_feed",
+                    title=title,
+                    description=text[:300],
+                    author_name=author,
+                    discovered_at=created,
+                    up_name=feed_name,
+                    content_text=text[:20000],
+                )
+            )
+        return out
+
+    async def _fetch_diary(self, uid: str, feed_name: str, limit: int) -> list["DiscoveredContent"]:
+        """拉取并按 limit 截断用户动态。"""
+        try:
+            raw = await asyncio_run_in_executor(self._fetch_diary_raw, uid)
+        except requests.RequestException as exc:
+            logger.warning("DoubanFeedAdapter: diary 拉取失败 %s: %s", uid, exc)
+            return []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("DoubanFeedAdapter: diary 拉取异常 %s: %s", uid, exc)
+            return []
+        items = self._diary_items(raw, uid, feed_name)
+        logger.info("DoubanFeedAdapter: diary %d items for user %s", len(items), uid)
+        return items[:limit]
+
     async def fetch(
         self,
         recipe: SourceRecipe,
         profile: object | None = None,
         limit: int = 20,
     ) -> list[DiscoveredContent]:
-        """按 recipe.config 的 feed_kind 拼 URL 抓取并解析。"""
+        """按 recipe.config 的 feed_kind 抓取并解析。"""
         cfg = getattr(recipe, "config", None) or {}
         feed_kind = str(cfg.get("feed_kind", "review") or "review")
         uid = str(cfg.get("uid", "") or "")
         group_id = str(cfg.get("group_id", "") or "")
         feed_name = recipe.name or cfg.get("name", "") or "豆瓣feed"
-        # rsshub_url 优先 recipe.config，其次构造时传入的 rsshub_url。
-        rsshub_url = str(cfg.get("rsshub_url", "") or "") or self._rsshub_url
-        url = _feed_url(feed_kind, uid=uid, group_id=group_id, rsshub_url=rsshub_url)
+
+        # diary（用户广播）走 rexxar JSON 接口直连，不走 RSS。
+        if feed_kind == "diary" and uid:
+            return await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit)
+
+        url = _feed_url(feed_kind, uid=uid, group_id=group_id)
 
         try:
             xml = await asyncio_run_in_executor(self._fetch_xml, url)

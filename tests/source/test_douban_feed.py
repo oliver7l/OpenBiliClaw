@@ -53,12 +53,8 @@ def test_feed_url_templates() -> None:
     assert _feed_url("comment", uid="60690917") == "https://douban.com/feed/people/60690917/"
     assert _feed_url("review") == "https://douban.com/feed/review/latest"
     assert _feed_url("group", group_id="beijing") == "https://www.douban.com/feed/group/beijing/discussion"
-    # diary 走本地自部署 RSSHub（默认），路由为 /douban/people/:userid/status
-    assert _feed_url("diary", uid="60690917") == "http://127.0.0.1:1200/douban/people/60690917/status"
-    assert (
-        _feed_url("diary", uid="60690917", rsshub_url="http://192.168.1.5:1200/")
-        == "http://192.168.1.5:1200/douban/people/60690917/status"
-    )
+    # diary 不走 RSS URL（rexxar 直连），回落默认 review
+    assert _feed_url("diary", uid="60690917") == "https://douban.com/feed/review/latest"
     # 默认 review
     assert _feed_url("") == "https://douban.com/feed/review/latest"
 
@@ -125,28 +121,56 @@ def test_fetch_cookie_built_from_kind(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["url"] == "https://douban.com/feed/people/60690917/"
 
 
-def test_fetch_diary_uses_self_hosted_rsshub(monkeypatch: pytest.MonkeyPatch) -> None:
-    """diary feed 走本地自部署 RSSHub，且构造器传入的 rsshub_url 生效。"""
+def test_fetch_diary_uses_rexxar_direct(monkeypatch: pytest.MonkeyPatch) -> None:
+    """diary 直连豆瓣 rexxar JSON 接口，带 Referer + cookie，解析 status items。"""
     captured: dict = {}
+    _SAMPLE_TIMELINE = {
+        "count": 2,
+        "items": [
+            {
+                "status": {
+                    "text": "看完《出走的决心》，很有感触。",
+                    "sharing_url": "https://www.douban.com/people/60690917/status/1/",
+                    "create_time": "2026-09-01 10:00:00",
+                    "author": {"name": "影迷A"},
+                }
+            },
+            {
+                "status": {
+                    "text": "读书笔记打卡",
+                    "sharing_url": "https://www.douban.com/people/60690917/status/2/",
+                    "create_time": "2026-09-02 09:00:00",
+                    "author": {"name": "影迷A"},
+                }
+            },
+        ],
+    }
 
-    class _FakeResp:
-        text = _SAMPLE_XML
-
-        def raise_for_status(self) -> None:
-            pass
-
-    def fake_get(url, cookies=None, timeout=None, headers=None):  # type: ignore[no-untyped-def]
+    def fake_get(url, cookies=None, params=None, timeout=None, headers=None):  # type: ignore[no-untyped-def]
         captured["url"] = url
-        return _FakeResp()
+        captured["cookies"] = cookies
+        captured["headers"] = headers
+        resp = type("R", (), {})()
+        resp.json = lambda: _SAMPLE_TIMELINE  # type: ignore[attr-defined]
+        resp.raise_for_status = lambda: None  # type: ignore[attr-defined]
+        return resp
 
     import requests
 
     monkeypatch.setattr(requests, "get", fake_get)
-    adapter = DoubanFeedAdapter(
-        cookie="ck=yU89", rsshub_url="http://127.0.0.1:1200/"
+    adapter = DoubanFeedAdapter(cookie="ck=yU89; dbcl2=\"60690917:x\"")
+    items = asyncio.run(adapter.fetch(_recipe(feed_kind="diary", uid="60690917"), limit=5))
+    assert captured["url"].startswith(
+        "https://m.douban.com/rexxar/api/v2/status/user_timeline/60690917"
     )
-    asyncio.run(adapter.fetch(_recipe(feed_kind="diary", uid="60690917"), limit=5))
-    assert captured["url"] == "http://127.0.0.1:1200/douban/people/60690917/status"
+    assert captured["headers"].get("Referer", "").startswith(
+        "https://m.douban.com/people/60690917"
+    )
+    assert captured["cookies"] == {"ck": "yU89", "dbcl2": "\"60690917:x\""}
+    assert len(items) == 2
+    assert items[0].source_platform == "douban_feed"
+    assert items[0].content_url == "https://www.douban.com/people/60690917/status/1/"
+    assert "出走的决心" in items[0].title
 
 
 def test_fetch_empty_xml(monkeypatch: pytest.MonkeyPatch) -> None:

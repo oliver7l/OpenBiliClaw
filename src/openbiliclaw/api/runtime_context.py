@@ -638,12 +638,8 @@ class RuntimeContext:
             from openbiliclaw.sources.douban_feed_adapter import DoubanFeedAdapter
 
             _cookie_env = getattr(douban_cfg, "cookie_env", "") or "OPENBILICLAW_DOUBAN_COOKIE"
-            _rsshub_base = getattr(douban_cfg, "rsshub_url", "") or ""
             new_discovery_engine.register_adapter(
-                DoubanFeedAdapter(
-                    cookie=os.environ.get(_cookie_env, ""),
-                    rsshub_url=_rsshub_base,
-                )
+                DoubanFeedAdapter(cookie=os.environ.get(_cookie_env, ""))
             )
 
         # Register X (Twitter) adapter — server-side cookie replay, like
