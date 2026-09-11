@@ -4,6 +4,124 @@
 
 ---
 
+## v0.3.232: 修复 4 个存量真 bug（拆库/提取遗留）+ tests/api 清零（2026-09-11）
+
+> 缘起：全量 `tests/api` 有 25 例存量失败。逐组诊断后发现 **4 例是产品真 bug**（拆库与模块提取的"做了一半"），其余为测试自身过时。**25 failed → 0**（末次全量 `tests/api`：**0 failed / 498 passed**，2:57）。
+
+### 🐛 真 bug 1：收藏 / 稍后再看列表丢失全部元数据
+- **现象**：`GET /api/favorites`、`GET /api/watch-later` 返回的 `title` / `up_name` / `cover_url` / `content_url` / `source_platform` **全是空字符串**（原代码硬编码 `'' AS title` 等）。用户看到的收藏卡片只有 bvid、没有标题和封面。
+- **根因**：`v0.4.0+` 把 `favorites`/`watch_later` 迁到 `content.db`、`content_cache` 在 `pool.db` 后，注释写着"暂不跨库 JOIN"就没再补。基础设施其实已就绪（主连接同时 ATTACH 了 pool 与 content），**但每线程连接 `conn` 与 `open_connection()` 只 ATTACH 了 pool/events/knowledge，漏了 content**，导致跨库 JOIN 在请求线程里根本不可用。
+- **修复**：新增与 `_attach_pool/_attach_events/_attach_knowledge` 对称的 `_attach_content()`，在**初始化连接 / 每线程连接 / open_connection / 通用裸连**四处统一 ATTACH；`list_favorites` / `list_watch_later` 改走 `self.conn` 做跨库 LEFT JOIN 取回元数据。
+
+### 🐛 真 bug 2：xhs 分享链接的 xsec_token 回填从不落盘
+- **现象**：先由搜索页（无 token）入池、后由 explore feed 观察到带 token 的同一笔记时，缓存里的 URL 不会被升级，用户点推荐卡片被 xhs「300031 访问被拒」登录墙拦住。
+- **根因**：`_backfill_xhs_tokens` 在 `_discovery_conn`（独立连接，默认隔离级别）上执行 UPDATE，**却只 commit 了主连接**，discovery 侧写入永不提交。
+- **修复**：改走已有的 `database._discovery_write()`（内部 commit）。
+
+### 🐛 真 bug 3：`POST /api/config/probe-service` 恒返回 422
+- **现象**：前端"测试连接/probe"按钮永远失败（422 `{"loc":["query","cfg"],"msg":"Field required"}`）。
+- **根因**：`api/app.py` 内联的 `_probe_llm_config(cfg: Any)` 把 `Any` 注解让 FastAPI 判定为 **query 参数**；同时它抢先注册，**遮蔽了 `api/probe_routes.py` 中的正确实现**——而 `probe_routes.register_probe_routes` 从提取出来后**从未被接线**（又一个孤儿）。
+- **修复**：删除 app.py 内联块（110 行，含一个死 helper `_probe_embedding_config`），改为调用 `register_probe_routes(app, apply_llm_update=_apply_llm_update)`。
+
+### 🐛 真 bug 4：`PUT /api/config` 更新 X (Twitter) cookie 抛 ImportError
+- **现象**：保存 X cookie 时 `ImportError: cannot import name '_X_REQUIRED_COOKIE_NAMES' from 'openbiliclaw.api.app'`，导致"粘贴有效 cookie = 重新登录"的解除阻塞逻辑失效。
+- **根因**：`config_routes._get_x_required_cookie_names()` 从 `api.app` 导入一个**从未存在过**的常量名。
+- **修复**：改从真身 `openbiliclaw.sources.x_auth.X_REQUIRED_COOKIE_NAMES` 导入（与 `_cookie_routes.py` 一致）。顺带全仓扫了另外 7 处 `from openbiliclaw.api.app import ...` 桥接，仅此一处缺失。
+
+### 🧪 测试过时修正（非产品 bug）
+- `tests/api/test_api_xhs_ingest.py`：`from .test_search_strategy` → `tests.discovery.test_search_strategy`（K10 测试重组织后路径变更）；12 处裸名查 `discovery_candidates` 改为 `db._discovery_conn`（P5 拆库后 discovery 表不在主连接）。
+- `tests/api/test_api_bili_tasks.py`：3 处同样改 `db._discovery_conn`。
+- `tests/api/test_api_reading_tagging.py`：auto-tag 路由绑定的是 `api.utils.load_interest_keywords`，测试却 patch `api.app._load_interest_keywords`（**静默不生效**）→ 改 patch `reading_routes` 模块全局。
+- `tests/api/test_api_config_transactional.py`：回滚用的是 `config_routes` 自己的 `_restore_config_snapshot`，测试 patch `api.app.*` 无效 → 改对目标。
+
+### ✅ 验证
+- `tests/api`：**0 failed / 498 passed**（原 25 failed / 464 passed）；`tests/storage` + `tests/reading` + `tests/discovery` = **433 passed / 0 failed**。
+- ruff format + check 全过（改动文件）；mypy 0 错误（app.py 遗留 2 例 `_diary_rag_service` 为存量，HEAD 版同样存在）。
+- 全量 `importlib` 体检 423 模块 0 失败；`POST /api/config/probe-service` 实测返回 200。
+
+---
+
+## v0.3.231: 豆瓣 feed 改接自部署 RSSHub（2026-09-11）
+
+- **新增 RSSHub 自部署 runtime**：`runtime/rsshub.py` `ensure_rsshub` 用 Docker 拉起本地 RSSHub（`diygod/rsshub`，监听 `127.0.0.1:1200`，`--restart unless-stopped`）；检测到本机 `host.docker.internal:7890` 代理可达时自动注入 `HTTP/HTTPS/ALL_PROXY`，让 RSSHub 拉取受限内容。
+- **adapter 改指本地 RSSHub**：`DoubanFeedAdapter` 的 `diary`（个人动态）feed 不再用已限流的官方 `rsshub.app`，改走 `[sources.douban].rsshub_url`（默认 `http://127.0.0.1:1200`）；`rsshub_url` 从配置经 runtime_context 传入构造器。
+- **配置新增**：`[autostart].manage_rsshub=false`（`openbiliclaw start` 自动拉起本机 RSSHub，默认关）+ `[sources.douban].rsshub_url`。
+- **测试**：`tests/source/test_douban_feed.py` 更新 diary URL 断言；新增 `tests/runtime/test_rsshub.py`（存活短路 / 无 docker / 代理注入）。
+
+---
+
+## v0.3.226: 死代码收尾 + 磁盘清理 23G + cycle 模块补测试（2026-09-11）
+
+- **移除 `saved_sync/extension_broker.py`（293 行）**：全仓零外部引用，且其调用的 8 个 `Database` 方法（`create_or_reuse_extension_native_save_job` / `claim_extension_native_save_job` / `complete_extension_native_save_job` / `owns_extension_native_save_job` / `get_extension_native_save_job` / `cancel_unclaimed_extension_native_save_job` / `mark_unclaimed_extension_native_save_job_extension_required` / `expire_stale_extension_native_save_jobs`）**在 `Database` 上完全不存在**——即一旦被调用立即 `AttributeError`。唯一消费者是其上轮已删除的 `adapters/extension.py`。属 100% 死且坏的代码，已移入废纸篓。`saved_sync/` 收敛为 5 文件（`__init__` / `identity` / `models` / `router` / `service`）。
+- **`cycle/` 补测试（此前 0 覆盖）**：新增 `tests/cycle/test_cycle_store.py`（10 例），覆盖建表+索引、CRUD、`dt` 唯一约束、`stats()` 空态/日期差推导/显式 interval、实例间隔离。**10 passed**，ruff 干净。同时补 `docs/modules/cycle.md`。
+- **磁盘清理 23G**：按"保留最新 1 份完整快照，其余删除"决策，清理 `data/` 下冗余历史备份（详见 `docs/cleanup-manifest-2026-09-11.md`）——`data/_archive/`（20G，含 `backups_20260910` 17G 拆库前快照）、`data/openbiliclaw.db.bak-pre-{interview,events,pool}`（3.5G）、`openbiliclaw.db.backup-20260907-083148`（1.0G）。**项目 52G → 29G，`data/` 34G → 9.9G**。保留唯一完整单体快照 `data/backups/rollback-20260909/openbiliclaw-20260909-082527.db`（1.6G，168 表 / events 229761，integrity ok）作回滚点。顺带清理 3 个 0 字节垃圾文件（`data/database.db` / `data/hiser.db` / `data/openbiliclaw.db?mode=ro`）。执行采用"同盘暂存 → 验证 → 删除"两阶段，验证项：活库完好、`create_app()` 正常、`/api` 390 条、`/api/health/stats` 200（17 患者）、全量 import 417/0 FAIL、`tests/cycle` 10 passed。
+
+---
+
+## v0.3.228: 豆瓣文章 feed 阅读源（2026-09-11）
+
+- **新增豆瓣 feed 阅读源**：`sources/douban_feed_adapter.py` `DoubanFeedAdapter` 拉取豆瓣官方 RSS feed（关注作者评论 / 全站评论 / 小组讨论 / 日记），带 cookie 抓取（`requests` + feedparser），归一化为 `DiscoveredContent`；`source_type="douban_feed"`。
+- **接入阅读库**：`sources/douban_feed_tasks.py` 仿 rss_tasks 写库（`upsert_article` + `inject_article_to_pool`，按 url 去重），豆瓣文章进入「阅读库」页面可读。
+- **订阅配置**：`[scheduler] douban_feed_subscriptions`（`{name, feed_kind, uid|group_id}`）；手动触发 `scripts/fetch_douban_feed.py`。
+- **阅读意图登记**：`api/utils.py` + `api/app.py` 的 reading source synonyms 加 `豆瓣feed/豆瓣评论→douban_feed`，搜索"豆瓣"相关可归入该源。
+- **注册**：runtime_context 在 `[sources.douban].enabled` 时注册 `DoubanFeedAdapter`（cookie 从 `cookie_env` 环境变量读）。
+- **测试**：`tests/source/test_douban_feed.py` 7 例（URL 模板、cookie 解析、mock 抓取解析、空 feed、写库 source_type）；ruff + mypy 全绿。
+- **文档**：`docs/modules/douban.md` 新增「豆瓣文章 feed 阅读源」节。
+- **已知限制**：豆瓣官方 RSS 维护较少，部分 feed（如 `/feed/review/latest`）可能为空；日记类 feed 官方覆盖有限、需 RSSHub。接入后先手动跑一次确认目标 feed 有内容。
+
+---
+
+## v0.3.227: 豆瓣观影/读书画像分析（2026-09-11）
+
+- **新增统计画像**：`openbiliclaw/douban/analytics.py` `DoubanAnalytics` 纯内存聚合 `data/douban.db` 清单（不调 LLM）——总量与实际消费占比、分类×状态分布、按年份消费趋势、最早/最近年份品味跨度；暴露 `GET /api/douban/analytics`。
+- **新增 LLM 深度画像报告**：`openbiliclaw/douban/insight.py` 把统计摘要 + 近期代表清单填进结构化 prompt，调用 LLM 生成"我的观影/读书画像"报告（第一人称/分主题/成长脉络，600字内）；`POST /api/douban/insight` 生成、`GET /api/douban/insight` 读缓存；结果缓存到 `data/douban/profile_report.json`，非 force 直接读缓存；LLM 未配置时优雅返回 `{ok:false}`。
+- **前端画像子视图**：豆瓣 tab 内新增「书影音｜画像分析」子视图切换（仿 travel 子视图），画像视图含统计卡（总量/消费占比/品味跨度/分类分布）+ 年度趋势条 + 「生成/重新生成画像报告」按钮与报告渲染；`douban-app.js` 自包含不改 app.js 主体。
+- **路由注入 LLM**：`build_douban_router(config, llm_service=None)` 接收可选 LLM；`_route_registry.py` 从 `ctx.llm_service` 传入，统计功能不依赖 LLM、深度报告可选。
+- **测试**：`tests/api/test_douban.py` 从 5 例扩到 9 例（analytics 聚合/空库、insight 生成+缓存+mock、routes analytics/insight），tmp db + mock llm 隔离；ruff + mypy 全绿。
+- **文档**：`docs/modules/douban.md` 新增「画像分析」节 + `/api/douban/analytics|insight` API 表。
+
+---
+
+## v0.3.226: 豆瓣书影音模块（内容源 + tab + 独立库）（2026-09-11）
+
+- **新增豆瓣书影音模块**：展示与复用用户从豆瓣抓取的书影音清单（影视/书/音乐 × 看过/想看/在看）。独立库 `data/douban.db`（`[storage] douban_db_path`，同 health/media 锁域隔离模式），后端 `openbiliclaw/douban/`（`store.py` + `service.py` + `routes.py` `/api/douban/items|stats`），桌面新增「📚 豆瓣」tab → `/web/douban`（`douban-app.js`），支持清单卡片、分类/状态筛选、关键词搜索、跳转豆瓣原文阅读入口。
+- **数据导入**：`python -m openbiliclaw.douban.import_data` 把 `data/douban/*.json`（1410 条书影音）幂等导入 `douban_items` 表（按 url 去重）。
+- **内容源 adapter**：新增 `sources/douban_adapter.py` `DoubanAdapter`，从 douban.db 回放书影音条目为 `DiscoveredContent`；在 `runtime_context.py` **默认关闭**（`[sources.douban].enabled=false`）注册，不主动进入推荐流（仿小红书 stub + twitter enabled 门控）。
+- **配置**：`config.example.toml` 新增 `[sources.douban]`、`[storage] douban_db_path`；`config.py` 新增 `DoubanSourceConfig` + `StorageConfig.douban_db_path` + `SourcesConfig.douban`。
+- **测试**：`tests/api/test_douban.py` 5 例（store 导入去重/筛选/统计、routes、adapter），tmp db 隔离真实数据。
+- **文档**：新增 `docs/modules/douban.md`；`docs/modules/config.md` 补 `[sources.douban]` 与 `douban_db_path`。
+
+---
+
+## v0.3.225: 旅行模块接线 + 049 目录迁移清理（2026-09-11）
+
+- **旅行模块正式接线**：本机 `config.toml` 补 `[travel]` 段（`data_path = "data/travel"`），此前 `data_path` 为空导致 `/api/travel/*` 三个端点读不到数据、旅行 tab 显示"未配置数据目录"。接线后 `/api/travel/doc`、`/api/travel/overview`、`/api/travel/flights` 均实测返回 200 与真实数据。
+- **迁移 049 目录并分类归档**：`002-探索项目/049-新疆旅行预算/`、`049-新疆之旅/` 两个目录内容已迁移清理完毕并删除。
+  - **用户数据**（预算文档 `新疆旅行预算.md` + 携程机票结果 `our_routes_results.json` + 核心爬虫）确认已在 `data/travel/`（`data/` 属 `.gitignore` 本地数据）；`our_routes_results.json` 两处校验 md5 一致。
+  - **参考项目**（外部 clone 的 GitHub 项目）整体移入 `references/` 并保留 `.git` 与 LICENSE：`references/ctrip-ticket-crawler/`（Yybrook，MIT）、`references/travel-price-advisor/`（nzy-user）。`travel-price-advisor` 为独立比价助手，未并入当前项目源码（仅作参考）。
+- **文档**：`docs/modules/config.md` 新增 `[travel]`（v0.3.225+）段落。旅行模块无独立 `docs/modules/travel.md`（仅 API 路由 + 前端 tab，无特殊架构改动）。
+- **迁移 health-research 参考项目**：`002-探索项目/health-research/` 三个健康系统参考项目（均为外部 clone 的 GitHub 仓库）整体移入 `references/` 并保留 `.git` 与 origin：`references/EHR-django/`（MohsinRazaKhanSipra，Django 电子病历）、`references/HealthCare-Management-System/`（MrAnayDongre）、`references/MedSync-AI/`（tirth-patel06）。清理可再生成内容：移除 `EHR-django` 下 Windows 专用 `venv`（85M→24M）与全部 `__pycache__`。当前项目 `health/` 健康模块为自研、仅借鉴这些项目设计理念（见历史 changelog），不依赖其代码/数据，故仅作参考归档。原 `health-research/` 目录已删除。
+
+---
+
+## v0.3.224: 健康模块路由修复 + 路由注册可见性改造 + 文档全盘校正（2026-09-11）
+
+- **修复健康模块 55 条路由长期未注册（用户可见 bug）**：`api/health_routes.py:73` 的类型注解引用了 `CycleStore`，但文件顶部从未 import 它（该类型来自新增的 `openbiliclaw/cycle/` 模块）→ 模块级注解求值即抛 `NameError` → 整个模块导入失败。由于 `api/_route_registry.py` 当时用静默 `try/except Exception: logger.exception(...)` 吞掉异常，**55 条健康路由长期缺失却无人察觉**：健康页 `health-app.js` 实际调用的 34 个端点中，仅 13 条只读列表可用，`/stats`、`/timeline`、`/vitals`、`/encounters`、`/lab-trend`、`/medication-adherence`、`/check-drug-interactions`、全部 POST/PUT/DELETE 与 AI 解读端点均不可用。修复：补 `from openbiliclaw.cycle import CycleStore`。
+- **删除 app.py 内联健康路由兜底段（292 行）**：`api/app.py` 曾内联 13 条只读列表路由（`patients` / `conditions` / `medications` / `lab-results` / `procedures` / `allergies` / `immunizations` / `doctors` / `documents` / `insights` / `appointments` / `medication-logs`）作为临时兜底，构造方式为 `HealthService(database=database)` —— **读的是主库中已拆空的 `health_` 空壳表（0 行）**，导致健康页列表长期显示空数据（真实数据在 `data/health.db`，17 个患者）。该段已整体删除，`/api/health/*` 现为**单一来源** `health_routes.py`（68 条路由 / 36 条路径），同时清理 app.py 中不再使用的 `HealthService` import。注：`GET /api/health`（embedding readiness 探针）保留在 app.py，与健康档案无关。
+- **路由注册失败可见性改造**：`api/_route_registry.py` 新增 `_RouteRegistrationFailures` 收集器，14 处 `try/except Exception: logger.exception(...)` 全部改为 `_failures.record(...)`，并在 `register_all_routes()` 末尾聚合输出一条 ERROR（含失败模块名、异常类型与消息）+ 逐个 traceback。**保持"单模块失败不阻塞主 API 启动"的语义不变，但不再静默**。
+- **移除 `saved_sync/adapters/` 死代码**：该子包（`bilibili.py` / `extension.py` / `__init__.py`，共 3 文件）全仓零外部引用、`NativeSaveRouter()` 以无参方式装配、`tests/` 无任何覆盖，属重构遗留。已移入废纸篓（非永久删除）。
+- **验证**：全量 `importlib` 体检 **418 模块 0 失败**（修复前 3 失败）；`create_app()` 成功，`/api` 路由 387 条，健康路径 36 条；实测 `/api/health/stats` 返回真实数据（17 患者 / 2 就诊 / 6 健康问题）；ruff format + check 全过，mypy 0 错误。`tests/api` 全量 25 failed / 464 passed，经 stash 对照确认 **23 例为改动前存量失败**（bili_tasks / config_probe / xhs_ingest / favorites / watch_later / reading_tagging），另 2 例为并发资源竞争，**均非本次回归**；`test_api_media` + `test_api_ed2k` = 28 passed。
+- **文档全盘校正**：`docs/modules/health.md`（API 归属改 `health_routes.py`、存储改 `data/health.db` 子库、前端改桌面内嵌 `healthPage`、补 `cycle/` 与配置项 `storage.health_db_path`）；`docs/development.md` §4.2 模块表（补 `cycle` / `ed2k` / `media`、更新 `saved_sync`）+ §5 数据与存储（补 health.db / cycle.db 等子库与 `data/` 清理提示）+ §7 API 结构现状（重写 K3 接线状态，删除"13 个文件从未被注册"的过时描述）；`docs/index.md` 模块表补 health / cycle / saved_sync 行；`config.example.toml` 补 `[storage] health_db_path`。
+- **产出全盘梳理报告** `docs/project-consolidation-2026-09-11.md`（三重核实：运行时 dump 路由 + 全量 import 体检 + 磁盘实测），并修正 `docs/project-audit-2026-09-11.md` 中"`/api/health` 整体未注册"的错误结论。
+
+---
+
+## v0.3.223: ed2k / Kad 下载管理模块（2026-09-10）
+
+- **新增 ed2k / Kad 下载管理模块**：经本机 `mule` CLI 驱动 MLDonkey（Colima + Docker 容器），后端封装 `openbiliclaw/ed2k/`（`service.py` `MuleService` + `routes.py` `/api/ed2k/net|search|download|downloads|cancel|commit|path`），前端桌面顶栏新增「⬇ ed2k 下载」tab → `/web/ed2k` 内嵌页（`ed2kPage` + `assets/js/ed2k-app.js`），支持搜索、按来源数排序、下载、3 秒轮询进度、取消、commit、落地目录展示。搜索走 `asyncio.to_thread` 不阻塞事件循环。新增配置 `[ed2k] mule_path / download_dir`（均可留空自动推断），落地目录默认为容器 `incoming/files` 挂载宿主路径。配套 `docs/modules/ed2k.md`。ed2k 为独立下载工具，不注入推荐流、不新增 source，架构图无需改动。
+
+---
+
 ## v0.3.222: 本地媒体浏览模块（2026-09-10）
 
 - **新增本地媒体浏览模块（视频 + 图片）**：浏览 `[media] roots` 配置的本地媒体目录。桌面端以**内嵌视图**呈现（`mediaPage`，与专题/健康/旅行同款 `card-grid.is-minimal` 3 列小白卡 + 左对齐 subtab），顶栏「🎬 媒体」tab → `/web/media`；另保留独立 `/media` 页兜底。功能：根目录切换、类型/文件名过滤、子目录逐层进入 + 面包屑、图片灯箱轮播、HTML5 视频播放（后端 Range 流式 + ffmpeg 抽帧封面缓存）、**收藏（只看收藏视图）**、**1-5 星评级**、**随机播放（自动连播）**、**删除（移入 `data/media_trash/` 回收站，可找回）**、页面内「添加目录」一键持久化、目录穿越防护。后端：`src/openbiliclaw/media/`（`service.py` 扫描 + `store.py` 收藏/评级 `media_state.db` + `routes.py` `/api/media/roots|list|file|poster|item(GET/POST/DELETE)|favorites`）；新增配置 `[media] roots`。配套 `tests/api/test_api_media.py`（17 例）、`docs/modules/media.md`。媒体为独立查看器，不注入推荐流、不新增 source，架构图/README 无需改动。

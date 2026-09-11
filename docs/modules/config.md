@@ -53,6 +53,7 @@ cp config.example.toml config.toml
 |----|------|--------|------|
 | `enabled` | bool | `false` | 是否期望系统登录后自动拉起 `openbiliclaw start`。可通过插件 / 桌面 Web 设置页或 `openbiliclaw autostart enable/disable` 修改 |
 | `manage_ollama` | bool | `true` | `start` 时如果检测到当前配置需要本机 Ollama，且 endpoint 是默认 `localhost:11434`，会在 Ollama 未运行时尝试后台拉起 `ollama serve`。自定义端口或远端 endpoint 只探测不拉起 |
+| `manage_rsshub` | bool | `false` | `start` 时若 `sources.douban.rsshub_url` 未监听，用 Docker 自动拉起本地 RSSHub 容器（`--restart unless-stopped`）。默认关；需本机有 Docker。RSSHub 容器若探测到本机 `host.docker.internal:7890` 代理可达会自动注入 `HTTP/HTTPS/ALL_PROXY` |
 
 `save_config()` 默认会保留磁盘上已有的 `[autostart].enabled`，避免普通配置保存用陈旧快照覆盖用户刚从 API / CLI 改过的自启动开关。只有 `/api/autostart/apply` 和 `openbiliclaw autostart enable/disable` 会以 `autostart_authoritative=true` 权威写入该字段。
 
@@ -484,6 +485,23 @@ X 源健康状态（`ok` / `missing_cookie` / `expired_cookie` / `rate_limited` 
 
 `openbiliclaw init` 会根据用户是否接入小红书 / 抖音 / YouTube / X / 知乎写回对应 `enabled`。其中知乎在 `fetch-zhihu` 命令下仍只是事件爬取 smoke；在 guided init 勾选知乎或传 `--yes-zhihu` 时，`bootstrap_events` 会作为首版画像信号参与 `analyze_events()` / `build_initial_profile()`。Bilibili 默认启用，也可在插件设置页或 `config.toml` 里手动关闭。交互式初始化在采集完各平台事件后，会按事件量给出一组推荐比例，用户可确认使用或手动输入。插件设置页也可开关六个平台、编辑六个平台占比，并通过 `/api/config/source-share-suggestion` 按已有事件重新生成建议值；GET 使用已保存配置，POST 可接收设置页当前尚未保存的 `enabled_sources` / `configured_shares`。
 
+### `[sources.douban]`（v0.3.226+）
+
+豆瓣书影音回放源（`openbiliclaw/sources/douban_adapter.py`）。从 `data/douban.db` 读取用户已抓取的书影音清单，作为内容源可供发现/阅读。**默认关闭**，不进入推荐流。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `enabled` | bool | `false` | 是否注册 douban source adapter 与 feed adapter 到发现链路（默认 off） |
+| `cookie_env` | string | `"OPENBILICLAW_DOUBAN_COOKIE"` | 仅重新抓取豆瓣清单需用；不写进 config.toml |
+| `rsshub_url` | string | `"http://127.0.0.1:1200"` | 本地自部署 RSSHub base；`diary` 等聚合 feed 用它（官方实例已限流，默认指向本地） |
+
+```toml
+[sources.douban]
+enabled = false
+cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"
+rsshub_url = "http://127.0.0.1:1200"
+```
+
 ### `[discovery]`
 
 **统一关键词规划器 / Discover 背压 / 评估输入**（`DiscoveryConfig`）。把"每平台各自定时调 LLM 生成搜索词"换成**缺口拉动的双缓冲背压模型**：一个关键词存储（cache + 历史 + 产出）夹在「生成」与「抓取」之间，生成只在缓存见底且池子有真实缺口时触发（一次合并 LLM 调用覆盖所有缺货平台，带历史去重 + 池子分布避让）。同一段也承载 discovery evaluator 的可选封面图输入开关。本段**与 `[llm.discovery]` 是两个独立的表**——后者是 discovery 模块的 per-module LLM provider 覆盖，本段是规划器 / 背压 / 评估输入调参。完整设计见 [`docs/plans/2026-06-14-discover-backpressure-refactor-design.md`](../plans/2026-06-14-discover-backpressure-refactor-design.md) §6 参数表。
@@ -541,7 +559,9 @@ X 源健康状态（`ok` / `missing_cookie` / `expired_cookie` / `rate_limited` 
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
-| `db_path` | string | `"data/openbiliclaw.db"` | SQLite 数据库路径 |
+| `db_path` | string | `"data/openbiliclaw.db"` | SQLite 主库路径 |
+| `health_db_path` | string | `"data/health.db"` | 健康档案独立子库（db sharding P7，隔离锁域）；`cycle.db` 与其同目录派生 |
+| `douban_db_path` | string | `"data/douban.db"` | 豆瓣书影音独立子库（`openbiliclaw/douban/`，隔离锁域） |
 
 ### `[interview]`（v0.3.217+）
 
@@ -565,6 +585,38 @@ roots = [
   "/Volumes/固态硬盘1T/009-暂存内容/115网盘下载",
   "/Volumes/固态硬盘1T/009-暂存内容/Telegram Desktop",
 ]
+```
+
+### `[ed2k]`（v0.3.223+）
+
+ed2k / Kad 下载管理模块（桌面「⬇ ed2k 下载」tab + `/api/ed2k/*`）。后端经本机 `mule` CLI 驱动 MLDonkey（Colima + Docker 容器）。字段均可留空，留空时自动推断。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `mule_path` | string | `""` | mule CLI 绝对路径；留空时从 PATH 查找（`shutil.which`） |
+| `download_dir` | string | `""` | 下载落地目录；留空时从容器 `incoming/files` 挂载源推断 |
+
+```toml
+[ed2k]
+mule_path = ""
+download_dir = ""
+```
+
+### `[travel]`（v0.3.225+）
+
+旅行预算模块（桌面旅行 tab + `/api/travel/flights|doc|overview`）。`data_path` 指向存放预算文档与携程机票爬虫结果 JSON 的目录，相对项目根。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `data_path` | string | `""` | 旅行数据目录；留空则 travel tab 显示"未配置数据目录" |
+| `budget_doc` | string | `"新疆旅行预算.md"` | 预算文档文件名（相对 `data_path`） |
+| `flights_json` | string | `"ctrip-ticket-crawler/our_routes_results.json"` | 机票实时价格 JSON（相对 `data_path`） |
+
+```toml
+[travel]
+data_path = "data/travel"
+budget_doc = "新疆旅行预算.md"
+flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 ```
 
 ### `[soul.preference]`

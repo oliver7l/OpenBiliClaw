@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -622,6 +623,28 @@ class RuntimeContext:
         from openbiliclaw.sources.xiaoyuzhou_adapter import XiaoyuzhouAdapter
 
         new_discovery_engine.register_adapter(XiaoyuzhouAdapter())
+
+        # Register Douban (豆瓣) replay adapter — replays the user's crawled
+        # book/movie/music list from douban.db. Gated on [sources.douban].enabled
+        # so it does not inject the recommended pool unless explicitly turned on.
+        douban_cfg = getattr(getattr(new_config, "sources", None), "douban", None)
+        if douban_cfg is not None and bool(getattr(douban_cfg, "enabled", False)):
+            from openbiliclaw.sources.douban_adapter import DoubanAdapter
+
+            new_discovery_engine.register_adapter(DoubanAdapter())
+
+            # 豆瓣文章 feed adapter — 拉豆瓣官方 RSS（评论/小组/日记）进阅读库。
+            # cookie 从 [sources.douban].cookie_env 环境变量读取（未配置则空，仍拉公开源）。
+            from openbiliclaw.sources.douban_feed_adapter import DoubanFeedAdapter
+
+            _cookie_env = getattr(douban_cfg, "cookie_env", "") or "OPENBILICLAW_DOUBAN_COOKIE"
+            _rsshub_base = getattr(douban_cfg, "rsshub_url", "") or ""
+            new_discovery_engine.register_adapter(
+                DoubanFeedAdapter(
+                    cookie=os.environ.get(_cookie_env, ""),
+                    rsshub_url=_rsshub_base,
+                )
+            )
 
         # Register X (Twitter) adapter — server-side cookie replay, like
         # Bilibili / Douyin-direct (a real fetch(), NOT an extension stub).

@@ -243,6 +243,9 @@ class SchedulerConfig:
     )
     xiaoyuzhou_subscriptions: list[dict[str, str]] = field(default_factory=list)
     wechat_subscriptions: list[dict[str, str]] = field(default_factory=list)
+    # 豆瓣 feed 订阅：每条 {name, feed_kind, uid} 或 {name, feed_kind, group_id}
+    # feed_kind: comment(个人新评论) / review(全站最新评论) / group(小组讨论) / diary(日记)
+    douban_feed_subscriptions: list[dict[str, str]] = field(default_factory=list)
     account_sync_interval_hours: int = 6
     refresh_check_interval_seconds: int = _DEFAULT_REFRESH_CHECK_INTERVAL_SECONDS
     signal_event_threshold: int = _DEFAULT_SIGNAL_EVENT_THRESHOLD
@@ -407,6 +410,9 @@ class AutostartConfig:
 
     enabled: bool = False
     manage_ollama: bool = True
+    # 是否在启动时用 Docker 自动拉起本机 RSSHub（供豆瓣 feed 等聚合源）。
+    # 默认关，显式开启才自部署；需本机有 Docker。
+    manage_rsshub: bool = False
 
 
 @dataclass
@@ -562,6 +568,21 @@ class BilibiliSourceConfig:
 
 
 @dataclass
+class DoubanSourceConfig:
+    """Douban (豆瓣) book/movie/music replay configuration.
+
+    Douban content enters the system from the user's own crawled list
+    (``data/douban.db``), not live network discovery. Off by default so it does
+    not inject the recommended pool unless explicitly enabled.
+    """
+
+    enabled: bool = False
+    cookie_env: str = "OPENBILICLAW_DOUBAN_COOKIE"
+    # 自部署 RSSHub 实例地址（供豆瓣 feed 聚合源）。空则用官方（已被限制，仅作回退）。
+    rsshub_url: str = "http://127.0.0.1:1200"
+
+
+@dataclass
 class SourcesConfig:
     """Multi-source content adapters configuration.
 
@@ -586,6 +607,7 @@ class SourcesConfig:
     zhihu: ZhihuSourceConfig = field(default_factory=ZhihuSourceConfig)
     v2ex: V2EXSourceConfig = field(default_factory=V2EXSourceConfig)
     reddit: RedditSourceConfig = field(default_factory=RedditSourceConfig)
+    douban: DoubanSourceConfig = field(default_factory=DoubanSourceConfig)
 
 
 @dataclass
@@ -602,6 +624,9 @@ class StorageConfig:
     # 知识图谱子库：knowledge_* / entities / topics 等独立存放（db sharding P8）。
     # 默认 data/knowledge.db，可由配置覆盖。
     knowledge_db_path: str = "data/knowledge.db"
+    # 豆瓣书影音子库：douban_items 独立存放，与主库锁域隔离。
+    # 默认 data/douban.db，可由配置覆盖。
+    douban_db_path: str = "data/douban.db"
 
 
 @dataclass
@@ -706,6 +731,19 @@ class MediaConfig:
 
 
 @dataclass
+class Ed2kConfig:
+    """ed2k / Kad 下载管理模块（ed2k）配置。
+
+    后端经本机 ``mule`` CLI 驱动 MLDonkey（Colima + Docker 容器）。字段均可为空：
+    ``mule_path`` 留空时从 PATH 查找 mule；``download_dir`` 留空时从容器
+    挂载推断落地目录。详见 ``openbiliclaw.ed2k``。
+    """
+
+    mule_path: str = ""
+    download_dir: str = ""
+
+
+@dataclass
 class ApiAuthConfig:
     """Optional password gate for LAN / remote access (see
     ``docs/plans/2026-05-30-web-password-auth-design.md``).
@@ -802,6 +840,7 @@ class Config:
     travel: TravelConfig = field(default_factory=TravelConfig)
     interview: InterviewConfig = field(default_factory=InterviewConfig)
     media: MediaConfig = field(default_factory=MediaConfig)
+    ed2k: Ed2kConfig = field(default_factory=Ed2kConfig)
 
     @property
     def data_path(self) -> Path:
@@ -939,6 +978,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
     media_raw = raw.get("media", {})
     if not isinstance(media_raw, dict):
         media_raw = {}
+    ed2k_raw = raw.get("ed2k", {})
+    if not isinstance(ed2k_raw, dict):
+        ed2k_raw = {}
 
     embedding_raw = llm_raw.get("embedding", {})
     data_dir_raw = general.get("data_dir", "data")
@@ -1012,6 +1054,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
     zhihu_raw = sources_raw.get("zhihu", {})
     v2ex_raw = sources_raw.get("v2ex", {})
     reddit_raw = sources_raw.get("reddit", {})
+    douban_raw = sources_raw.get("douban", {})
     sources = SourcesConfig(
         browser_cdp_url=sources_browser_raw.get("cdp_url", ""),
         browser_headed=sources_browser_raw.get("headed", False),
@@ -1126,6 +1169,11 @@ def _build_config(raw: dict[str, Any]) -> Config:
             request_interval_seconds=int(reddit_raw.get("request_interval_seconds", 3)),
             min_interval_minutes=max(0, int(reddit_raw.get("min_interval_minutes", 3))),
             proxy=str(reddit_raw.get("proxy", "")),
+        ),
+        douban=DoubanSourceConfig(
+            enabled=bool(douban_raw.get("enabled", False)),
+            cookie_env=str(douban_raw.get("cookie_env", "OPENBILICLAW_DOUBAN_COOKIE")),
+            rsshub_url=str(douban_raw.get("rsshub_url", "http://127.0.0.1:1200")),
         ),
     )
 
@@ -1270,6 +1318,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
         autostart=AutostartConfig(
             enabled=_coerce_bool(autostart_raw.get("enabled"), default=False),
             manage_ollama=_coerce_bool(autostart_raw.get("manage_ollama"), default=True),
+            manage_rsshub=_coerce_bool(autostart_raw.get("manage_rsshub"), default=False),
         ),
         storage=StorageConfig(**store_raw),
         logging=LoggingConfig(**logging_raw),
@@ -1286,6 +1335,10 @@ def _build_config(raw: dict[str, Any]) -> Config:
         ),
         media=MediaConfig(
             roots=_normalize_string_list(media_raw.get("roots")),
+        ),
+        ed2k=Ed2kConfig(
+            mule_path=str(ed2k_raw.get("mule_path", "") or ""),
+            download_dir=str(ed2k_raw.get("download_dir", "") or ""),
         ),
     )
 
@@ -2524,6 +2577,22 @@ def _render_config_toml(
         lines.append("]")
     else:
         lines.append("wechat_subscriptions = []")
+    if config.scheduler.douban_feed_subscriptions:
+        lines.append("douban_feed_subscriptions = [")
+        for df in config.scheduler.douban_feed_subscriptions:
+            tmpl = '  {name = "%s", feed_kind = "%s", uid = "%s", group_id = "%s"},'
+            lines.append(
+                tmpl
+                % (
+                    df.get("name", ""),
+                    df.get("feed_kind", ""),
+                    df.get("uid", ""),
+                    df.get("group_id", ""),
+                )
+            )
+        lines.append("]")
+    else:
+        lines.append("douban_feed_subscriptions = []")
     lines.append("")
     lines.append("[scheduler.pool_source_shares]")
     lines.append(f"bilibili = {int(config.scheduler.pool_source_shares.get('bilibili', 5))}")
@@ -2591,6 +2660,7 @@ def _render_config_toml(
             f"interview_db_path = {_toml_string(config.storage.interview_db_path)}",
             f"health_db_path = {_toml_string(config.storage.health_db_path)}",
             f"knowledge_db_path = {_toml_string(config.storage.knowledge_db_path)}",
+            f"douban_db_path = {_toml_string(config.storage.douban_db_path)}",
             "",
             "[logging]",
             f"level = {_toml_string(config.logging.level)}",

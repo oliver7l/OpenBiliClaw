@@ -347,6 +347,16 @@ daily_related_budget = 0                # 相关扩展 discovery 每日任务上
 request_interval_seconds = 3            # 后端等待任务时的轮询间隔 / 插件搜索节奏提示
 min_interval_minutes = 60               # ZhihuDiscoveryProducer 两次执行最小间隔
 
+[sources.douban]
+# 豆瓣书影音回放源：从 data/douban.db 读取用户已抓取的清单注入系统。
+# 默认关闭，不会进入推荐流；开启后可作为内容源供阅读/发现。
+# Cookie 只在你需要重新抓取豆瓣清单时使用（见 data/douban/），不要写进 config.toml。
+enabled = false
+cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"
+# 本地自部署 RSSHub base：diary 等聚合 feed 用它（官方实例已限流）。
+# 开启 [autostart].manage_rsshub 后 openbiliclaw start 会自动 docker 拉起。
+rsshub_url = "http://127.0.0.1:1200"
+
 [scheduler]
 # Enable scheduled content discovery
 enabled = true
@@ -366,6 +376,12 @@ discovery_cron = "0 */8 * * *"
 pool_target_count = 300
 # Low-frequency account sync interval for history / favorites / following
 account_sync_interval_hours = 6
+# 豆瓣 feed 阅读源订阅（接入阅读库）。每条:
+#   {name="来源名", feed_kind="comment|review|group|diary", uid="豆瓣uid", group_id="小组ID"}
+#   comment=关注作者最新评论(douban.com/feed/people/{uid}/) / review=全站最新评论 /
+#   group=小组讨论(douban.com/feed/group/{group_id}/discussion) / diary=日记(经 rsshub)
+# cookie 从 [sources.douban].cookie_env 环境变量读取（不写进本文件）。
+douban_feed_subscriptions = []
 # --- Runtime refresh tuning ---
 refresh_check_interval_seconds = 60      # Main loop poll interval; values <15 fallback
 signal_event_threshold = 6               # New behavior events before search+related refresh
@@ -486,10 +502,20 @@ enabled = false
 # 当 LLM / embedding 使用本机 Ollama 时，后端启动时顺带确保 `ollama serve`
 # 已运行。仅管理本机 localhost:11434，远端 Ollama 不会被拉起。
 manage_ollama = true
+# 是否在后端启动时用 Docker 自动拉起本地 RSSHub（供豆瓣 feed 等聚合源）。
+# 默认关闭；需本机有 Docker。拉起时若探测到 host.docker.internal:7890
+# 代理可达会自动注入 HTTP/HTTPS/ALL_PROXY。
+manage_rsshub = false
 
 [storage]
 # SQLite database path
 db_path = "data/openbiliclaw.db"
+# Health record sub-database (db sharding P7, isolated lock domain).
+# 健康档案独立子库；留空则回退到主库同目录的 health.db。
+health_db_path = "data/health.db"
+# Douban book/movie/music list sub-database (isolated lock domain).
+# 豆瓣书影音独立子库；留空则回退到 data/douban.db。
+douban_db_path = "data/douban.db"
 
 [logging]
 # Console log level: DEBUG | INFO | WARNING | ERROR
@@ -548,3 +574,9 @@ root = ""
 # 在 /media 独立页里浏览与播放；也可在页面内「添加目录」一键追加。
 # 留空则该页显示"未配置目录"。
 roots = []
+
+[ed2k]
+# ed2k / Kad 下载管理模块：经本机 mule CLI 驱动 MLDonkey（Colima + Docker 容器）
+# mule_path 留空时从 PATH 查找 mule；download_dir 留空时从容器挂载推断落地目录。
+mule_path = ""
+download_dir = ""

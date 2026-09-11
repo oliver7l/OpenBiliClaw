@@ -333,6 +333,30 @@ def _preflight_loopback_ollama(cfg: Any) -> None:
         )
 
 
+def _preflight_loopback_rsshub(cfg: Any) -> None:
+    """启动时装着拉本机自部署 RSSHub（豆瓣 feed 等聚合源用）。
+
+    仅在 ``[autostart].manage_rsshub=true`` 时执行；需本机有 Docker。仿 Ollama 预检。
+    """
+    if not cfg.autostart.manage_rsshub:
+        return
+    from openbiliclaw.runtime import rsshub as rsshub_runtime
+
+    if rsshub_runtime.rsshub_is_up():
+        return
+    if not rsshub_runtime._docker_available():
+        console.print(
+            "[yellow]RSSHub 未运行且本机无 docker；豆瓣 feed 等 RSSHub 聚合源不可用。"
+            "请安装 Docker 或移除 [autostart].manage_rsshub。[/yellow]"
+        )
+        return
+    console.print("[dim]预检 RSSHub：本机自部署实例未监听，正在拉起…[/dim]")
+    if not rsshub_runtime.ensure_rsshub():
+        console.print(
+            "[yellow]RSSHub preflight 未能拉起；豆瓣 feed 聚合源可能不可用。[/yellow]"
+        )
+
+
 def _self_heal_autostart_registration(cfg: Any) -> None:
     from openbiliclaw.runtime import autostart
 
@@ -4004,6 +4028,7 @@ def start(
             )
     _maybe_create_runtime_database_backup()
     _preflight_loopback_ollama(cfg)
+    _preflight_loopback_rsshub(cfg)
     _self_heal_autostart_registration(cfg)
     _run_api_server(host=effective_host, port=effective_port)
 
