@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
+import random
 import re
 import time
 from typing import TYPE_CHECKING
@@ -36,17 +37,35 @@ _FEED_PARSE_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = (
     )
 )
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-# 移动端 UA + Referer 是豆瓣 rexxar 反爬校验的必需头
-_MOBILE_UA = (
+# 桌面/移动真实 UA 池：每请求轮换，避免固定一个被豆瓣指纹识别（参考同类爬虫项目）。
+_UA_POOL = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-)
-# 每次翻页之间的等待秒数（温和限频，避免触发豆瓣反爬）
-_DIARY_PAGE_SLEEP = 1.0
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+]
+_USER_AGENT = _UA_POOL[0]  # 兼容旧引用
+# 每次翻页之间的随机延迟区间（秒）——固定间隔是机器人特征，随机更似真人（参考 douban-takeout）。
+_DIARY_SLEEP_MIN = 1.5
+_DIARY_SLEEP_MAX = 3.0
+# 完整浏览器请求头（缺 Referer / Accept-Language 会被豆瓣直接拦截）
+_HEADERS_BASE = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Connection": "keep-alive",
+    "DNT": "1",
+}
+
+
+def _headers(referer: str) -> dict[str, str]:
+    """构造带随机 UA + 指定 Referer 的完整请求头，更接近真人浏览器。"""
+    h = dict(_HEADERS_BASE)
+    h["User-Agent"] = random.choice(_UA_POOL)
+    h["Referer"] = referer
+    return h
 
 
 def _status_time(item: dict) -> str:
@@ -118,15 +137,14 @@ class DoubanFeedAdapter:
         return out or None
 
     def _fetch_xml(self, url: str) -> str:
-        """带 cookie 抓取原始 XML。"""
+        """带 cookie 抓取原始 XML（随机 UA + 完整头，更像真人浏览器）。"""
+        headers = _headers("https://www.douban.com/")
+        headers["Accept"] = "application/rss+xml, application/atom+xml, text/xml, */*;q=0.8"
         resp = requests.get(
             url,
             cookies=self._cookie_jar(),
             timeout=20,
-            headers={
-                "User-Agent": _USER_AGENT,
-                "Accept": "application/rss+xml, application/atom+xml, text/xml",
-            },
+            headers=headers,
         )
         resp.raise_for_status()
         return resp.text
@@ -146,11 +164,7 @@ class DoubanFeedAdapter:
         while True:
             url = f"https://m.douban.com/rexxar/api/v2/status/user_timeline/{uid}"
             params = {"start": start, "count": per_page}
-            headers = {
-                "User-Agent": _MOBILE_UA,
-                "Referer": f"https://m.douban.com/people/{uid}/statuses",
-                "Accept": "application/json",
-            }
+            headers = _headers(f"https://m.douban.com/people/{uid}/statuses")
             resp = requests.get(
                 url,
                 params=params,
@@ -177,7 +191,7 @@ class DoubanFeedAdapter:
                 collected.extend(page_items)
             if not page_items or start >= total or len(collected) >= 90:
                 break
-            time.sleep(_DIARY_PAGE_SLEEP)
+            time.sleep(random.uniform(_DIARY_SLEEP_MIN, _DIARY_SLEEP_MAX))
         return collected
 
     def _diary_items(self, raw: list[dict], uid: str, feed_name: str) -> list["DiscoveredContent"]:
