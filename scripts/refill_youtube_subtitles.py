@@ -74,24 +74,38 @@ def _yt_retryable(stderr: str) -> bool:
     ])
 
 
+def _yt_bot_blocked(stderr: str) -> bool:
+    """YouTube 机器人检测（本机 IP/出口被判定为 bot）。
+
+    这是**全局**故障，不是单条视频的属性：一旦出现，本轮后续全部会失败，
+    必须熔断停止，且**绝不能**把条目记满重试次数（否则一次性废掉整个队列）。
+    """
+    return "Sign in to confirm" in stderr or "not a bot" in stderr
+
+
 def _yt_permanent(stderr: str) -> bool:
-    """判断是否属于永久不可抓（视频无字幕/会员/私有/需登录）。"""
+    """判断是否属于永久不可抓（视频无字幕/会员/私有/需登录）。
+
+    注意：不含 "Sign in" —— 那会把 "Sign in to confirm you're not a bot"
+    误判成"该视频需登录"，导致整批条目被永久跳过（历史上一天废掉 200 条）。
+    """
     return any(k in stderr for k in [
         "Subtitles are not available", "no subtitles", "No subtitles",
-        "Sign in", "members", "Private", "unavailable", "not available",
+        "members-only", "Private video", "Video unavailable", "not available",
     ])
 
 
-def fetch_youtube_subtitle(url: str) -> tuple[str, bool]:
-    """返回 (正文, 是否应重试)。
+def fetch_youtube_subtitle(url: str) -> tuple[str, bool, bool]:
+    """返回 (正文, 是否应重试, 是否被 bot 检测熔断)。
 
-    - 拿到 >= MIN_BODY 的正文 → (正文, 任意) 视为成功；
-    - 视频无字幕/不可抓 → ("", False) 永久跳过；
-    - 限流/网络失败 → ("", True) 下轮重试。
+    - 拿到 >= MIN_BODY 的正文 → (正文, 任意, False) 视为成功；
+    - 视频无字幕/不可抓 → ("", False, False) 永久跳过；
+    - 限流/网络失败 → ("", True, False) 下轮重试；
+    - 命中 bot 检测 → ("", True, True) 熔断（调用方应立即停止本轮）。
     """
     vid = extract_vid(url)
     if not vid:
-        return "", False  # url 不合法，永久无法处理
+        return "", False, False  # url 不合法，永久无法处理
     tmp = tempfile.mkdtemp(prefix="yt_subs_")
     env = os.environ.copy()
     env["HTTP_PROXY"] = PROXY
@@ -108,8 +122,10 @@ def fetch_youtube_subtitle(url: str) -> tuple[str, bool]:
                 )
                 stderr = r.stderr or ""
                 if r.returncode != 0:
+                    if _yt_bot_blocked(stderr):
+                        return "", True, True  # 全局熔断
                     if _yt_permanent(stderr):
-                        return "", False
+                        return "", False, False
                     if _yt_retryable(stderr):
                         time.sleep(8 * (attempt + 1))  # 指数退避
                         continue
@@ -118,7 +134,7 @@ def fetch_youtube_subtitle(url: str) -> tuple[str, bool]:
                     continue
                 files = glob.glob(os.path.join(tmp, "*.vtt"))
                 if not files:
-                    return "", False  # 无字幕文件 → 永久跳过
+                    return "", False, False  # 无字幕文件 → 永久跳过
                 chosen = None
                 for lang in LANG_PRIORITY:
                     for f in files:
@@ -131,12 +147,12 @@ def fetch_youtube_subtitle(url: str) -> tuple[str, bool]:
                     chosen = max(files, key=os.path.getsize)
                 body = parse_vtt(chosen)
                 if len(body) >= MIN_BODY:
-                    return body, True
-                return "", False  # 字幕过短，视为无
+                    return body, True, False
+                return "", False, False  # 字幕过短，视为无
             except subprocess.TimeoutExpired:
                 time.sleep(8 * (attempt + 1))
                 continue
-        return "", True  # 重试耗尽 → 下轮再试
+        return "", True, False  # 重试耗尽 → 下轮再试
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -180,7 +196,15 @@ def main() -> None:
 
     ok = fail = skipped = 0
     for idx, (aid, url) in enumerate(rows, 1):
-        body, retry = fetch_youtube_subtitle(url)
+        body, retry, bot = fetch_youtube_subtitle(url)
+        if bot:
+            # 全局被判定为 bot：立刻熔断，不消耗任何条目的重试次数。
+            print(
+                f"[ABORT] {idx}/{len(rows)} 命中 YouTube bot 检测，"
+                f"本轮停止（未消耗重试次数）。请先修复 Cookie/出口 IP。",
+                flush=True,
+            )
+            break
         attempts = db.execute(
             "SELECT COALESCE(body_fetch_attempts, 0) FROM articles WHERE id = ?", (aid,)
         ).fetchone()[0] + 1
