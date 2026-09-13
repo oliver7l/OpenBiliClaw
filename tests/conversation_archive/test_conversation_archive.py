@@ -4,7 +4,8 @@
   - 存储层 ConversationArchiveStore（建表、upsert 幂等、批量、列表/排序、FTS 全文搜索、详情、计数、统计）
   - API 路由（列表 / 详情 / 统计 / 创建 / 批量导入 / 无数据库退化）
 
-不依赖真实主库或 LLM：存储层用临时文件触发自带建表；API 用临时文件库（check_same_thread=False，兼容 TestClient 子线程）+ 注入式 RuntimeContext。
+不依赖真实主库或 LLM：存储层用临时文件触发自带建表；API 用临时文件库
+（``check_same_thread=False``，兼容 TestClient 子线程）+ 注入式 ``RuntimeContext``。
 """
 
 from __future__ import annotations
