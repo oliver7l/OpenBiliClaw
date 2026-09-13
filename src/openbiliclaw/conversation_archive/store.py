@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS conversation_archive (
     tags TEXT DEFAULT '[]',
     extracted_original_md TEXT DEFAULT '',
     my_analysis_md TEXT DEFAULT '',
+    entry_num INTEGER DEFAULT 0,
+    group_name TEXT DEFAULT '',
+    dialog_excerpt TEXT DEFAULT '',
+    annotations TEXT DEFAULT '',
+    md_file TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -124,6 +129,17 @@ class ConversationArchiveStore:
     def _initialize_tables(self, conn: sqlite3.Connection | None = None) -> None:
         c = conn or self.conn
         c.executescript(_SCHEMA_SQL)
+        # v2 内容库新增列：已存在的旧表补列（CREATE IF NOT EXISTS 对旧表无效）
+        existing = {r[1] for r in c.execute("PRAGMA table_info(conversation_archive)")}
+        for col, ddl in (
+            ("entry_num", "INTEGER DEFAULT 0"),
+            ("group_name", "TEXT DEFAULT ''"),
+            ("dialog_excerpt", "TEXT DEFAULT ''"),
+            ("annotations", "TEXT DEFAULT ''"),
+            ("md_file", "TEXT DEFAULT ''"),
+        ):
+            if col not in existing:
+                c.execute(f"ALTER TABLE conversation_archive ADD COLUMN {col} {ddl}")
         c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
 
     # ── 写入 ──

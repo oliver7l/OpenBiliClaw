@@ -4277,6 +4277,24 @@ body.card-lg { --card-min: 340px; }
 .conv-detail[open] > summary { border-bottom: 1px solid #f0f0f0; }
 .conv-markdown { padding: 10px 12px; font-size: 13px; line-height: 1.7; color: #2b2b2b; overflow-x: auto; }
 .conv-analysis { background: #fcfbff; }
+/* ── 内容库 v2：编号/分组/状态按钮/链接行 ─────────────────── */
+.conv-entry-num {
+  flex: 0 0 auto; min-width: 34px; height: 22px; padding: 0 7px; border-radius: 6px;
+  background: #e8f7f0; color: #0e9f6e; font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.conv-group { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #fff7ed; color: #c2660a; }
+.conv-head-right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.conv-links { display: flex; gap: 14px; align-items: center; }
+.conv-links .conv-link { margin-bottom: 6px; }
+.conv-state-btn {
+  flex: 0 0 auto; height: 22px; padding: 0 10px; border-radius: 10px; border: 1px solid #e5e7eb;
+  background: #fff; color: #9ca3af; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.conv-state-btn[data-state="reading"] { background: #fffbeb; border-color: #f59e0b; color: #b45309; }
+.conv-state-btn[data-state="digested"] { background: #ecfdf5; border-color: #10b981; color: #047857; }
+.conv-state-btn:hover { border-color: #7c5cd6; color: #7c5cd6; }
+.conv-archive-page .library-filters { margin-bottom: 12px; max-width: 880px; }
 .conv-markdown :where(h1,h2,h3) { font-size: 15px; margin: 10px 0 6px; }
 .conv-markdown :where(p) { margin: 6px 0; }
 .conv-markdown :where(blockquote) { margin: 8px 0; padding: 4px 10px; border-left: 3px solid #e5e0f5; color: #555; background: #faf9ff; }

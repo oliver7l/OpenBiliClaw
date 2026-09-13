@@ -6,11 +6,16 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException
+from fastapi.responses import FileResponse, JSONResponse
 
 from openbiliclaw.conversation_archive.store import ConversationArchiveStore
+
+# 收藏库原始文件目录（单一数据源）
+LIBRARY_DIR = Path(__file__).resolve().parents[3] / "notes" / "阅读收藏库"
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -62,6 +67,22 @@ def register_conversation_archive_routes(app: FastAPI, ctx: RuntimeContext) -> N
                 "offset": max(0, int(offset)),
             }
         )
+
+    @app.get("/api/conversation-archive/{item_id:int}/raw-md")
+    def conversation_archive_raw_md(item_id: int) -> FileResponse:
+        """返回该条目对应的收藏库原始 md 文件（三件套闭环：前端→API→md）。"""
+        svc = _get_service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="database unavailable")
+        item = svc.get_item(item_id)
+        md_file = (item or {}).get("md_file") or ""
+        if not md_file:
+            raise HTTPException(status_code=404, detail="no source md")
+        base = LIBRARY_DIR.resolve()
+        target = (base / md_file).resolve()
+        if target.parent != base or not target.is_file():
+            raise HTTPException(status_code=404, detail="md file not found")
+        return FileResponse(target, media_type="text/markdown; charset=utf-8", filename=md_file)
 
     @app.get("/api/conversation-archive/stats")
     def conversation_archive_stats() -> JSONResponse:

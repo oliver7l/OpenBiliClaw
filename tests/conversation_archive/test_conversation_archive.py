@@ -3,6 +3,7 @@
 覆盖：
   - 存储层 ConversationArchiveStore（建表、upsert 幂等、批量、列表/排序、FTS 全文搜索、详情、计数、统计）
   - API 路由（列表 / 详情 / 统计 / 创建 / 批量导入 / 无数据库退化）
+  - 原始 md 端点（命中返回源文件 / 无 md_file → 404 / 文件缺失 → 404 / 路径穿越 → 404）
 
 不依赖真实主库或 LLM：存储层用临时文件触发自带建表；API 用临时文件库
 （``check_same_thread=False``，兼容 TestClient 子线程）+ 注入式 ``RuntimeContext``。
@@ -257,3 +258,67 @@ def test_api_503_when_database_unavailable() -> None:
     resp = client.get("/api/conversation-archive")
     assert resp.status_code == 503
     assert resp.json()["ok"] is False
+
+
+# ── API：原始 md 端点（v2 三件套闭环：前端 → API → 收藏库源文件） ─────
+
+
+def _seed_raw_md(api_client: TestClient, md_file: str | None) -> int:
+    """写入一条 seq=1 的记录并通过原生 SQL 回填 md_file（upsert_item 不覆盖 v2 列）。"""
+    api_client.get("/api/conversation-archive")  # 触发 _service 懒加载
+    svc = ca_routes._service
+    assert svc is not None
+    svc.upsert_item({"seq": 1, "user_question": "Q1"})
+    rid = svc.conn.execute("SELECT id FROM conversation_archive WHERE seq=1").fetchone()[0]
+    if md_file is not None:
+        svc.conn.execute(
+            "UPDATE conversation_archive SET md_file=? WHERE id=?", (md_file, rid)
+        )
+        svc.conn.commit()
+    return rid
+
+
+def test_api_raw_md_returns_source_file(
+    api_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lib = tmp_path / "library"
+    lib.mkdir()
+    (lib / "84-demo.md").write_text("# 标题\n\n正文内容在这里", encoding="utf-8")
+    monkeypatch.setattr(ca_routes, "LIBRARY_DIR", lib)
+    rid = _seed_raw_md(api_client, "84-demo.md")
+
+    resp = api_client.get(f"/api/conversation-archive/{rid}/raw-md")
+
+    assert resp.status_code == 200
+    assert "正文内容在这里" in resp.text
+
+
+def test_api_raw_md_404_when_no_md_file(api_client: TestClient) -> None:
+    rid = _seed_raw_md(api_client, None)
+    resp = api_client.get(f"/api/conversation-archive/{rid}/raw-md")
+    assert resp.status_code == 404
+
+
+def test_api_raw_md_404_when_file_missing(
+    api_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lib = tmp_path / "library"
+    lib.mkdir()
+    monkeypatch.setattr(ca_routes, "LIBRARY_DIR", lib)
+    rid = _seed_raw_md(api_client, "not-exist.md")
+    resp = api_client.get(f"/api/conversation-archive/{rid}/raw-md")
+    assert resp.status_code == 404
+
+
+def test_api_raw_md_404_when_path_escapes_library(
+    api_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """路径穿越（../）不得越出收藏库目录。"""
+    lib = tmp_path / "library"
+    lib.mkdir()
+    outside = tmp_path / "secret.md"
+    outside.write_text("不该被读到", encoding="utf-8")
+    monkeypatch.setattr(ca_routes, "LIBRARY_DIR", lib)
+    rid = _seed_raw_md(api_client, "../secret.md")
+    resp = api_client.get(f"/api/conversation-archive/{rid}/raw-md")
+    assert resp.status_code == 404

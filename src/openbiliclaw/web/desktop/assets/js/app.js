@@ -1833,7 +1833,31 @@
     // ── 对话归档（用户与 AI 的对话内容）────────────────────────────
     let _convArchiveBound = false;
     let _convArchiveQuery = "";
-    const CONV_KIND_LABELS = { zhihu_eval: "知乎评析", concept_explain: "概念讲解" };
+    let _convArchiveItems = [];
+    let _convArchiveType = "all";
+    const CONV_KIND_LABELS = { zhihu_eval: "知乎评析", concept_explain: "概念讲解", link_article: "链接原文", summary: "摘要", dialogue: "对话解读" };
+    // 阅读状态与阅读计划看板共享同一 localStorage（obc_reading_plan_v1），键=收藏库编号
+    const READING_PLAN_KEY = "obc_reading_plan_v1";
+    const READING_STATE_LABELS = { unread: "未读", reading: "在读", digested: "已消化" };
+    function readingPlanState() {
+      try { const s = JSON.parse(localStorage.getItem(READING_PLAN_KEY)); return (s && s.status) ? s : { status: {} }; }
+      catch (e) { return { status: {} }; }
+    }
+    function saveReadingPlanState(s) {
+      try { localStorage.setItem(READING_PLAN_KEY, JSON.stringify(s)); } catch (e) { /* 忽略配额错误 */ }
+    }
+    function cycleReadingState(entryNum, btn) {
+      const s = readingPlanState();
+      const order = ["unread", "reading", "digested"];
+      const cur = order.includes(s.status[entryNum]) ? s.status[entryNum] : "unread";
+      const next = order[(order.indexOf(cur) + 1) % order.length];
+      s.status[entryNum] = next;
+      saveReadingPlanState(s);
+      if (btn) {
+        btn.dataset.state = next;
+        btn.textContent = READING_STATE_LABELS[next];
+      }
+    }
     const CONV_SOURCE_LABELS = { answer: "回答", pin: "想法", article: "文章" };
 
     function openConversationArchivePage() {
@@ -1865,6 +1889,29 @@
       if (clearBtn) clearBtn.addEventListener("click", () => {
         input.value = ""; _convArchiveQuery = ""; clearBtn.hidden = true; loadConversationArchiveItems();
       });
+      // 类型筛选条（前端内存过滤，不重新请求）
+      const filterBox = document.getElementById("convArchiveFilters");
+      if (filterBox && !filterBox.dataset.bound) {
+        filterBox.dataset.bound = "1";
+        const types = [["all", "全部"], ["link_article", "链接原文"], ["summary", "摘要"], ["dialogue", "对话解读"], ["zhihu_eval", "知乎评析"], ["concept_explain", "概念讲解"]];
+        const renderFilters = () => {
+          const counts = {};
+          _convArchiveItems.forEach((it) => { counts[it.kind] = (counts[it.kind] || 0) + 1; });
+          filterBox.innerHTML = types
+            .filter(([key]) => key === "all" || counts[key])
+            .map(([key, label]) => `<button class="library-filter-btn${_convArchiveType === key ? " is-active" : ""}" data-conv-type="${key}" type="button">${label}${key === "all" ? ` ${_convArchiveItems.length}` : ` ${counts[key] || 0}`}</button>`)
+            .join("");
+          filterBox.querySelectorAll("[data-conv-type]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              _convArchiveType = btn.dataset.convType;
+              renderFilters();
+              loadConversationArchiveItems();
+            });
+          });
+        };
+        renderFilters();
+        filterBox.__render = renderFilters;
+      }
     }
 
     async function loadConversationArchiveItems() {
@@ -1878,15 +1925,19 @@
         const res = await fetch(`/api/conversation-archive?${params.toString()}`, { headers: { "X-OBC-Auth": "1" } });
         const data = await res.json();
         const items = Array.isArray(data.items) ? data.items : [];
+        _convArchiveItems = items;
+        const fb = document.getElementById("convArchiveFilters");
+        if (fb && fb.__render) fb.__render();
         if (countEl) countEl.textContent = data.total ? String(data.total) : "";
-        if (!items.length) {
+        const shown = _convArchiveType === "all" ? items : items.filter((it) => it.kind === _convArchiveType);
+        if (!shown.length) {
           list.innerHTML = `<div class="empty-state">${_convArchiveQuery ? "没有匹配的对话。" : "还没有归档的对话。"}</div>`;
           return;
         }
-        list.innerHTML = items.map(convArchiveCardHtml).join("");
-        for (const det of list.querySelectorAll("details.conv-detail")) {
-          det.addEventListener("toggle", () => {});
-        }
+        list.innerHTML = shown.map(convArchiveCardHtml).join("");
+        list.querySelectorAll("[data-state-btn]").forEach((btn) => {
+          btn.addEventListener("click", () => cycleReadingState(Number(btn.dataset.entry), btn));
+        });
       } catch (err) {
         list.innerHTML = '<div class="empty-state">加载对话归档失败，请确认后端服务正常</div>';
       }
@@ -1903,27 +1954,41 @@
       ].filter(Boolean).map((m) => `<span class="conv-meta">${m}</span>`).join("");
       const title = item.question_title ? `<div class="conv-title">${escapeHtml(item.question_title)}</div>` : "";
       const link = item.source_url ? `<a class="conv-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener noreferrer">查看原文 ↗</a>` : "";
+      const rawMd = item.md_file ? `<a class="conv-link" href="/api/conversation-archive/${item.id}/raw-md" target="_blank" rel="noopener noreferrer">原始 md ↗</a>` : "";
       const question = item.user_question ? `<div class="conv-question">${escapeHtml(item.user_question)}</div>` : "";
       const tags = Array.isArray(item.tags) && item.tags.length
         ? `<div class="conv-tags">${item.tags.map((t) => `<span class="conv-tag">${escapeHtml(t)}</span>`).join("")}</div>`
         : "";
+      // v2 内容库：对话摘录 / 批注 / 阅读状态（与阅读计划看板共享 localStorage）
+      const planState = readingPlanState();
+      const rState = ["unread", "reading", "digested"].includes(planState.status[item.entry_num]) ? planState.status[item.entry_num] : "unread";
+      const stateBtn = item.entry_num
+        ? `<button class="conv-state-btn" type="button" data-state-btn data-entry="${item.entry_num}" data-state="${rState}" title="点击切换：未读 → 在读 → 已消化（与阅读计划看板同步）">${READING_STATE_LABELS[rState]}</button>`
+        : "";
+      const group = item.group_name ? `<span class="conv-group">${escapeHtml(item.group_name)}</span>` : "";
       const hasOrig = item.extracted_original_md && item.extracted_original_md.length > 50;
       const hasAna = item.my_analysis_md && item.my_analysis_md.length > 50;
-      const orig = hasOrig ? `<details class="conv-detail" open><summary>📄 提取的原文</summary><div class="conv-markdown">${renderMarkdown(item.extracted_original_md)}</div></details>` : "";
-      const ana = hasAna ? `<details class="conv-detail" open><summary>💡 我的分析</summary><div class="conv-markdown conv-analysis">${renderMarkdown(item.my_analysis_md)}</div></details>` : "";
-      const badges = [kind ? `<span class="conv-kind">${escapeHtml(kind)}</span>` : "", src ? `<span class="conv-source">${escapeHtml(src)}</span>` : ""].join("");
+      const hasDialog = item.dialog_excerpt && item.dialog_excerpt.length > 20;
+      const hasAnno = item.annotations && item.annotations.length > 20;
+      const orig = hasOrig ? `<details class="conv-detail"><summary>📄 原文</summary><div class="conv-markdown">${renderMarkdown(item.extracted_original_md)}</div></details>` : "";
+      const ana = hasAna ? `<details class="conv-detail" open><summary>💡 我的解读</summary><div class="conv-markdown conv-analysis">${renderMarkdown(item.my_analysis_md)}</div></details>` : "";
+      const dialog = hasDialog ? `<details class="conv-detail"><summary>💬 对话摘录</summary><div class="conv-markdown">${renderMarkdown(item.dialog_excerpt)}</div></details>` : "";
+      const anno = hasAnno ? `<details class="conv-detail"><summary>📎 批注与关联</summary><div class="conv-markdown">${renderMarkdown(item.annotations)}</div></details>` : "";
+      const numBadge = item.entry_num ? `<span class="conv-entry-num">#${item.entry_num}</span>` : "";
+      const badges = [numBadge, kind ? `<span class="conv-kind">${escapeHtml(kind)}</span>` : "", src ? `<span class="conv-source">${escapeHtml(src)}</span>` : "", group].join("");
       return `<article class="conv-card">
         <div class="conv-head-row">
-          <span class="conv-seq">${item.seq}</span>
           ${badges}
-          <span class="conv-author-line"><span class="conv-author">${author}</span>${meta}</span>
+          <span class="conv-head-right">${stateBtn}<span class="conv-author-line"><span class="conv-author">${author}</span>${meta}</span></span>
         </div>
         ${title}
         ${question}
-        ${link}
+        ${link || rawMd ? `<div class="conv-links">${link}${rawMd}</div>` : ""}
         ${tags}
-        ${orig}
         ${ana}
+        ${dialog}
+        ${anno}
+        ${orig}
       </article>`;
     }
 

@@ -4,6 +4,31 @@
 
 ---
 
+## 内容库 v2：收藏库吸收对话归档，打通「md → DB → 前端」三件套（2026-09-13）
+
+- **定位调整**：`notes/阅读收藏库/` 的 md 文件升为**内容单一数据源**，对话归档 DB 表
+  （`conversation_archive`）降为**派生镜像**。此前「解读过的链接只进对话归档、没进收藏库」的
+  12 条历史缺口（原 seq 1–11、13）已回填为收藏库 84–95；无链接的概念讲解（原 seq 12）建为
+  97 号（类型 = `对话解读`）。
+- **索引加「类型」列**（8 列制）：`链接原文` / `摘要` / `对话解读` 三分类；看板解析器
+  `build_plan_data.py` 适配（仍从右侧固定列反推标题，兼容标题含 `|`）。84–95 条目补
+  「对话摘录」节（从 DB 回填当时的用户提问）。
+- **DB 表加 5 个 v2 派生列**：`entry_num` / `group_name` / `dialog_excerpt` / `annotations` /
+  `md_file`；`store.py` 增加幂等补列 `_ensure_columns`（旧库首次访问自动 ALTER，无需手工迁移）。
+- **新脚本 `scripts/sync_library_to_db.py`**：md → DB 单向同步。幂等键是 **`md_file`** 而非 `seq`——
+  历史行 seq 与收藏库编号不一致（原对话归档 seq 1 对应收藏库 84 号），按 seq 匹配曾导致
+  97 → 181 行的重复插入；改用文件名后重复跑只更新不新增（`updated 116 / inserted 0`）。
+- **API 新增** `GET /api/conversation-archive/{id}/raw-md`：`FileResponse` 回吐收藏库源 md，
+  校验路径不越出收藏库目录（防 `../` 穿越）。`{item_id}` 为表主键 `id`，非 `entry_num`。
+- **桌面端对话归档页升级**（`/web/conversation-archive`）：卡片加 `#编号` / 类型 badge、
+  对话摘录与批注 `<details>`、原始 md 链接、三态状态按钮（与阅读计划看板共用 `localStorage`
+  键 `obc_reading_plan_v1`，按 `entry_num` 对齐）、顶部类型筛选条。
+- 验证：`tests/conversation_archive` **21 passed**（新增 raw-md 4 例）；收藏库索引 1–116 连续；
+  DB 同步幂等 `updated 116 / inserted 0`；`/api/conversation-archive/stats` → `total=116`
+  （dialogue 1 + link_article 115）。
+
+---
+
 ## 重构：fetch-*/discover-* 组抽离 _cmd_fetch（P4 第五刀，2026-09-13）
 
 - 上帝文件 `cli/__init__.py` **6298 → 约5000 行**（五刀累计 **-2000+**）。11 个
