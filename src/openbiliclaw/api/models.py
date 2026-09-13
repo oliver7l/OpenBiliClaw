@@ -1025,6 +1025,9 @@ class LLMProviderConfigOut(BaseModel):
     http_referer: str = ""
     x_title: str = ""
     reasoning_effort: str = ""
+    # Ollama-only context window (0 = 服务端默认)。此前后端已支持但既不在本
+    # 模型的字段里、`_apply_llm_update` 也不处理 → 只能手改 config.toml。
+    num_ctx: int = 0
 
 
 class EmbeddingConfigOut(BaseModel):

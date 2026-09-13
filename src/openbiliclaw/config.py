@@ -2753,6 +2753,11 @@ def _render_provider_section(name: str, provider: LLMProviderConfig) -> list[str
     if name == "openrouter":
         lines.append(f"http_referer = {_toml_string(provider.http_referer)}")
         lines.append(f"x_title = {_toml_string(provider.x_title)}")
+    if name == "ollama":
+        # Ollama-only: 0 = 用服务端默认。>0 时 chat 走 native ``/api/chat``
+        # 以让 ``options.num_ctx`` 真正生效（``/v1`` 兼容层会静默忽略它，
+        # 截断大批量 prompt 并破坏结构化 JSON）。其他 provider 忽略该字段。
+        lines.append(f"num_ctx = {int(provider.num_ctx)}")
     lines.append("")
     return lines
 

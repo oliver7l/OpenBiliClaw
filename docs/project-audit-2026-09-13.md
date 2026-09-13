@@ -248,7 +248,9 @@
 1. ~~**F1 的 setup 端点**~~：✅ 已完成（2026-09-13）——实现 `discover-models` + 修复向导保存链路
    （routing v2 → provider-name，含降级模式白名单放行），删除 `apply-status` / `embedding/repair` 两处不可达死分支。
    复核结论：初稿的「移植 448 行 `ollama_diagnostics`」并非必要——那两个端点在本 fork 无任何可达路径。
-   遗留的 `api_flavor` / `num_ctx` 两处 UI 缺口待定（见 §1 F1 末）。
+   遗留的 `api_flavor` / `num_ctx` 两处缺口**已收口**（2026-09-13）：前者删除死承诺
+   （实证上游 #72 的 `735e1c4c` 不在本 fork 历史中，属"上游 UI 超前"而非"后端缺实现"），
+   后者打通 API 层（落盘 + 回传 + 整数校验）。
 2. ~~**39 条重复路由**~~：✅ 全部收敛（两轮：32 对闭包树等价 + 6 对逐对澄清后删除，重复 0 对，见 §2）。
 3. ~~**F1 遗留的「provider 白名单缺三家」**~~：✅ 已修复（2026-09-13）。
    排查后发现不是「白名单漏列三项」，而是 **provider 集合散落 5 处、其中 3 处漏项**：
@@ -266,8 +268,26 @@
    `config.LLM_PROVIDER_NAMES`（从 `LLMConfig` 数据类**派生**，新增字段自动纳入），
    四处引用点全部改用它；回归测试 8 例
    （`tests/config/test_llm_provider_sections.py` + `tests/api/test_config_provider_sections.py`）。
-4. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
-5. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？
+4. ~~**P2 磁盘清理**~~：✅ 已执行（2026-09-13）——`data/v2ex-hot-hub`（28M 陈旧重复 clone，
+   活跃脚本用的是下划线版）与 `data/tax_frames{,2,2_check}`（~9.7M，09-10 一次性提取的
+   PNG 帧，代码/文档/JSON 状态/全部 DB 均零引用）已移入废纸篓（可还原）。
+   `data/backups/`（1.9G 回滚点）**未动**——非紧急，保留与否仍由用户定。
+5. **P4 大重构**：🟡 已启动第一刀（2026-09-13）——`llm/registry.py` 与
+   `llm/_compat_registry.py` 的 **5 个逐字相同适配入口**（`build_llm_registry` /
+   `build_embedding_service` / `summarize_registry` / `_maybe_openai_compatible_provider` /
+   `_ollama_is_chat_capable`）已去重，唯一实现归 `_compat_registry`，`registry.py` 只转发
+   （77 → 37 行）。**剩余范围（本次实测，修正旧报告的偏小口径）**：
+
+   | 项 | 实测规模 | 备注 |
+   |----|---------|------|
+   | `obc_runtime` 包 | **仍未创建** | `docs/module-extraction-plan.md` §5 阶段 4 |
+   | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 旧报告写「224 处」偏小 |
+   | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
+   | 上帝文件 | `cli/__init__.py` **7087 行**（约 60 个命令，榜首）；`api/app.py` 4084 行 | app.py 本轮前序已 6534 → 4084 |
+
+   建议顺序：① 抽 `cli` 命令组（按 `note_app` / `fetch-*` / `discover-*` 等自洽簇）→
+   ② 收 `obc_runtime` 抽取 → ③ 最后批量改 import 路径（`from`-import 绑定会破坏
+   `monkeypatch` 补丁，必须与测试补丁点同步核查）。
 
 ---
 

@@ -322,6 +322,11 @@ def test_wizard_page_drops_dead_upstream_branches() -> None:
         "routing_version",
         "default_chain",
         "orcarouter",  # 后端无该 provider 配置段
+        # 上游 #72 的 responses 协议（api_flavor）从未合入本 fork：
+        # `LLMProviderConfig` 无该字段、obc_llm 也无 /v1/responses 实现，
+        # 那个下拉是死承诺（提交后被静默忽略）。
+        "api_flavor",
+        "apiFlavor",
     ):
         assert banned not in html, f"向导页仍引用本 fork 不支持的 {banned}"
 

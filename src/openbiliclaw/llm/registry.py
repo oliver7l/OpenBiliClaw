@@ -1,11 +1,21 @@
 """Re-export from obc_llm.registry — compatibility stub.
 
-``build_llm_registry`` / ``build_embedding_service`` 包装为接受主项目
-``Config`` 的适配入口（内部经 ``_compat.to_llm_config`` 映射），其余名字
-直接 re-export。
-"""
+适配入口（``build_llm_registry`` / ``build_embedding_service`` /
+``summarize_registry`` / ``_maybe_openai_compatible_provider`` /
+``_ollama_is_chat_capable``）的**唯一实现**位于
+``openbiliclaw.llm._compat_registry``：它们接受主项目 ``Config`` / ``Config.llm``，
+内部经 ``_compat.to_llm_config`` 映射为 ``obc_llm._config.LLMConfig``。
 
-from typing import Any
+本模块只做转发。此前 ``registry`` 与 ``_compat_registry`` 各存一份逐字相同的
+包装函数（后者 docstring 解释：``import *`` + 覆盖会让 mypy 把符号解析回
+obc_llm 原签名，故另设一个类型正确的模块），两份实现即两处漂移点。现在签名
+与实现都归 ``_compat_registry``，本 stub 仅保留
+``openbiliclaw.llm.registry.*`` 这条稳定导入路径。
+
+私有名（``_embedding_compat_warned`` / ``_emit_embedding_compat_warning``）
+经 ``import *`` 拿不到，故显式 re-export —— 测试经本 stub 读写的仍是 obc_llm
+中同一个对象。
+"""
 
 from obc_llm._config import LLMConfig  # noqa: F401 — re-export 供调用方注解
 from obc_llm.base import LLMProvider, LLMRegistry  # noqa: F401 — 同上
@@ -17,61 +27,11 @@ from obc_llm.registry import (
     _embedding_compat_warned,  # noqa: F401 — 模块级 set，测试经 stub 读写同一对象
     _emit_embedding_compat_warning,  # noqa: F401 — private name, explicit re-export
 )
-from obc_llm.registry import (
-    _maybe_openai_compatible_provider as _maybe_openai_compatible_provider_impl,
+
+from openbiliclaw.llm._compat_registry import (  # noqa: F401
+    _maybe_openai_compatible_provider,
+    _ollama_is_chat_capable,
+    build_embedding_service,
+    build_llm_registry,
+    summarize_registry,
 )
-from obc_llm.registry import (
-    _ollama_is_chat_capable as _ollama_is_chat_capable_impl,
-)
-from obc_llm.registry import (
-    build_embedding_service as _build_embedding_service,
-)
-from obc_llm.registry import (
-    build_llm_registry as _build_llm_registry,
-)
-from obc_llm.registry import (
-    summarize_registry as _summarize_registry_impl,
-)
-
-from openbiliclaw.llm._compat import to_llm_config
-
-
-def build_llm_registry(  # type: ignore[no-redef]  # noqa: F811 — 覆盖 import * 的同名导出
-    config: Any,
-    *,
-    provider_overrides: dict[str, LLMProvider] | None = None,
-    fallback_order: list[str] | None = None,
-) -> LLMRegistry:
-    """适配入口：接受主项目 Config / Config.llm，映射为 obc_llm LLMConfig。"""
-    return _build_llm_registry(
-        to_llm_config(config),
-        provider_overrides=provider_overrides,
-        fallback_order=fallback_order,
-    )
-
-
-def build_embedding_service(  # type: ignore[no-redef]  # noqa: F811 — 覆盖 import * 的同名导出
-    config: Any,
-    registry: LLMRegistry | None = None,
-) -> SupportsEmbeddingService | None:
-    """适配入口：接受主项目 Config / Config.llm，映射为 obc_llm LLMConfig。"""
-    # obc_llm 侧 registry 参数仅为兼容旧调用保留、实现不使用，允许传 None
-    return _build_embedding_service(to_llm_config(config), registry)  # type: ignore[arg-type]
-
-
-def _maybe_openai_compatible_provider(
-    config: Any,
-    overrides: dict[str, LLMProvider],
-) -> LLMProvider | None:
-    """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
-    return _maybe_openai_compatible_provider_impl(to_llm_config(config), overrides)
-
-
-def _ollama_is_chat_capable(config: Any) -> bool:
-    """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
-    return _ollama_is_chat_capable_impl(to_llm_config(config))
-
-
-def summarize_registry(config: Any, registry: LLMRegistry) -> RegistrySummary:  # type: ignore[no-redef]
-    """适配入口：接受主项目 Config，映射后再调 obc_llm 实现。"""
-    return _summarize_registry_impl(to_llm_config(config), registry)

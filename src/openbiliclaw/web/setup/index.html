@@ -171,14 +171,6 @@
           <div class="hint" id="baseHint" style="display:none">用第三方中转/网关时填写(Anthropic 协议 /v1/messages);直连官方请留空。</div>
         </div>
 
-        <div id="flavorWrap" style="display:none">
-          <label for="apiFlavor">接口协议</label>
-          <select id="apiFlavor">
-            <option value="">chat/completions（默认，绝大多数服务）</option>
-            <option value="responses">responses（部分第三方网关的 GPT 模型只开放这个）</option>
-          </select>
-        </div>
-
         <label for="model">模型名</label>
         <div class="model-discovery-row">
           <input id="model" list="modelOptions" type="text" autocomplete="off" spellcheck="false" placeholder="选择接口返回的模型，或直接手填" aria-describedby="modelHint modelDiscoveryStatus">
@@ -412,7 +404,6 @@
       return {
         model: $("#model").value.trim(),
         base_url: $("#baseUrl").value.trim(),
-        api_flavor: $("#apiFlavor").value,
         auth_mode: $("#authMode").value,
         reasoning_effort: $("#reasoningEffort").value.trim(),
       };
@@ -437,7 +428,6 @@
           : DEFAULT_MODELS[next] || "";
       $("#model").value = String(cfg.model || nextDefaultModel);
       $("#baseUrl").value = String(cfg.base_url || "");
-      $("#apiFlavor").value = cfg.api_flavor === "responses" ? "responses" : "";
       $("#authMode").value = nextAuthMode;
       $("#reasoningEffort").value = String(cfg.reasoning_effort || "");
       activeProvider = next;
@@ -458,8 +448,6 @@
       // Claude 也开放 Base URL（可选，第三方 Anthropic 协议网关，见 issue #72）
       $("#baseWrap").style.display = (isCompat || isClaude) ? "block" : "none";
       $("#baseHint").style.display = isClaude ? "block" : "none";
-      // openai_compatible 可切 /v1/responses 协议（issue #72）
-      $("#flavorWrap").style.display = isCompat ? "block" : "none";
       const [url, name] = KEY_LINKS[p] || ["", ""];
       $("#keyHint").innerHTML = url ? `还没有 key？去 <a href="${url}" target="_blank" rel="noopener">${name}</a> 免费申请,粘贴回来即可。` : "";
       const modelInput = $("#model");
@@ -549,9 +537,6 @@
       // into the wrong config block.
       if (baseUrl && (provider === "openai_compatible" || provider === "claude")) {
         block.base_url = baseUrl;
-      }
-      if (provider === "openai_compatible") {
-        block.api_flavor = $("#apiFlavor").value;
       }
       // 无条件发送：空字符串对 reasoning_effort 是**有效值**（关闭 thinking），
       // `_apply_llm_update` 也把它列为「空值照写」的例外。加 if 会让用户无法清空。

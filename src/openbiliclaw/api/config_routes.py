@@ -179,6 +179,7 @@ def register_config_routes(
                 http_referer=getattr(p, "http_referer", ""),
                 x_title=getattr(p, "x_title", ""),
                 reasoning_effort=getattr(p, "reasoning_effort", ""),
+                num_ctx=int(getattr(p, "num_ctx", 0) or 0),
             )
 
         issue_list = [
@@ -462,6 +463,21 @@ def register_config_routes(
                             skipped_fields.append(f"{field_name}=empty_skip")
                             continue
                         setattr(provider_cfg, field_name, new_value)
+                # num_ctx is an int (Ollama-only context window); the string
+                # loop above would coerce it to "8192" and poison the field.
+                # Only [llm.ollama] persists it (see _render_provider_section),
+                # so accepting it elsewhere would be a silent no-op — record a
+                # skip instead.
+                if "num_ctx" in pdata and provider_name == "ollama":
+                    try:
+                        provider_cfg.num_ctx = max(0, int(pdata["num_ctx"] or 0))
+                    except (TypeError, ValueError) as exc:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="llm.ollama.num_ctx must be an integer",
+                        ) from exc
+                elif "num_ctx" in pdata:
+                    skipped_fields.append("num_ctx=not_ollama")
                 if skipped_fields:
                     logger.debug(
                         "Config LLM update: provider %s skipped fields: %s",

@@ -736,12 +736,30 @@ provider 段会自动纳入，因此四处遍历点都引用它、不再各写�
 都要求 `base_url` 非空，否则返回 `None`——provider 根本建不起来，只留一条 key 也没用。
 `claude` 的 `base_url` 同理（向导页允许第三方 Anthropic 协议网关覆盖它）。
 
+### 适配入口的单一数据源（2026-09-13）
+
+主项目 `Config` 与 `obc_llm._config.LLMConfig` 是字段对齐的两套数据类，桥接在
+`openbiliclaw/llm/_compat.py`（`to_llm_config`）。基于它的 5 个「适配入口」——
+`build_llm_registry` / `build_embedding_service` / `summarize_registry` /
+`_maybe_openai_compatible_provider` / `_ollama_is_chat_capable`——此前在
+`llm/registry.py` 与 `llm/_compat_registry.py` **各存一份逐字相同的实现**
+（分两处的原因：`registry.py` 用 `import *` + 覆盖来保持 obc_llm 的名字全量可用，
+而覆盖会让 mypy 把符号解析回 `obc_llm` 原签名，故另设一个类型正确的模块）。
+
+现在唯一实现在 `_compat_registry`，`llm/registry.py` 只做转发（77 → 37 行）。
+`openbiliclaw.llm.registry.*` 这条导入路径**保留不变**——`runtime/ollama_supervisor.py`、
+API 路由与测试都依赖它，且 `monkeypatch.setattr("openbiliclaw.llm.registry.build_llm_registry", ...)`
+这类补丁照旧生效（名字仍在同一模块命名空间里）。
+
+`_compat.py` 本身仍在：彻底移除需要主项目调用方直接构造 `obc_llm._config.LLMConfig`，
+属 P4 大重构范围。
+
 ### 已知 API 缺口（待补，勿误以为可用）
 
 | 字段 | 现状 |
 |------|------|
-| `[llm.openai_compatible].api_flavor` | `LLMProviderConfig` 中**不存在**该字段，`obc_llm` 也没有 `responses` 协议实现 → 设置页/向导选择 `responses` 会被**静默忽略**。修法二选一：删掉该 UI 对齐现实，或补后端协议支持 |
-| `[llm.<provider>].num_ctx` | 后端**完整支持**（`config.py` → `registry.py` → `ollama_provider.py` 的 native `/api/chat` 路径），但 `LLMProviderConfigOut` 未暴露、`_apply_llm_update` 也不处理 → 目前只能手改 `config.toml`。这是**缺 UI**，不是缺后端 |
+| ~~`[llm.openai_compatible].api_flavor`~~ | ✅ **已对齐现实**（2026-09-13）：上游 issue #72 的 `responses` 协议（`735e1c4c`）**从未合入本 fork**——`git merge-base --is-ancestor` 判定该提交不在 `main` 历史中，`LLMProviderConfig` 无该字段、`obc_llm` 也无 `/v1/responses` 实现。向导页那个「接口协议」下拉曾是**死承诺**（选中后提交被静默忽略），现已删除；如需该能力须另立专项移植上游实现 |
+| ~~`[llm.<provider>].num_ctx`~~ | ✅ **已打通 API**（2026-09-13）：`_render_config_toml` 现在写出 `num_ctx`，`LLMProviderConfigOut` 暴露该字段，`_apply_llm_update` 接受整数（负数收敛到 0、非整数返回 400）。**仅 `[llm.ollama]` 落盘**——其他 provider 提交它会被记入 `skipped_fields` 调试日志，而不是静默丢弃。仍**没有前端入口**（Ollama 在本 fork 无 LLM provider 设置面板），故 CLI / 直接调 API 是当前唯一配置途径 |
 | ~~`zhipu` / `modelscope` / `siliconflow`~~ | ✅ **已修复**（2026-09-13）：provider 集合收敛为 `LLM_PROVIDER_NAMES`，四环节全部覆盖 |
 
 ## 环境变量

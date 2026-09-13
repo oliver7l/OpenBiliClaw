@@ -4,6 +4,42 @@
 
 ---
 
+## 修复：收口三处 API 缺口 + obc_llm 适配层去重（2026-09-13）
+
+> 承接上一条的「遗留」三项。前两项的定性都被实证改写：`api_flavor` 不是"后端没实现"
+> 而是**上游特性从未合入**；`num_ctx` 不是"后端不持久化"而是**只有 API/UI 没接线**。
+
+- **`api_flavor`（responses 协议）——删除死承诺**：上游 `735e1c4c`（issue #72）是
+  完整实现（`/v1/responses` 路由、校验、API、多端 UI），但
+  `git merge-base --is-ancestor 735e1c4c main` 判定**该提交不在本 fork 历史中**，
+  `git log -S api_flavor -- '*.py'` 在本 fork 也零命中——即与 F1 的
+  `apply-status` / `embedding/repair` 同一类：**上游 UI 超前于本 fork 后端**。
+  向导页那个「接口协议」下拉选中后提交会被静默忽略，故删除该下拉与 3 处引用
+  （`currentProviderFields` / `switchProvider` / `buildLlmBlock` + `renderProvider` 显隐），
+  并把 `api_flavor` 加入向导页的"死分支禁止回流"静态检查。
+  若确实需要 responses 网关支持，须另立专项移植上游实现。
+- **`num_ctx`——打通 API 层**：后端一直是完整的（`config.py` → `obc_llm.registry`
+  → `ollama_provider.py` 的 native `/api/chat`），缺的是三处接线：
+  `_render_config_toml` 从不写它（**所以只加 API 也不落盘**）、
+  `LLMProviderConfigOut` 无该字段、`_apply_llm_update` 不处理。三处补齐：
+  仅 `[llm.ollama]` 落盘（其他 provider 提交它记入 `skipped_fields`，不做静默丢弃），
+  整数校验（负数收敛到 0、非整数 400 且不污染 TOML）。
+- **obc_llm 适配层去重（P4 第一刀）**：`llm/registry.py` 与 `_compat_registry.py`
+  此前**各存一份逐字相同的 5 个适配入口**（`build_llm_registry` /
+  `build_embedding_service` / `summarize_registry` / `_maybe_openai_compatible_provider` /
+  `_ollama_is_chat_capable`），两份实现即两处漂移点。现唯一实现归 `_compat_registry`，
+  `registry.py` 只做转发（77 → 37 行）；`openbiliclaw.llm.registry.*` 导入路径与
+  monkeypatch 语义均保留。
+- **验证**：`tests/api/test_config_provider_sections.py` 新增 4 例（num_ctx 落盘 /
+  回读 / 负数收敛 / 非 ollama 不落盘 / 非整数 400），向导页静态检查覆盖 `api_flavor`。
+  全量 **3510 passed / 0 failed / 16 skipped**；`ruff check` + `mypy`（`llm/registry.py`、
+  `llm/_compat_registry.py`）全绿。
+- **本地清理（不入版本库）**：`data/v2ex-hot-hub`（28M 陈旧重复 clone，活跃脚本用
+  下划线版）、`data/tax_frames{,2,2_check}`（~9.7M，09-10 一次性提取的 PNG 帧，
+  全仓零引用）移入废纸篓；`data/` 34G → 11G 不变（本次仅 ~38M），项目目录不涉及仓库内容。
+
+---
+
 ## 修复：LLM provider 集合收敛为单一数据源（2026-09-13）
 
 > 承接上一条的「遗留」项。起初只当是「白名单缺三家」的小问题，排查后发现是

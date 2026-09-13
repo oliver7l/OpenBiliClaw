@@ -103,3 +103,75 @@ def test_domestic_provider_survives_a_later_unrelated_save(client: TestClient, t
     assert "[llm.zhipu]" in saved
     assert "zp-KEEP-ME-123456" in saved
     assert "https://open.bigmodel.cn/api/paas/v4" in saved
+
+
+# ── Ollama num_ctx（此前只能手改 config.toml）────────────────────
+
+
+def _section(text: str, name: str) -> str:
+    """取出 ``[llm.<name>]`` 段的正文。"""
+    marker = f"[llm.{name}]"
+    assert marker in text, f"config.toml 缺少 {marker}"
+    body = text.split(marker, 1)[1]
+    return body.split("\n[", 1)[0]
+
+
+def test_put_persists_ollama_num_ctx(client: TestClient, tmp_path: Path) -> None:
+    """PUT 的 num_ctx 必须落盘并能回读（此前 API 层整条链都没接线）。"""
+    _leave_degraded(client)
+
+    r = client.put(
+        "/api/config",
+        json={
+            "suppress_background_llm_work": True,
+            "llm": {
+                "ollama": {
+                    "model": "qwen3:8b",
+                    "base_url": "http://127.0.0.1:11434",
+                    "num_ctx": 16384,
+                }
+            },
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    assert "num_ctx = 16384" in _section((tmp_path / "config.toml").read_text(encoding="utf-8"), "ollama")
+    assert client.get("/api/config").json()["llm"]["ollama"]["num_ctx"] == 16384
+
+
+def test_put_clamps_negative_num_ctx(client: TestClient, tmp_path: Path) -> None:
+    """负数收敛到 0（= 用 Ollama 服务端默认），不得写成非法值。"""
+    _leave_degraded(client)
+
+    r = client.put(
+        "/api/config",
+        json={"suppress_background_llm_work": True, "llm": {"ollama": {"num_ctx": -5}}},
+    )
+    assert r.status_code == 200, r.text
+    assert "num_ctx = 0" in _section((tmp_path / "config.toml").read_text(encoding="utf-8"), "ollama")
+
+
+def test_put_rejects_non_integer_num_ctx(client: TestClient, tmp_path: Path) -> None:
+    """非整数必须显式 400，而不是被字符串化后写进 TOML。"""
+    _leave_degraded(client)
+
+    r = client.put(
+        "/api/config",
+        json={"suppress_background_llm_work": True, "llm": {"ollama": {"num_ctx": "abc"}}},
+    )
+    assert r.status_code == 400, r.text
+    assert "num_ctx" in r.text
+    # 校验失败不得污染 TOML：仍是默认 0
+    assert "num_ctx = 0" in _section((tmp_path / "config.toml").read_text(encoding="utf-8"), "ollama")
+
+
+def test_num_ctx_not_persisted_for_non_ollama_provider(client: TestClient, tmp_path: Path) -> None:
+    """num_ctx 只有 ollama 会落盘；其他 provider 提交它不得出现在其配置段里。"""
+    _leave_degraded(client)
+
+    r = client.put(
+        "/api/config",
+        json={"suppress_background_llm_work": True, "llm": {"deepseek": {"num_ctx": 4096}}},
+    )
+    assert r.status_code == 200, r.text
+    assert "num_ctx" not in _section((tmp_path / "config.toml").read_text(encoding="utf-8"), "deepseek")
