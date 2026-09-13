@@ -568,6 +568,23 @@ root = ""
 # 留空则该页显示"未配置目录"。
 roots = []
 
+[weekend]
+# 周末怎么玩模块：把日记情绪 / 豆瓣想看想读 / 灵魂画像 / 本地活动种子
+# 聚合成带「为什么适合你」理由的周末计划。
+enabled = true
+# 数据库路径（相对项目根）；活动种子存这里
+db_path = "data/weekend.db"
+# 周五主动推送：在周五 18:00-23:00 自动生成下周计划并推 WebSocket 事件
+auto_friday_push = true
+friday_push_hour = 20
+# LLM 润色方案文案（默认关，离线规则生成即可用）
+use_llm = false
+# 本地活动种子 JSON（手动喂入的深圳周末指南等）；留空则不自动导入
+seed_path = "data/weekend_seed_activities.json"
+# 联网抓取源（可选增强，默认空=纯离线优先）。填入 provider 名如
+# ["shenzhen_look_rss"] 才启用；实现需在 weekend/providers 提供，当前为预留接口。
+online_providers = []
+
 [ed2k]
 # ed2k / Kad 下载管理模块：经本机 mule CLI 驱动 MLDonkey（Colima + Docker 容器）
 # mule_path 留空时从 PATH 查找 mule；download_dir 留空时从容器挂载推断落地目录。

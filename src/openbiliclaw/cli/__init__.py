@@ -181,6 +181,14 @@ try:
     _register_interview(app)
 except Exception as _interview_import_exc:  # noqa: BLE001 — 可选模块导入失败不阻塞主 CLI
     _APP_CONTEXT["interview_import_error"] = str(_interview_import_exc)
+
+# 周末怎么玩（weekend）命令组
+try:
+    from openbiliclaw.weekend.cli import register as _register_weekend
+
+    _register_weekend(app)
+except Exception as _weekend_import_exc:  # noqa: BLE001 — 可选模块导入失败不阻塞主 CLI
+    _APP_CONTEXT["weekend_import_error"] = str(_weekend_import_exc)
 _DISCOVER_STRATEGIES_OPTION = typer.Option(
     None,
     "--strategy",

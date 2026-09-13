@@ -171,6 +171,18 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
                 self._loop_self_evolution(),
             ),
         ]
+        # ── 周末计划主动推送 loop（可选模块，导入失败不阻塞主循环）──
+        try:
+            from openbiliclaw.weekend.engine import WeekendEngine  # noqa: F401
+            from openbiliclaw.weekend.store import WeekendStore  # noqa: F401
+
+            tasks.append(
+                self._spawn_loop(
+                    "weekend_plan", "周末计划", 600, self._loop_weekend_plan()
+                )
+            )
+        except Exception as _weekend_loop_exc:  # noqa: BLE001
+            logger.warning("weekend plan loop not registered: %s", _weekend_loop_exc)
         try:
             await asyncio.gather(*tasks)
         finally:
@@ -761,3 +773,47 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
                 event_types=self._signal_event_types,
             )
         )
+
+    async def _loop_weekend_plan(self) -> None:
+        """周末计划主动推送——周五 18:00-23:00 自动生成下周计划并推 WebSocket。
+
+        受 ``[weekend].auto_friday_push`` 开关控制；未启用或不在窗口内则空转。
+        与所有后台 loop 一样：``while True`` + 按小时级间隔休眠，永不阻塞。
+        """
+        from datetime import datetime as _dt
+
+        from openbiliclaw.weekend.engine import WeekendEngine
+        from openbiliclaw.weekend.store import WeekendStore
+
+        # 10 分钟轮询一次即可，足够覆盖「周五晚上」窗口且不空转过频
+        interval = 600
+        while True:
+            try:
+                # 配置开关（懒读，避免循环依赖）
+                from openbiliclaw.config import load_config
+
+                cfg = load_config()
+                wk = getattr(cfg, "weekend", None)
+                if wk is None or not getattr(wk, "enabled", False) or not getattr(
+                    wk, "auto_friday_push", False
+                ):
+                    await asyncio.sleep(interval)
+                    continue
+                store = WeekendStore(getattr(wk, "db_path", "") or None)
+                engine = WeekendEngine(store, diary_db="data/diary.db", douban_db="data/douban.db")
+                plan = engine.generate_for_friday(now=_dt.now())
+                if plan is not None:
+                    payload = plan.to_dict()
+                    payload["type"] = "weekend.plan"
+                    payload["message"] = "周五啦，给你备好了这个周末的玩法方案"
+                    await self._publish_event(payload)
+                    logger.info(
+                        "weekend plan pushed for %s (%d options)",
+                        plan.week_of,
+                        len(plan.options),
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("weekend plan loop tick failed", exc_info=True)
+            await asyncio.sleep(interval)

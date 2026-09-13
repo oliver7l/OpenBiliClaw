@@ -317,5 +317,22 @@ def register_all_routes(
     except Exception as _exc:  # noqa: BLE001
         _failures.record("douban routes", _exc)
 
+    # ── 周末怎么玩 API ───────────────────────────────────────────
+    try:
+        from openbiliclaw.weekend.routes import build_weekend_router
+        from openbiliclaw.weekend.store import WeekendStore
+
+        _wk_cfg = getattr(config, "weekend", None)
+        _wk_db = str(getattr(_wk_cfg, "db_path", "") or "") or None
+        _wk_use_llm = bool(getattr(_wk_cfg, "use_llm", False))
+        app.include_router(
+            build_weekend_router(
+                store=WeekendStore(_wk_db) if _wk_db else None,
+                use_llm=_wk_use_llm,
+            )
+        )
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("Weekend routes", _exc)
+
     # ── 聚合告警：注册失败的路由模块必须可见（不再静默吞错）──────────
     _failures.report()

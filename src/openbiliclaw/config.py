@@ -739,6 +739,23 @@ class Ed2kConfig:
 
 
 @dataclass
+class WeekendConfig:
+    """周末怎么玩模块（weekend）配置。
+
+    把日记情绪 / 豆瓣想看想读 / 灵魂画像 / 本地活动种子聚合成带
+    「为什么适合你」理由的周末计划。详见 ``openbiliclaw.weekend``。
+    """
+
+    enabled: bool = True
+    db_path: str = "data/weekend.db"
+    auto_friday_push: bool = True
+    friday_push_hour: int = 20
+    use_llm: bool = False
+    seed_path: str = "data/weekend_seed_activities.json"
+    online_providers: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ApiAuthConfig:
     """Optional password gate for LAN / remote access (see
     ``docs/plans/2026-05-30-web-password-auth-design.md``).
@@ -836,6 +853,7 @@ class Config:
     interview: InterviewConfig = field(default_factory=InterviewConfig)
     media: MediaConfig = field(default_factory=MediaConfig)
     ed2k: Ed2kConfig = field(default_factory=Ed2kConfig)
+    weekend: WeekendConfig = field(default_factory=WeekendConfig)
 
     @property
     def data_path(self) -> Path:
