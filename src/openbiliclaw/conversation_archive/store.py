@@ -101,12 +101,11 @@ class ConversationArchiveStore:
     @property
     def conn(self) -> sqlite3.Connection:
         if self._database:
-            conn = self._database.conn
-            if not self._initialized:
-                self._initialize_tables(conn)
-                self._initialized = True
-            return conn
-        conn = getattr(self._local, "connection", None)
+            return self._database.conn
+        return self._get_conn()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        conn: sqlite3.Connection | None = getattr(self._local, "connection", None)
         if conn is None:
             conn = open_db_conn(str(self._db_path), isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
@@ -165,10 +164,11 @@ class ConversationArchiveStore:
                 record.get("my_analysis_md", ""),
             ),
         )
-        row = c.execute(
+        row: sqlite3.Row | None = c.execute(
             "SELECT id FROM conversation_archive WHERE seq = ?", (int(record["seq"]),)
         ).fetchone()
-        return row["id"] if row else c.lastrowid
+        # use conn.lastrowid if no row found (new insert scenario)
+        return row["id"] if row else c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     def upsert_many(self, records: list[dict[str, Any]]) -> int:
         return sum(self.upsert_item(r) for r in records)

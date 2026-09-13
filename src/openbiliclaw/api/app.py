@@ -2659,9 +2659,6 @@ def create_app(
 
     def _get_diary_rag_service():
         """获取或创建日记 RAG 服务实例（懒加载）。"""
-        nonlocal _diary_rag_service
-        if _diary_rag_service is not None:
-            return _diary_rag_service
         database = getattr(ctx, "database", None)
         if database is None:
             return None
@@ -2675,7 +2672,6 @@ def create_app(
             rag.set_embedding_service(embedding_service)
         if llm_service is not None:
             rag.set_llm_service(llm_service)
-        _diary_rag_service = rag
         return rag
 
     @app.get("/api/diary/rag/stats")
