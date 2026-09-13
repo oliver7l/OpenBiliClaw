@@ -81,10 +81,15 @@
 `routing_version` / `default_chain` / `orcarouter` 回流。
 
 **遗留（未在本轮动，避免越权改动可见 UI）**：
-- 向导页 `#apiFlavor`（`responses` 协议）：`api_flavor` 不在 `LLMProviderConfig` 中，
-  `_apply_llm_update` 也不处理 → 选了不生效（payload 里仍会带上，后端静默忽略）。
-- `[llm.<provider>].num_ctx` 有配置字段，但 `_apply_llm_update` 不处理 → 无法经 API 设置。
-- `_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`（配置模型里有，API 改不到）。
+- 向导页 `#apiFlavor`（`responses` 协议）：该字段在 `LLMProviderConfig` 中**根本不存在**，
+  `obc_llm` 也没有 `responses` 协议实现 → 选了不生效（payload 仍会带上，后端静默忽略）。
+  修法二选一：**删掉该 UI** 对齐现实，或补后端协议支持。
+- `[llm.<provider>].num_ctx`：后端**完整支持**（`config.py` → `registry.py` →
+  `ollama_provider.py` 的 native `/api/chat`），只是没有前端入口、`LLMProviderConfigOut`
+  未暴露 → 属**缺 UI，不是缺后端**（初稿把两者混为一谈，措辞已更正）。
+- ~~`_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`~~
+  ✅ **已修复**（2026-09-13，见 §7 第 3 条）：根因不是「漏列三项」，而是 provider 集合
+  散落 5 处、其中 3 处漏项，而**写盘路径的漏项会让用户手工配置被静默删除**。
 
 ### 🔴 F2：`GET /api/diary/rag/stats` 恒 422 —— 装饰器误挂 + 注册遮蔽
 
@@ -243,10 +248,26 @@
 1. ~~**F1 的 setup 端点**~~：✅ 已完成（2026-09-13）——实现 `discover-models` + 修复向导保存链路
    （routing v2 → provider-name，含降级模式白名单放行），删除 `apply-status` / `embedding/repair` 两处不可达死分支。
    复核结论：初稿的「移植 448 行 `ollama_diagnostics`」并非必要——那两个端点在本 fork 无任何可达路径。
-   遗留的 `api_flavor` / `num_ctx` / `zhipu·modelscope·siliconflow` 三处 API 缺口待另立小专项（见 §1 F1 末）。
+   遗留的 `api_flavor` / `num_ctx` 两处 UI 缺口待定（见 §1 F1 末）。
 2. ~~**39 条重复路由**~~：✅ 全部收敛（两轮：32 对闭包树等价 + 6 对逐对澄清后删除，重复 0 对，见 §2）。
-3. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
-4. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？
+3. ~~**F1 遗留的「provider 白名单缺三家」**~~：✅ 已修复（2026-09-13）。
+   排查后发现不是「白名单漏列三项」，而是 **provider 集合散落 5 处、其中 3 处漏项**：
+
+   | 位置 | 漏项后果 |
+   |------|---------|
+   | `_apply_llm_update`（PUT 字段应用） | 提交被静默忽略 |
+   | `_render_config_toml`（写盘） | **任何一次保存都删掉该段**（数据丢失） |
+   | `LLMConfigOut` + `_config_to_response`（GET 回传） | 读不回来 |
+   | `_collect_config_issues`（校验） | 误判「不支持的默认 provider」 |
+   | `llm/_compat._PROVIDER_NAMES` | ✅ 正确（10 个，与 `obc_llm` registry 一致） |
+
+   实测（worktree 对照 HEAD 版）：手工写入的 `[llm.zhipu]` 能被 `load_config` 读到，
+   但一次 `save_config` 后该段与 `api_key` **全部消失**。已收敛为
+   `config.LLM_PROVIDER_NAMES`（从 `LLMConfig` 数据类**派生**，新增字段自动纳入），
+   四处引用点全部改用它；回归测试 8 例
+   （`tests/config/test_llm_provider_sections.py` + `tests/api/test_config_provider_sections.py`）。
+4. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
+5. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？
 
 ---
 

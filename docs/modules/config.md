@@ -712,13 +712,37 @@ flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 （HTTP 200），因为模型名始终可手填。本端点**不读不写** `config.toml`，且已在 `api/app.py` 的 degraded
 中间件白名单中放行——首次运行无可用 LLM 时后端按定义处于降级模式。
 
+### provider 段的单一数据源（2026-09-13）
+
+`LLMConfig` 声明的每个 provider 段（`openai` / `claude` / `gemini` / `deepseek` / `ollama` /
+`openrouter` / `openai_compatible` / `zhipu` / `modelscope` / `siliconflow`）统一由
+`config.LLM_PROVIDER_NAMES` 枚举。该常量从 `LLMConfig` 的数据类字段**派生**，新增一个
+provider 段会自动纳入，因此四处遍历点都引用它、不再各写一份列表：
+
+| 环节 | 位置 |
+|------|------|
+| 校验 | `_collect_config_issues` 的 `provider_configs` |
+| 写盘 | `_render_config_toml` 的段渲染 |
+| API 写入 | `_apply_llm_update` 的字段应用 |
+| API 回传 | `LLMConfigOut` + `_config_to_response` |
+
+> 2026-09-13 之前这四处里有 3 处硬编码 7 个 provider，漏掉 `zhipu` / `modelscope` /
+> `siliconflow`，后果是：`PUT` 提交被静默忽略、`GET` 读不回来，而且**任何一次保存都会
+> 删掉用户手工配置的该段**（数据丢失，不只是"不生效"）。回归测试：
+> `tests/config/test_llm_provider_sections.py` 与 `tests/api/test_config_provider_sections.py`。
+
+写盘时这三家的 `base_url` / `reasoning_effort` 必须写出：`obc_llm` 的
+`_maybe_zhipu_provider` / `_maybe_modelscope_provider` / `_maybe_siliconflow_provider`
+都要求 `base_url` 非空，否则返回 `None`——provider 根本建不起来，只留一条 key 也没用。
+`claude` 的 `base_url` 同理（向导页允许第三方 Anthropic 协议网关覆盖它）。
+
 ### 已知 API 缺口（待补，勿误以为可用）
 
 | 字段 | 现状 |
 |------|------|
-| `[llm.openai_compatible].api_flavor` | `LLMProviderConfig` 中**不存在**该字段，`_apply_llm_update` 也不处理；设置页/向导选择 `responses` 协议不生效 |
-| `[llm.<provider>].num_ctx` | 配置模型里有该字段，但 `_apply_llm_update` 不处理 → 无法经 API 设置 |
-| `zhipu` / `modelscope` / `siliconflow` | `LLMConfig` 里有对应配置段，但 `_apply_llm_update` 的 provider 白名单未包含 → 只能手改 `config.toml` |
+| `[llm.openai_compatible].api_flavor` | `LLMProviderConfig` 中**不存在**该字段，`obc_llm` 也没有 `responses` 协议实现 → 设置页/向导选择 `responses` 会被**静默忽略**。修法二选一：删掉该 UI 对齐现实，或补后端协议支持 |
+| `[llm.<provider>].num_ctx` | 后端**完整支持**（`config.py` → `registry.py` → `ollama_provider.py` 的 native `/api/chat` 路径），但 `LLMProviderConfigOut` 未暴露、`_apply_llm_update` 也不处理 → 目前只能手改 `config.toml`。这是**缺 UI**，不是缺后端 |
+| ~~`zhipu` / `modelscope` / `siliconflow`~~ | ✅ **已修复**（2026-09-13）：provider 集合收敛为 `LLM_PROVIDER_NAMES`，四环节全部覆盖 |
 
 ## 环境变量
 

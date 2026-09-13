@@ -209,6 +209,31 @@ class LLMConfig:
     evaluation: ModuleLLMConfig = field(default_factory=ModuleLLMConfig)
 
 
+def _llm_provider_field_names() -> tuple[str, ...]:
+    """Derive the per-provider section names from ``LLMConfig`` itself.
+
+    Single source of truth for every site that iterates the provider blocks —
+    config validation, ``PUT /api/config`` field application, and the
+    ``llm/_compat`` mapping. Deriving rather than hand-listing means a newly
+    added provider can never be silently dropped by one of those sites, which
+    is exactly how ``zhipu`` / ``modelscope`` / ``siliconflow`` ended up
+    writable in ``config.toml`` yet ignored by the config API and reported as
+    "不支持的默认 provider" by the validator.
+    """
+    from dataclasses import fields as _dc_fields
+
+    defaults = LLMConfig()
+    return tuple(
+        spec.name
+        for spec in _dc_fields(defaults)
+        if isinstance(getattr(defaults, spec.name), LLMProviderConfig)
+    )
+
+
+#: Provider sections of :class:`LLMConfig`, in declaration order.
+LLM_PROVIDER_NAMES: tuple[str, ...] = _llm_provider_field_names()
+
+
 def _gemini_api_key_from_env() -> str:
     """Return Gemini API key from official environment variables."""
     google_api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
@@ -1934,13 +1959,7 @@ def _collect_config_issues(config: Config) -> list[ConfigIssue]:
 
     provider_name = config.llm.default_provider
     provider_configs: dict[str, LLMProviderConfig] = {
-        "openai": config.llm.openai,
-        "claude": config.llm.claude,
-        "gemini": config.llm.gemini,
-        "deepseek": config.llm.deepseek,
-        "ollama": config.llm.ollama,
-        "openrouter": config.llm.openrouter,
-        "openai_compatible": config.llm.openai_compatible,
+        name: getattr(config.llm, name) for name in LLM_PROVIDER_NAMES
     }
 
     provider_config = provider_configs.get(provider_name)
@@ -2382,13 +2401,14 @@ def _render_config_toml(
         f"fallback_provider = {_toml_string(config.llm.fallback_provider)}",
         "",
     ]
-    lines.extend(_render_provider_section("openai", config.llm.openai))
-    lines.extend(_render_provider_section("claude", config.llm.claude))
-    lines.extend(_render_provider_section("gemini", config.llm.gemini))
-    lines.extend(_render_provider_section("deepseek", config.llm.deepseek))
-    lines.extend(_render_provider_section("ollama", config.llm.ollama))
-    lines.extend(_render_provider_section("openrouter", config.llm.openrouter))
-    lines.extend(_render_provider_section("openai_compatible", config.llm.openai_compatible))
+    # Derive from LLMConfig itself so a newly declared provider section can
+    # never be silently dropped from the persisted file (see
+    # LLM_PROVIDER_NAMES) — the exact drift that made the config API accept
+    # zhipu / modelscope / siliconflow while this renderer never wrote them.
+    for provider_name in LLM_PROVIDER_NAMES:
+        lines.extend(
+            _render_provider_section(provider_name, getattr(config.llm, provider_name))
+        )
     lines.extend(
         [
             "[llm.embedding]",
@@ -2709,11 +2729,26 @@ def _render_provider_section(name: str, provider: LLMProviderConfig) -> list[str
     lines = [f"[llm.{name}]"]
     lines.append(f"api_key = {_toml_string(provider.api_key)}")
     lines.append(f"model = {_toml_string(provider.model)}")
-    if name in {"openai", "deepseek", "ollama", "openrouter", "openai_compatible"}:
+    # Providers whose factory reads a user-supplied base_url. Claude is here
+    # because the setup wizard lets a third-party Anthropic-protocol gateway
+    # override it; the three domestic platforms REQUIRE a non-empty base_url to
+    # be constructed at all, so omitting it would persist the api_key yet still
+    # leave the provider unusable.
+    if name in {
+        "openai",
+        "claude",
+        "deepseek",
+        "ollama",
+        "openrouter",
+        "openai_compatible",
+        "zhipu",
+        "modelscope",
+        "siliconflow",
+    }:
         lines.append(f"base_url = {_toml_string(provider.base_url)}")
     if name == "openai":
         lines.append(f"auth_mode = {_toml_string(provider.auth_mode)}")
-    if name == "deepseek":
+    if name in {"deepseek", "zhipu", "modelscope", "siliconflow"}:
         lines.append(f"reasoning_effort = {_toml_string(provider.reasoning_effort)}")
     if name == "openrouter":
         lines.append(f"http_referer = {_toml_string(provider.http_referer)}")

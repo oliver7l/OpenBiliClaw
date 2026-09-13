@@ -4,6 +4,37 @@
 
 ---
 
+## 修复：LLM provider 集合收敛为单一数据源（2026-09-13）
+
+> 承接上一条的「遗留」项。起初只当是「白名单缺三家」的小问题，排查后发现是
+> **provider 集合在 5 处各写一遍、其中 3 处漏项**，而写盘路径的漏项会让
+> **用户手工配置的段被静默删除**——是数据丢失，不只是"不生效"。
+
+- **根因**：`LLMConfig` 声明 10 个 provider 段，但「谁遍历 provider」散在 5 处，
+  其中 3 处硬编码 7 个，漏掉 `zhipu` / `modelscope` / `siliconflow`：
+
+  | 位置 | 漏项的后果 |
+  |------|-----------|
+  | `_apply_llm_update`（`PUT /api/config` 字段应用） | 提交被**静默忽略** |
+  | `_render_config_toml`（写盘） | **任何一次保存都删掉该段**（数据丢失） |
+  | `LLMConfigOut` + `_config_to_response`（`GET` 回传） | 读不回来，UI 无法回显 |
+  | `_collect_config_issues`（校验） | 误判为「不支持的默认 provider」 |
+  | `llm/_compat._PROVIDER_NAMES` | ✅ 正确（10 个，与 `obc_llm` registry 一致） |
+
+- **实证（worktree 对照 HEAD 版复现）**：把 `[llm.zhipu]` 手写进 config.toml 后，
+  `load_config` 能读到它（加载路径一直支持），但**只需一次 `save_config`，该段连同
+  api_key 全部消失**。另外这三家的 provider 工厂要求 `base_url` 非空
+  （`registry.py` 的 `_maybe_*_provider`），而 `_render_provider_section` 从不写它们的
+  `base_url`——即使段被保留也建不起来。`claude` 的 `base_url` 同样被丢（向导页会提交它）。
+- **修复**：新增 `config.LLM_PROVIDER_NAMES`——从 `LLMConfig` 数据类型**派生**
+  （新增 provider 字段自动纳入，不会再漏），上述 4 个环节全部改为引用它；
+  `_render_provider_section` 补齐三家的 `base_url` / `reasoning_effort` 并补上 `claude` 的 `base_url`。
+- **验证**：`tests/config/test_llm_provider_sections.py` 5 例 + `tests/api/test_config_provider_sections.py` 3 例，
+  含「重新保存不得删段」的数据丢失回归、常量与 `_compat` / `LLMConfigOut` 的漂移断言，
+  以及「每个已声明 provider 都能作为 `default_provider`」。
+
+---
+
 ## 修复：setup 首启动向导与后端失配——保存链路 + 模型发现（2026-09-13）
 
 > 来源：`docs/project-audit-2026-09-13.md` §1 F1。复核发现初稿低估了范围：
@@ -25,8 +56,11 @@
 - **验证**：`tests/llm/test_model_discovery.py` 19 例 + `tests/api/test_config_setup_wizard.py` 12 例
   （含「向导引用的全部 `/api` 路径必须存在于路由表」的端点级对账，与禁止死分支回流的静态检查）。
   全量 **3491 passed / 0 failed / 16 skipped**（261s）；`ruff check` + `ruff format --check` 全绿。
-- **遗留（未改可见 UI，待另立小专项）**：`#apiFlavor`（`responses` 协议）与 `num_ctx` 后端不持久化；
-  `_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`。
+- **遗留（未改可见 UI，待另立小专项）**：向导页的 `#apiFlavor`（`responses` 协议）下拉所提交的字段
+  后端**完全没有概念**（`obc_llm` 无该协议实现），当前会被静默忽略——要么删掉该 UI、要么补后端支持；
+  `num_ctx` 则相反，后端**完整支持**（`config.py` → `registry.py` → `ollama_provider.py`），
+  只是没有任何前端入口（本条初稿把两者混为一谈，措辞已更正）。
+  ~~`_apply_llm_update` 的 provider 白名单缺三家~~ ✅ 已修复（见上一条）。
 
 ---
 

@@ -1058,6 +1058,13 @@ class LLMConfigOut(BaseModel):
     openrouter: LLMProviderConfigOut = Field(default_factory=LLMProviderConfigOut)
     # v0.3.32+ — generic OpenAI-protocol-compatible provider.
     openai_compatible: LLMProviderConfigOut = Field(default_factory=LLMProviderConfigOut)
+    # 国内免费大模型平台（OpenAI 协议兼容）。These are declared on the core
+    # ``LLMConfig`` dataclass and persisted by ``_render_config_toml``; mirror
+    # them here or ``GET /api/config`` silently hides them even after a
+    # successful write, which is how they went missing from the settings UI.
+    zhipu: LLMProviderConfigOut = Field(default_factory=LLMProviderConfigOut)
+    modelscope: LLMProviderConfigOut = Field(default_factory=LLMProviderConfigOut)
+    siliconflow: LLMProviderConfigOut = Field(default_factory=LLMProviderConfigOut)
     embedding: EmbeddingConfigOut = Field(default_factory=EmbeddingConfigOut)
     soul: ModuleLLMConfigOut = Field(default_factory=ModuleLLMConfigOut)
     discovery: ModuleLLMConfigOut = Field(default_factory=ModuleLLMConfigOut)

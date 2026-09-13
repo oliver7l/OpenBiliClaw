@@ -168,6 +168,8 @@ def register_config_routes(
                 cookie_env=cfg.sources.twitter.cookie_env,
             )
 
+        from openbiliclaw.config import LLM_PROVIDER_NAMES
+
         def _provider_out(p: Any) -> LLMProviderConfigOut:
             return LLMProviderConfigOut(
                 api_key=_mask(p.api_key),
@@ -199,13 +201,10 @@ def register_config_routes(
                 timeout=int(getattr(cfg.llm, "timeout", 300)),
                 fallback_enabled=cfg.llm.fallback_enabled,
                 fallback_provider=cfg.llm.fallback_provider,
-                openai=_provider_out(cfg.llm.openai),
-                claude=_provider_out(cfg.llm.claude),
-                gemini=_provider_out(cfg.llm.gemini),
-                deepseek=_provider_out(cfg.llm.deepseek),
-                ollama=_provider_out(cfg.llm.ollama),
-                openrouter=_provider_out(cfg.llm.openrouter),
-                openai_compatible=_provider_out(cfg.llm.openai_compatible),
+                **{
+                    provider_name: _provider_out(getattr(cfg.llm, provider_name))
+                    for provider_name in LLM_PROVIDER_NAMES
+                },
                 embedding=EmbeddingConfigOut(
                     provider=cfg.llm.embedding.provider,
                     model=cfg.llm.embedding.model,
@@ -418,7 +417,11 @@ def register_config_routes(
         """Apply the LLM subset of a config update to an in-memory config."""
         if not isinstance(llm_data, dict):
             return
-        from openbiliclaw.config import _normalize_llm_concurrency, _normalize_llm_timeout
+        from openbiliclaw.config import (
+            LLM_PROVIDER_NAMES,
+            _normalize_llm_concurrency,
+            _normalize_llm_timeout,
+        )
 
         if "default_provider" in llm_data:
             cfg.llm.default_provider = str(llm_data["default_provider"])
@@ -430,15 +433,7 @@ def register_config_routes(
             cfg.llm.fallback_enabled = _as_bool(llm_data["fallback_enabled"])
         if "fallback_provider" in llm_data:
             cfg.llm.fallback_provider = str(llm_data["fallback_provider"]).strip()
-        for provider_name in (
-            "openai",
-            "claude",
-            "gemini",
-            "deepseek",
-            "ollama",
-            "openrouter",
-            "openai_compatible",
-        ):
+        for provider_name in LLM_PROVIDER_NAMES:
             if provider_name in llm_data and isinstance(llm_data[provider_name], dict):
                 provider_cfg = getattr(cfg.llm, provider_name)
                 pdata = llm_data[provider_name]
