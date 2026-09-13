@@ -286,6 +286,54 @@ EMOTION_LABELS_CN = {
     "bored": "无聊",
 }
 
+# 细粒度情绪标签 → DiaryEntry.mood（MoodLevel 枚举值）
+#
+# 为什么需要这张表：diary_entries.mood 是画像（emotional_baseline）和复盘链路
+# 实际消费的字段，而 EmotionAnalyzer 产出的是 valence/arousal + 细粒度标签。
+# 早期版本只写 diary_emotion_analyses、从不回写 entries，导致画像侧恒为 unknown。
+MOOD_LEVEL_BY_EMOTION_LABEL: dict[str, str] = {
+    "ecstatic": "very_happy",
+    "enthusiastic": "very_happy",
+    "happy": "happy",
+    "content": "happy",
+    "excited": "happy",
+    "calm": "neutral",
+    "relaxed": "neutral",
+    "neutral": "neutral",
+    "bored": "neutral",
+    "tired": "sad",
+    "stressed": "anxious",
+    "anxious": "anxious",
+    "sad": "sad",
+    "depressed": "very_sad",
+    "angry": "angry",
+}
+
+# MoodLevel → 先验效价。用于条目已带 mood 标注时做加权融合（见 analyze_diary）。
+# 注意：mood 存的是 "happy" 这类枚举字符串，不是数字。
+MOOD_PRIOR_VALENCE: dict[str, float] = {
+    "very_happy": 0.8,
+    "happy": 0.5,
+    "neutral": 0.0,
+    "sad": -0.5,
+    "very_sad": -0.8,
+    "angry": -0.6,
+    "anxious": -0.4,
+}
+
+
+def mood_level_for_emotion(emotion_label: str) -> str:
+    """把细粒度情绪标签映射回 ``DiaryEntry.mood`` 的枚举值。
+
+    Args:
+        emotion_label: ``EMOTION_LABELS`` 中的标签，如 ``happy`` / ``anxious``。
+
+    Returns:
+        ``MoodLevel`` 的字符串值；未知标签一律回落 ``neutral``。
+
+    """
+    return MOOD_LEVEL_BY_EMOTION_LABEL.get(emotion_label, "neutral")
+
 
 # ─── 情绪分析服务 ────────────────────────────────────────────────────
 
@@ -383,8 +431,20 @@ class EmotionAnalyzer:
                 return label
         return "neutral"
 
-    def analyze_diary(self, diary_id: int) -> ValenceArousal | None:
-        """分析单篇日记的情绪。"""
+    def analyze_diary(self, diary_id: int, *, use_mood_prior: bool = False) -> ValenceArousal | None:
+        """分析单篇日记的情绪。
+
+        Args:
+            diary_id: 日记 ID。
+            use_mood_prior: 是否把条目上已有的 ``mood`` 当作效价先验做加权融合。
+                **默认关闭** —— ``mood`` 是本方法的输出而非输入：一旦开启，
+                回填后的条目每次重跑都会被上一轮结果再压 0.6 倍，效价反复衰减到 0。
+                只有明确知道 ``mood`` 来自人工标注时才应开启。
+
+        Returns:
+            效价/唤醒坐标；日记不存在时返回 None。
+
+        """
         conn = self.store.conn
         row = conn.execute(
             "SELECT id, title, content, mood FROM diary_entries WHERE id = ?",
@@ -397,16 +457,15 @@ class EmotionAnalyzer:
         text = (row["title"] or "") + " " + (row["content"] or "")
         result = self.analyze_text(text)
 
-        # 如果日记有原始 mood 分数，融合进去
-        if row["mood"] is not None:
-            try:
-                original_mood = float(row["mood"])
-                # 原始 mood 作为效价的参考，加权融合
-                result.valence = round(result.valence * 0.6 + original_mood * 0.4, 4)
-                result.confidence = round(min(1.0, result.confidence + 0.2), 4)
-                result.emotion_label = self._map_to_emotion_label(result.valence, result.arousal)
-            except (ValueError, TypeError):
-                pass
+        # 可选：把条目已有的 mood 标注作为效价先验融合进去。
+        # mood 是 MoodLevel 字符串（"happy" / "unknown"…）而非数字——早期版本在这里
+        # float(row["mood"])，恒抛 ValueError 被吞掉，这段融合从未真正生效过。
+        # 现在改为显式开关，默认关闭（见 analyze_diary 文档）。
+        prior = MOOD_PRIOR_VALENCE.get(str(row["mood"] or "").lower()) if use_mood_prior else None
+        if prior is not None:
+            result.valence = round(result.valence * 0.6 + prior * 0.4, 4)
+            result.confidence = round(min(1.0, result.confidence + 0.2), 4)
+            result.emotion_label = self._map_to_emotion_label(result.valence, result.arousal)
 
         # 保存到数据库
         conn.execute(
@@ -424,9 +483,70 @@ class EmotionAnalyzer:
                 json.dumps(result.evidence, ensure_ascii=False),
             ),
         )
-        conn.commit()
+
+        # 回写到 diary_entries：分析表是明细，entries 侧才是画像/复盘的消费字段。
+        # 缺了这一步，diary_entries.mood 永远停在 unknown，emotional_baseline 全废。
+        self._write_entry_mood(
+            diary_id,
+            mood_level_for_emotion(result.emotion_label),
+            result.valence,
+            commit=True,
+        )
 
         return result
+
+    def _write_entry_mood(self, diary_id: int, mood: str, mood_score: float, *, commit: bool = True) -> None:
+        """把情绪结论写回 ``diary_entries.mood`` / ``mood_score``。"""
+        conn = self.store.conn
+        conn.execute(
+            """
+            UPDATE diary_entries
+            SET mood = ?, mood_score = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (mood, round(mood_score, 4), diary_id),
+        )
+        if commit:
+            conn.commit()
+
+    def backfill_entry_moods(self, *, only_unknown: bool = True) -> int:
+        """把已有的分析结果回填到 ``diary_entries``。
+
+        用于修复历史数据：分析表有数据、但条目侧仍是 unknown 的情况（本项目的
+        存量 925 篇正是如此）。
+
+        Args:
+            only_unknown: 为 True 时只回填 ``mood = 'unknown'`` 的条目，
+                保留人工或非分析来源写入的情绪标注。
+
+        Returns:
+            实际更新的条数。
+
+        """
+        conn = self.store.conn
+        rows = conn.execute(
+            """
+            SELECT ea.diary_id, ea.valence, ea.emotion_label, de.mood AS entry_mood
+            FROM diary_emotion_analyses ea
+            JOIN diary_entries de ON de.id = ea.diary_id
+            ORDER BY ea.diary_id
+            """
+        ).fetchall()
+
+        updated = 0
+        for row in rows:
+            if only_unknown and (row["entry_mood"] or "unknown") != "unknown":
+                continue
+            self._write_entry_mood(
+                int(row["diary_id"]),
+                mood_level_for_emotion(row["emotion_label"] or "neutral"),
+                float(row["valence"] or 0.0),
+                commit=False,
+            )
+            updated += 1
+
+        conn.commit()
+        return updated
 
     def analyze_all_diaries(self) -> int:
         """分析所有日记的情绪。返回分析的数量。"""
@@ -570,12 +690,8 @@ class EmotionAnalyzer:
             return result
 
         # 1. 情绪耗竭（效价持续偏低 + 唤醒偏低）
-        recent_valences = (
-            [p.valence for p in trend[-7:]] if len(trend) >= 7 else [p.valence for p in trend]
-        )
-        recent_arousals = (
-            [p.arousal for p in trend[-7:]] if len(trend) >= 7 else [p.arousal for p in trend]
-        )
+        recent_valences = [p.valence for p in trend[-7:]] if len(trend) >= 7 else [p.valence for p in trend]
+        recent_arousals = [p.arousal for p in trend[-7:]] if len(trend) >= 7 else [p.arousal for p in trend]
 
         avg_valence = sum(recent_valences) / len(recent_valences)
         avg_arousal = sum(recent_arousals) / len(recent_arousals)

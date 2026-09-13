@@ -33,7 +33,7 @@
 | 多来源导入 | ✅ | 支持 MindBack、有道云、苹果备忘录、WPS、乐乐成长等 5 个来源 |
 | 跨来源去重 | ✅ | 自动识别并合并跨来源重复日记 |
 | 前端页面 | ✅ | 桌面端完整的日记浏览、编辑、分析界面 |
-| 单元测试 | ✅ | 39 个测试用例覆盖核心功能（19 基础 + 20 知识图谱） |
+| 单元测试 | ✅ | 58 个测试用例覆盖核心功能（19 基础 + 20 知识图谱 + 19 情绪回写） |
 | **RAG 语义搜索** | ✅ | 基于 bge-m3 向量的语义搜索，支持自然语言查询 |
 | **日记对话** | ✅ | 基于 RAG 的日记问答，AI 基于你的日记回答问题 |
 | **碎片化快速记录** | ✅ | 随手记功能，支持类型/媒体/标签，AI 自动标注 |
@@ -42,6 +42,7 @@
 | **个人知识网络** | ✅ | 标签关联网络、人物关系图谱、混合知识网络、节点详情 |
 | **人物关系分析** | ✅ | 自动推断人物关系类型（家人/朋友/同事/伴侣） |
 | **接口性能优化** | ✅ | 统计类接口 30s TTL 内存缓存（写操作自动失效）；日记模块 JS 按需加载，首页不再加载 9 个日记脚本 |
+| **情绪分析回写** | ✅ | `EmotionAnalyzer` 分析后同步写回 `diary_entries.mood` / `mood_score`，并提供历史回填脚本；画像 `emotional_baseline` 以分析表为事实来源 |
 
 ## 数据模型
 
@@ -372,6 +373,50 @@ CREATE VIRTUAL TABLE diary_fts USING fts5(
 
 AI 分析会同时输出这两个维度，用户也可以手动设置。
 
+### 5. 情绪的唯一事实来源：分析表，不是条目字段
+
+`EmotionAnalyzer` 产出细粒度的 valence/arousal + 情绪标签（15 种），落在
+`diary_emotion_analyses`；而筛选、趋势、画像消费的是 `diary_entries` 上的
+`mood` / `mood_score`。两者必须靠**回写**打通，否则消费侧永远是默认值。
+
+早期版本只写分析表、从不回写条目，导致 `SelfEvolutionService` 的
+`emotional_baseline` 恒为 `{"unknown": N}`（本项目存量 925 篇全部中招）。修复后：
+
+- **分析即回写**：`analyze_diary()` 写完分析表立刻 UPDATE 条目；
+- **历史可回填**：`backfill_entry_moods()` 用已有分析补 `mood='unknown'` 的条目；
+- **画像优先读分析表**：`_calculate_emotional_baseline()` 取 `diary_emotion_analyses`
+  的 valence 与标签，无分析结果时才回退条目字段，并在结果里用 `source` 标明来源；
+- **先验融合默认关闭**：`analyze_diary(..., use_mood_prior=True)` 才会把条目已有
+  `mood` 折进效价。`mood` 是本方法的输出而非输入——默认开启会让回填后的条目每次
+  重跑都被上一轮结果再压 0.6 倍，效价反复衰减到 0。
+
+## 情绪回写与回填
+
+```python
+from openbiliclaw.diary.emotion import EmotionAnalyzer, mood_level_for_emotion
+from openbiliclaw.diary.store import DiaryStore
+
+store = DiaryStore(db_path="data/diary.db")
+analyzer = EmotionAnalyzer(store)
+
+analyzer.analyze_diary(123)                       # 分析 + 回写条目 mood/mood_score
+analyzer.analyze_all_diaries()                    # 全量分析
+analyzer.backfill_entry_moods()                   # 只补 mood == 'unknown' 的条目
+analyzer.backfill_entry_moods(only_unknown=False) # 强制覆盖已有标注
+
+mood_level_for_emotion("content")                 # -> 'happy'
+```
+
+一键修复存量数据并重建画像（幂等，可重复执行）：
+
+```bash
+.venv/bin/python scripts/backfill_diary_moods.py                 # 回填 + 重建画像
+.venv/bin/python scripts/backfill_diary_moods.py --force         # 连已有标注一起覆盖
+.venv/bin/python scripts/backfill_diary_moods.py --no-rebuild    # 只回填
+```
+
+执行前会自动打印回填前后的 `mood` 分布，便于确认效果。
+
 ## 前端页面
 
 桌面端日记页面（`/web/diary`）提供以下功能视图：
@@ -438,9 +483,15 @@ AI 分析会同时输出这两个维度，用户也可以手动设置。
 - 服务功能测试（13 个）：标签网络、人物网络、混合网络、关系分析、节点详情、网络统计、日期筛选、空数据库
 - 边界情况测试（3 个）：最大节点数限制、节点大小缩放、关系类型推断
 
+### `tests/diary/test_diary_emotion_backfill.py`（19 个情绪回写测试）
+- 标签映射（10 个）：`mood_level_for_emotion` 把 15 种细粒度标签映射回 `MoodLevel`，未知标签回落 neutral
+- 分析即回写（3 个）：分析后条目 `mood` / `mood_score` 同步、重复分析不漂移、先验融合默认关闭且显式开启才生效
+- 历史回填（3 个）：默认只补 unknown、force 覆盖已有标注、无分析时返回 0
+- 画像基线（3 个）：优先读分析表（`source=diary_emotion_analyses`）、无分析时回退条目字段、只统计 target_date 之前的日记
+
 运行测试：
 ```bash
-pytest tests/test_diary.py -v
+.venv/bin/python -m pytest tests/diary -q -p no:randomly --basetemp=/tmp/obc_pytest_tmp
 ```
 
 ## 后续规划

@@ -586,49 +586,94 @@ class SelfEvolutionService:
                 "first_mentioned": min(person_date_list) if person_date_list else "",
                 "last_mentioned": max(person_date_list) if person_date_list else "",
                 "recent_30d_count": sum(
-                    1
-                    for d in person_date_list
-                    if (datetime.now() - datetime.strptime(d, "%Y-%m-%d")).days <= 30
+                    1 for d in person_date_list if (datetime.now() - datetime.strptime(d, "%Y-%m-%d")).days <= 30
                 ),
             }
 
         return relationships
 
     def _calculate_emotional_baseline(self, entries: list[DiaryEntry]) -> dict[str, Any]:
-        """计算情绪基调。"""
+        """计算情绪基调。
+
+        优先取 ``diary_emotion_analyses``（效价/唤醒明细，是情绪的事实来源）；
+        一篇分析都没有时才回退到条目自带的 ``mood`` / ``mood_score`` 字段——
+        后者历史上从未被写入，只看它会让整份画像退化成 100% unknown。
+        """
+        entry_ids = {e.id for e in entries if e.id is not None}
+        analyses = self._load_emotion_analyses(entry_ids)
+        if analyses:
+            valences = [valence for valence, _ in analyses.values()]
+            labels = [label for _, label in analyses.values()]
+            return self._baseline_from_samples(valences, labels, source="diary_emotion_analyses")
+
         mood_scores = [e.mood_score for e in entries if e.mood_score is not None]
         moods = [e.mood.value for e in entries if e.mood]
+        return self._baseline_from_samples(mood_scores, moods, source="diary_entries")
 
-        if not mood_scores:
+    def _load_emotion_analyses(self, entry_ids: set[int]) -> dict[int, tuple[float, str]]:
+        """读取指定条目的情绪分析明细。
+
+        Args:
+            entry_ids: 参与本次画像的日记 ID 集合。
+
+        Returns:
+            ``{diary_id: (valence, emotion_label)}``；表不存在或不可读时返回空字典。
+
+        """
+        conn = getattr(self.store, "conn", None)
+        if conn is None or not entry_ids:
+            return {}
+        try:
+            rows = conn.execute("SELECT diary_id, valence, emotion_label FROM diary_emotion_analyses").fetchall()
+        except Exception:  # noqa: BLE001 — 表未建 / 库只读时安静回退，不阻断画像
+            logger.debug("读取 diary_emotion_analyses 失败，回退到条目字段", exc_info=True)
             return {}
 
-        avg_mood = round(sum(mood_scores) / len(mood_scores), 3)
+        result: dict[int, tuple[float, str]] = {}
+        for row in rows:
+            diary_id = int(row["diary_id"])
+            if diary_id not in entry_ids:
+                continue
+            result[diary_id] = (
+                float(row["valence"] or 0.0),
+                str(row["emotion_label"] or "neutral"),
+            )
+        return result
+
+    def _baseline_from_samples(self, scores: list[float], labels: list[str], *, source: str) -> dict[str, Any]:
+        """把（分值, 标签）样本按统一口径折算成情绪基线。"""
+        if not scores:
+            return {}
+
+        total = len(scores)
+        avg_mood = round(sum(scores) / total, 3)
 
         # 情绪波动性（标准差）
-        if len(mood_scores) > 1:
-            mean = sum(mood_scores) / len(mood_scores)
-            variance = sum((x - mean) ** 2 for x in mood_scores) / len(mood_scores)
+        if total > 1:
+            mean = sum(scores) / total
+            variance = sum((x - mean) ** 2 for x in scores) / total
             volatility = round(math.sqrt(variance), 3)
         else:
             volatility = 0
 
         # 正负情绪比例
-        positive_count = sum(1 for s in mood_scores if s > 0.1)
-        negative_count = sum(1 for s in mood_scores if s < -0.1)
-        neutral_count = len(mood_scores) - positive_count - negative_count
+        positive_count = sum(1 for s in scores if s > 0.1)
+        negative_count = sum(1 for s in scores if s < -0.1)
+        neutral_count = total - positive_count - negative_count
 
         # 主导情绪
-        mood_counter = Counter(moods)
+        mood_counter = Counter(labels)
         dominant_mood = mood_counter.most_common(1)[0][0] if mood_counter else "unknown"
 
         return {
             "average_mood": avg_mood,
             "volatility": volatility,
-            "positive_ratio": round(positive_count / len(mood_scores), 3),
-            "negative_ratio": round(negative_count / len(mood_scores), 3),
-            "neutral_ratio": round(neutral_count / len(mood_scores), 3),
+            "positive_ratio": round(positive_count / total, 3),
+            "negative_ratio": round(negative_count / total, 3),
+            "neutral_ratio": round(neutral_count / total, 3),
             "dominant_mood": dominant_mood,
             "mood_distribution": dict(mood_counter.most_common()),
+            "source": source,
         }
 
     def _analyze_writing_pattern(self, entries: list[DiaryEntry]) -> dict[str, Any]:
@@ -705,9 +750,7 @@ class SelfEvolutionService:
             return drifts
 
         # 获取 30 天前的画像作为对比基准
-        comparison_date = (
-            datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=30)
-        ).strftime("%Y-%m-%d")
+        comparison_date = (datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d")
         previous_profile = self._get_closest_profile(comparison_date)
 
         if previous_profile is None:
@@ -721,9 +764,7 @@ class SelfEvolutionService:
         drifts.extend(self._detect_focus_drift(current_profile, previous_profile, target_date))
 
         # 3. 关系漂移检测
-        drifts.extend(
-            self._detect_relationship_drift(current_profile, previous_profile, target_date)
-        )
+        drifts.extend(self._detect_relationship_drift(current_profile, previous_profile, target_date))
 
         # 4. 写作频率漂移检测
         drifts.extend(self._detect_writing_drift(current_profile, previous_profile, target_date))
@@ -734,9 +775,7 @@ class SelfEvolutionService:
 
         return drifts
 
-    def _detect_emotion_drift(
-        self, current: UserProfile, previous: UserProfile, target_date: str
-    ) -> list[DriftEvent]:
+    def _detect_emotion_drift(self, current: UserProfile, previous: UserProfile, target_date: str) -> list[DriftEvent]:
         """检测情绪漂移。"""
         drifts = []
 
@@ -798,9 +837,7 @@ class SelfEvolutionService:
 
         return drifts
 
-    def _detect_focus_drift(
-        self, current: UserProfile, previous: UserProfile, target_date: str
-    ) -> list[DriftEvent]:
+    def _detect_focus_drift(self, current: UserProfile, previous: UserProfile, target_date: str) -> list[DriftEvent]:
         """检测关注焦点漂移。"""
         drifts = []
 
@@ -904,9 +941,7 @@ class SelfEvolutionService:
 
         return drifts
 
-    def _detect_writing_drift(
-        self, current: UserProfile, previous: UserProfile, target_date: str
-    ) -> list[DriftEvent]:
+    def _detect_writing_drift(self, current: UserProfile, previous: UserProfile, target_date: str) -> list[DriftEvent]:
         """检测写作频率漂移。"""
         drifts = []
 
@@ -1068,9 +1103,7 @@ class SelfEvolutionService:
         optimization.hierarchy = {k: v for k, v in hierarchy.items() if v}
 
         # 4. 过时标签（超过 90 天未使用）
-        ninety_days_ago = (
-            datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=90)
-        ).strftime("%Y-%m-%d")
+        ninety_days_ago = (datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=90)).strftime("%Y-%m-%d")
 
         tag_last_used: dict[str, str] = {}
         for e in entries:
@@ -1123,11 +1156,7 @@ class SelfEvolutionService:
 
         # 1. 今日摘要
         total_words = sum(e.word_count or 0 for e in target_entries)
-        avg_mood = (
-            sum(e.mood_score or 0 for e in target_entries) / len(target_entries)
-            if target_entries
-            else 0
-        )
+        avg_mood = sum(e.mood_score or 0 for e in target_entries) / len(target_entries) if target_entries else 0
 
         all_tags = []
         for e in target_entries:
@@ -1161,8 +1190,7 @@ class SelfEvolutionService:
             }
             if top_traits:
                 learnings.append(
-                    f"从语言风格看，你最突出的性格特质是"
-                    f"{'、'.join(trait_names.get(t, t) for t, _ in top_traits)}。"
+                    f"从语言风格看，你最突出的性格特质是{'、'.join(trait_names.get(t, t) for t, _ in top_traits)}。"
                 )
 
         if profile.focus_distribution:
@@ -1182,9 +1210,7 @@ class SelfEvolutionService:
                 learnings.append(f"你最近最关注的领域是{'和'.join(focus_strs)}。")
 
         if profile.values:
-            learnings.append(
-                f"从反复出现的主题看，你重视的价值观包括：{'、'.join(profile.values[:3])}。"
-            )
+            learnings.append(f"从反复出现的主题看，你重视的价值观包括：{'、'.join(profile.values[:3])}。")
 
         log.learnings = learnings
 
@@ -1244,13 +1270,9 @@ class SelfEvolutionService:
         if profile.emotional_baseline:
             avg_mood = profile.emotional_baseline.get("average_mood", 0)
             if avg_mood < -0.2:
-                suggestions.append(
-                    "最近情绪似乎偏低，要不要做点让自己开心的小事？比如听听喜欢的音乐，或者出去走走。"
-                )
+                suggestions.append("最近情绪似乎偏低，要不要做点让自己开心的小事？比如听听喜欢的音乐，或者出去走走。")
             elif avg_mood > 0.3:
-                suggestions.append(
-                    "最近状态不错呢！保持这份好心情，也可以记录一下是什么让你这么开心。"
-                )
+                suggestions.append("最近状态不错呢！保持这份好心情，也可以记录一下是什么让你这么开心。")
 
         # 基于漂移的建议
         for drift in drifts:
@@ -1267,9 +1289,7 @@ class SelfEvolutionService:
         if profile.writing_pattern:
             freq = profile.writing_pattern.get("writing_frequency_per_week", 0)
             if freq < 1:
-                suggestions.append(
-                    "最近写日记的频率降低了，哪怕只写几句话，记录当下的感受也是很有意义的。"
-                )
+                suggestions.append("最近写日记的频率降低了，哪怕只写几句话，记录当下的感受也是很有意义的。")
 
         log.suggestions = suggestions[:5]  # 最多 5 条建议
 
@@ -1283,15 +1303,10 @@ class SelfEvolutionService:
             )
 
         if tag_optimization.outdated_tags:
-            self_opts.append(
-                f"发现 {len(tag_optimization.outdated_tags)} 个超过90天未使用的标签，"
-                f"可以考虑归档或删除。"
-            )
+            self_opts.append(f"发现 {len(tag_optimization.outdated_tags)} 个超过90天未使用的标签，可以考虑归档或删除。")
 
         if drifts:
-            self_opts.append(
-                f"检测到 {len(drifts)} 个显著变化，已记录到漂移事件库，后续分析会考虑这些变化趋势。"
-            )
+            self_opts.append(f"检测到 {len(drifts)} 个显著变化，已记录到漂移事件库，后续分析会考虑这些变化趋势。")
 
         self_opts.append(
             f"已更新用户画像，当前基于 {profile.total_entries_analyzed} 篇日记构建，"
@@ -1378,9 +1393,7 @@ class SelfEvolutionService:
                     "total_entries": row["total_entries"],
                     "created_at": row["created_at"],
                     "summary": {
-                        "average_mood": profile_dict.get("emotional_baseline", {}).get(
-                            "average_mood"
-                        ),
+                        "average_mood": profile_dict.get("emotional_baseline", {}).get("average_mood"),
                         "top_focus": list(profile_dict.get("focus_distribution", {}).keys())[:3],
                         "key_relationships": list(profile_dict.get("relationships", {}).keys())[:5],
                     },
