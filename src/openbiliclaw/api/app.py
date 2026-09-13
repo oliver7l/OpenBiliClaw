@@ -16,11 +16,11 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,22 +29,13 @@ from fastapi.responses import JSONResponse, Response
 from openbiliclaw.api.models import (
     ArticleNoteIn,
     AutostartApplyIn,
-    AutostartConfigOut,
     AutostartStatusOut,
     BehaviorEventBatchIn,
-    BilibiliConfigOut,
     BilibiliCookieIn,
     BilibiliCookieResponse,
-    BilibiliSourceConfigOut,
-    ChatIn,
     ChatTurnListResponse,
     ChatTurnOut,
     CognitionUpdateSummary,
-    ConfigIssueOut,
-    ConfigResponse,
-    DiscoveryConfigOut,
-    DouyinSourceConfigOut,
-    EmbeddingConfigOut,
     EventIngestResponse,
     EventRejectedOut,
     ExtensionE2EAction,
@@ -61,10 +52,6 @@ from openbiliclaw.api.models import (
     InitPrerequisitesOut,
     InitStageOut,
     InitStatusOut,
-    LLMConfigOut,
-    LLMProviderConfigOut,
-    LoggingConfigOut,
-    ModuleLLMConfigOut,
     PendingDelightOut,
     PendingDelightResponse,
     ProfileEditIn,
@@ -72,16 +59,8 @@ from openbiliclaw.api.models import (
     RecommendationClickIn,
     RecommendationClickResponse,
     RecommendationOut,
-    SchedulerConfigOut,
-    SourcesBrowserConfigOut,
-    SourcesConfigOut,
     SourceShareSuggestionIn,
     SourceShareSuggestionResponse,
-    StorageConfigOut,
-    TwitterSourceConfigOut,
-    XiaohongshuSourceConfigOut,
-    YoutubeSourceConfigOut,
-    ZhihuSourceConfigOut,
 )
 from openbiliclaw.diary import DiaryService
 from openbiliclaw.runtime.feedback_scheduler import FeedbackBatchScheduler
@@ -1623,45 +1602,6 @@ def create_app(
             update_state(_advance)
         return ingested
 
-    def _load_source_bootstrap_state() -> dict[str, object]:
-        from openbiliclaw.sources.bootstrap_state import (
-            default_source_bootstrap_state,
-            normalize_source_bootstrap_state,
-        )
-
-        load_state = getattr(ctx.memory_manager, "load_source_bootstrap_state", None)
-        if not callable(load_state):
-            return default_source_bootstrap_state()
-        with suppress(Exception):
-            return normalize_source_bootstrap_state(load_state())
-        return default_source_bootstrap_state()
-
-    def _filter_new_source_bootstrap_items(
-        source: str,
-        items: list[dict[str, Any]],
-        key_func: Callable[[dict[str, Any]], str],
-    ) -> tuple[list[dict[str, Any]], dict[int, str]]:
-        """Filter bootstrap items that already propagated from an older task."""
-        from openbiliclaw.sources.bootstrap_state import (
-            as_string_list,
-            source_bootstrap_state_key,
-        )
-
-        state = _load_source_bootstrap_state()
-        state_key = source_bootstrap_state_key(source)
-        seen = set(as_string_list(state.get(state_key, [])))
-        batch_seen: set[str] = set()
-        fresh: list[dict[str, Any]] = []
-        fresh_keys_by_index: dict[int, str] = {}
-        for item in items:
-            key = key_func(item)
-            if not key or key in seen or key in batch_seen:
-                continue
-            batch_seen.add(key)
-            fresh_keys_by_index[len(fresh)] = key
-            fresh.append(item)
-        return fresh, fresh_keys_by_index
-
     fallback_chat_turns: dict[str, dict[str, Any]] = {}
     # RAG citations per chat turn, keyed by turn_id. Kept in memory: these are
     # ephemeral UI hints that don't need to survive a restart (the durable
@@ -1694,13 +1634,6 @@ def create_app(
         method = getattr(ctx.database, name, None)
         return method if callable(method) else None
 
-    def _get_chat_turn_row(turn_id: str) -> dict[str, Any] | None:
-        get_chat_turn = _chat_db_method("get_chat_turn")
-        if get_chat_turn is not None:
-            return cast("dict[str, Any] | None", get_chat_turn(turn_id))
-        row = fallback_chat_turns.get(turn_id)
-        return dict(row) if row else None
-
     def _list_chat_turn_rows(
         *,
         session: str = "popup",
@@ -1720,40 +1653,6 @@ def create_app(
         ]
         rows.sort(key=lambda row: (str(row.get("created_at", "")), str(row.get("turn_id", ""))))
         return rows[-max(1, int(limit)) :]
-
-    def _complete_chat_turn_row(turn_id: str, *, reply: str) -> None:
-        complete_chat_turn = _chat_db_method("complete_chat_turn")
-        if complete_chat_turn is not None:
-            complete_chat_turn(turn_id, reply=reply)
-            return
-        if turn_id in fallback_chat_turns:
-            from datetime import datetime
-
-            fallback_chat_turns[turn_id].update(
-                {
-                    "status": "completed",
-                    "reply": reply,
-                    "error": "",
-                    "updated_at": datetime.now().isoformat(sep=" "),
-                }
-            )
-
-    def _fail_chat_turn_row(turn_id: str, *, error: str, reply: str = "") -> None:
-        fail_chat_turn = _chat_db_method("fail_chat_turn")
-        if fail_chat_turn is not None:
-            fail_chat_turn(turn_id, error=error, reply=reply)
-            return
-        if turn_id in fallback_chat_turns:
-            from datetime import datetime
-
-            fallback_chat_turns[turn_id].update(
-                {
-                    "status": "failed",
-                    "reply": reply,
-                    "error": error,
-                    "updated_at": datetime.now().isoformat(sep=" "),
-                }
-            )
 
     def _health_profile_ready() -> bool | None:
         soul_engine = getattr(ctx, "soul_engine", None)
@@ -2625,55 +2524,6 @@ def create_app(
             pass
         return incoming
 
-    def _keyword_judge_sentiment(user_message: str) -> str:
-        """Fallback keyword-based sentiment detection."""
-        msg = user_message.lower()
-        negative_terms = {
-            "不喜欢",
-            "不感兴趣",
-            "不是这个意思",
-            "别推",
-            "没兴趣",
-            "不想看",
-        }
-        strong_positive_terms = {
-            "以后多推",
-            "这就是我想看的",
-            "我就喜欢",
-            "加入我的画像",
-        }
-        weak_positive_terms = {
-            "有点意思",
-            "可以看看",
-            "偶尔看看",
-            "还行",
-            "先试试",
-        }
-        if any(kw in msg for kw in negative_terms):
-            return "negative"
-        if any(kw in msg for kw in strong_positive_terms):
-            return "strong_positive"
-        if any(kw in msg for kw in weak_positive_terms):
-            return "weak_positive"
-        return "neutral"
-
-    def _get_diary_rag_service():
-        """获取或创建日记 RAG 服务实例（懒加载）。"""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return None
-        from openbiliclaw.diary import DiaryRAGService
-
-        rag = DiaryRAGService(database=database)
-        # 注入 embedding 和 llm 服务
-        embedding_service = getattr(ctx, "embedding_service", None)
-        llm_service = getattr(ctx, "llm_service", None)
-        if embedding_service is not None:
-            rag.set_embedding_service(embedding_service)
-        if llm_service is not None:
-            rag.set_llm_service(llm_service)
-        return rag
-
     def _serialize_recommendation_items(items: list[Any]) -> list[RecommendationOut]:
         return [
             RecommendationOut(
@@ -3388,93 +3238,6 @@ def create_app(
                     )
         return EventIngestResponse(accepted=accepted, rejected=rejected)
 
-    async def _classify_new_pool_items() -> None:
-        """Legacy recovery for content_cache rows that lack content features.
-
-        Normal source ingest writes ``discovery_candidates`` and lets the
-        shared discovery-candidate pipeline evaluate/admit content before it
-        reaches ``content_cache``.  This helper remains for old databases or
-        explicit repair paths where rows are already cached but still missing
-        ``style_key``, ``topic_group``, and ``relevance_score``.
-
-        Silent skip when soul profile hasn't been built yet (init's first
-        ~7 minutes). Otherwise events ingested before profile-ready would
-        log ERROR-level traces for every batch — the legitimate retry is
-        the next-tick + the profile-ready hook in ``SoulEngine``.
-        """
-        if ctx.recommendation_engine is None or ctx.soul_engine is None:
-            return
-        if not ctx.soul_engine.is_profile_ready():
-            logger.debug("Background pool classification skipped: soul profile not ready")
-            return
-        try:
-            profile = await ctx.soul_engine.get_profile()
-            await ctx.recommendation_engine.classify_pool_backlog(
-                profile=profile,
-                limit=30,
-            )
-        except Exception:
-            logger.exception("Background pool classification failed")
-
-    async def trigger_delight(payload: dict[str, Any] | None = None) -> Any:
-        """Manually push N distinct delight candidates via WebSocket.
-
-        Body: ``{"count": 3}``. For testing the queue UI: pulls the top N
-        un-notified candidates from the pool and publishes a
-        ``delight.candidate`` event for each one in succession, **without**
-        marking any as notified. That way you can re-trigger the same
-        batch repeatedly while iterating on the popup-side queue, and
-        the popup's own ``/api/delight/pending`` calls still see them
-        afterwards.
-
-        Cooldown is cleared at the end so the proactive-push loop
-        isn't gated.
-        """
-        count = 1
-        if isinstance(payload, dict):
-            try:
-                count = max(1, min(20, int(payload.get("count", 1))))
-            except (ValueError, TypeError):
-                count = 1
-
-        from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
-
-        candidates = ctx.database.get_delight_candidates(
-            min_delight_score=DEFAULT_DELIGHT_THRESHOLD,
-            limit=count,
-        )
-        pushed: list[str] = []
-        for row in candidates:
-            payload_event = {
-                "type": "delight.candidate",
-                "phase": "ready",
-                "message": "发现了一条你可能会意外喜欢的内容",
-                "bvid": str(row.get("bvid", "")),
-                "title": str(row.get("title", "")),
-                "delight_reason": str(row.get("delight_reason", "")),
-                "delight_score": float(row.get("delight_score", 0.0) or 0.0),
-                "delight_hook": str(row.get("delight_hook", "")),
-                "cover_url": str(row.get("cover_url", "")),
-                "content_url": str(row.get("content_url", "")),
-                "source_platform": str(row.get("source_platform", "bilibili")),
-            }
-            with suppress(Exception):
-                await ctx.event_hub.publish(payload_event)
-            pushed.append(str(payload_event["bvid"]))
-
-        # Clear cooldown so the regular push loop isn't gated after manual
-        # trigger.
-        memory_manager = getattr(ctx.runtime_controller, "memory_manager", None)
-        if memory_manager is not None:
-            update_state = getattr(memory_manager, "update_discovery_runtime_state", None)
-            if callable(update_state):
-                update_state(lambda state: state.pop("last_delight_notification_at", None))
-            else:
-                state = memory_manager.load_discovery_runtime_state()
-                state.pop("last_delight_notification_at", None)
-                memory_manager.save_discovery_runtime_state(state)
-        return {"ok": True, "pushed_count": len(pushed), "bvids": pushed}
-
     @app.get("/api/delight/pending", response_model=PendingDelightResponse)
     async def pending_delight() -> PendingDelightResponse:
         get_pending_delight = getattr(ctx.runtime_controller, "get_pending_delight", None)
@@ -3705,81 +3468,6 @@ def create_app(
         await _publish_probe_event("delight.chat", f"关于「{label}」你说：{raw_message}", bvid)
         return JSONResponse(content={"ok": True, "action": "chat", "bvid": bvid, "reply": reply})
 
-    async def _rag_retrieve(
-        message: str, top_k: int = 4
-    ) -> tuple[str | None, list[dict[str, Any]]]:
-        """Retrieve RAG context + citations for a chat message.
-
-        Returns ``(context_block, references)``. Both are empty when the
-        article index is missing or has nothing relevant, so chat degrades
-        cleanly to its normal (non-grounded) behaviour. The blocking embed +
-        scan runs off the event loop behind a short budget so a slow embedder
-        can never stall a reply.
-        """
-        if not message or not message.strip():
-            return None, []
-        try:
-            from openbiliclaw.rag.retriever import get_retriever
-
-            retr = get_retriever()
-            loop = asyncio.get_running_loop()
-            hits = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: retr.retrieve_chunks(message, top_k=top_k)),
-                timeout=15,
-            )
-        except Exception:
-            logger.debug("RAG retrieval skipped for this turn", exc_info=True)
-            return None, []
-        if not hits:
-            return None, []
-        context = retr.format_context(hits)
-        references = [
-            {
-                "title": str(h.get("title", "") or ""),
-                "url": str(h.get("url", "") or ""),
-                "author": str(h.get("author", "") or ""),
-                "source_table": str(h.get("source_table", "") or "articles"),
-                "score": float(h.get("score", 0.0) or 0.0),
-            }
-            for h in hits
-        ]
-        logger.info("RAG context injected for chat (%d refs)", len(references))
-        return context, references
-
-    @app.post("/api/chat")
-    async def chat(payload: ChatIn) -> Any:
-        from fastapi.responses import JSONResponse
-
-        message = payload.message.strip()
-        if not message:
-            raise HTTPException(status_code=422, detail="Chat message is required.")
-        # Pause discovery LLM calls while user is chatting
-        concurrency = getattr(ctx.discovery_engine, "_concurrency", None)
-        if concurrency is not None:
-            concurrency.chat_active = True
-        # RAG: ground the reply in the user's crawled reading library whenever
-        # the index has something relevant (no-op while the index is still
-        # being built, so chat behaves exactly as before until then).
-        retrieval_context, references = await _rag_retrieve(message, top_k=4)
-        try:
-            # Bumped from 30s to 120s — deepseek with reasoning_effort=max
-            # routinely takes 60-90s for one dialogue turn, so a 30s budget
-            # truncated essentially every reply. Extension's AbortController
-            # is sized to be generous enough to cover this end-to-end.
-            reply = await asyncio.wait_for(
-                ctx.dialogue.respond(message, retrieval_context=retrieval_context or None),
-                timeout=120,
-            )
-        except TimeoutError:
-            reply = "后台正忙，等一下再聊。"
-        except Exception:
-            logger.exception("Chat dialogue failed")
-            reply = "聊天出了点问题，稍后再试。"
-        finally:
-            if concurrency is not None:
-                concurrency.chat_active = False
-        return JSONResponse(content={"reply": reply, "references": references})
-
     # ── Conversational recommendation (生成式推荐第二步) ──
     _chat_recommend_sessions: dict[str, Any] = {}
 
@@ -3792,7 +3480,6 @@ def create_app(
         detail: str = "",
     ) -> None:
         """Write a cognition update so probe feedback shows in '阿b最近记住了什么'."""
-        from datetime import datetime
 
         try:
             updates = ctx.memory_manager.load_cognition_updates()
@@ -3822,175 +3509,6 @@ def create_app(
                     "domain": domain,
                 }
             )
-
-    def _probe_metadata_from_active_item(
-        get_active: Any,
-        domain: str,
-        *,
-        include_category: bool = False,
-        include_source_mode: bool = False,
-    ) -> dict[str, object]:
-        """Read active probe metadata before confirm/reject mutates state."""
-        from openbiliclaw.soul.speculator import build_probe_axis
-
-        if not callable(get_active):
-            return {"domain": domain}
-        try:
-            active_items = list(get_active())
-        except Exception:
-            logger.debug("Failed to read active probe metadata", exc_info=True)
-            return {"domain": domain}
-
-        for item in active_items:
-            spec_domain = str(getattr(item, "domain", "")).strip()
-            if spec_domain.lower() != domain.lower():
-                continue
-            specifics = [
-                str(getattr(specific, "name", "")).strip()
-                for specific in getattr(item, "specifics", [])
-                if str(getattr(specific, "name", "")).strip()
-            ]
-            axis = build_probe_axis(
-                experience_mode=getattr(item, "experience_mode", ""),
-                entry_load=getattr(item, "entry_load", ""),
-            )
-            metadata: dict[str, object] = {
-                "domain": spec_domain or domain,
-                "reason": str(getattr(item, "reason", "")).strip(),
-            }
-            if include_category:
-                metadata["category"] = str(getattr(item, "category", "")).strip()
-            if include_source_mode:
-                source_mode = str(getattr(item, "source_mode", "")).strip()
-                source_signal = str(getattr(item, "source_signal", "")).strip()
-                if source_mode:
-                    metadata["source_mode"] = source_mode
-                if source_signal:
-                    metadata["source_signal"] = source_signal
-            if axis:
-                metadata["axis"] = axis
-            if specifics:
-                metadata["specifics"] = specifics
-            return metadata
-        return {"domain": domain}
-
-    def _probe_metadata_from_active_speculation(
-        speculator: Any,
-        domain: str,
-    ) -> dict[str, object]:
-        """Read active interest probe metadata before state mutation."""
-        return _probe_metadata_from_active_item(
-            getattr(speculator, "get_active_speculations", None),
-            domain,
-            include_category=True,
-        )
-
-    def _probe_metadata_from_active_avoidance(
-        speculator: Any,
-        domain: str,
-    ) -> dict[str, object]:
-        """Read active avoidance probe metadata before state mutation."""
-        return _probe_metadata_from_active_item(
-            getattr(speculator, "get_active_avoidances", None),
-            domain,
-            include_source_mode=True,
-        )
-
-    async def _judge_probe_sentiment(
-        user_message: str,
-        ai_reply: str,
-        domain: str,
-    ) -> str:
-        """Judge the user's probe chat as a 4-way confirmation signal."""
-        sentiment, _classifier = await _classify_probe_sentiment(
-            user_message,
-            ai_reply,
-            domain,
-        )
-        return sentiment
-
-    async def _classify_probe_sentiment(
-        user_message: str,
-        ai_reply: str,
-        domain: str,
-    ) -> tuple[str, str]:
-        """Return ``(classification, classifier)`` for probe chat feedback."""
-        llm_result = await _llm_judge_sentiment(user_message, ai_reply, domain)
-        if llm_result in {"strong_positive", "weak_positive", "negative"}:
-            return llm_result, "llm"
-        keyword_result = _keyword_judge_sentiment(user_message)
-        if keyword_result != "neutral":
-            return keyword_result, "keyword"
-        return "neutral", "neutral_default"
-
-    async def _llm_judge_sentiment(
-        user_message: str,
-        ai_reply: str,
-        domain: str,
-    ) -> str:
-        """LLM-based sentiment judgment for probe chat."""
-        if ctx.recommendation_engine is None:
-            return "neutral"
-        llm = getattr(ctx.recommendation_engine, "_llm", None)
-        if llm is None:
-            return "neutral"
-        try:
-            response = await asyncio.wait_for(
-                llm.complete_with_core_memory(
-                    system_instruction=(
-                        "任务：判断用户对一个兴趣方向的态度。\n\n"
-                        "规则：\n"
-                        "1. 只输出一个英文标签："
-                        "strong_positive、weak_positive、neutral 或 negative\n"
-                        "2. 不要输出任何其他内容\n\n"
-                        "判断标准：\n"
-                        "- strong_positive = 用户明确要加入画像、以后多推、这就是想看的\n"
-                        "- weak_positive = 用户表达轻微兴趣、可以看看、偶尔看看，但未直接确认\n"
-                        "- negative = 用户表达了不喜欢、不感兴趣、太难、太无聊\n"
-                        "- neutral = 态度不明确\n"
-                    ),
-                    user_input=f"方向：{domain}\n用户：{user_message}",
-                    max_tokens=8,
-                    temperature=0.0,
-                    json_mode=False,
-                    caller="api.sentiment",
-                    bypass_semaphore=True,
-                ),
-                timeout=15,
-            )
-            raw = str(getattr(response, "content", "")).strip().lower()
-            # Extract the first recognizable word
-            for word in raw.split():
-                cleaned = word.strip("\"'.,:;!?")
-                if cleaned in (
-                    "strong_positive",
-                    "weak_positive",
-                    "negative",
-                    "neutral",
-                ):
-                    logger.info("Sentiment LLM for '%s': %s (raw=%r)", domain, cleaned, raw)
-                    return cleaned
-            logger.info(
-                "Sentiment LLM for '%s': unrecognized (raw=%r), trying keywords", domain, raw
-            )
-            return "neutral"
-        except Exception:
-            logger.info("Sentiment LLM for '%s' failed, trying keywords", domain)
-            return "neutral"
-
-    def _confirm_speculation_with_source(
-        speculator: Any,
-        domain: str,
-        *,
-        confirmation_source: str,
-    ) -> bool:
-        confirm = getattr(speculator, "user_confirm_speculation", None)
-        if not callable(confirm):
-            return False
-        try:
-            return bool(confirm(domain, confirmation_source=confirmation_source))
-        except TypeError:
-            return bool(confirm(domain))
 
     def _promote_exploration_buffer_entries(
         promoted: list[dict[str, object]],
@@ -4052,7 +3570,7 @@ def create_app(
         specifics: list[str] | None = None,
         evidence_id: str = "",
     ) -> None:
-        from datetime import UTC, datetime
+        from datetime import UTC
 
         from openbiliclaw.soul.exploration_buffer import (
             pop_promotable_buffer_entries,
@@ -4288,113 +3806,8 @@ def create_app(
 
     # ── Source recipe management endpoints ──────────────────────────
 
-    @app.get("/api/sources")
-    def list_sources() -> dict[str, Any]:
-        """Return all source recipes."""
-        recipes = ctx.database.get_all_recipes()
-        return {"items": recipes}
 
     # ── XHS observed URL ingestion endpoint ─────────────────────────
-
-    xhs_url_prefix = "https://www.xiaohongshu.com/"
-
-    def _discovery_candidate_pending_cap() -> int:
-        from openbiliclaw.discovery.candidate_pool import discovery_candidate_pending_cap
-
-        scheduler = getattr(config, "scheduler", None)
-        target = int(getattr(scheduler, "pool_target_count", 300) or 300)
-        return discovery_candidate_pending_cap(target)
-
-    def _intish(value: Any) -> int:
-        if isinstance(value, bool):
-            return 0
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return 0
-
-    def _cache_bili_search_videos(
-        database: Any,
-        videos: list[dict[str, Any]],
-        *,
-        query: str = "",
-        source_keyword_id: int | None = None,
-    ) -> int:
-        """Enqueue extension-collected Bilibili search videos for evaluation."""
-        from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
-        from openbiliclaw.discovery.engine import DiscoveredContent
-
-        enqueue = getattr(database, "enqueue_discovery_candidates", None)
-        if not callable(enqueue):
-            return 0
-        writes = []
-        for video in videos:
-            bvid = str(video.get("bvid") or video.get("content_id") or "").strip()
-            if not bvid:
-                continue
-            title = str(video.get("title") or "").strip()
-            if not title:
-                continue
-            up_name = str(
-                video.get("up_name") or video.get("author_name") or video.get("author") or ""
-            ).strip()
-            content_url = str(video.get("content_url") or video.get("url") or "").strip()
-            if not content_url:
-                content_url = f"https://www.bilibili.com/video/{bvid}"
-            tags_raw = video.get("tags")
-            tags = (
-                [str(item).strip() for item in tags_raw if str(item).strip()]
-                if isinstance(tags_raw, list)
-                else []
-            )
-            item = DiscoveredContent(
-                bvid=bvid,
-                title=title,
-                up_name=up_name,
-                up_mid=_intish(video.get("up_mid") or video.get("mid")),
-                cover_url=str(video.get("cover_url") or video.get("pic") or "").strip(),
-                duration=_intish(video.get("duration")),
-                view_count=_intish(video.get("view_count") or video.get("play")),
-                like_count=_intish(video.get("like_count") or video.get("likes")),
-                favorite_count=_intish(
-                    video.get("favorite_count") or video.get("favorites") or video.get("favorite")
-                ),
-                danmaku_count=_intish(
-                    video.get("danmaku_count") or video.get("danmaku") or video.get("video_review")
-                ),
-                comment_count=_intish(
-                    video.get("comment_count") or video.get("reply") or video.get("review")
-                ),
-                share_count=_intish(video.get("share_count") or video.get("share")),
-                tags=tags,
-                description=str(video.get("description") or video.get("desc") or "").strip(),
-                source_strategy="bili-extension-search",
-                content_id=bvid,
-                content_url=content_url,
-                source_platform="bilibili",
-                author_name=up_name,
-                score_threshold=0.60,
-                source_keyword_id=source_keyword_id,
-            )
-            writes.append(
-                discovered_content_to_candidate_write(
-                    item,
-                    source_context="bili-extension-search",
-                    raw_payload={
-                        "bvid": bvid,
-                        "query": query,
-                        "url": content_url,
-                        "admission_policy": "observed",
-                        "score_threshold": 0.60,
-                    },
-                )
-            )
-        if not writes:
-            return 0
-        try:
-            return int(enqueue(writes, max_pending_per_source=_discovery_candidate_pending_cap()))
-        except TypeError:
-            return int(enqueue(writes))
 
     # ── XHS self-author filter (v0.3.48+) ────────────────────────────
     #
@@ -4424,23 +3837,6 @@ def create_app(
         except Exception:
             logger.exception("Failed to load xhs self_info")
         return {}
-
-    def _is_self_authored_note(note: dict[str, Any], self_info: dict[str, str]) -> bool:
-        """Check whether a note's author matches the logged-in user.
-
-        Both user_id and nickname can match — XHS sometimes only ships
-        nickname in note metadata (no author user_id), other times both.
-        Treat the match as case-insensitive on the trimmed values.
-        """
-        if not self_info:
-            return False
-        nickname = self_info.get("nickname", "").strip().lower()
-        user_id = self_info.get("user_id", "").strip().lower()
-        author = str(note.get("author", "") or "").strip().lower()
-        if author and nickname and author == nickname:
-            return True
-        author_id = str(note.get("author_id", "") or "").strip().lower()
-        return bool(author_id and user_id and author_id == user_id)
 
     def _purge_self_authored_pool_items(
         database: Any,
@@ -4480,114 +3876,6 @@ def create_app(
             logger.exception("Failed to purge self-authored xhs pool items")
             return 0
 
-    def _cache_xhs_notes(
-        database: Any,
-        notes: list[dict[str, Any]],
-        page_type: str,
-        self_info: dict[str, str] | None = None,
-        *,
-        source_keyword_id: int | None = None,
-    ) -> int:
-        """Enqueue xhs note metadata from the extension into discovery_candidates.
-
-        ``self_info`` (v0.3.48+) lets the caller pass the just-extracted
-        login fingerprint from the same request — avoids a round-trip
-        through ``discovery_runtime_state`` and works against test
-        stubs that haven't implemented the runtime-state API.  When
-        ``None``, falls back to the persisted state.
-
-        ``source_keyword_id`` (P1.8) is the ``discovery_keywords.id`` carried on
-        the originating xhs *search* task payload. XHS is truly async, so the id
-        cannot be stamped at search time — it rides the task and is threaded onto
-        each ingested candidate here so admission can backfill the keyword's
-        yield. ``None`` for passive / observed / non-planner ingests.
-        """
-        from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
-        from openbiliclaw.discovery.engine import DiscoveredContent
-
-        enqueue = getattr(database, "enqueue_discovery_candidates", None)
-        if not callable(enqueue):
-            return 0
-        if self_info is None:
-            self_info = _load_xhs_self_info()
-        writes = []
-        skipped_self = 0
-        for note in notes:
-            if _is_self_authored_note(note, self_info):
-                skipped_self += 1
-                continue
-            url = note.get("url", "")
-            if not isinstance(url, str) or not url.startswith(xhs_url_prefix):
-                continue
-            # Extract note ID from URL path
-            try:
-                path = urlparse(url).path.strip("/")
-                note_id = path.rsplit("/", 1)[-1] if path else ""
-            except Exception:
-                note_id = ""
-            if not note_id:
-                continue
-
-            title = str(note.get("title", "") or "").strip()
-            if not title:
-                continue  # Skip notes with empty title — they produce blank recommendation cards
-            author = str(note.get("author", "") or "").strip()
-            cover_url = str(note.get("cover_url", "") or "").strip()
-            best_url = _pick_best_xhs_url(database, note_id, url)
-
-            item = DiscoveredContent(
-                bvid=note_id,
-                title=title,
-                up_name=author,
-                cover_url=cover_url,
-                view_count=_intish(note.get("view_count") or note.get("views")),
-                like_count=_intish(note.get("like_count") or note.get("likes")),
-                collect_count=_intish(
-                    note.get("collect_count")
-                    or note.get("favorite_count")
-                    or note.get("favorites")
-                    or note.get("collects")
-                ),
-                comment_count=_intish(note.get("comment_count") or note.get("comments")),
-                share_count=_intish(note.get("share_count") or note.get("shares")),
-                description=str(
-                    note.get("description") or note.get("desc") or note.get("text") or ""
-                ),
-                source_strategy=f"xhs-extension-{page_type}",
-                content_id=note_id,
-                content_url=best_url,
-                source_platform="xiaohongshu",
-                author_name=author,
-                source_keyword_id=source_keyword_id,
-            )
-            writes.append(
-                discovered_content_to_candidate_write(
-                    item,
-                    source_context=page_type,
-                    raw_payload={
-                        "note_id": note_id,
-                        "url": best_url,
-                        "page_type": page_type,
-                        "title": title,
-                        "author": author,
-                        "cover_url": cover_url,
-                        "admission_policy": "observed",
-                    },
-                )
-            )
-        if skipped_self > 0:
-            logger.info(
-                "xhs ingest filter: dropped %d self-authored note(s) (%s)",
-                skipped_self,
-                page_type,
-            )
-        if not writes:
-            return 0
-        try:
-            return int(enqueue(writes, max_pending_per_source=_discovery_candidate_pending_cap()))
-        except TypeError:
-            return int(enqueue(writes))
-
     # ── Bilibili extension search fallback endpoints ────────────────
 
     from openbiliclaw.sources.bili_tasks import (
@@ -4613,12 +3901,6 @@ def create_app(
         _xhs_task_queue = XhsTaskQueue(ctx.database)
         _xhs_creator_store = XhsCreatorStore(ctx.database)
 
-    def xhs_list_creators() -> dict[str, Any]:
-        """List all xhs creator subscriptions."""
-        if _xhs_creator_store is None:
-            return {"items": []}
-        return {"items": _xhs_creator_store.list_all()}
-
     # ── X (Twitter) account subscriptions ──────────────────────────
     # No extension round-trip: the X producer fetches each subscription
     # server-side via XCreatorStrategy. This block only owns the
@@ -4630,12 +3912,6 @@ def create_app(
     if hasattr(ctx.database, "conn"):
         _x_creator_store = XCreatorStore(ctx.database)
 
-    @app.get("/api/sources/x/creators")
-    def x_list_creators() -> dict[str, Any]:
-        """List all X account subscriptions."""
-        if _x_creator_store is None:
-            return {"items": []}
-        return {"items": _x_creator_store.list_all()}
 
     # ── X (Twitter) source health (spec §7) ────────────────────────
     # Surfaces the persisted health state machine so the settings UI can
@@ -4656,17 +3932,6 @@ def create_app(
         "rate_limited": "被限流，正在退避冷却中，稍后会自动重试。",
         "blocked": "请求被拒绝 (403) —— 账号可能受限或需要重新验证。",
     }
-
-    def _mask_source_credential(value: str, *, reveal: bool) -> str:
-        if reveal or not value:
-            return value
-        if len(value) <= 8:
-            return "*" * len(value)
-        return f"{value[:4]}{'*' * max(4, len(value) - 8)}{value[-4:]}"
-
-    def _xhs_token_from_url(url: str) -> str:
-        match = re.search(r"(?:[?&])xsec_token=([^&#]+)", str(url or ""))
-        return match.group(1) if match else ""
 
     # ── Douyin task queue endpoints (extension dispatcher) ──────────
     # Independent from the XHS block above by design — see
@@ -4698,13 +3963,6 @@ def create_app(
     # dispatcher POST debug events here so they end up in the daemon
     # log alongside backend-side activity. Will be reverted before
     # release.
-    @app.post("/api/sources/_debug/log")
-    async def ext_debug_log(payload: dict[str, Any]) -> dict[str, Any]:
-        source = str(payload.get("source", "?"))[:8]
-        event = str(payload.get("event", "?"))[:80]
-        data = payload.get("data")
-        logger.warning("[ext-debug] [%s] %s data=%s", source, event, data)
-        return {"ok": True}
 
     # ── YouTube bootstrap endpoints ────────────────────────────────
     from openbiliclaw.sources.yt_tasks import (
@@ -4807,25 +4065,6 @@ def create_app(
         finally:
             registry.pop(run_id, None)
 
-    @app.post("/api/extension/e2e/result")
-    async def extension_e2e_result(
-        request: Request,
-        payload: ExtensionE2EResultIn,
-    ) -> dict[str, object]:
-        """Accept a signed callback from the extension E2E runner."""
-        if not _get_auth_gate().is_trusted_local(request):
-            raise HTTPException(status_code=403, detail="local_only")
-
-        registry = cast("dict[str, _ExtensionE2ERunState]", app.state.extension_e2e_runs)
-        state = registry.get(payload.run_id)
-        if state is None:
-            raise HTTPException(status_code=404, detail="unknown run_id")
-        if not secrets.compare_digest(state.token, payload.token):
-            raise HTTPException(status_code=403, detail="bad token")
-
-        state.extension_result = payload
-        state.event.set()
-        return {"ok": True, "run_id": payload.run_id}
 
     def _autostart_status_out(
         request: Request,
@@ -4899,12 +4138,6 @@ def create_app(
             detail=detail,
         )
 
-    @app.get("/api/autostart-status", response_model=AutostartStatusOut)
-    def autostart_status(request: Request) -> AutostartStatusOut:
-        from openbiliclaw.config import load_config
-
-        cfg = load_config()
-        return _autostart_status_out(request, cfg)
 
     @app.post("/api/autostart/apply", response_model=AutostartStatusOut)
     async def autostart_apply(
@@ -5056,266 +4289,12 @@ def create_app(
 
     # ── Configuration management endpoints ──────────────────────────
 
-    def _config_to_response(
-        cfg: Any,
-        issues: list[Any] | None = None,
-        *,
-        mask_keys: bool = True,
-        degraded: bool = False,
-        degraded_reason: str = "",
-    ) -> ConfigResponse:
-        """Convert a Config dataclass to a ConfigResponse, optionally masking API keys."""
-
-        def _mask(key: str) -> str:
-            if not mask_keys or not key:
-                return key
-            if len(key) <= 8:
-                return "*" * len(key)
-            return key[:4] + "*" * (len(key) - 8) + key[-4:]
-
-        # Douyin / X store their cookie in data/*.json (env override wins),
-        # not in config.toml — resolve here so the settings pages can show
-        # the live credential exactly like the Bilibili card does.
-        from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
-
-        dy_cookie = ""
-        with suppress(Exception):
-            dy_cookie = resolve_douyin_cookie(
-                data_dir=cfg.data_path,
-                cookie_env=cfg.sources.douyin.cookie_env,
-            )
-        tw_cookie = ""
-        with suppress(Exception):
-            tw_cookie = resolve_x_cookie(
-                data_dir=cfg.data_path,
-                cookie_env=cfg.sources.twitter.cookie_env,
-            )
-
-        def _provider_out(p: Any) -> LLMProviderConfigOut:
-            return LLMProviderConfigOut(
-                api_key=_mask(p.api_key),
-                model=p.model,
-                base_url=p.base_url,
-                auth_mode=getattr(p, "auth_mode", ""),
-                http_referer=getattr(p, "http_referer", ""),
-                x_title=getattr(p, "x_title", ""),
-                reasoning_effort=getattr(p, "reasoning_effort", ""),
-            )
-
-        issue_list = [
-            ConfigIssueOut(
-                field=i.field,
-                message=i.message,
-                severity=getattr(i, "severity", "warning"),
-            )
-            for i in (issues or [])
-        ]
-
-        return ConfigResponse(
-            language=cfg.language,
-            data_dir=cfg.data_dir,
-            degraded=degraded,
-            degraded_reason=degraded_reason,
-            llm=LLMConfigOut(
-                default_provider=cfg.llm.default_provider,
-                concurrency=int(getattr(cfg.llm, "concurrency", 3)),
-                timeout=int(getattr(cfg.llm, "timeout", 300)),
-                fallback_enabled=cfg.llm.fallback_enabled,
-                fallback_provider=cfg.llm.fallback_provider,
-                openai=_provider_out(cfg.llm.openai),
-                claude=_provider_out(cfg.llm.claude),
-                gemini=_provider_out(cfg.llm.gemini),
-                deepseek=_provider_out(cfg.llm.deepseek),
-                ollama=_provider_out(cfg.llm.ollama),
-                openrouter=_provider_out(cfg.llm.openrouter),
-                openai_compatible=_provider_out(cfg.llm.openai_compatible),
-                embedding=EmbeddingConfigOut(
-                    provider=cfg.llm.embedding.provider,
-                    model=cfg.llm.embedding.model,
-                    api_key=_mask(cfg.llm.embedding.api_key),
-                    base_url=cfg.llm.embedding.base_url,
-                    output_dimensionality=cfg.llm.embedding.output_dimensionality,
-                    similarity_threshold=cfg.llm.embedding.similarity_threshold,
-                    fallback_enabled=cfg.llm.embedding.fallback_enabled,
-                    fallback_provider=cfg.llm.embedding.fallback_provider,
-                ),
-                soul=ModuleLLMConfigOut(
-                    provider=cfg.llm.soul.provider,
-                    model=cfg.llm.soul.model,
-                ),
-                discovery=ModuleLLMConfigOut(
-                    provider=cfg.llm.discovery.provider,
-                    model=cfg.llm.discovery.model,
-                ),
-                recommendation=ModuleLLMConfigOut(
-                    provider=cfg.llm.recommendation.provider,
-                    model=cfg.llm.recommendation.model,
-                ),
-                evaluation=ModuleLLMConfigOut(
-                    provider=cfg.llm.evaluation.provider,
-                    model=cfg.llm.evaluation.model,
-                ),
-            ),
-            bilibili=BilibiliConfigOut(
-                auth_method=cfg.bilibili.auth_method,
-                cookie=_mask(cfg.bilibili.cookie),
-                browser_executable=cfg.bilibili.browser_executable,
-                browser_headed=cfg.bilibili.browser_headed,
-            ),
-            sources=SourcesConfigOut(
-                browser=SourcesBrowserConfigOut(
-                    cdp_url=cfg.sources.browser_cdp_url,
-                    headed=cfg.sources.browser_headed,
-                ),
-                bilibili=BilibiliSourceConfigOut(
-                    enabled=cfg.sources.bilibili.enabled,
-                ),
-                xiaohongshu=XiaohongshuSourceConfigOut(
-                    enabled=cfg.sources.xiaohongshu.enabled,
-                    daily_search_budget=cfg.sources.xiaohongshu.daily_search_budget,
-                    daily_creator_budget=cfg.sources.xiaohongshu.daily_creator_budget,
-                    task_interval_seconds=cfg.sources.xiaohongshu.task_interval_seconds,
-                ),
-                douyin=DouyinSourceConfigOut(
-                    enabled=cfg.sources.douyin.enabled,
-                    mode=cfg.sources.douyin.mode,
-                    cookie=_mask(dy_cookie),
-                    cookie_env=cfg.sources.douyin.cookie_env,
-                    daily_search_budget=cfg.sources.douyin.daily_search_budget,
-                    daily_hot_budget=cfg.sources.douyin.daily_hot_budget,
-                    daily_feed_budget=cfg.sources.douyin.daily_feed_budget,
-                    request_interval_seconds=cfg.sources.douyin.request_interval_seconds,
-                ),
-                youtube=YoutubeSourceConfigOut(
-                    enabled=cfg.sources.youtube.enabled,
-                    daily_search_budget=cfg.sources.youtube.daily_search_budget,
-                    daily_trending_budget=cfg.sources.youtube.daily_trending_budget,
-                    daily_channel_budget=cfg.sources.youtube.daily_channel_budget,
-                    request_interval_seconds=cfg.sources.youtube.request_interval_seconds,
-                    min_interval_minutes=cfg.sources.youtube.min_interval_minutes,
-                ),
-                twitter=TwitterSourceConfigOut(
-                    enabled=cfg.sources.twitter.enabled,
-                    mode=cfg.sources.twitter.mode,
-                    cookie=_mask(tw_cookie),
-                    cookie_env=cfg.sources.twitter.cookie_env,
-                    daily_search_budget=cfg.sources.twitter.daily_search_budget,
-                    daily_feed_budget=cfg.sources.twitter.daily_feed_budget,
-                    daily_creator_budget=cfg.sources.twitter.daily_creator_budget,
-                    request_interval_seconds=cfg.sources.twitter.request_interval_seconds,
-                    min_interval_minutes=cfg.sources.twitter.min_interval_minutes,
-                ),
-                zhihu=ZhihuSourceConfigOut(
-                    enabled=cfg.sources.zhihu.enabled,
-                    source_modes=list(cfg.sources.zhihu.source_modes),
-                    daily_search_budget=cfg.sources.zhihu.daily_search_budget,
-                    daily_hot_budget=cfg.sources.zhihu.daily_hot_budget,
-                    daily_feed_budget=cfg.sources.zhihu.daily_feed_budget,
-                    daily_creator_budget=cfg.sources.zhihu.daily_creator_budget,
-                    daily_related_budget=cfg.sources.zhihu.daily_related_budget,
-                    request_interval_seconds=cfg.sources.zhihu.request_interval_seconds,
-                    min_interval_minutes=cfg.sources.zhihu.min_interval_minutes,
-                ),
-            ),
-            scheduler=SchedulerConfigOut(
-                enabled=cfg.scheduler.enabled,
-                pause_on_extension_disconnect=cfg.scheduler.pause_on_extension_disconnect,
-                extension_disconnect_grace_seconds=cfg.scheduler.extension_disconnect_grace_seconds,
-                discovery_cron=cfg.scheduler.discovery_cron,
-                pool_target_count=cfg.scheduler.pool_target_count,
-                pool_source_shares=dict(cfg.scheduler.pool_source_shares),
-                account_sync_interval_hours=cfg.scheduler.account_sync_interval_hours,
-                refresh_check_interval_seconds=cfg.scheduler.refresh_check_interval_seconds,
-                signal_event_threshold=cfg.scheduler.signal_event_threshold,
-                feedback_batch_threshold=cfg.scheduler.feedback_batch_threshold,
-                trending_refresh_hours=cfg.scheduler.trending_refresh_hours,
-                explore_refresh_hours=cfg.scheduler.explore_refresh_hours,
-                discovery_limit=cfg.scheduler.discovery_limit,
-                delight_queue_limit=cfg.scheduler.delight_queue_limit,
-                proactive_push_interval_seconds=cfg.scheduler.proactive_push_interval_seconds,
-                speculator_idle_interval_minutes=cfg.scheduler.speculator_idle_interval_minutes,
-                speculation_interval_minutes=cfg.scheduler.speculation_interval_minutes,
-                speculation_ttl_days=cfg.scheduler.speculation_ttl_days,
-                speculation_cooldown_days=cfg.scheduler.speculation_cooldown_days,
-                speculation_confirmation_threshold=(
-                    cfg.scheduler.speculation_confirmation_threshold
-                ),
-                speculation_max_active=cfg.scheduler.speculation_max_active,
-                speculation_max_primary_interests=(cfg.scheduler.speculation_max_primary_interests),
-                speculation_max_secondary_interests=(
-                    cfg.scheduler.speculation_max_secondary_interests
-                ),
-                avoidance_speculation_interval_minutes=(
-                    cfg.scheduler.avoidance_speculation_interval_minutes
-                ),
-                avoidance_speculation_ttl_days=cfg.scheduler.avoidance_speculation_ttl_days,
-                avoidance_speculation_cooldown_days=(
-                    cfg.scheduler.avoidance_speculation_cooldown_days
-                ),
-                avoidance_speculation_confirmation_threshold=(
-                    cfg.scheduler.avoidance_speculation_confirmation_threshold
-                ),
-                avoidance_speculation_max_active=cfg.scheduler.avoidance_speculation_max_active,
-                auto_update_enabled=cfg.scheduler.auto_update_enabled,
-                auto_update_check_interval_hours=cfg.scheduler.auto_update_check_interval_hours,
-                auto_update_allow_prerelease=cfg.scheduler.auto_update_allow_prerelease,
-                auto_update_allowed_remotes=list(cfg.scheduler.auto_update_allowed_remotes),
-                rss_subscriptions=list(cfg.scheduler.rss_subscriptions),
-                xiaoyuzhou_subscriptions=list(cfg.scheduler.xiaoyuzhou_subscriptions),
-                wechat_subscriptions=list(cfg.scheduler.wechat_subscriptions),
-            ),
-            discovery=DiscoveryConfigOut(
-                unified_keyword_planner_enabled=cfg.discovery.unified_keyword_planner_enabled,
-                kw_cache_high=cfg.discovery.kw_cache_high,
-                kw_cache_low=cfg.discovery.kw_cache_low,
-                gen_batch=cfg.discovery.gen_batch,
-                fetch_batch=cfg.discovery.fetch_batch,
-                history_window_size=cfg.discovery.history_window_size,
-                history_window_hours=cfg.discovery.history_window_hours,
-                claim_lease_minutes=cfg.discovery.claim_lease_minutes,
-                planner_poll_seconds=cfg.discovery.planner_poll_seconds,
-                plan_ttl_hours=cfg.discovery.plan_ttl_hours,
-                admission_min_score=cfg.discovery.admission_min_score,
-                multimodal_evaluation_enabled=cfg.discovery.multimodal_evaluation_enabled,
-                multimodal_batch_size=cfg.discovery.multimodal_batch_size,
-                multimodal_image_max_px=cfg.discovery.multimodal_image_max_px,
-                multimodal_image_quality=cfg.discovery.multimodal_image_quality,
-                multimodal_image_timeout_seconds=(cfg.discovery.multimodal_image_timeout_seconds),
-            ),
-            autostart=AutostartConfigOut(
-                enabled=cfg.autostart.enabled,
-                manage_ollama=cfg.autostart.manage_ollama,
-            ),
-            storage=StorageConfigOut(
-                db_path=cfg.storage.db_path,
-                interview_db_path=cfg.storage.interview_db_path,
-            ),
-            logging=LoggingConfigOut(
-                level=cfg.logging.level,
-                file_level=cfg.logging.file_level,
-                directory=cfg.logging.directory,
-                filename=cfg.logging.filename,
-                file_path=str(cfg.logging.file_path),
-                max_file_size_mb=cfg.logging.max_file_size_mb,
-                backup_count=cfg.logging.backup_count,
-                aggregate_budget_mb=cfg.logging.aggregate_budget_mb,
-                unmanaged_truncate_mb=cfg.logging.unmanaged_truncate_mb,
-                unmanaged_max_age_days=cfg.logging.unmanaged_max_age_days,
-            ),
-            issues=issue_list,
-        )
-
     def _as_bool(value: object) -> bool:
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
             return value.strip().lower() in {"1", "true", "yes", "y", "on"}
         return bool(value)
-
-    def _string_list(value: object) -> list[str]:
-        if not isinstance(value, list):
-            return []
-        return [str(item).strip() for item in value if str(item).strip()]
 
     def _normalize_enabled_sources_override(
         raw_enabled: dict[str, bool] | None,
@@ -5421,140 +4400,6 @@ def create_app(
             return JSONResponse({"ok": False, "error": "failed to save note"}, status_code=500)
         return JSONResponse({"ok": True, "id": note_id})
 
-    @app.delete("/api/notes/{note_id}")
-    def delete_article_note(note_id: int) -> JSONResponse:
-        """Delete one note by its own id."""
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        ok = database.delete_article_note(note_id)
-        return JSONResponse({"ok": ok, "id": note_id})
-
-    async def reading_intent_search(
-        q: str = "",
-        limit: int = 30,
-        source_type: str = "",
-        status: str = "",
-    ) -> JSONResponse:
-        """自然语言意图搜索阅读库：把口语查询解析成关键词 / 排除 / 来源 / 状态。
-
-        与旧的 ``/api/articles?q=`` 纯子串匹配不同，这里先「理解」查询：
-
-        - **主路径 LLM**：用 ``soul_engine.llm_ask`` 把 ``q`` 拆成
-          ``{keywords, exclude, source_type, status}``（能处理同义词、
-          「不要营销号」这类排除、「最近想读点轻松的」这类口语）。
-        - **规则回退**：LLM 不可用 / 未配置 / 解析失败时走
-          :func:`_rule_parse_reading_intent`，按词表剥离来源、状态与
-          「不要 X」排除，剩余作关键词。
-        - 关键词并集检索（复用 FTS ``search_articles``）→ 排除过滤 →
-          按兴趣画像契合度（``_article_fit_score``）重排。
-
-        显式传入的 ``source_type`` / ``status`` 覆盖模型推断值，保证与
-        前端来源页 / 状态下拉一致。返回附 ``intent`` 供前端回显「我理解成
-        了什么」，让纠偏有据可依。
-        """
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        q = (q or "").strip()
-        limit = max(1, min(int(limit), 60))
-        if not q:
-            return JSONResponse({"ok": True, "items": [], "total": 0, "intent": {}})
-
-        intent: dict[str, Any] | None = None
-        soul_engine = getattr(ctx, "soul_engine", None)
-        llm_ask = getattr(soul_engine, "llm_ask", None) if soul_engine is not None else None
-        if callable(llm_ask) and len(q) >= 3:
-            with suppress(Exception):
-                sys_prompt = (
-                    "你是阅读库搜索的意图解析器。把用户的自然语言查询拆成结构化检索意图，"
-                    '只输出 JSON：{"keywords":[检索关键词],'
-                    '"exclude":[要排除的词，如『不要营销号』里的『营销号』],'
-                    '"source_type":来源或null,'
-                    '"status":unread|reading|finished|archived 之一或null}。'
-                    f"source_type 只能取这些值之一：{sorted(_READING_VALID_SOURCE_TYPES)}；"
-                    "不符合的填 null。keywords 用具体、聚焦的词，去掉停用词。"
-                )
-                raw = await llm_ask(sys_prompt, q)
-                if raw:
-                    parsed = json.loads(raw)
-                    if isinstance(parsed, dict):
-                        kws = [
-                            str(k).strip() for k in (parsed.get("keywords") or []) if str(k).strip()
-                        ]
-                        exc = [
-                            str(e).strip() for e in (parsed.get("exclude") or []) if str(e).strip()
-                        ]
-                        src = str(parsed.get("source_type") or "").strip().lower()
-                        stt = str(parsed.get("status") or "").strip().lower()
-                        intent = {
-                            "keywords": kws[:6],
-                            "exclude": exc,
-                            "source_type": src if src in _READING_VALID_SOURCE_TYPES else "",
-                            "status": stt if stt in _READING_VALID_STATUSES else "",
-                            "llm_used": True,
-                        }
-        if intent is None:
-            intent = _rule_parse_reading_intent(q)
-
-        # 显式查询参数优先于模型推断，避免与前端筛选下拉打架。
-        if source_type.strip():
-            intent["source_type"] = source_type.strip().lower()
-        if status.strip():
-            intent["status"] = status.strip().lower()
-
-        source_type_filter: str | None = intent["source_type"] or None
-        st = intent["status"] or None
-        terms = intent["keywords"] or [q]
-
-        merged: dict[int, dict[str, Any]] = {}
-        order: list[int] = []
-        per_term_limit = max(limit, 30)
-        for term in terms:
-            rows = database.search_articles(
-                q=term,
-                limit=per_term_limit,
-                offset=0,
-                source_type=source_type_filter,
-                status=st,
-            )
-            for row in rows:
-                try:
-                    rid = int(row.get("id"))
-                except (TypeError, ValueError):
-                    continue
-                if rid not in merged:
-                    merged[rid] = row
-                    order.append(rid)
-        items = [merged[rid] for rid in order]
-        items = _apply_reading_exclusions(items, intent.get("exclude") or [])
-
-        for item in items:
-            text = " ".join(
-                [
-                    str(item.get("title") or ""),
-                    str(item.get("summary") or ""),
-                    str(item.get("tags") or ""),
-                ]
-            )
-            item["fit_score"] = _article_fit_score(text)
-        items.sort(
-            key=lambda it: (
-                float(it.get("fit_score") or 0.0),
-                str(it.get("published_at") or ""),
-            ),
-            reverse=True,
-        )
-        items = items[:limit]
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": items,
-                "total": len(items),
-                "intent": intent,
-                "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        )
 
     # ── 知识库概念反向索引 API ─────────────────────────────────
     @app.get("/api/knowledge/concepts")
@@ -5612,897 +4457,58 @@ def create_app(
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
-    def reading_auto_tag(
-        limit: int = 500,
-        status: str | None = None,
-        only_sparse: bool = True,
-        max_new: int = 5,
-        min_weight: float = 0.15,
-    ) -> JSONResponse:
-        """给阅读库补打轻量兴趣标签（确定性规则：画像关键词 + ``#话题``）。
-
-        命中即 merge 进现有 ``tags``（保留来源标签、大小写去重、幂等），
-        零 LLM、零网络。冷画像（无兴趣词）时直接跳过，不臆造标签。
-        """
-        import json as _json
-
-        from openbiliclaw.reading.tags import generate_tags, merge_tag_lists
-
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        keywords = _load_interest_keywords()
-        if not keywords:
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "scanned": 0,
-                    "updated": 0,
-                    "added": 0,
-                    "note": "no interest profile yet; skipped",
-                },
-                status_code=200,
-            )
-        rows = database.iter_articles_for_tagging(
-            limit=limit, status=status, only_sparse=only_sparse
-        )
-        updated = 0
-        added_total = 0
-        for row in rows:
-            try:
-                existing = _json.loads(row.get("tags") or "[]")
-            except Exception:
-                existing = []
-            if not isinstance(existing, list):
-                existing = []
-            new_tags = generate_tags(
-                title=str(row.get("title") or ""),
-                summary=str(row.get("summary") or ""),
-                content_text=str(row.get("content_text") or ""),
-                interest_keywords=keywords,
-                existing=[str(t) for t in existing],
-                max_new=max_new,
-                min_weight=min_weight,
-            )
-            if not new_tags:
-                continue
-            merged = merge_tag_lists([str(t) for t in existing], new_tags)
-            try:
-                if database.update_article_tags(int(row["id"]), merged):
-                    updated += 1
-                    added_total += len(new_tags)
-            except Exception:
-                logger.exception("auto-tag write failed for article id=%s", row.get("id"))
-        return JSONResponse(
-            {"ok": True, "scanned": len(rows), "updated": updated, "added": added_total}
-        )
-
     # ── 日记系统 API ─────────────────────────────────────────────
 
     _diary_service: DiaryService | None = None
 
-    def _get_diary_service() -> DiaryService | None:
-        """获取或创建日记服务实例（懒加载）。"""
-        nonlocal _diary_service
-        if _diary_service is not None:
-            return _diary_service
-        database = getattr(ctx, "database", None)
-        if database is None:
-            return None
-        llm_service = getattr(ctx, "llm_service", None)
-        _diary_service = DiaryService(database=database, llm_service=llm_service)
-        return _diary_service
-
     # ─── 日记数据洞察 API ───────────────────────────────────────────
 
-    @app.get("/api/diary/insights/mood-trend")
-    def diary_insights_mood_trend(
-        granularity: str = "month",
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> JSONResponse:
-        """获取情绪趋势数据。
-
-        Args:
-            granularity: month / year
-            start_date: 起始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
-
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import DiaryInsightsService
-
-        insights = DiaryInsightsService(svc.store)
-        trend = insights.get_mood_trend(granularity, start_date, end_date)
-        return JSONResponse(
-            {
-                "ok": True,
-                "granularity": granularity,
-                "data": [
-                    {
-                        "period": p.period,
-                        "avg_score": p.avg_score,
-                        "entry_count": p.entry_count,
-                        "mood_distribution": p.mood_distribution,
-                    }
-                    for p in trend
-                ],
-            }
-        )
-
-    def diary_insights_keywords(
-        limit: int = 50,
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> JSONResponse:
-        """获取高频关键词（词云数据）。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import DiaryInsightsService
-
-        insights = DiaryInsightsService(svc.store)
-        keywords = insights.get_top_keywords(limit, start_date, end_date)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [{"word": w, "count": c} for w, c in keywords],
-            }
-        )
 
     # ─── 日记反思 API（周报/月度反思/年度回顾/里程碑） ─────────────────
 
-    async def diary_reflection_weekly_generate(
-        payload: dict[str, Any] | None = None,
-    ) -> JSONResponse:
-        """生成 AI 周报。
-
-        请求体（可选）：
-        - week_start: 周开始日期（YYYY-MM-DD），默认本周一
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import ReflectionService
-
-        payload = payload or {}
-        reflection = ReflectionService(svc.store)
-        report = reflection.generate_weekly_report(payload.get("week_start"))
-        if report.entry_count == 0:
-            return JSONResponse({"ok": False, "error": "本周暂无日记"}, status_code=404)
-
-        prompt = reflection.build_weekly_report_prompt(report)
-        try:
-            ai_result = await svc._call_llm(prompt)  # noqa: SLF001
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "data": report.__dict__,
-                    "ai_result": ai_result,
-                }
-            )
-        except Exception as exc:
-            logger.exception("周报生成失败")
-            return JSONResponse(
-                {"ok": False, "error": f"生成失败: {exc}", "data": report.__dict__},
-                status_code=500,
-            )
-
-    def diary_reflection_milestones(
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int = 50,
-    ) -> JSONResponse:
-        """获取人生里程碑列表。
-
-        Query:
-        - start_date: 开始日期（YYYY-MM-DD），默认 2000-01-01
-        - end_date: 结束日期（YYYY-MM-DD），默认今天
-        - limit: 返回数量上限，默认 50
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import ReflectionService
-
-        reflection = ReflectionService(svc.store)
-        milestones = reflection.detect_milestones(start_date, end_date)
-        milestones = milestones[:limit]
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [m.__dict__ for m in milestones],
-                "total": len(milestones),
-            }
-        )
-
     # ─── 知识图谱 API（标签关联+人物关系+知识网络） ─────────────────
 
-    @app.get("/api/diary/knowledge-graph/tag-network")
-    def diary_kg_tag_network(
-        start_date: str | None = None,
-        end_date: str | None = None,
-        min_count: int = 2,
-        max_nodes: int = 50,
-    ) -> JSONResponse:
-        """获取标签关联网络。
 
-        Query:
-        - start_date: 开始日期
-        - end_date: 结束日期
-        - min_count: 最小出现次数，默认 2
-        - max_nodes: 最大节点数，默认 50
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
 
-        kg = KnowledgeGraphService(svc.store)
-        graph = kg.build_tag_network(start_date, end_date, min_count, max_nodes)
-        return JSONResponse({"ok": True, "data": graph.to_dict()})
 
-    @app.get("/api/diary/knowledge-graph/person-network")
-    def diary_kg_person_network(
-        start_date: str | None = None,
-        end_date: str | None = None,
-        min_count: int = 1,
-        max_nodes: int = 30,
-    ) -> JSONResponse:
-        """获取人物关系图谱。
 
-        Query:
-        - start_date: 开始日期
-        - end_date: 结束日期
-        - min_count: 最小出现次数，默认 1
-        - max_nodes: 最大节点数，默认 30
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
 
-        kg = KnowledgeGraphService(svc.store)
-        graph = kg.build_person_network(start_date, end_date, min_count, max_nodes)
-        return JSONResponse({"ok": True, "data": graph.to_dict()})
-
-    @app.get("/api/diary/knowledge-graph/mixed")
-    def diary_kg_mixed(
-        start_date: str | None = None,
-        end_date: str | None = None,
-        min_count: int = 2,
-        max_nodes: int = 60,
-    ) -> JSONResponse:
-        """获取混合知识网络（标签 + 人物 + 标签-人物关联）。
-
-        Query:
-        - start_date: 开始日期
-        - end_date: 结束日期
-        - min_count: 最小出现次数，默认 2
-        - max_nodes: 最大节点数，默认 60
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
-
-        kg = KnowledgeGraphService(svc.store)
-        graph = kg.build_mixed_network(start_date, end_date, min_count, max_nodes)
-        return JSONResponse({"ok": True, "data": graph.to_dict()})
-
-    @app.get("/api/diary/knowledge-graph/stats")
-    def diary_kg_stats(
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> JSONResponse:
-        """获取知识网络统计信息。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
-
-        kg = KnowledgeGraphService(svc.store)
-        stats = kg.get_network_stats(start_date, end_date)
-        return JSONResponse({"ok": True, "data": stats})
-
-    @app.get("/api/diary/knowledge-graph/node/{node_id}")
-    def diary_kg_node_detail(
-        node_id: str,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int = 20,
-    ) -> JSONResponse:
-        """获取知识节点详情。
-
-        Path:
-        - node_id: 节点 ID（格式：tag:xxx 或 person:xxx）
-
-        Query:
-        - start_date: 开始日期
-        - end_date: 结束日期
-        - limit: 相关日记数量上限，默认 20
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
-
-        kg = KnowledgeGraphService(svc.store)
-        detail = kg.get_node_detail(node_id, start_date, end_date, limit)
-        if detail is None:
-            return JSONResponse({"ok": False, "error": "节点不存在或无相关日记"}, status_code=404)
-        return JSONResponse({"ok": True, "data": detail.__dict__})
-
-    @app.get("/api/diary/knowledge-graph/person/{person_name}/relations")
-    def diary_kg_person_relations(
-        person_name: str,
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> JSONResponse:
-        """分析某个人物与其他人物的关系。
-
-        Path:
-        - person_name: 人物名称
-
-        Query:
-        - start_date: 开始日期
-        - end_date: 结束日期
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import KnowledgeGraphService
-
-        kg = KnowledgeGraphService(svc.store)
-        relations = kg.analyze_person_relations(person_name, start_date, end_date)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [r.__dict__ for r in relations],
-                "total": len(relations),
-            }
-        )
 
     # ─── 自进化 API（夜间自我改进循环） ─────────────────────────────
 
-    @app.get("/api/diary/self-evolution/profile")
-    def diary_se_profile(
-        target_date: str | None = None,
-    ) -> JSONResponse:
-        """获取用户画像。
 
-        Query:
-        - target_date: 目标日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
 
-        se = SelfEvolutionService(svc.store)
-        profile = se.get_user_profile(target_date)
-        if profile is None:
-            return JSONResponse(
-                {"ok": False, "error": "用户画像不存在，请先运行夜间循环"}, status_code=404
-            )
-        return JSONResponse({"ok": True, "data": profile.to_dict()})
 
-    @app.get("/api/diary/self-evolution/profile/history")
-    def diary_se_profile_history(
-        limit: int = 30,
-    ) -> JSONResponse:
-        """获取画像历史快照。
 
-        Query:
-        - limit: 返回数量上限，默认 30
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
 
-        se = SelfEvolutionService(svc.store)
-        history = se.get_profile_history(limit)
-        return JSONResponse({"ok": True, "data": history, "total": len(history)})
 
-    @app.get("/api/diary/self-evolution/drifts")
-    def diary_se_drifts(
-        drift_type: str | None = None,
-        severity: str | None = None,
-        status: str | None = None,
-        limit: int = 50,
-    ) -> JSONResponse:
-        """获取漂移事件列表。
-
-        Query:
-        - drift_type: 按类型筛选（behavior/emotion/focus/relationship/writing）
-        - severity: 按严重程度筛选（info/warning/alert）
-        - status: 按状态筛选（new/acknowledged/dismissed）
-        - limit: 返回数量上限，默认 50
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
-
-        se = SelfEvolutionService(svc.store)
-        drifts = se.get_drifts(drift_type, severity, status, limit)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [d.to_dict() for d in drifts],
-                "total": len(drifts),
-            }
-        )
-
-    @app.get("/api/diary/self-evolution/nightly-logs")
-    def diary_se_nightly_logs(
-        limit: int = 30,
-    ) -> JSONResponse:
-        """获取夜间日志列表。
-
-        Query:
-        - limit: 返回数量上限，默认 30
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
-
-        se = SelfEvolutionService(svc.store)
-        logs = se.get_nightly_logs(limit)
-        return JSONResponse({"ok": True, "data": logs, "total": len(logs)})
-
-    @app.get("/api/diary/self-evolution/nightly-logs/{log_date}")
-    def diary_se_nightly_log_detail(
-        log_date: str,
-    ) -> JSONResponse:
-        """获取指定日期的夜间日志详情。
-
-        Path:
-        - log_date: 日志日期（YYYY-MM-DD）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
-
-        se = SelfEvolutionService(svc.store)
-        log = se.get_nightly_log(log_date)
-        if log is None:
-            return JSONResponse({"ok": False, "error": "夜间日志不存在"}, status_code=404)
-        return JSONResponse({"ok": True, "data": log.to_dict()})
-
-    @app.post("/api/diary/self-evolution/run-nightly")
-    def diary_se_run_nightly(
-        target_date: str | None = None,
-    ) -> JSONResponse:
-        """手动触发夜间自我改进循环。
-
-        Query:
-        - target_date: 目标日期，默认昨天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import SelfEvolutionService
-
-        se = SelfEvolutionService(svc.store)
-        nightly_log = se.run_nightly_cycle(target_date)
-        return JSONResponse(
-            {
-                "ok": True,
-                "message": "夜间循环完成",
-                "data": nightly_log.to_dict(),
-            }
-        )
-
-    @app.get("/api/diary/self-evolution/tag-optimizations")
-    def diary_se_tag_optimizations(
-        target_date: str | None = None,
-    ) -> JSONResponse:
-        """获取标签优化建议。
-
-        Query:
-        - target_date: 目标日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from dataclasses import asdict
-
-        from openbiliclaw.diary import SelfEvolutionService
-
-        se = SelfEvolutionService(svc.store)
-        if target_date is None:
-            target_date = datetime.now().strftime("%Y-%m-%d")
-        optimization = se.optimize_tags(target_date)
-        return JSONResponse({"ok": True, "data": asdict(optimization)})
 
     # ─── 主动洞察引擎 API（第二阶段） ────────────────────────────────
 
-    @app.get("/api/diary/insights/memory-on-this-day")
-    def diary_insights_memory_on_this_day(
-        target_date: str | None = None,
-    ) -> JSONResponse:
-        """获取历史上的今天。
 
-        Query:
-        - target_date: 目标日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
 
-        engine = InsightEngineService(svc.store)
-        memory = engine.get_memory_on_this_day(target_date)
-        return JSONResponse({"ok": True, "data": asdict(memory)})
 
-    @app.get("/api/diary/insights/patterns")
-    def diary_insights_patterns(
-        lookback_days: int = 90,
-    ) -> JSONResponse:
-        """发现日记中的模式。
 
-        Query:
-        - lookback_days: 回溯天数，默认 90
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
 
-        engine = InsightEngineService(svc.store)
-        patterns = engine.discover_patterns(lookback_days)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [asdict(p) for p in patterns],
-                "total": len(patterns),
-            }
-        )
 
-    @app.get("/api/diary/insights/morning-briefing")
-    def diary_insights_morning_briefing(
-        briefing_date: str | None = None,
-    ) -> JSONResponse:
-        """获取晨间简报。
 
-        Query:
-        - briefing_date: 简报日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        briefing = engine.get_morning_briefing(briefing_date)
-        if briefing is None:
-            # 如果不存在，生成一个
-            briefing = engine.generate_morning_briefing(briefing_date)
-        return JSONResponse({"ok": True, "data": briefing.to_dict()})
-
-    @app.post("/api/diary/insights/morning-briefing/generate")
-    def diary_insights_generate_morning_briefing(
-        briefing_date: str | None = None,
-    ) -> JSONResponse:
-        """生成晨间简报。
-
-        Query:
-        - briefing_date: 简报日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        briefing = engine.generate_morning_briefing(briefing_date)
-        return JSONResponse({"ok": True, "data": briefing.to_dict()})
-
-    @app.get("/api/diary/insights/open-loops")
-    def diary_insights_open_loops(
-        status: str | None = None,
-        loop_type: str | None = None,
-        priority: str | None = None,
-        limit: int = 50,
-    ) -> JSONResponse:
-        """获取开放循环列表。
-
-        Query:
-        - status: 状态筛选（open/in_progress/completed/abandoned）
-        - loop_type: 类型筛选（promise/goal/todo/question/idea）
-        - priority: 优先级筛选（high/medium/low）
-        - limit: 返回数量上限，默认 50
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        loops = engine.get_open_loops(status, loop_type, priority, limit)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [loop.to_dict() for loop in loops],
-                "total": len(loops),
-            }
-        )
-
-    @app.post("/api/diary/insights/open-loops/scan")
-    def diary_insights_scan_open_loops(
-        lookback_days: int = 365,
-    ) -> JSONResponse:
-        """扫描日记中的开放循环。
-
-        Query:
-        - lookback_days: 回溯天数，默认 365
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        loops = engine.scan_open_loops(lookback_days)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [loop.to_dict() for loop in loops],
-                "total": len(loops),
-                "message": f"扫描完成，发现 {len(loops)} 个开放循环",
-            }
-        )
-
-    @app.put("/api/diary/insights/open-loops/{loop_id}/status")
-    def diary_insights_update_open_loop_status(
-        loop_id: str,
-        status: str,
-    ) -> JSONResponse:
-        """更新开放循环状态。
-
-        Path:
-        - loop_id: 循环 ID
-
-        Query:
-        - status: 新状态（open/in_progress/completed/abandoned）
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        success = engine.update_open_loop_status(loop_id, status)
-        if success:
-            return JSONResponse({"ok": True, "message": "状态更新成功"})
-        return JSONResponse({"ok": False, "error": "状态更新失败"}, status_code=400)
-
-    @app.get("/api/diary/insights/report")
-    def diary_insights_report(
-        target_date: str | None = None,
-    ) -> JSONResponse:
-        """生成综合洞察报告。
-
-        Query:
-        - target_date: 目标日期，默认今天
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import InsightEngineService
-
-        engine = InsightEngineService(svc.store)
-        report = engine.generate_insight_report(target_date)
-        return JSONResponse({"ok": True, "data": report.to_dict()})
 
     # ─── 三层记忆系统 API（第三阶段） ────────────────────────────────
-
-    def diary_memory_search(
-        query: str = "",
-        tier: str | None = None,
-        limit: int = 20,
-        min_importance: float = 0.0,
-    ) -> JSONResponse:
-        """搜索记忆。
-
-        Query:
-        - query: 搜索关键词
-        - tier: 记忆层级过滤（hot/warm/cold）
-        - limit: 返回数量上限，默认 20
-        - min_importance: 最低重要性评分，默认 0
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import MemorySystemService
-
-        memory = MemorySystemService(svc.store)
-        results = memory.search_memories(query, tier, limit, min_importance)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": results,
-                "total": len(results),
-            }
-        )
 
     # ─── 情绪系统（效价/唤醒二维模型）API ────────────────────────────
 
     # ─── 高级记忆系统（6层记忆 + 信念 + 巩固）API ───────────────────
 
-    def diary_advanced_memory_search(
-        query: str = "",
-        layer: str | None = None,
-        min_importance: float = 0.0,
-        limit: int = 20,
-    ) -> JSONResponse:
-        """搜索记忆。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        from openbiliclaw.diary import AdvancedMemoryService
-
-        am = AdvancedMemoryService(svc.store)
-        results = am.search_memories(
-            query=query, layer=layer, min_importance=min_importance, limit=limit
-        )
-        return JSONResponse({"ok": True, "data": results})
-
     # ─── 智能时间线卡片 API ───────────────────────────────────────────
 
-    @app.get("/api/diary/fragments")
-    def diary_fragments_list(
-        fragment_date: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-        fragment_type: str | None = None,
-    ) -> JSONResponse:
-        """列出碎片，可按日期和类型筛选。"""
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        fragments = svc.list_fragments(fragment_date, limit, offset, fragment_type)
-        total = svc.store.count_fragments(fragment_date)
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": [f.model_dump(mode="json") for f in fragments],
-                "total": total,
-                "limit": limit,
-                "offset": offset,
-            }
-        )
 
     # ── 日记标签与人物提取 API ────────────────────────────────
 
-    @app.get("/api/diary/tags")
-    def diary_tags_list(
-        type: str | None = None,
-        limit: int = 200,
-        min_count: int = 1,
-    ) -> JSONResponse:
-        """获取标签列表，可按类型筛选。
 
-        Query:
-        - type: 标签类型（emotion/topic/event/location/work/family/health/finance/other）
-        - limit: 返回数量上限
-        - min_count: 最小使用次数
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            from openbiliclaw.diary.models import TagType
-
-            tag_type = TagType(type) if type else None
-            tags = svc.get_tags(tag_type=tag_type, limit=limit, min_count=min_count)
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "data": [t.model_dump(mode="json") for t in tags],
-                    "total": len(tags),
-                }
-            )
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.get("/api/diary/persons")
-    def diary_persons_list(
-        relation: str | None = None,
-        limit: int = 200,
-        min_appearances: int = 1,
-    ) -> JSONResponse:
-        """获取人物列表，可按关系筛选。
-
-        Query:
-        - relation: 关系筛选（家人/朋友/同事等）
-        - limit: 返回数量上限
-        - min_appearances: 最小出现次数
-        """
-        svc = _get_diary_service()
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            persons = svc.get_persons(
-                relation=relation, limit=limit, min_appearances=min_appearances
-            )
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "data": [p.model_dump(mode="json") for p in persons],
-                    "total": len(persons),
-                }
-            )
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
     # ─── RAG 语义搜索与问答 API ─────────────────────────────────────
 
     _diary_rag_service = None
-
-    async def diary_rag_search(
-        q: str,
-        top_k: int = 10,
-        min_score: float = 0.3,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        source: str | None = None,
-    ) -> JSONResponse:
-        """语义搜索日记（用自然语言搜索，按语义相似度排序）。
-
-        参数：
-        - q: 搜索查询（自然语言）
-        - top_k: 返回最多多少条（默认 10）
-        - min_score: 最低相似度阈值 0-1（默认 0.3）
-        - start_date / end_date: 日期范围过滤
-        - source: 来源过滤
-        """
-        rag = _get_diary_rag_service()
-        if rag is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if rag.embedding_service is None:
-            return JSONResponse({"ok": False, "error": "Embedding 服务未配置"}, status_code=400)
-        if not q.strip():
-            return JSONResponse({"ok": False, "error": "缺少搜索关键词 q"}, status_code=400)
-        try:
-            results = await rag.semantic_search(
-                query=q,
-                top_k=top_k,
-                min_score=min_score,
-                start_date=start_date,
-                end_date=end_date,
-                source=source,
-            )
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "query": q,
-                    "count": len(results),
-                    "results": [
-                        {
-                            "id": r.entry.id,
-                            "date": r.entry.entry_date,
-                            "title": r.entry.title,
-                            "content": r.entry.content[:500]
-                            + ("..." if len(r.entry.content) > 500 else ""),
-                            "source": r.entry.source,
-                            "mood": r.entry.mood.value,
-                            "score": round(r.score, 4),
-                            "highlight": r.highlight,
-                        }
-                        for r in results
-                    ],
-                }
-            )
-        except Exception as exc:
-            logger.exception("语义搜索失败")
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
     # ── Route registration (集中到 _route_registry.py) ─────────
     register_all_routes(
