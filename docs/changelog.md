@@ -22,8 +22,9 @@
     以及后端不支持的 `orcarouter`。`web/setup/index.html` 1813 → 1701 行。
   - `api/app.py` degraded 中间件白名单放行 `/api/config/discover-models`——首次运行无可用 LLM 时
     后端**按定义**处于降级模式，不放行则该页面自己被 503 挡住。
-- **验证**：`tests/llm/test_model_discovery.py` 19 例 + `tests/api/test_config_setup_wizard.py` 11 例
-  （含「向导引用的全部 `/api` 路径必须存在于路由表」的端点级对账，与禁止死分支回流的静态检查）。ruff 全绿。
+- **验证**：`tests/llm/test_model_discovery.py` 19 例 + `tests/api/test_config_setup_wizard.py` 12 例
+  （含「向导引用的全部 `/api` 路径必须存在于路由表」的端点级对账，与禁止死分支回流的静态检查）。
+  全量 **3491 passed / 0 failed / 16 skipped**（261s）；`ruff check` + `ruff format --check` 全绿。
 - **遗留（未改可见 UI，待另立小专项）**：`#apiFlavor`（`responses` 协议）与 `num_ctx` 后端不持久化；
   `_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`。
 
