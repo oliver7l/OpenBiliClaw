@@ -307,4 +307,158 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
             logger.exception("Failed to read itinerary")
             raise HTTPException(status_code=500, detail=f"读取行程数据失败: {exc}") from exc
 
+    @router.get("/expenses")
+    def get_expenses() -> dict[str, Any]:
+        """Return trip expenses from trip_expenses table."""
+        db_path = Path("data/travel.db")
+        if not db_path.exists():
+            raise HTTPException(status_code=404, detail="旅行数据库不存在")
+
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+
+            # Get latest trip
+            c.execute("SELECT id, title, budget, people_count FROM trips ORDER BY id DESC LIMIT 1")
+            trip_row = c.fetchone()
+            if not trip_row:
+                conn.close()
+                return {"trip": None, "expenses": [], "summary": {}}
+
+            trip = dict(trip_row)
+            trip_id = trip["id"]
+
+            # Get all expenses
+            c.execute(
+                "SELECT id, category, item, detail, amount, created_at "
+                "FROM trip_expenses WHERE trip_id = ? ORDER BY category, id",
+                (trip_id,),
+            )
+            expenses = [dict(r) for r in c.fetchall()]
+
+            # Summary by category
+            c.execute(
+                "SELECT category, SUM(amount) as total, COUNT(*) as count "
+                "FROM trip_expenses WHERE trip_id = ? GROUP BY category ORDER BY total DESC",
+                (trip_id,),
+            )
+            by_category = [dict(r) for r in c.fetchall()]
+
+            total = sum(e["amount"] for e in expenses)
+            people = trip.get("people_count", 1) or 1
+
+            conn.close()
+            return {
+                "trip": trip,
+                "expenses": expenses,
+                "summary": {
+                    "by_category": by_category,
+                    "total": total,
+                    "per_person": round(total / people, 0) if people else 0,
+                    "people_count": people,
+                },
+            }
+        except Exception as exc:
+            logger.exception("Failed to read expenses")
+            raise HTTPException(status_code=500, detail=f"读取费用数据失败: {exc}") from exc
+
+    @router.get("/flights-detail")
+    def get_flights_detail() -> dict[str, Any]:
+        """Return detailed flight information from trip_flights table."""
+        db_path = Path("data/travel.db")
+        if not db_path.exists():
+            raise HTTPException(status_code=404, detail="旅行数据库不存在")
+
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+
+            c.execute("SELECT id, title FROM trips ORDER BY id DESC LIMIT 1")
+            trip_row = c.fetchone()
+            if not trip_row:
+                conn.close()
+                return {"trip": None, "departures": [], "returns": []}
+
+            trip = dict(trip_row)
+            trip_id = trip["id"]
+
+            # 去程
+            c.execute(
+                "SELECT * FROM trip_flights WHERE trip_id = ? AND flight_type = '去程' ORDER BY departure_time",
+                (trip_id,),
+            )
+            departures = [dict(r) for r in c.fetchall()]
+
+            # 返程
+            c.execute(
+                "SELECT * FROM trip_flights WHERE trip_id = ? AND flight_type = '返程' ORDER BY departure_time",
+                (trip_id,),
+            )
+            returns = [dict(r) for r in c.fetchall()]
+
+            total_price = sum(f["price"] or 0 for f in departures + returns)
+
+            conn.close()
+            return {
+                "trip": trip,
+                "departures": departures,
+                "returns": returns,
+                "summary": {
+                    "departure_count": len(departures),
+                    "return_count": len(returns),
+                    "total_price": total_price,
+                },
+            }
+        except Exception as exc:
+            logger.exception("Failed to read flights")
+            raise HTTPException(status_code=500, detail=f"读取航班数据失败: {exc}") from exc
+
+    @router.get("/hotels")
+    def get_hotels() -> dict[str, Any]:
+        """Return hotel information from trip_hotels table."""
+        db_path = Path("data/travel.db")
+        if not db_path.exists():
+            raise HTTPException(status_code=404, detail="旅行数据库不存在")
+
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+
+            c.execute("SELECT id, title FROM trips ORDER BY id DESC LIMIT 1")
+            trip_row = c.fetchone()
+            if not trip_row:
+                conn.close()
+                return {"trip": None, "hotels": []}
+
+            trip = dict(trip_row)
+            trip_id = trip["id"]
+
+            c.execute(
+                "SELECT * FROM trip_hotels WHERE trip_id = ? ORDER BY day_number",
+                (trip_id,),
+            )
+            hotels = [dict(r) for r in c.fetchall()]
+
+            included_count = sum(1 for h in hotels if h["included_in_tour"] == 1)
+            self_paid_count = sum(1 for h in hotels if h["included_in_tour"] == 0)
+            self_paid_total = sum(h["price"] or 0 for h in hotels if h["included_in_tour"] == 0)
+
+            conn.close()
+            return {
+                "trip": trip,
+                "hotels": hotels,
+                "summary": {
+                    "total_nights": len(hotels),
+                    "included_in_tour": included_count,
+                    "self_paid": self_paid_count,
+                    "self_paid_total": self_paid_total,
+                },
+            }
+        except Exception as exc:
+            logger.exception("Failed to read hotels")
+            raise HTTPException(status_code=500, detail=f"读取住宿数据失败: {exc}") from exc
+
     return router

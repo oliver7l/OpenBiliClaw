@@ -5,7 +5,7 @@
  * plan comparison, and the full budget markdown document.
  */
 
-import { fetchTravelFlights, fetchTravelOverview, fetchTravelDoc, fetchTravelItinerary } from "../api.js";
+import { fetchTravelFlights, fetchTravelOverview, fetchTravelDoc, fetchTravelItinerary, fetchTravelExpenses, fetchTravelFlightsDetail, fetchTravelHotels } from "../api.js";
 
 let $root = null;
 let loaded = false;
@@ -14,7 +14,10 @@ let flightsData = null;
 let overviewData = null;
 let docContent = null;
 let itineraryData = null;
-let activeSection = "itinerary"; // itinerary | flights | overview | doc
+let expensesData = null;
+let flightsDetailData = null;
+let hotelsData = null;
+let activeSection = "itinerary"; // itinerary | flights | flights-detail | hotels | expenses | overview | doc
 
 function esc(s) {
   const el = document.createElement("span");
@@ -45,7 +48,10 @@ function fmtPrice(n) {
 function renderSectionTabs() {
   const tabs = [
     { id: "itinerary", label: "🗺️ 行程安排" },
-    { id: "flights", label: "✈️ 实时机票" },
+    { id: "flights-detail", label: "✈️ 航班信息" },
+    { id: "hotels", label: "🏨 住宿信息" },
+    { id: "expenses", label: "💰 费用明细" },
+    { id: "flights", label: "📈 实时机票" },
     { id: "overview", label: "📊 预算概览" },
     { id: "doc", label: "📄 完整文档" },
   ];
@@ -228,6 +234,80 @@ function renderFlights() {
   return html;
 }
 
+// ── Expenses section ───────────────────────────────────────────
+function renderExpenses() {
+  if (!expensesData || !expensesData.trip) {
+    return `<div class="travel-empty">加载费用数据中…</div>`;
+  }
+
+  const { trip, expenses, summary } = expensesData;
+  let html = "";
+
+  // Summary cards
+  html += `<div class="expenses-summary-cards">
+    <div class="expense-card expense-total">
+      <div class="expense-card-label">总费用</div>
+      <div class="expense-card-value">${fmtPrice(summary.total)}</div>
+      <div class="expense-card-sub">${summary.people_count}人 · 8天</div>
+    </div>
+    <div class="expense-card expense-perperson">
+      <div class="expense-card-label">人均费用</div>
+      <div class="expense-card-value">${fmtPrice(summary.per_person)}</div>
+      <div class="expense-card-sub">不含餐费及个人消费</div>
+    </div>
+  </div>`;
+
+  // Category breakdown with progress bars
+  if (summary.by_category && summary.by_category.length > 0) {
+    html += `<div class="expenses-section">
+      <div class="expenses-section-title">📊 费用构成</div>
+      <div class="expenses-categories">`;
+    for (const cat of summary.by_category) {
+      const pct = summary.total ? Math.round((cat.total / summary.total) * 100) : 0;
+      const colorClass = cat.category === "团费" ? "cat-group" : cat.category === "机票" ? "cat-flight" : "cat-hotel";
+      html += `<div class="expense-category">
+        <div class="expense-cat-head">
+          <span class="expense-cat-name">${esc(cat.category)}</span>
+          <span class="expense-cat-amount">${fmtPrice(cat.total)} <em>(${pct}%)</em></span>
+        </div>
+        <div class="expense-cat-bar"><div class="expense-cat-fill ${colorClass}" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Detailed expense table grouped by category
+  if (expenses && expenses.length > 0) {
+    const categories = [...new Set(expenses.map((e) => e.category))];
+    html += `<div class="expenses-section">
+      <div class="expenses-section-title">📋 费用明细（${expenses.length}项）</div>`;
+
+    for (const cat of categories) {
+      const items = expenses.filter((e) => e.category === cat);
+      const catTotal = items.reduce((s, e) => s + e.amount, 0);
+      html += `<div class="expense-group">
+        <div class="expense-group-header">
+          <span>${esc(cat)}</span>
+          <span class="expense-group-total">${fmtPrice(catTotal)}</span>
+        </div>
+        <table class="travel-table expense-detail-table">
+          <thead><tr><th>项目</th><th>明细</th><th style="text-align:right">金额</th></tr></thead>
+          <tbody>`;
+      for (const item of items) {
+        html += `<tr>
+          <td class="expense-item-name">${esc(item.item)}</td>
+          <td class="expense-item-detail">${esc(item.detail || "")}</td>
+          <td class="travel-amount">${fmtPrice(item.amount)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+    html += `</div>`;
+  }
+
+  return html;
+}
+
 // ── Overview section ───────────────────────────────────────────
 function renderOverview() {
   if (!overviewData) {
@@ -283,6 +363,160 @@ function renderDoc() {
   </div>`;
 }
 
+// ── Flights Detail section ─────────────────────────────────────
+function renderFlightsDetail() {
+  if (!flightsDetailData) {
+    return `<div class="travel-empty">加载航班信息中…</div>`;
+  }
+
+  const { departures, returns, summary } = flightsDetailData;
+  let html = "";
+
+  // Summary cards
+  html += `<div class="expenses-summary">
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">去程航班</div>
+      <div class="expense-summary-value">${summary.departure_count} 班</div>
+    </div>
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">返程航班</div>
+      <div class="expense-summary-value">${summary.return_count} 班</div>
+    </div>
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">机票总费用</div>
+      <div class="expense-summary-value">${fmtPrice(summary.total_price)}</div>
+    </div>
+  </div>`;
+
+  // Departures
+  html += `<div class="travel-section-title">🛫 去程航班（10月2日）</div>`;
+  html += `<table class="travel-table">
+    <thead><tr><th>航班号</th><th>航线</th><th>起飞</th><th>到达</th><th>时长</th><th>乘机人</th><th>费用</th></tr></thead><tbody>`;
+  for (const f of departures) {
+    html += `<tr>
+      <td><strong>${esc(f.flight_no)}</strong><br><span style="color:#888;font-size:11px">${esc(f.airline)}</span></td>
+      <td>${esc(f.departure_city)} → ${esc(f.arrival_city)}</td>
+      <td>${esc(f.departure_time.split(" ")[1])}<br><span style="color:#888;font-size:11px">${esc(f.departure_airport)}</span></td>
+      <td>${esc(f.arrival_time.split(" ")[1])}<br><span style="color:#888;font-size:11px">${esc(f.arrival_airport)}</span></td>
+      <td>${esc(f.duration)}</td>
+      <td>${esc(f.passengers)}<br><span style="color:#888;font-size:11px">${f.passenger_count}人</span></td>
+      <td class="travel-amount">${f.price > 0 ? fmtPrice(f.price) : "含在往返"}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+
+  // Returns
+  html += `<div class="travel-section-title">🛬 返程航班</div>`;
+  html += `<table class="travel-table">
+    <thead><tr><th>日期</th><th>航班号</th><th>航线</th><th>起飞</th><th>到达</th><th>乘机人</th><th>费用</th></tr></thead><tbody>`;
+  for (const f of returns) {
+    const date = f.departure_time.split(" ")[0];
+    const depTime = f.departure_time.split(" ")[1];
+    const arrTime = f.arrival_time.split(" ")[1];
+    const isNextDay = f.arrival_time.includes("2026-10-08") || f.arrival_time.includes("2026-10-10");
+    html += `<tr>
+      <td>${esc(date)}</td>
+      <td><strong>${esc(f.flight_no)}</strong><br><span style="color:#888;font-size:11px">${esc(f.airline)}</span></td>
+      <td>${esc(f.departure_city)} → ${esc(f.arrival_city)}</td>
+      <td>${esc(depTime)}</td>
+      <td>${esc(arrTime)}${isNextDay ? '<br><span style="color:#e74c3c;font-size:11px">次日抵达</span>' : ""}</td>
+      <td>${esc(f.passengers)}<br><span style="color:#888;font-size:11px">${f.passenger_count}人</span></td>
+      <td class="travel-amount">${f.price > 0 ? fmtPrice(f.price) : "含在往返"}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+
+  // Notes
+  html += `<div style="margin-top:12px;padding:10px;background:#fff8e1;border-radius:6px;font-size:12px;color:#795548">
+    <strong>⚠️ 重要提醒：</strong><br>
+    • 10月2日分两批抵达：早上7人（深圳/重庆出发），晚上4人（太原出发）<br>
+    • 10月7日晚3人先返重庆（爸爸+三嬢+三姑爷）<br>
+    • 10月9日分两批返程：下午4人飞太原，晚上4人飞深圳（次日凌晨抵达）<br>
+    • 姐姐家4人为往返套票（CZ5196去+HU7446返），总价¥6,600
+  </div>`;
+
+  return html;
+}
+
+// ── Hotels section ─────────────────────────────────────────────
+function renderHotels() {
+  if (!hotelsData) {
+    return `<div class="travel-empty">加载住宿信息中…</div>`;
+  }
+
+  const { hotels, summary } = hotelsData;
+  let html = "";
+
+  // Summary cards
+  html += `<div class="expenses-summary">
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">总晚数</div>
+      <div class="expense-summary-value">${summary.total_nights} 晚</div>
+    </div>
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">团费包含</div>
+      <div class="expense-summary-value">${summary.included_in_tour} 晚</div>
+    </div>
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">自费住宿</div>
+      <div class="expense-summary-value">${summary.self_paid} 晚</div>
+    </div>
+    <div class="expense-summary-card">
+      <div class="expense-summary-label">自费总额</div>
+      <div class="expense-summary-value" style="color:#e74c3c">${fmtPrice(summary.self_paid_total)}</div>
+    </div>
+  </div>`;
+
+  // Hotels list
+  html += `<div class="travel-section-title">🏨 每日住宿详情</div>`;
+  for (const h of hotels) {
+    const isSelfPaid = h.included_in_tour === 0;
+    const tagColor = isSelfPaid ? "#e74c3c" : "#27ae60";
+    const tagText = isSelfPaid ? "自费" : "团费包含";
+    html += `<div class="itinerary-day-card" style="margin-bottom:12px">
+      <div class="itinerary-day-header">
+        <span class="itinerary-day-num">D${h.day_number}</span>
+        <span class="itinerary-day-title">${esc(h.date)} · ${esc(h.city)}</span>
+        <span style="background:${tagColor};color:white;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:auto">${tagText}</span>
+      </div>
+      <div style="padding:10px 14px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">${esc(h.hotel_name)} <span style="color:#f39c12;font-size:12px">${esc(h.star_rating)}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:#555">
+          <div>📍 ${esc(h.address)}</div>
+          <div>🛏️ ${esc(h.room_type)} × ${h.room_count}间</div>
+          <div>🕐 入住 ${esc(h.check_in.split(" ")[1])} / 退房 ${esc(h.check_out.split(" ")[1])}</div>
+          <div>👥 ${h.guest_count}人 ${h.breakfast ? "· 含早" : "· 不含早"}</div>
+        </div>
+        ${isSelfPaid ? `<div style="margin-top:6px;color:#e74c3c;font-size:13px;font-weight:600">费用：${fmtPrice(h.price)}</div>` : ""}
+        ${h.notes ? `<div style="margin-top:6px;padding:6px 8px;background:#f8f9fa;border-radius:4px;font-size:11px;color:#666">💡 ${esc(h.notes)}</div>` : ""}
+      </div>
+    </div>`;
+  }
+
+  // Room allocation
+  html += `<div class="travel-section-title">🛏️ 房间分配建议（11人/6间）</div>`;
+  html += `<table class="travel-table">
+    <thead><tr><th>房间</th><th>入住人员</th><th>备注</th></tr></thead><tbody>
+    <tr><td>房间1</td><td>童力 + 刘艳艳</td><td>夫妻，全程</td></tr>
+    <tr><td>房间2</td><td>周贤英（妈妈） + 童言（乐仔）</td><td>母子，全程</td></tr>
+    <tr><td>房间3</td><td>刘霞（姐姐） + 姐夫</td><td>夫妻，全程</td></tr>
+    <tr><td>房间4</td><td>岳母 + 田佳禾（外甥）</td><td>祖孙，全程</td></tr>
+    <tr><td>房间5</td><td>童先海（爸爸）</td><td>10-02至10-07，10-07离团</td></tr>
+    <tr><td>房间6</td><td>童淑琴（三嬢） + 卢昌友（三姑爷）</td><td>夫妻，10-02至10-07离团</td></tr>
+    </tbody></table>`;
+
+  // Notes
+  html += `<div style="margin-top:12px;padding:10px;background:#fff8e1;border-radius:6px;font-size:12px;color:#795548">
+    <strong>⚠️ 住宿注意：</strong><br>
+    • 禾木木屋（D3）夜间0-5℃，无空调只有电热毯，注意保暖<br>
+    • 禾木木屋不含早餐，需在村内小店解决<br>
+    • 10-07晚3人离团后，赛湖和乌鲁木齐只住8人<br>
+    • 建议自带洗漱用品，尤其是禾木木屋
+  </div>`;
+
+  return html;
+}
+
 // ── Main render ────────────────────────────────────────────────
 function render() {
   if (!$root) return;
@@ -294,7 +528,10 @@ function render() {
 
   let content = "";
   if (activeSection === "itinerary") content = renderItinerary();
+  else if (activeSection === "flights-detail") content = renderFlightsDetail();
+  else if (activeSection === "hotels") content = renderHotels();
   else if (activeSection === "flights") content = renderFlights();
+  else if (activeSection === "expenses") content = renderExpenses();
   else if (activeSection === "overview") content = renderOverview();
   else if (activeSection === "doc") content = renderDoc();
 
@@ -329,17 +566,23 @@ async function loadData(force = false) {
   if (force || !flightsData) render();
 
   try {
-    const [flights, overview, doc, itinerary] = await Promise.all([
+    const [flights, overview, doc, itinerary, expenses, flightsDetail, hotels] = await Promise.all([
       fetchTravelFlights().catch((e) => ({ error: String(e) })),
       fetchTravelOverview().catch((e) => ({ error: String(e) })),
       fetchTravelDoc().catch((e) => ({ error: String(e) })),
       fetchTravelItinerary().catch((e) => ({ error: String(e) })),
+      fetchTravelExpenses().catch((e) => ({ error: String(e) })),
+      fetchTravelFlightsDetail().catch((e) => ({ error: String(e) })),
+      fetchTravelHotels().catch((e) => ({ error: String(e) })),
     ]);
 
     if (!flights.error) flightsData = flights;
     if (!overview.error) overviewData = overview;
     if (!doc.error) docContent = doc;
     if (!itinerary.error) itineraryData = itinerary;
+    if (!expenses.error) expensesData = expenses;
+    if (!flightsDetail.error) flightsDetailData = flightsDetail;
+    if (!hotels.error) hotelsData = hotels;
   } catch (err) {
     console.error("Travel data load failed:", err);
   } finally {

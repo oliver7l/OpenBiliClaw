@@ -621,6 +621,18 @@ export async function fetchTravelItinerary(timeoutMs = DEFAULT_READ_TIMEOUT_MS) 
   return requestJson("/travel/itinerary", { timeoutMs });
 }
 
+export async function fetchTravelExpenses(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/expenses", { timeoutMs });
+}
+
+export async function fetchTravelFlightsDetail(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/flights-detail", { timeoutMs });
+}
+
+export async function fetchTravelHotels(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
+  return requestJson("/travel/hotels", { timeoutMs });
+}
+
 // ── Interview (求职面试备战) ────────────────────────────────
 export async function fetchInterviewStatus(timeoutMs = DEFAULT_READ_TIMEOUT_MS) {
   return requestJson("/api/interview/status", { timeoutMs });

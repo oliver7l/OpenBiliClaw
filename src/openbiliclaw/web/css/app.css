@@ -2301,6 +2301,60 @@ body.auth-locked #tab-bar {
   margin-top: 14px; font-size: 11px; color: #aaa; text-align: center;
 }
 
+/* Expenses */
+.expenses-summary-cards {
+  display: flex; gap: 12px; margin-bottom: 16px;
+}
+.expense-card {
+  flex: 1; border-radius: 12px; padding: 16px; text-align: center;
+}
+.expense-total {
+  background: linear-gradient(135deg, #fff5f0, #ffe8d6);
+  border: 1px solid #ffc9a8;
+}
+.expense-perperson {
+  background: linear-gradient(135deg, #f0f7ff, #e0efff);
+  border: 1px solid #a8c8ff;
+}
+.expense-card-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.expense-card-value { font-size: 26px; font-weight: 800; color: #ff6b35; }
+.expense-perperson .expense-card-value { color: #1976d2; }
+.expense-card-sub { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+.expenses-section { margin-bottom: 16px; }
+.expenses-section-title {
+  font-size: 15px; font-weight: 700; color: #333;
+  margin: 0 0 10px;
+}
+.expenses-categories { display: flex; flex-direction: column; gap: 10px; }
+.expense-category { }
+.expense-cat-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 4px; font-size: 13px;
+}
+.expense-cat-name { font-weight: 600; color: #444; }
+.expense-cat-amount { color: #666; }
+.expense-cat-amount em { color: #999; font-style: normal; font-size: 11px; }
+.expense-cat-bar {
+  height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden;
+}
+.expense-cat-fill { height: 100%; border-radius: 4px; }
+.expense-cat-fill.cat-group { background: linear-gradient(90deg, #ff9a56, #ff6b35); }
+.expense-cat-fill.cat-flight { background: linear-gradient(90deg, #64b5f6, #1976d2); }
+.expense-cat-fill.cat-hotel { background: linear-gradient(90deg, #81c784, #388e3c); }
+
+.expense-group { margin-bottom: 14px; }
+.expense-group-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: #fafafa; border-radius: 8px 8px 0 0;
+  font-size: 13px; font-weight: 600; color: #555;
+  border: 1px solid #eee; border-bottom: none;
+}
+.expense-group-total { color: #ff6b35; }
+.expense-detail-table { border-radius: 0 0 8px 8px; }
+.expense-item-name { font-weight: 500; color: #333; }
+.expense-item-detail { color: #888; font-size: 12px; }
+
 /* ── Interview (求职面试备战) ──────────────────────────────── */
 .interview-view { padding: 0 0 20px; }
 .interview-head {
