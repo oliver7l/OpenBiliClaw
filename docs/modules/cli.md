@@ -452,7 +452,7 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 
 ### 命令组子模块结构（P4 重构）
 
-上帝文件 `cli/__init__.py` 正在按自洽簇拆分（2026-09-13 已完成四刀）：
+上帝文件 `cli/__init__.py` 正在按自洽簇拆分（2026-09-13 ~ 09-14 已完成六刀，7087 → 4038 行）：
 
 | 模块 | 内容 | patch 语义要点 |
 |------|------|--------------|
@@ -460,6 +460,7 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 | `cli/_cmd_usage.py` | `cost` / `logs-prune` | 被 patch 符号经函数内 `from openbiliclaw import cli as _cli` 动态取属性 |
 | `cli/_cmd_autostart.py` | `autostart` 组（3 命令） | 测试 patch 本体模块 `runtime.autostart` / `guards`，handler 延迟导入 |
 | `cli/_cmd_fetch.py` | fetch-\*/search-\*/discover-\* 平铺组（13 命令，`register(app)` 挂载） | 50+ 处共享符号调用全部 `_cli.X` 动态取；`_run_*_discovery` 等在 cli 命名空间 re-export 供 patch |
+| `cli/_cmd_init.py` | `init` 引导组（1 命令 + 11 个问询/落盘 helper，`register(app)` 挂载） | 11 类 patch 敏感符号（4 个本组 + 7 个外部）全部 `_cli.X` 动态取；`init` 等 10 个符号在 cli 命名空间 re-export |
 | `cli/_render.py` | 渲染共享 helper（`_print_page_title` / `_print_status_panel` / `_print_key_value_table` / `_print_discovered_content_preview`） | 测试须 patch 本体 `_render.console`，不得再 patch `cli.console` |
 
 子模块顶层**禁止** import `cli` 包本体（防循环依赖）；兄弟子模块互引允许。

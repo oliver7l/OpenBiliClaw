@@ -4,6 +4,44 @@
 
 ---
 
+## 重构：init 引导组抽离 _cmd_init（P4 第六刀，2026-09-14）
+
+- **抽离规模**：`init` 命令（372 行，含全部 typer 选项）+ 11 个问询 / 落盘 helper
+  （`_ask_*_inclusion` / `_ask_network_binding` / `_persist_api_host_choice` /
+  `_maybe_setup_password_in_init` / `_persist_init_source_enabled_flags` /
+  `_ask_init_bilibili_limits` / `_print_init_cost_summary` /
+  `_notify_running_server_init_completed` 等），共 **~988 行** → `cli/_cmd_init.py`；
+  经 `register(app)` 挂回主 app（命令名与形状不变）。`cli/__init__.py`
+  **5007 → 4038 行**（六刀累计 7087 → 4038，**-3049 行 / 约 -43%**）。
+- **patch 语义（本刀最难处）**：本组同时存在两类 patch 敏感符号——
+  ①本文件定义但测试 patch 到 `cli` 命名空间的 4 个
+  （`_ask_network_binding` / `_maybe_setup_password_in_init` /
+  `_notify_running_server_init_completed` / `_persist_api_host_choice`）；
+  ②外部定义（`runtime.init_flow` / 主文件）但同样被测 patch 的 7 个
+  （`_is_interactive_terminal` / `_prepare_init_runtime` / `_get_runtime_database` /
+  `_build_bilibili_client` / `_build_memory_manager` / `_build_soul_engine` /
+  `_run_init_discovery_backfill_async`，含无括号引用传值 `discover_backfill=...`）。
+  11 类全部改为**函数体内** `from openbiliclaw import cli as _cli` + `_cli.X` 动态取，
+  19 处调用经脚本改写；`_INIT_*` 常量与 `console` / `run_guided_init` /
+  `GuidedInitError` 属签名默认值 / 模块加载期求值，直接 `from
+  openbiliclaw.runtime.init_flow import`（与 `_render.py` 同源）。
+- **cli 命名空间 re-export 10 个符号**：`init`（`tests/cli` 经 `cli_module.init`
+  检查 `--yes-x` 签名）与 9 个直引 / patch 符号，避免测试补丁点漂移。
+- **方法论收益**：抽取前先做 AST 预扫（块内对外部顶层符号的裸名引用 + 测试
+  patch 目标统计），抽后跑 ruff F821 兜底——本次**一次通过、零 F821**
+  （第五刀曾靠 F821 抓出两批遗漏）。
+- **验证**：`tests/cli` **182 passed**（含新增守门 6 例）；cli 相关超集
+  （+network_isolation / event_format / ollama_supervisor）**215 passed**；
+  顶层 42 命令 worktree 对账一致；`init --help` 冒烟正常；
+  ruff + mypy（改动三文件）全绿。
+- 守门 `tests/cli/test_cli_init_module.py`（6 例）：顶层禁 import cli 本体、
+  命令数 42 对账、re-export 可见性与同一性、`cli_module.init` 签名、
+  `_cli.` 动态取语义检查、**行为锁**（patch `cli_module._is_interactive_terminal`
+  后 `_ask_xhs_inclusion` 必须走到 `typer.confirm`——若改回模块级 from-import
+  则该用例失败）。
+
+---
+
 ## 内容库 v2：收藏库吸收对话归档，打通「md → DB → 前端」三件套（2026-09-13）
 
 - **定位调整**：`notes/阅读收藏库/` 的 md 文件升为**内容单一数据源**，对话归档 DB 表

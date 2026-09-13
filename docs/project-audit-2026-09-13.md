@@ -272,7 +272,7 @@
    活跃脚本用的是下划线版）与 `data/tax_frames{,2,2_check}`（~9.7M，09-10 一次性提取的
    PNG 帧，代码/文档/JSON 状态/全部 DB 均零引用）已移入废纸篓（可还原）。
    `data/backups/`（1.9G 回滚点）**未动**——非紧急，保留与否仍由用户定。
-5. **P4 大重构**：🟡 已完成四刀（2026-09-13）——
+5. **P4 大重构**：🟡 已完成六刀（2026-09-13 ~ 09-14）——
    **第一刀**：`llm/registry.py` 与 `llm/_compat_registry.py` 的 **5 个逐字相同适配入口**
    （`build_llm_registry` / `build_embedding_service` / `summarize_registry` /
    `_maybe_openai_compatible_provider` / `_ollama_is_chat_capable`）已去重，唯一实现归
@@ -294,17 +294,24 @@
    挂载，命令形状不变）；50+ 处共享符号调用统一 `_cli.X` 动态取（ruff F821
    逐轮兜底补漏，含无括号引用传值形态）；`_print_discovered_content_preview`
    迁入 `_render`。守门 `tests/cli/test_cli_fetch_module.py`（5 例）。
-   四五刀累计 **7087 → 约5000 行**；顶层 42 命令 worktree 对账零丢失。
+   **第六刀**：init 引导组（`init` 命令 372 行 + 11 个问询/落盘 helper，共 ~988 行）
+   抽至 `cli/_cmd_init.py`；19 处共享符号调用 `_cli.X` 动态取（7 个外部被 patch
+   符号 + 4 个本组 patch 点）；`init` 及 9 个测试直引/patch 符号在 cli 命名空间
+   re-export（`cli_module.init` 签名检查等既有测试不变）。守门
+   `tests/cli/test_cli_init_module.py`（6 例，含「patch 经 cli 命名空间可命中」
+   的行为锁）。六刀累计 **7087 → 4038 行**（-3049，约 -43%）；顶层 42 命令
+   worktree 对账零丢失。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（init 引导 / fetch-* / discover-* 等）待续。
+   与上帝文件后续簇（profile 系 / probe / config 显示 / start 等约 40 命令与
+   构建 helper）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **6501 行**（已拆 note + cost/logs-prune 两簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（autostart / init 引导问询 / discover-* 等） |
+   | 上帝文件 | `cli/__init__.py` **4038 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init 五簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（profile 系 / probe / config 显示等） |
 
 ---
 
