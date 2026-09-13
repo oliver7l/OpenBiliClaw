@@ -43,6 +43,8 @@ ZHIHU_HELPER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zhihu_a
 XHS_CLI = shutil.which("xhs") or "/Users/imac/.local/bin/xhs"
 YTDLP = shutil.which("yt-dlp") or "/opt/homebrew/bin/yt-dlp"
 YT_PROXY = "http://127.0.0.1:7890"
+# 登录态 Cookie（Netscape）：data/youtube_cookies.txt，见 refill_youtube_subtitles.py 同名常量
+YT_COOKIE_FILE = os.path.join(BASE, "data", "youtube_cookies.txt")
 MAX_ATTEMPTS = 3
 TIMEOUT = 150
 MIN_BODY = 50
@@ -56,6 +58,18 @@ YT_LANG_PRIORITY = ["zh-Hans", "zh-CN", "zh", "zh-TW", "zh-Hant", "en"]
 
 def _run(cmd: list[str], timeout: int = TIMEOUT) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def _run_clean(cmd: list[str], timeout: int = TIMEOUT) -> subprocess.CompletedProcess:
+    """去掉 PYTHONPATH 后运行子进程。
+
+    在某些宿主环境（如带 sitecustomize shim 的沙箱）下，PYTHONPATH 会注入一个
+    sitecustomize，它拦截 ``Path.mkdir`` 且**不认 exist_ok=True**，导致
+    zhihu_cli 初始化缓存目录时抛 ``PermissionError: EEXIST``（目录已存在时）。
+    清掉 PYTHONPATH 即可正常导入。
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
 
 
 def fetch_autocli(url: str) -> str:
@@ -117,7 +131,7 @@ def fetch_zhihu_body(url: str) -> tuple[str, bool]:
         kind, oid = ("article", m.group(1)) if m else ("", "")
     if oid:
         try:
-            r = _run([ZHIHU_PY, ZHIHU_HELPER, kind, oid], timeout=60)
+            r = _run_clean([ZHIHU_PY, ZHIHU_HELPER, kind, oid], timeout=60)
             if r.returncode != 0 and not (r.stdout or "").strip():
                 return "", False  # 调用失败 → 保留重试
             text = (r.stdout or "").strip()
@@ -178,10 +192,10 @@ def _yt_run(url: str) -> str:
                 # --cookies-from-browser chrome: 过 YouTube bot 检测
                 # ("Sign in to confirm you're not a bot")；--remote-components
                 # ejs:github + 本机 deno: 解 JS challenge（n challenge）。
-                [YTDLP, "--proxy", YT_PROXY,
-                 "--cookies-from-browser", "chrome",
-                 "--remote-components", "ejs:github",
-                 "--skip-download", "--write-subs",
+                [YTDLP, "--proxy", YT_PROXY]
+                + (["--cookies", YT_COOKIE_FILE] if os.path.exists(YT_COOKIE_FILE) else
+                   ["--cookies-from-browser", "chrome", "--remote-components", "ejs:github"])
+                + ["--skip-download", "--write-subs",
                  "--sub-langs", "all", "--sub-format", "vtt",
                  "-o", os.path.join(td, "sub.%(ext)s"), url],
                 timeout=TIMEOUT,

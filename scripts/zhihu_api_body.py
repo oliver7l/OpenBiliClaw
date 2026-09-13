@@ -14,9 +14,18 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 
-from zhihu_cli.content.handlers.requests import session
+# 宿主环境可能通过 PYTHONPATH 注入 sitecustomize（沙箱 shim），它拦截 Path.mkdir
+# 且不认 exist_ok=True，会导致 zhihu_cli 初始化缓存目录时抛
+# `PermissionError: EEXIST ... cache/questions`。检测到就去掉 PYTHONPATH 重启自己。
+_pp = os.environ.get("PYTHONPATH") or ""
+if "sitecustomize" in _pp or "shim" in _pp:
+    os.environ.pop("PYTHONPATH", None)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+from zhihu_cli.content.handlers.requests import session  # noqa: E402
 from zhihu_cli.content.utils.html2markdown import converter
 
 API = {
