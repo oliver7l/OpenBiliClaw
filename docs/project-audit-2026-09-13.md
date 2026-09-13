@@ -278,9 +278,12 @@
    `_maybe_openai_compatible_provider` / `_ollama_is_chat_capable`）已去重，唯一实现归
    `_compat_registry`，`registry.py` 只转发（77 → 37 行）。
    **第二刀**：note 命令组（9 命令 + 服务工厂，~270 行）抽至 `cli/_cmd_notes.py`，
-   `cli/__init__.py` **7087 → 6815 行**；顶层 42 命令 worktree 对账零丢失；
    同刀修复 note 命令**静默 no-op**（`_APP_CONTEXT` 无 `data_dir`/`config` 写入点）与
    `Database` 未 `initialize()` 两个既有 bug，守门测试 `tests/cli/test_cli_notes_module.py`。
+   **第三刀**：`cost` / `logs-prune`（~320 行）抽至 `cli/_cmd_usage.py`（`register(app)`
+   模式，被 patch 符号经 `_cli.` 函数内动态取保 patch 语义），守门
+   `tests/cli/test_cli_usage_module.py`。三刀累计 **7087 → 6501 行**；顶层 42 命令
+   worktree 对账零丢失。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
    与上帝文件后续簇（autostart / init 引导 / fetch-* / discover-* 等）待续。
@@ -290,7 +293,7 @@
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **6815 行**（已拆 note 簇，剩约 50 命令）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（autostart / cost+logs-prune / init 引导问询等） |
+   | 上帝文件 | `cli/__init__.py` **6501 行**（已拆 note + cost/logs-prune 两簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（autostart / init 引导问询 / discover-* 等） |
 
 ---
 

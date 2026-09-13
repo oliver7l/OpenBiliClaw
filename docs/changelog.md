@@ -4,6 +4,22 @@
 
 ---
 
+## 重构：cost / logs-prune 抽离 _cmd_usage（P4 第三刀，2026-09-13）
+
+- 上帝文件 `cli/__init__.py` **6815 → 6501 行**（三刀累计 -586）。`cost` 与
+  `logs-prune`（~320 行）抽至 `cli/_cmd_usage.py`，经 `register(app)` 挂回主 app
+  （与 knowledge_forge 等外部命令组同款模式）。
+- **patch 语义保留**：cost 引用的 `_ensure_runtime_database_healthy` /
+  `_get_runtime_database` 在**函数体内**经 `from openbiliclaw import cli as _cli`
+  动态取属性——顶层 from-import 绑定会破坏 `monkeypatch.setattr(cli_module, ...)`
+  （项目已知坑）。守门测试 `tests/cli/test_cli_usage_module.py`（3 例）锁死：
+  命令注册对账、顶层 import cli 禁止、patched 符号必须 `_cli.` 动态取。
+- `logs-prune` 真机冒烟通过（DRY-RUN 计划表正常）；`cost` 冒烟受同刻后台
+  全量 pytest 占用运行库锁影响（`database is locked` 环境性），全量结束后复验。
+- 验证：守门 8 passed（notes 5 + usage 3）；ruff + mypy（改动三文件）全绿。
+
+---
+
 ## 修复：CLI note 命令组不可用 + 上帝文件第一簇抽离（2026-09-13）
 
 > P4 第二刀 + 顺带发现的两个既有 bug。`openbiliclaw note *` 全部 9 个命令

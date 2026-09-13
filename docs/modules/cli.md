@@ -443,6 +443,13 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 > 命令静默 no-op）且 `Database` 构造后未 `initialize()`——两个 bug 均已修，
 > note 命令自此端到端可用。
 
+### `openbiliclaw cost` 与 `openbiliclaw logs-prune`
+
+> 实现位置：`cli/_cmd_usage.py`（2026-09-13 自上帝文件 `cli/__init__.py` 抽出，
+> P4 第三刀，`register(app)` 模式）。对被测试 patch 的共享符号
+> （`_get_runtime_database` 等）在函数体内经 `from openbiliclaw import cli as _cli`
+> 动态取，保证 `monkeypatch.setattr(cli_module, ...)` 语义不变。
+
 ### `openbiliclaw note list`
 
 列出笔记，支持按类型、平台、标签筛选和全文搜索。
