@@ -157,9 +157,8 @@
     if (view === "insights") {
       loadAllInsights();
     }
-    // 进入人物视图时加载
+    // 进入人物视图时加载（人物统计由 diary-people.js 的 loadStats 负责）
     if (view === "people") {
-      loadPeopleData();
       renderFragments();
     }
     // 进入记忆视图时加载
@@ -202,24 +201,6 @@
     });
     container.insertBefore(hint, container.firstChild);
     localStorage.setItem(KEY_PREFIX + view, "1");
-  }
-
-  // 辅助函数：加载人物数据
-  function loadPeopleData() {
-    const el = document.getElementById("diaryPeopleStats");
-    if (!el) return;
-    fetch("/api/diary/people")
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) {
-          const elId = (id) => document.getElementById(id);
-          const setText = (id, v) => { const e = elId(id); if (e) e.textContent = v; };
-          setText("statTotalPersons", data.persons?.length || 0);
-          setText("statTotalTags", data.tags?.length || 0);
-          setText("statExtractedEntries", data.processed || 0);
-        }
-      })
-      .catch(() => {});
   }
 
   // 辅助函数：初始化自进化模块

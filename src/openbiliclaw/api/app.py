@@ -2674,7 +2674,6 @@ def create_app(
             rag.set_llm_service(llm_service)
         return rag
 
-    @app.get("/api/diary/rag/stats")
     def _serialize_recommendation_items(items: list[Any]) -> list[RecommendationOut]:
         return [
             RecommendationOut(

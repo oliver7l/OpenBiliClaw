@@ -35,13 +35,23 @@
 | `GET /api/config/apply-status` | `web/setup/index.html:762` | **404** |
 | `POST /api/embedding/repair` | `web/setup/index.html:1211` | **404** |
 
-**根因**：上游 `origin/main` 的 god-file `src/openbiliclaw/api/app.py` **有**这些端点
-（`apply-status` L17540、`discover-models` L18430、`embedding/repair` L6201）。本 fork 把 `app.py`
-的路由抽取到 `config_routes.py` 时**只迁了 `GET/PUT /api/config`**，这 3 条**没跟着迁、也没在内联保留**
-→ 「提取后没接线」的典型重构半成品。setup 页（沿用上游/已更新）因此调用到不存在的端点。
+**根因（2026-09-13 复核后更正）**：不是「抽取时漏迁一行」，而是**整块上游子系统从未合入本 fork**。
+本 fork 落后上游 `origin/main` **1328 个提交**；这 3 条端点及其依赖属于上游后续加入的能力，
+本 fork 从未有过。复核证据（依赖在本 fork 的存在性）：
+
+| 端点 | 上游实现规模 | 关键依赖 | 依赖在本 fork |
+|------|------------|---------|--------------|
+| `POST /api/embedding/repair` | ~200 行 | `llm/ollama_diagnostics.py`（448 行）+ repair 锁/状态/缓存 | ❌ 模块**整个不存在** |
+| `GET /api/config/apply-status` | 4 行 handler | `_config_apply_status_response` + config-apply 状态机（`config_apply_state/task/pending/...`） | ❌ 均无 |
+| `POST /api/config/discover-models` | ~16 行 | `_discover_llm_models` + `ConfigModelDiscoveryIn/Response` | ⚠️ 仅 `_apply_llm_update` 已有（`config_routes.py:415`） |
+
+关键提交 `d3aaa480`（新增 `ollama_diagnostics.py`）**仅在上游、不在本 fork main**（`merge-base --is-ancestor` 判定 NO）。
+而 setup 页之所以会调用它们，是本 fork 用户侧提交 `76d965c8`（2026-09-01「feat: 阅读库/多源抓取/质量评分与前端迭代」）
+把**上游新版 setup 页**引入了前端、但后端未同步 **→ 前端超前于后端**。
 
 **影响**：setup 向导的「模型发现」「配置热重载状态轮询」「embedding 修复」三项不可用。
-**修法（低风险）**：把上游这 3 个 handler 迁到 `config_routes.py` / 对应模块（或内联补回）。
+**修法**：这不是「补一行接线」，而是**移植上游子系统**（工作量按上表，embedding/repair 最重）。
+需先决策（见 §7）：① 完整移植 3 个子系统；② 只移植轻量的 `discover-models`；③ 让 setup 页对齐本 fork 现有能力（删/禁用对应 UI）。
 
 ### 🔴 F2：`GET /api/diary/rag/stats` 恒 422 —— 装饰器误挂 + 注册遮蔽
 
@@ -56,13 +66,26 @@
 **影响**：日记 RAG 统计接口不可用（用户点得到）。
 **修法**：删掉 `app.py:2677` 那行误挂的 `@app.get(...)` 装饰器（保留 L6514 的传参用法）。
 
+> ✅ **已修（2026-09-13）**：已删除该装饰器，实测 `GET /api/diary/rag/stats` 由 **422 → 200**。
+> 回归测试见 `tests/api/test_api_route_regressions.py::test_diary_rag_stats_route_not_shadowed`
+>（断言胜出 handler 为 `diary_rag_stats`；已验证在未修复代码下会失败）。
+
 ### 🟠 F3：`GET /api/diary/people` 405 —— 前后端命名漂移
 
 **现象**：`GET /api/diary/people` → **405**（因被 `/api/diary/{entry_id}` 的 PUT/DELETE 兜底命中，返回 405 而非 404，掩盖了问题）。
 **证据**：`web/desktop/assets/js/diary-insights.js:211` 调 `/api/diary/people`，期望 `{persons,tags,processed}`；
 但后端只有 `/api/diary/persons`（`app.py:6416` + `diary_routes.py:1556`），且**同项目**另一个文件
 `diary-people.js:78` 用的就是正确的 `persons`。→ 前端内部不一致 + 命名漂移。
-**修法**：把 `diary-insights.js:211` 改为 `/api/diary/persons`（并核对返回字段名）。
+
+> ⚠️ **修法更正（2026-09-13 复核）**：本报告初稿写的「改名为 `persons`」是**错的**——两者响应结构根本不匹配：
+> `/api/diary/persons` 返回 `{ok, data:[...], total}`，而 `loadPeopleData` 期望 `{ok, persons, tags, processed}`。
+> 复核后确认 `loadPeopleData`（`diary-insights.js`）是**被 `diary-people.js` 取代的遗留死代码**：
+> 同一批统计卡片（`statTotalPersons`/`statTotalTags`/`statExtractedEntries`）已由
+> `diary-people.js:53 loadStats()` 走正确端点 `/api/diary/extraction-stats` 填充。
+> **真正的修法 = 删除死代码**（删 `loadPeopleData` 的调用与定义），而非改名。
+>
+> ✅ **已修（2026-09-13）**：已删除 `loadPeopleData`（调用 + 定义）。回归测试见
+> `tests/api/test_api_route_regressions.py::test_frontend_does_not_call_removed_diary_people_endpoint`。
 
 ---
 
@@ -133,19 +156,21 @@
 
 ## 6. 建议动作（按风险升序）
 
-| 优先级 | 动作 | 风险 | 说明 |
+| 优先级 | 动作 | 风险 | 状态 |
 |--------|------|------|------|
-| **P0** | 修 F2：删 `app.py:2677` 误挂装饰器 | 极低 | 一处删除，恢复 `/api/diary/rag/stats` |
-| **P0** | 修 F3：`diary-insights.js:211` 改用 `persons` | 极低 | 单行 |
-| **P1** | 修 F1：迁回 setup 3 端点（discover-models / apply-status / embedding-repair） | 低 | 参照上游 `origin/main` 的 app.py 实现 |
-| **P1** | 清 F1 的 39 条重复路由：确认后删 `app.py` 内联副本 | 中 | 逐条验证再删，跑全量测试回归 |
-| **P2** | `data/` 孤儿/重复目录清理（v2ex-hot-hub + tax_frames*） | 低 | 先出 `cleanup-manifest-2026-09-13.md` 再移废纸篓 |
+| **P0** | 修 F2：删 `app.py:2677` 误挂装饰器 | 极低 | ✅ **已完成**（+ 回归测试） |
+| **P0** | 修 F3：删 `diary-insights.js` 死的 `loadPeopleData` | 极低 | ✅ **已完成**（+ 回归测试） |
+| **P1** | 修 F1：setup 3 端点（实为**移植上游 3 个子系统**，见 §1） | 中 | ⏸ 待决策（§7） |
+| **P1** | 清 39 条重复路由：确认后删 `app.py` 内联副本 | 中 | ⏸ 待决策（§7） |
+| **P2** | `data/` 孤儿/重复目录清理（v2ex-hot-hub + tax_frames*） | 低 | ⏸ 待决策（§7） |
 
 ---
 
 ## 7. 待用户拍板
 
-1. **F1 的 3 个 setup 端点**：是**补回实现**（推荐，上游有现成实现可参照），还是**删掉 setup 页对应 UI**？
+1. **F1 的 3 个 setup 端点**（实为移植上游子系统，见 §1 依赖表）——选其一：
+   ① 完整移植（含 448 行 `ollama_diagnostics` + config-apply 状态机）；② 只移植轻量的 `discover-models`；
+   ③ 让 setup 页对齐本 fork 现有能力（删/禁用对应 UI）。
 2. **39 条重复路由**：是否启动「删 app.py 内联副本、模块单点负责」的收敛（需配套回归测试）？
 3. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
 4. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？

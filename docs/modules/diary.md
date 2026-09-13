@@ -180,6 +180,10 @@ count, entries = importer.import_markdown_file("path/to/diary.md")
 | POST | `/api/diary/fragments/{id}/auto-tag` | AI 自动标注碎片 |
 | POST | `/api/diary/fragments/auto-tag-batch` | 批量自动标注 |
 | POST | `/api/diary/fragments/generate-diary` | 从碎片生成日记 |
+| **人物与标签** | | |
+| GET | `/api/diary/persons?relation=&limit=&min_appearances=` | 人物列表（可按关系筛选） |
+| GET | `/api/diary/persons/{person_id}` | 人物详情（含相关日记） |
+| GET | `/api/diary/extraction-stats` | 人物/标签提取统计（供「人物与标签」视图卡片，见 `diary-people.js`） |
 | **反思回顾** | | |
 | GET | `/api/diary/reflection/weekly-stats?date=YYYY-MM-DD` | 周报统计 |
 | POST | `/api/diary/reflection/weekly-report` | AI 生成周报 |

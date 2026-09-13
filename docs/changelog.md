@@ -4,6 +4,24 @@
 
 ---
 
+## 修复：日记 RAG 统计恒 422 + 人物视图死代码（2026-09-13）
+
+> 来源：`docs/project-audit-2026-09-13.md` 的 P0 两项（F2 / F3）。
+
+- **F2 `GET /api/diary/rag/stats` 恒 422**：`api/app.py` 把 `@app.get("/api/diary/rag/stats")`
+  误挂在了**序列化辅助函数** `_serialize_recommendation_items(items: list[Any])` 之上（该函数本应作
+  `serialize_recommendation_items=` 传参，不是路由）。它先注册即**遮蔽**了 `diary_routes` 里的正确实现
+  `diary_rag_stats`，并因签名被 FastAPI 当成必填 body → 恒 422。删除该误挂装饰器，实测 **422 → 200**。
+- **F3 人物视图死代码**：`web/desktop/assets/js/diary-insights.js` 的 `loadPeopleData()` 调用后端
+  不存在的 `/api/diary/people`（期望 `{persons,tags,processed}`）。经复核这是**被 `diary-people.js`
+  取代的遗留死代码**——同一批统计卡片已由后者走正确端点 `/api/diary/extraction-stats` 填充。
+  删除该死代码（调用 + 定义）。
+- **回归测试**：新增 `tests/api/test_api_route_regressions.py`（4 例），断言
+  `/api/diary/rag/stats` 的胜出 handler 为 `diary_rag_stats`、隔离环境下该端点不返回 422、
+  `/api/diary/persons` 已注册、前端资产不再引用 `/api/diary/people`。已验证未修复代码下会失败。
+
+---
+
 ## v0.3.246: 对话归档模块（补记 —— 2026-09-11 已合入、changelog 漏记）
 
 - **背景**：对话归档随 `975b0b3a` 合入，但当时 v0.3.242 编号被同日合入的
