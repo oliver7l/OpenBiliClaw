@@ -378,7 +378,7 @@ def get_reviews(limit: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
 
 def _scan_ammo_dir(company_dir: Path) -> dict[str, Any]:
     """扫描单个公司的弹药库目录。"""
-    result = {
+    result: dict[str, Any] = {
         "company": company_dir.name.replace("-面试准备", ""),
         "path": str(company_dir),
         "categories": {},
@@ -395,7 +395,7 @@ def _scan_ammo_dir(company_dir: Path) -> dict[str, Any]:
         cat_dir = company_dir / cat_dir_name
         if not cat_dir.exists():
             continue
-        files = []
+        files: list[dict[str, Any]] = []
         for f in cat_dir.iterdir():
             if f.is_file() and not f.name.startswith("."):
                 stat = f.stat()
@@ -410,12 +410,12 @@ def _scan_ammo_dir(company_dir: Path) -> dict[str, Any]:
         files.sort(key=lambda x: x["mtime"], reverse=True)
         result["categories"][cat_label] = files
         # 收集关键文件（最新的3个）
-        for f in files[:3]:
+        for row in files[:3]:
             result["key_files"].append({
                 "category": cat_label,
-                "name": f["name"],
-                "mtime": f["mtime"],
-                "size_kb": f["size_kb"],
+                "name": row["name"],
+                "mtime": row["mtime"],
+                "size_kb": row["size_kb"],
             })
     # 通用模块索引
     index_file = company_dir / "04_通用模块索引.md"

@@ -373,9 +373,9 @@ def _review_service() -> InterviewReviewService | None:
     project_root = Path(__file__).resolve().parents[3]
     db_path = project_root / "data" / "interview.db"
     try:
-        from openbiliclaw.config import load_settings
+        from openbiliclaw.config import load_config
 
-        settings = load_settings()
+        settings = load_config()
         if settings.storage.interview_db_path:
             p = Path(settings.storage.interview_db_path)
             db_path = p if p.is_absolute() else project_root / p

@@ -167,8 +167,8 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         """面试专题库（从 interview.db 的 kb_documents 表读取，doc_type=面试专题）。"""
         db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
         try:
-            from openbiliclaw.config import load_settings
-            settings = load_settings()
+            from openbiliclaw.config import load_config
+            settings = load_config()
             if settings.storage.interview_db_path:
                 p = Path(settings.storage.interview_db_path)
                 db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
@@ -196,8 +196,8 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         """面试专题详情（含完整内容）。"""
         db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
         try:
-            from openbiliclaw.config import load_settings
-            settings = load_settings()
+            from openbiliclaw.config import load_config
+            settings = load_config()
             if settings.storage.interview_db_path:
                 p = Path(settings.storage.interview_db_path)
                 db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
@@ -216,8 +216,8 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     def _scripts_db() -> str:
         db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
         try:
-            from openbiliclaw.config import load_settings
-            settings = load_settings()
+            from openbiliclaw.config import load_config
+            settings = load_config()
             if settings.storage.interview_db_path:
                 p = Path(settings.storage.interview_db_path)
                 return str(p if p.is_absolute() else Path(__file__).resolve().parents[3] / p)
