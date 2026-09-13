@@ -450,6 +450,19 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 > （`_get_runtime_database` 等）在函数体内经 `from openbiliclaw import cli as _cli`
 > 动态取，保证 `monkeypatch.setattr(cli_module, ...)` 语义不变。
 
+### 命令组子模块结构（P4 重构）
+
+上帝文件 `cli/__init__.py` 正在按自洽簇拆分（2026-09-13 已完成四刀）：
+
+| 模块 | 内容 | patch 语义要点 |
+|------|------|--------------|
+| `cli/_cmd_notes.py` | `note` 组（9 命令） | 配置经 `load_config().data_path` 自取 |
+| `cli/_cmd_usage.py` | `cost` / `logs-prune` | 被 patch 符号经函数内 `from openbiliclaw import cli as _cli` 动态取属性 |
+| `cli/_cmd_autostart.py` | `autostart` 组（3 命令） | 测试 patch 本体模块 `runtime.autostart` / `guards`，handler 延迟导入 |
+| `cli/_render.py` | 渲染共享 helper（`_print_page_title` / `_print_status_panel` / `_print_key_value_table`） | 测试须 patch 本体 `_render.console`，不得再 patch `cli.console` |
+
+子模块顶层**禁止** import `cli` 包本体（防循环依赖）；兄弟子模块互引允许。
+
 ### `openbiliclaw note list`
 
 列出笔记，支持按类型、平台、标签筛选和全文搜索。

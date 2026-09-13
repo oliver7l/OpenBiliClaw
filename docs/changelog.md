@@ -4,6 +4,32 @@
 
 ---
 
+## 重构：autostart 组 + 渲染 helper 抽离；修降级面板测试补丁点漂移（P4 第四刀，2026-09-13）
+
+- 上帝文件 `cli/__init__.py` **6501 → 6298 行**（四刀累计 -789）。`autostart`
+  命令组（3 命令 + 8 helper，~190 行）抽至 `cli/_cmd_autostart.py`；三个渲染
+  helper（`_print_page_title` / `_print_status_panel` / `_print_key_value_table`）
+  抽至共享模块 `cli/_render.py`（主文件与三个命令组子模块共用，消除渲染复制）。
+- **patch 语义**：autostart 测试 patch 的是本体模块 `runtime.autostart` /
+  `runtime.autostart.guards`（register/unregister/get_manager/autostart_shadowed），
+  handler 内延迟导入不变 → 补丁点天然不受抽离影响。
+- **真回归发现与修复**：`_run_api_server` 降级面板测试
+  （`test_run_api_server_prints_degraded_mode_panel`）在第三刀后隐性挂——helper
+  抽离后其 console 本体迁至 `_render`，测试仍 patch `cli_module.console` → 补丁
+  点失效、断言空串。第三刀时被同刻 `database is locked` 环境错误**掩盖**。修复：
+  测试补丁点迁至本体模块 `_render.console`（项目铁律「patch 必须打本体模块」），
+  并在守门测试中新增「本体补丁生效性」用例锁死。
+- 守门测试 `tests/cli/test_cli_autostart_module.py`（5 例）：`_cmd_autostart` /
+  `_render` 顶层禁 import cli 本体（**兄弟子模块互引允许**）、autostart 组挂载、
+  渲染 helper 的 `_render.console` 本体补丁生效性。
+- `autostart status` 真机冒烟通过（launchd 状态表正常）；顶层 42 命令 worktree
+  对照 HEAD 对账一致。
+- 验证：`tests/cli` **171 passed**；ruff + mypy（改动三文件）全绿。另：上一轮
+  后台全量 109 failed 经抽查（ed2k 单跑通过）确认为沙箱 `PermissionError:
+  Sensitive command` 环境性假失败，非代码回归。
+
+---
+
 ## 重构：cost / logs-prune 抽离 _cmd_usage（P4 第三刀，2026-09-13）
 
 - 上帝文件 `cli/__init__.py` **6815 → 6501 行**（三刀累计 -586）。`cost` 与

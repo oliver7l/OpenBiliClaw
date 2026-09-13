@@ -272,21 +272,27 @@
    活跃脚本用的是下划线版）与 `data/tax_frames{,2,2_check}`（~9.7M，09-10 一次性提取的
    PNG 帧，代码/文档/JSON 状态/全部 DB 均零引用）已移入废纸篓（可还原）。
    `data/backups/`（1.9G 回滚点）**未动**——非紧急，保留与否仍由用户定。
-5. **P4 大重构**：🟡 已完成前两刀（2026-09-13）——
+5. **P4 大重构**：🟡 已完成四刀（2026-09-13）——
    **第一刀**：`llm/registry.py` 与 `llm/_compat_registry.py` 的 **5 个逐字相同适配入口**
    （`build_llm_registry` / `build_embedding_service` / `summarize_registry` /
    `_maybe_openai_compatible_provider` / `_ollama_is_chat_capable`）已去重，唯一实现归
    `_compat_registry`，`registry.py` 只转发（77 → 37 行）。
-   **第二刀**：note 命令组（9 命令 + 服务工厂，~270 行）抽至 `cli/_cmd_notes.py`，
+   **第二刀**：note 命令组（9 命令 + 服务工厂，~270 行）抽至 `cli/_cmd_notes.py`；
    同刀修复 note 命令**静默 no-op**（`_APP_CONTEXT` 无 `data_dir`/`config` 写入点）与
    `Database` 未 `initialize()` 两个既有 bug，守门测试 `tests/cli/test_cli_notes_module.py`。
-   **第三刀**：`cost` / `logs-prune`（~320 行）抽至 `cli/_cmd_usage.py`（`register(app)`
-   模式，被 patch 符号经 `_cli.` 函数内动态取保 patch 语义），守门
-   `tests/cli/test_cli_usage_module.py`。三刀累计 **7087 → 6501 行**；顶层 42 命令
-   worktree 对账零丢失。
+   **第三刀**：`cost` / `logs-prune`（~320 行）抽至 `cli/_cmd_usage.py`；patch 语义
+   经「函数体内 `from openbiliclaw import cli as _cli` 动态取属性」保留（cost 的
+   `_ensure_runtime_database_healthy` / `_get_runtime_database`），守门
+   `tests/cli/test_cli_usage_module.py`。
+   **第四刀**：autostart 组（3 命令 + 8 helper）抽至 `cli/_cmd_autostart.py`；三个渲染
+   helper 抽至共享 `cli/_render.py`；同刀发现并修复第三刀引入的隐性回归——降级面板
+   测试补丁点漂移（helper console 本体迁至 `_render`，测试仍 patch `cli.console` →
+   空串断言，且曾被 `database is locked` 环境错误掩盖），修复=补丁点迁至本体模块。
+   守门：`tests/cli/test_cli_autostart_module.py`（5 例，含本体补丁生效性）。
+   四刀累计 **7087 → 6298 行**（-789）；顶层 42 命令 worktree 对账零丢失。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（autostart / init 引导 / fetch-* / discover-* 等）待续。
+   与上帝文件后续簇（init 引导 / fetch-* / discover-* 等）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|

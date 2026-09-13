@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
+import openbiliclaw.cli._render as render_module
 import openbiliclaw.runtime.init_flow as init_flow_module
 from openbiliclaw import cli as cli_module
 from openbiliclaw import config as config_module
@@ -1015,12 +1016,12 @@ def test_run_api_server_prints_degraded_mode_panel(
     )
     run_calls: list[dict[str, object]] = []
 
-    monkeypatch.setattr(
-        cli_module,
-        "console",
-        Console(file=output, force_terminal=False, width=120),
-        raising=False,
-    )
+    # 降级面板由 cli/_render.py 的 helper 渲染（P4 第四刀抽离）——按项目
+    # 惯例 patch 本体模块的 console；cli_module.console 一并 patch 兜底
+    # 主文件内其它直接打印。
+    fake_console = Console(file=output, force_terminal=False, width=120)
+    monkeypatch.setattr(cli_module, "console", fake_console, raising=False)
+    monkeypatch.setattr(render_module, "console", fake_console, raising=False)
     monkeypatch.setattr(api_app, "create_app", lambda: fake_app)
     monkeypatch.setattr(
         "uvicorn.run",
