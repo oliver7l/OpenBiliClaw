@@ -16,7 +16,20 @@
 - **双前端**：桌面 `/web/conversation-archive` 页面 + 移动端 `/m`「对话归档」tab（卡片 +
   details 展开原文/分析，搜索 250ms 防抖）。
 - **导入脚本**：`scripts/import_conversation_archive.py`（首批 13 条知乎问答原文与分析入库）。
-- ⚠️ **待补**：模块目前尚无单元测试（AGENTS.md 要求新增功能默认同时补充单元测试）。
+- ⚠️ **待补**：模块当时尚无单元测试（AGENTS.md 要求新增功能默认同时补充单元测试）。
+
+---
+
+## v0.3.246 增补：对话归档单元测试 + 两处缺陷修复（2026-09-13）
+
+- **补单元测试**：新增 `tests/conversation_archive/test_conversation_archive.py`（17 例，全绿），覆盖
+  存储层（建表 / upsert 幂等 / 批量 / 列表排序 / FTS 搜索 / 详情 / 统计）与 API 路由
+  （列表 / 详情 / stats / 创建 / 批量导入 / 无库 503）。不依赖真实主库或 LLM。
+- **修复 `upsert_many` 返回值**：旧实现返回「行 id 之和」而非导入条数，`import` 端点的 `imported`
+  字段会显示错误数字；改为返回 `len(records)`。
+- **修复 `database=` 模式不建表**：旧 `conn` 在 `database=` 下跳过 `_initialize_tables`，未跑过
+  import 脚本时 API 会报 no such table；对齐 `chat_analysis` 同源模式，首次访问懒建表（DDL 幂等），API 自愈。
+- **文档**：`docs/modules/conversation_archive.md` 去掉「无单元测试」旧结论，补充测试小节与两处缺陷说明。
 
 ---
 

@@ -125,7 +125,26 @@ CREATE TABLE IF NOT EXISTS conversation_archive (
 
 ## 已知问题
 
-- **无单元测试**：模块目前只有手工验证（建表、upsert、搜索、stats），未建 `tests/conversation_archive/`。
 - **`tags` 反序列化容错**：JSON 解析失败时静默降级为空列表，脏数据不会报错但也不会暴露。
 - **导入脚本内含数据**：`scripts/import_conversation_archive.py` 的 `RECORDS` 直接写死了 1–13 条的
   元数据与原文路径，属于一次性搬迁脚本；新增条目建议直接调 API 或另写脚本。
+
+## 测试
+
+`tests/conversation_archive/test_conversation_archive.py` 覆盖两层，不依赖真实主库 / LLM：
+
+- **存储层 `ConversationArchiveStore`**：建表（db_path 模式触发）、`upsert_item` 幂等（同 `seq` 复用行）、
+  `upsert_many` 返回导入条数、列表默认排序、按 `voteup_count` 倒序、分页、FTS5 全文搜索命中、
+  `get_item` 命中 / 缺失、tags JSON 往返、统计聚合（total / by_kind / by_author / with_original / with_analysis）。
+- **API 路由**：列表、详情（命中 / 404）、stats、创建（缺 `seq` → 400 / 正常 → 201）、
+  批量导入（非 list → 400 / 正常）、数据库不可用时统一 503。
+
+### 历史上修复的两个缺陷（与测试同批）
+
+1. **`upsert_many` 返回值错误**：旧实现 `return sum(self.upsert_item(r) for r in records)`，
+   而 `upsert_item` 返回的是**行 id**，导致批量导入实际返回「id 之和」而非导入条数
+   （如 seq=1→id1、seq=2→id2，返回 3 而非 2）。已改为 `return len(records)`，import 端点的
+   `imported` 字段现在报告真实条数。
+2. **`database=` 模式不建表**：旧 `conn` 在 `database=` 下直接 `return self._database.conn`，
+   跳过 `_initialize_tables`，导致**若未跑过 import 脚本，API 会报 no such table**。已对齐
+   `chat_analysis/store.py` 的同源模式——`database=` 下首次访问也懒建表（DDL 幂等），API 自愈。

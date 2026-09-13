@@ -101,7 +101,13 @@ class ConversationArchiveStore:
     @property
     def conn(self) -> sqlite3.Connection:
         if self._database:
-            return self._database.conn
+            conn = self._database.conn
+            # 与 chat_analysis 同源模式：database= 模式下也懒建表（DDL 幂等），
+            # 这样即便没跑过 import 脚本，API 也能自愈，不会报 no such table。
+            if not self._initialized:
+                self._initialize_tables(conn)
+                self._initialized = True
+            return conn
         return self._get_conn()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -171,7 +177,10 @@ class ConversationArchiveStore:
         return row["id"] if row else c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     def upsert_many(self, records: list[dict[str, Any]]) -> int:
-        return sum(self.upsert_item(r) for r in records)
+        """批量写入，返回导入条数（非行 id 之和）。"""
+        for r in records:
+            self.upsert_item(r)
+        return len(records)
 
     # ── 读取 ──
 
