@@ -4,6 +4,113 @@
 
 ---
 
+## v0.3.246: 对话归档模块（补记 —— 2026-09-11 已合入、changelog 漏记）
+
+- **背景**：对话归档随 `975b0b3a` 合入，但当时 v0.3.242 编号被同日合入的
+  「阅读库正文补抓链路修复」占用，造成本模块在 changelog 里长期缺失，此处补记。
+- **存储 `ConversationArchiveStore`**：单表 `conversation_archive` + FTS5 trigram 全文索引
+  （`user_question` / `question_title` / `author` / 原文 / 分析 五列），提供
+  `upsert_item` / `upsert_many` / `list_items` / `get_item` / `count_items` / `get_stats`。
+- **API**：`register_conversation_archive_routes()` 注册 5 个端点 —— 列表（分页 + 排序 +
+  search）、详情、stats、新增、批量 import。
+- **双前端**：桌面 `/web/conversation-archive` 页面 + 移动端 `/m`「对话归档」tab（卡片 +
+  details 展开原文/分析，搜索 250ms 防抖）。
+- **导入脚本**：`scripts/import_conversation_archive.py`（首批 13 条知乎问答原文与分析入库）。
+- ⚠️ **待补**：模块目前尚无单元测试（AGENTS.md 要求新增功能默认同时补充单元测试）。
+
+---
+
+## v0.3.245: YouTube 补抓支持代理 IP 池轮换 —— 多出口防封（2026-09-12）
+
+- **动机**：YouTube 对匿名抓取按出口 IP 风控，单节点高频请求会被打进黑名单
+  （"Sign in to confirm you're not a bot"）。把多个 Clash 节点 / 住宅代理的 endpoint
+  当作 IP 池轮换，可摊薄单 IP 请求频率，降低整批报废概率。
+- **新增代理 IP 池 `get_proxy_pool()`**：读取优先级 `--proxy-pool` 命令行 >
+  环境变量 `YT_PROXY_POOL` > 单代理 `PROXY`（默认 `http://127.0.0.1:7890`）兜底。
+  多个出口逗号分隔，例如
+  `YT_PROXY_POOL="socks5://127.0.0.1:7890,socks5://127.0.0.1:7891,http://127.0.0.1:7892"`。
+- **逐条视频轮询出口**：主循环以视频 `id` 为锚点轮询不同出口（相邻视频分散到不同 IP）；
+  某出口命中 bot 检测时**自动换下一个出口重试**（单条最多试 `min(池大小, 3)` 个），
+  只有所有出口都 bot 才熔断本轮——避免"一个 IP 被封就整批废掉"。
+- **向后兼容**：不设 `YT_PROXY_POOL` 时退化为单代理，bot 即熔断，逻辑与改动前一致。
+- **验证**：`py_compile` + dry-run + 真实 `limit 1` 冒烟测试通过，确认 bot 熔断**不误耗重试次数**。
+- **配套 Clash 方案**（文档提示，非代码）：在客户端建 `type: load-balance` 策略组
+  （`strategy: round-robin`，把订阅节点全列上），rules 将 `youtube.com` / `googlevideo.com`
+  指过去；yt-dlp 仍走单混合端口即可实现节点 IP 池轮换。⚠️ 勿用 `consistent-hashing`（会锁死单域名单 IP）。
+- **局限**：同机场 / 同 ASN 的数据中心节点 YouTube 仍可能整段封，真正稳需住宅代理。
+- **同日追加修复 · Cookie 才是真根因**：实测发现仅换 IP 仍报 bot 检测，根因是
+  `data/youtube_cookies.txt` 残缺（导出时只拿到 `__Secure-3PSID` 等分区 Cookie，
+  缺 `SID/HSID/SSID/SAPISID/APISID/LOGIN_INFO` 核心鉴权项），YouTube 把匿名会话当 bot。
+  改用浏览器实时 Cookie 后（2739 条完整 Cookie）**彻底绕过** bot 检测，
+  5/5 验证全部成功抓到字幕写回。新增 `--cookies-from-browser <browser>` 开关
+  （等价于 `YT_COOKIES_FROM_BROWSER` 环境变量），浏览器 Cookie 优先、文件兜底；
+  需对应浏览器（Chrome）运行时可用。后续 YouTube 批次统一走此通道。
+  ⚠️ 之前 16 行的 `data/youtube_cookies.txt` 已失效，勿再用。
+
+---
+
+## v0.3.244: 周末怎么玩模块上线 —— 本地优先的周末计划生成器（2026-09-11）
+
+- **新增垂直模块 `src/openbiliclaw/weekend/`**：把日记情绪、豆瓣想看/想读、灵魂画像、本地活动种子聚合成一份带「为什么适合你」理由的周末计划，产出 3 个可执行方案 + 事后打卡复盘。
+- **引擎 `WeekendEngine`**：`generate(mode='auto')` 依据近 14 天情绪基线决定混合方案（出门 + 宅家×2，共 3 个），出行活动按「优先区域宝安/南山/福田 + 免费 + 带娃/独处」评分分组；宅家方案读豆瓣 `wish` 列表给出书/影弹药。`use_llm=true` 时仅润色文案、失败回退规则（failsafe）。
+- **存储 `WeekendStore`**：`data/weekend.db` 三表 `weekend_spots` / `weekend_plans` / `weekend_checkins`，UPSERT 导入、`saturday_of_week()` 以周六为周键（周一~周六取本周六，周日回退刚过去的周六）。
+- **周五主动推送**：运行时 `_loop_weekend_plan`（600s 轮询）仅周五 18:00–23:00 且本周尚未生成时触发，发布 `weekend.plan` 事件。
+- **双入口一致**：CLI `openbiliclaw weekend`（generate/plans/spots/decide/checkin/seed）+ API `/api/weekend/*` 共用 `WeekendStore`/`WeekendEngine`；沿用 `interview` 模块的「CLI register + 路由注册表 + `WeekendConfig` + 运行时 loop」四件套，全部 `try/except` 包裹。
+- **配置 `[weekend]`**：`enabled` / `db_path` / `auto_friday_push` / `friday_push_hour` / `use_llm` / `seed_path` / `online_providers`（默认空，保持本地优先）。
+- **种子数据**：`data/weekend_seed_activities.json` 收录深圳周末指南 vol.288 的 6 个真实本地活动（香菜节/职人循环派对/南山八景征文/机场双展/腾讯长鹅快闪/沙井古墟）。
+- **测试**：`tests/weekend/test_weekend_module.py` 共 10 个用例覆盖模型、存储、生成、周五门控、`saturday_of_week` 边界；`ruff` + `mypy` 全清。
+
+---
+
+## v0.3.243: 日记情绪回写链路修复 —— 画像情绪维度从 100% unknown 复活（2026-09-11）
+
+- **根因**：`EmotionAnalyzer.analyze_diary()` 只写 `diary_emotion_analyses`，从不回写
+  `diary_entries.mood` / `mood_score`；而 `SelfEvolutionService._calculate_emotional_baseline()`
+  读的正是后者。存量 925 篇日记全部命中，`emotional_baseline` 恒为
+  `{"unknown": 925, "average_mood": 0, "volatility": 0}` —— 情绪维度一直是死的。
+- **修复 1 · 分析即回写**：分析写表后同步 `UPDATE diary_entries SET mood/mood_score`，
+  按 `MOOD_LEVEL_BY_EMOTION_LABEL` 把 15 种细粒度标签映射回 `MoodLevel`。
+- **修复 2 · 历史可回填**：新增 `EmotionAnalyzer.backfill_entry_moods(only_unknown=True)`，
+  默认只补 `mood='unknown'` 的条目，保留人工标注；`only_unknown=False` 可强制覆盖。
+- **修复 3 · 画像不再空转**：`_calculate_emotional_baseline()` 改为优先读
+  `diary_emotion_analyses` 的 valence + 标签，无分析结果时才回退条目字段，
+  并在结果里新增 `source` 字段标注数据来源。
+- **顺带修死代码**：原 `analyze_diary()` 里 `float(row["mood"])` 恒抛 ValueError 被吞
+  （`mood` 是 `"happy"` 这类枚举字符串不是数字），"融合原始 mood" 从未生效。改为
+  `MOOD_PRIOR_VALENCE` + 显式开关 `use_mood_prior`（**默认关闭**）——因为 `mood` 是本
+  方法的输出而非输入，默认开启会让回填后的条目每次重跑被上一轮压 0.6 倍、效价衰减到 0。
+- **脚本**：新增幂等的 `scripts/backfill_diary_moods.py`（回填 + 重建画像，打印前后分布）。
+  已对 `data/diary.db` 执行：925 条全部回填，`emotional_baseline` 现为
+  average_mood 0.243 / volatility 0.341 / 正面 61.4% / 负面 11.7% / 中性 26.9%。
+  执行前已备份 `data/backups/diary-before-mood-backfill-20260911-222758.db`。
+- **测试**：新增 `tests/diary/test_diary_emotion_backfill.py`（19 例）；`tests/diary` 全绿 58 例。
+
+## v0.3.242: 阅读库正文补抓链路修复 + 得到大脑兜底通道（2026-09-11）
+
+- 修复 `scripts/refill_article_bodies.py` / `refill_library_bodies_v2.py`：v0.4.0 拆库时
+  补的 ATTACH 代码块缩进错（顶格 `try:`），导致 `db` 未定义、两个脚本**完全跑不起来**，
+  拆库后正文补抓实际一直是停摆状态。
+- 知乎通道改用直连接口：新增 `scripts/zhihu_api_body.py`（复用 zhihu CLI 登录态打
+  `api.zhihu.com/answers|articles/{id}`，html2markdown 转正文）——新版 zhihu CLI 已移除
+  `answer` / `article` 子命令，旧调用 100% 失败。
+- 小红书语义修正：风控（CAPTCHA / noteDetailMap 为空）不再判成"确认无正文"，
+  裸链（无 xsec_token）单列跳过、**不消耗重试次数**，避免一次性废掉 4 万条队列。
+- YouTube 通道修正：`_yt_permanent` 里的 "Sign in" 会把 "Sign in to confirm you're
+  not a bot" 误判为永久无字幕（一天废掉 196 条）；改为独立 `_yt_bot_blocked` 检测，
+  命中即熔断停止且不计重试次数。已重置被误标的 404 条。
+- 新增 `scripts/refill_via_getnote.py`：把本机抓不到的 URL 交给得到大脑服务端抓取
+  （`getnote save` → `task` → `note --field content`），写回 articles；
+  配额 write_note 1000/天、read 20000/天，配额耗尽自动停止。任务状态落表
+  `getnote_body_task`（幂等）。
+- YouTube 通道打通：新增 `scripts/cookies_json_to_netscape.py`（浏览器导出的 Cookie
+  JSON → Netscape），产物落 `data/youtube_cookies.txt`（gitignore 内、600）；
+  两个补抓脚本检测到即自动带 `--cookies`，否则回退 `--cookies-from-browser`。
+- YouTube 简介兜底：自动字幕现在需要 PO token（`missing subtitles languages because
+  a PO token was not provided`），切换 player_client 无效且本机无 docker 装不了
+  bgutil provider；改为同一调用加 `--write-description`，无字幕时写
+  `【视频简介】…`，命中率 2/14 → 12/15。
+- 新增每日自动化「阅读库正文补抓（本机通道 + 得到大脑）」02:00 运行。
+
 ## v0.3.241: K10 producer 去重 —— keyword 簇 _insert_rows 收口（2026-09-11）
 
 - `producer_base` 新增 `insert_rows_slim(metric, with_body_text)`，把 xhs/youtube/zhihu

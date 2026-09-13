@@ -57,11 +57,13 @@
 | 运行时服务 | [modules/runtime.md](modules/runtime.md) | `src/openbiliclaw/runtime/` | ✅ refresh / candidate pipeline / presence gate / autostart / Ollama preflight / degraded boot / runtime-stream / 扩展 E2E 控制事件 / backend tag auto-update |
 | 引导初始化 | [modules/init.md](modules/init.md) | `src/openbiliclaw/cli.py`（`run_guided_init`）+ `runtime/init_coordinator.py` + `runtime/init_prereqs.py` | ✅ v0.3.102 共享流水线 + `InitCoordinator` 状态机 + `/api/init*` + 写者门控 + 插件推荐 tab CTA |
 | 求职面试备战 | [modules/interview.md](modules/interview.md) | `src/openbiliclaw/interview/` | ✅ v0.3.217 接入外部三层求职知识库：CLI `interview` 命令组 + `/api/interview/*` |
+| 对话归档 | [modules/conversation_archive.md](modules/conversation_archive.md) | `src/openbiliclaw/conversation_archive/` + `api/conversation_archive_routes.py` | ✅ v0.3.246 单表 + FTS5 trigram 全文检索 + 桌面 `/web/conversation-archive` 与移动端 tab（v0.3.242 编号被阅读库补抓占用，changelog 记为 v0.3.246 补记） |
 | 本地媒体浏览 | [modules/media.md](modules/media.md) | `src/openbiliclaw/media/` | ✅ v0.3.222 桌面 `/web/media` 页（视频 + 图片）+ `/api/media/*` |
 | ed2k 下载管理 | [modules/ed2k.md](modules/ed2k.md) | `src/openbiliclaw/ed2k/` | ✅ v0.3.223 桌面「⬇ ed2k 下载」tab + `/api/ed2k/*` |
 | 健康管理 | [modules/health.md](modules/health.md) | `src/openbiliclaw/health/` + `api/health_routes.py` | ✅ 桌面内嵌 `healthPage` 12 标签页；68 条 `/api/health/*` 路由（单一来源 health_routes.py）；子库 `data/health.db` |
 | 周期记录 | [modules/cycle.md](modules/cycle.md) | `src/openbiliclaw/cycle/` | ✅ 独立小模块，`cycle_records` 表存 `data/cycle.db` |
 | 豆瓣书影音 | [modules/douban.md](modules/douban.md) | `src/openbiliclaw/douban/` | ✅ v0.3.226 桌面「📚 豆瓣」tab + `/api/douban/*` + 独立库 `data/douban.db` + 可选内容源 |
+| 周末怎么玩 | [modules/weekend.md](modules/weekend.md) | `src/openbiliclaw/weekend/` | ✅ v0.3.244 本地优先周末计划生成器：CLI `weekend` + `/api/weekend/*` + 周五主动推送 + `data/weekend.db` |
 | 已读库 / 收藏同步 | — | `src/openbiliclaw/saved_sync/` | ✅ 原生保存路由 + 身份契约（`adapters/` 死代码已移除） |
 
 ## 开发指南
