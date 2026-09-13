@@ -130,3 +130,6 @@ data/cookies/
 data/*cookie*.json
 data/*cookies*.txt
 config.toml
+
+# 知识库引擎 SQLite 备份文件（revbak_* 单个 400MB+，禁止入库；历史已于 2026-09-13 清洗）
+*.revbak_*
