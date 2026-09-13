@@ -1218,6 +1218,11 @@ def test_runtime_builders_share_database_instance(monkeypatch: pytest.MonkeyPatc
         llm=SimpleNamespace(concurrency=3),
     )
 
+    # _RUNTIME_COMPONENTS 的本体定义在 runtime/init_flow.py，cli 只是 import
+    # 引用。只 patch cli 命名空间清不掉本体，_get_runtime_database() 会命中前面
+    # 测试留下的缓存而直接返回，不再新建 Database —— 表现为单独跑通过、合跑失败。
+    # 两边都要清空，保证 cli 侧读取与 init_flow 侧写入是同一个空 dict。
+    monkeypatch.setattr(init_flow_module, "_RUNTIME_COMPONENTS", {}, raising=False)
     monkeypatch.setattr(cli_module, "_RUNTIME_COMPONENTS", {}, raising=False)
     monkeypatch.setattr(cli_module, "_build_registry", lambda: "registry", raising=False)
     monkeypatch.setattr(cli_module, "_build_bilibili_client", lambda: "client", raising=False)
@@ -4710,7 +4715,10 @@ def test_enqueue_dy_bootstrap_task_returns_none_when_db_unavailable(
     def _raises() -> object:
         raise RuntimeError("db not initialised")
 
-    monkeypatch.setattr(cli_module, "_get_runtime_database", _raises)
+    # _enqueue_dy_bootstrap_task 内部调的是 init_flow 模块里的
+    # _get_runtime_database（本体），patch cli 命名空间里的引用不会生效 ——
+    # 结果是拿到真实数据库、命中 pending 任务复用而返回 task id。
+    monkeypatch.setattr(init_flow_module, "_get_runtime_database", _raises)
     assert _enqueue_dy_bootstrap_task() is None
 
 
