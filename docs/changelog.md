@@ -12,7 +12,7 @@
   `_ask_init_bilibili_limits` / `_print_init_cost_summary` /
   `_notify_running_server_init_completed` 等），共 **~988 行** → `cli/_cmd_init.py`；
   经 `register(app)` 挂回主 app（命令名与形状不变）。`cli/__init__.py`
-  **5007 → 4038 行**（六刀累计 7087 → 4038，**-3049 行 / 约 -43%**）。
+  **5007 → 4039 行**（六刀累计 7087 → 4039，**-3048 行 / 约 -43%**）。
 - **patch 语义（本刀最难处）**：本组同时存在两类 patch 敏感符号——
   ①本文件定义但测试 patch 到 `cli` 命名空间的 4 个
   （`_ask_network_binding` / `_maybe_setup_password_in_init` /

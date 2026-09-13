@@ -299,7 +299,7 @@
    符号 + 4 个本组 patch 点）；`init` 及 9 个测试直引/patch 符号在 cli 命名空间
    re-export（`cli_module.init` 签名检查等既有测试不变）。守门
    `tests/cli/test_cli_init_module.py`（6 例，含「patch 经 cli 命名空间可命中」
-   的行为锁）。六刀累计 **7087 → 4038 行**（-3049，约 -43%）；顶层 42 命令
+   的行为锁）。六刀累计 **7087 → 4039 行**（-3048，约 -43%）；顶层 42 命令
    worktree 对账零丢失。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
@@ -311,7 +311,7 @@
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **4038 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init 五簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（profile 系 / probe / config 显示等） |
+   | 上帝文件 | `cli/__init__.py` **4039 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init 五簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（profile 系 / probe / config 显示等） |
 
 ---
 
