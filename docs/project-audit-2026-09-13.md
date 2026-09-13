@@ -289,7 +289,12 @@
    测试补丁点漂移（helper console 本体迁至 `_render`，测试仍 patch `cli.console` →
    空串断言，且曾被 `database is locked` 环境错误掩盖），修复=补丁点迁至本体模块。
    守门：`tests/cli/test_cli_autostart_module.py`（5 例，含本体补丁生效性）。
-   四刀累计 **7087 → 6298 行**（-789）；顶层 42 命令 worktree 对账零丢失。
+   **第五刀**：fetch-\*/search-\*/discover-\* 平铺组（13 命令）+ discovery runtime
+   helpers + typer 参数常量（~1245 行）抽至 `cli/_cmd_fetch.py`（`register(app)`
+   挂载，命令形状不变）；50+ 处共享符号调用统一 `_cli.X` 动态取（ruff F821
+   逐轮兜底补漏，含无括号引用传值形态）；`_print_discovered_content_preview`
+   迁入 `_render`。守门 `tests/cli/test_cli_fetch_module.py`（5 例）。
+   四五刀累计 **7087 → 约5000 行**；顶层 42 命令 worktree 对账零丢失。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
    与上帝文件后续簇（init 引导 / fetch-* / discover-* 等）待续。

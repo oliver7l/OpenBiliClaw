@@ -4,6 +4,33 @@
 
 ---
 
+## 重构：fetch-*/discover-* 组抽离 _cmd_fetch（P4 第五刀，2026-09-13）
+
+- 上帝文件 `cli/__init__.py` **6298 → 约5000 行**（五刀累计 **-2000+**）。11 个
+  fetch/search/discover 命令 + `discover-douyin` / `discover` + 7 个 discovery
+  runtime helper + 8 个 typer 参数常量（~1245 行）抽至 `cli/_cmd_fetch.py`，
+  经 `register(app)` 挂回主 app（13 个**平铺**命令名与形状不变，非子命令组）。
+- `_print_discovered_content_preview` 一并迁入共享 `cli/_render.py`（渲染域）。
+- **动态取手法全面应用**：块内 50+ 处对共享符号的调用（`_enqueue_*_bootstrap_task`
+  六兄弟、`_collect_*` 八件套、`_build_registry` / `_build_soul_engine` /
+  `_build_memory_manager` / `_get_runtime_database` / `_require_runtime_config` /
+  `_prepare_init_runtime` / `_run_with_progress` / `_write_events_to_memory` 等）
+  统一改写为函数体内 `from openbiliclaw import cli as _cli` + `_cli.X` 动态取；
+  `_run_zhihu_discovery` / `_run_douyin_discovery` / `_run_xhs_discovery` /
+  `_normalize_douyin_discovery_sources` 在 cli 命名空间 re-export 供测试
+  patch / 直引。签名默认值引用的 4 个 `_DEFAULT_*_WAIT_SECONDS` 直接 from
+  `runtime.init_flow`（模块加载期求值，无法延迟）。
+- 迁移期间用 ruff `F821` 扫描兜底：逐轮补齐遗漏符号（引用传值
+  `enqueue=_enqueue_X` 无括号形态正则首版漏网）。
+- 守门测试 `tests/cli/test_cli_fetch_module.py`（5 例）：顶层禁 import cli 本体、
+  13 命令挂载对账、re-export 存在性、`_cli.` 动态取语义（词边界防 `_smoke`
+  子串误报）、`discover-douyin` 经 patch 的端到端冒烟。
+- 验证：`tests/cli` **176 passed**；顶层 42 命令 worktree 对账一致；
+  ruff + mypy（改动三文件）全绿。
+
+---
+
+
 ## 重构：autostart 组 + 渲染 helper 抽离；修降级面板测试补丁点漂移（P4 第四刀，2026-09-13）
 
 - 上帝文件 `cli/__init__.py` **6501 → 6298 行**（四刀累计 -789）。`autostart`

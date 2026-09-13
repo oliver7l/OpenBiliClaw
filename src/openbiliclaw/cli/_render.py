@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.panel import Panel
 from rich.table import Table
 
@@ -40,3 +42,16 @@ def _print_key_value_table(title: str, rows: list[tuple[str, str]]) -> None:
     for key, value in rows:
         table.add_row(key, value)
     console.print(table)
+
+
+def _print_discovered_content_preview(item: Any, index: int) -> None:
+    """Render one discovered content preview row."""
+    _print_key_value_table(
+        f"发现 {index}",
+        [
+            ("标题", item.title or "（暂无）"),
+            ("UP 主", item.up_name or "（未知）"),
+            ("来源策略", item.source_strategy or "（未知）"),
+            ("相关性分数", f"{float(item.relevance_score or 0.0):.2f}"),
+        ],
+    )
