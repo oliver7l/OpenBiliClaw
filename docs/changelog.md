@@ -4,6 +4,34 @@
 
 ---
 
+## 修复：CLI note 命令组不可用 + 上帝文件第一簇抽离（2026-09-13）
+
+> P4 第二刀 + 顺带发现的两个既有 bug。`openbiliclaw note *` 全部 9 个命令
+> 此前**从未端到端可用**：静默 no-op 或构造后崩溃。
+
+- **CLI note 命令静默 no-op（根因修复）**：`cli/__init__.py` 的 note 命令读
+  `_APP_CONTEXT["data_dir"] / ["config"]`，但该 dict **从未有这两键的写入点**
+  （只有 `log_level` 与三个可选命令组的 import 错误信息）→ `_get_note_service()`
+  恒返回 `None`，`note list/get/create/delete/search/stats/import-read-archive/tasks`
+  8 个命令静默什么都不做，`note video` 恒报「无法获取笔记服务」。
+- **`Database` 未 initialize（第二处既有 bug）**：旧实现 `Database(path)` 构造后
+  直接用，未调 `initialize()`（对照 `init_flow.py:101-102` 的惯例）——即便路径
+  修复也会抛 `RuntimeError: Database not initialized`。两处均已修：
+  经 `load_config().data_path` 取库（与 `cli._runtime_database_path()` 同源）+
+  构造后 `initialize()`。**实测 `note list` / `note stats` 首次真正读出库内数据**。
+- **上帝文件第一簇抽离（P4 第二刀）**：note 命令组（9 命令 + 服务工厂，~270 行）
+  抽至新模块 `cli/_cmd_notes.py`，`cli/__init__.py` **7087 → 6815 行**。
+  新模块顶层不 import `openbiliclaw.cli`（无循环依赖）；`console` 经
+  `runtime.init_flow` 同源引入。顶层 42 个命令经 worktree 对照 HEAD **逐一对账一致**。
+- **守门测试**：新增 `tests/cli/test_cli_notes_module.py`（5 例）——命令对账
+  （9 个一个不少）、`note --help` 挂载、AST 扫描 `_APP_CONTEXT` 禁止回流、
+  顶层 `import openbiliclaw.cli` 禁止回流、`_get_note_service` 真实可用
+  （tmp 库 + `get_stats()` 跑通）。
+- **验证**：`tests/cli` + `network_isolation` + `event_format` + `ollama_supervisor`
+  **197 passed**；守门 5 passed；`ruff` + `mypy`（改动两文件）全绿。
+
+---
+
 ## 修复：收口三处 API 缺口 + obc_llm 适配层去重（2026-09-13）
 
 > 承接上一条的「遗留」三项。前两项的定性都被实证改写：`api_flavor` 不是"后端没实现"

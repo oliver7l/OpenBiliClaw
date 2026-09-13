@@ -434,6 +434,15 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 - 用户在画像编辑里手动 remove/add 的条目会随改名同步（rename map 穿透 overrides），不会被合并「借尸还魂」
 - 回滚会把被回滚的合并对记入 no-merge 记忆，下一轮定时整理不会重做同一合并
 
+### 笔记命令组（`note *`）
+
+> 实现位置：`cli/_cmd_notes.py`（2026-09-13 自上帝文件 `cli/__init__.py` 抽出，
+> P4 第二刀）。该模块顶层不 import `openbiliclaw.cli`（避免循环依赖），
+> 数据库路径经 `load_config().data_path` 解析（与 `start` / `db-repair` 同源）。
+> 同刀修复：旧实现读 `_APP_CONTEXT["data_dir"]/["config"]`（无写入点 → 全部
+> 命令静默 no-op）且 `Database` 构造后未 `initialize()`——两个 bug 均已修，
+> note 命令自此端到端可用。
+
 ### `openbiliclaw note list`
 
 列出笔记，支持按类型、平台、标签筛选和全文搜索。
