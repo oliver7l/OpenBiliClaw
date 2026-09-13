@@ -130,6 +130,25 @@
 （含 25 个收敛前就已无人引用的存量死代码），`app.py` **6534 → 4560 行（净 -1974）**。
 全量 pytest 基线（收敛前）3460 passed / 0 failed，收敛后复跑见 §4。
 
+### ✅ 第二轮收敛（2026-09-13 晚，5 对"实义差异"全部澄清 → 重复 0 对）
+
+对剩余 6 对逐对做**正文精确 diff + 引用链追踪**，之前的"实义差异"全部澄清：
+
+| 对 | 判定 | 动作 |
+|----|------|------|
+| `POST /api/autostart/apply` | 两版正文逐行相同，仅锁名不同（`_CONFIG_SAVE_LOCK` vs `_config_save_lock`）——`app.py:4520` 把**同一把锁实例**传给了 `register_source_routes` | 删 app.py 内联 |
+| `POST /api/config/probe-service`（同模块双注册） | `app.py:2471` 与 `config_routes.py:521` 都调 `register_probe_routes`，且两版 `_apply_llm_update`（101 行）**零差异** | 删 app.py 的调用 |
+| `GET/POST /api/config/source-share-suggestion` ×2 | 两版 handler 逐行相同；差异只在辅助名 `_count_events_by_source_platform`（app.py 定义）vs `_get_count_events_by_source_platform`（config_routes 的**延迟 import 同一函数**的 3 行薄委托） | 删 app.py 内联 |
+| `GET /api/interview/reviews` | 生效版 = 新服务化实现（`InterviewReviewService`，返回裸列表，前端 `interview.js:506` 已按数组适配）；被遮蔽的旧版 `_interview_routes.get_reviews` 返回 `{reviews,stats,total}` dict（前端不适配） | 删旧版路由 |
+| `GET /api/knowledge/concepts` | 生效版直连 `database.conn`——但主库 `Database` 在 `storage/database.py:796` 打开时**已全局 ATTACH knowledge.db**，实测 200；模块版 `_conn_with_content` 的 ATTACH 是幂等冗余（suppress OperationalError） | 删 app.py 内联（模块版防御性更强） |
+
+**第二轮执行**：AST 删 4 个 app.py 内联 handler + 1 个双注册调用 + `_interview_routes.py` 旧 `get_reviews`；
+级联死代码再迭代到不动点（app.py 的 `_apply_llm_update`/`_autostart_status_out`/`_build_source_share_suggestion_response`
+副本均确认外部引用都指向模块自有定义）。**`app.py` 4560 → 4084 行（两轮累计 -2450，相对原始 6534）**。
+
+**验证**：重复 (path,method) 对数 **6 → 0**；API 路径 418→418 无丢失；`create_app()` 正常（routes 524→518）；
+7 个受影响端点冒烟全符合预期（2 个 422 为缺 body 的预期校验）；死代码 0；ruff 全绿。
+
 ---
 
 ## 3. 数据层 / 磁盘：孤儿与重复目录
@@ -180,7 +199,8 @@
 | **P0** | 修 F2：删 `app.py:2677` 误挂装饰器 | 极低 | ✅ **已完成**（+ 回归测试） |
 | **P0** | 修 F3：删 `diary-insights.js` 死的 `loadPeopleData` | 极低 | ✅ **已完成**（+ 回归测试） |
 | **P1** | 修 F1：setup 3 端点（实为**移植上游 3 个子系统**，见 §1） | 中 | ⏸ 待决策（§7） |
-| **P1** | 清重复路由（闭包树等价的 32 对）+ 级联死代码 | 中 | ✅ **已完成**（38→6 对；`app.py` -1974 行；5 对实义差异保留待审） |
+| **P1** | 清重复路由（闭包树等价的 32 对）+ 级联死代码 | 中 | ✅ **已完成**（38→6 对；`app.py` -1974 行） |
+| **P1** | 第二轮：剩余 6 对逐对澄清后全部收敛 | 中 | ✅ **已完成**（重复 6→0 对；`app.py` 再 -476 行，累计 6534→4084） |
 | **P2** | `data/` 孤儿/重复目录清理（v2ex-hot-hub + tax_frames*） | 低 | ⏸ 待决策（§7） |
 
 ---
@@ -190,8 +210,7 @@
 1. **F1 的 3 个 setup 端点**（实为移植上游子系统，见 §1 依赖表）——选其一：
    ① 完整移植（含 448 行 `ollama_diagnostics` + config-apply 状态机）；② 只移植轻量的 `discover-models`；
    ③ 让 setup 页对齐本 fork 现有能力（删/禁用对应 UI）。
-2. ~~**39 条重复路由**~~：✅ 已收敛（等价 32 对已删、5 对实义差异保留，见 §2 收敛执行记录）；
-   剩余 5 对（autostart/apply、source-share-suggestion×2、knowledge/concepts、interview/reviews）是否逐对审查合并？
+2. ~~**39 条重复路由**~~：✅ 全部收敛（两轮：32 对闭包树等价 + 6 对逐对澄清后删除，重复 0 对，见 §2）。
 3. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
 4. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？
 

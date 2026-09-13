@@ -336,44 +336,6 @@ def get_schedule() -> dict[str, Any]:
         conn.close()
 
 
-@router.get("/reviews")
-def get_reviews(limit: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
-    """获取面试复盘记录。"""
-    conn = _get_interview_conn()
-    try:
-        rows = conn.execute(
-            """SELECT id, company, position, interview_date, round, result, duration_min,
-                      emotion_level, tags, key_questions, self_assessment
-               FROM interview_reviews ORDER BY interview_date DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
-        reviews = []
-        for r in rows:
-            reviews.append({
-                "id": r["id"],
-                "company": r["company"],
-                "position": r["position"],
-                "interview_date": r["interview_date"],
-                "round": r["round"],
-                "result": r["result"],
-                "duration_min": r["duration_min"],
-                "emotion_level": r["emotion_level"] or "",
-                "tags": r["tags"] or "",
-                "key_questions": r["key_questions"] or "",
-                "self_assessment": r["self_assessment"] or "",
-            })
-        stats = conn.execute(
-            "SELECT result, COUNT(*) as cnt FROM interview_reviews GROUP BY result"
-        ).fetchall()
-        return {
-            "reviews": reviews,
-            "stats": {s["result"]: s["cnt"] for s in stats},
-            "total": len(reviews),
-        }
-    finally:
-        conn.close()
-
-
 # ── 岗位弹药库扫描 ─────────────────────────────────────────
 
 def _scan_ammo_dir(company_dir: Path) -> dict[str, Any]:

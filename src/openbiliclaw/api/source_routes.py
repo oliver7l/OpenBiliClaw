@@ -71,9 +71,6 @@ from openbiliclaw.config import (
 from openbiliclaw.config import (
     load_config as _load,
 )
-from openbiliclaw.config import (
-    save_config as _save,
-)
 from openbiliclaw.runtime.keyword_fetch import (
     mark_keyword_terminal_from_xhs_task,
     source_keyword_id_from_xhs_task,
@@ -2907,6 +2904,7 @@ def register_source_routes(
         payload: AutostartApplyIn, request: Request
     ) -> AutostartStatusOut | JSONResponse:
         from openbiliclaw.config import load_config as _load
+        from openbiliclaw.config import save_config as _save
         from openbiliclaw.runtime import autostart
         from openbiliclaw.runtime.autostart.guards import active_env_managed_inputs
 

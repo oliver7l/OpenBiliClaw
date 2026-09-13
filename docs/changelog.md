@@ -4,6 +4,25 @@
 
 ---
 
+## 重构：重复路由收敛第二轮——6 对全部澄清，重复归零（2026-09-13）
+
+- **逐对澄清**（正文精确 diff + 引用链追踪，此前"实义差异"5 对全部澄清为等价）：
+  - `POST /api/autostart/apply`：两版仅锁名不同，实为**同一把锁实例**（`app.py:4520` 传入 `register_source_routes`）；
+  - `POST /api/config/probe-service` 双注册：`app.py` 与 `config_routes.py` 各调一次 `register_probe_routes`，
+    两版 `_apply_llm_update`（101 行）零差异 → 删 app.py 的调用；
+  - `GET/POST /api/config/source-share-suggestion`：config_routes 版的 `_get_count_events_by_source_platform`
+    是**延迟 import app.py 同一函数**的 3 行薄委托 → 行为一致；
+  - `GET /api/interview/reviews`：生效版已是新服务化实现（裸列表，前端 `interview.js:506` 按数组适配），
+    旧版 `_interview_routes.get_reviews`（dict 结构）删除；
+  - `GET /api/knowledge/concepts`：主库 `Database` 打开时已全局 ATTACH `knowledge.db`
+    （`storage/database.py:796`），生效版实测 200；模块版 ATTACH 为幂等冗余 → 删 app.py 内联。
+- **执行**：AST 删 4 个内联 handler + 1 个双注册调用 + 1 条旧路由；级联死代码再迭代至不动点
+  （app.py 的 `_apply_llm_update`/`_autostart_status_out`/`_build_source_share_suggestion_response` 副本）。
+  **`app.py` 4560 → 4084 行（两轮累计 -2450，相对原始 6534）**。
+- **验证**：重复 (path,method) **6 → 0**；API 路径 418→418 无丢失；routes 524→518；7 端点冒烟符合预期；ruff 全绿。
+
+---
+
 ## 重构：重复路由收敛 + app.py 死代码清理（2026-09-13）
 
 > 来源：`docs/project-audit-2026-09-13.md` §2「39 对重复注册」的 P1 项。
