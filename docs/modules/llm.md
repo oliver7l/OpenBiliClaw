@@ -161,6 +161,33 @@ POST /api/config/probe-service
 
 失败以 `ok=false` 的正常响应返回，前端可直接显示 provider / model / latency / error；详见 [配置参考](config.md)。
 
+### 模型发现 API（`llm/model_discovery.py`）
+
+```http
+POST /api/config/discover-models
+```
+
+setup 首启动向导的「获取模型」按钮用它在**配置尚未保存**时列出端点实际提供的模型 id，
+因此请求体携带的是表单里的原始值（不是已保存的 provider 段）；`api_key` / `base_url` 留空时
+服务端回退到已保存的 `[llm.<provider>]`，兑现向导「留空则沿用当前 Key」的提示。
+
+| provider | 端点 | 解析 |
+|----------|------|------|
+| `openai` / `deepseek` / `openrouter` / `openai_compatible` | `GET {base}/models`（`Authorization: Bearer`） | `data[].id`，兼容 `models[]` 与裸数组 |
+| `ollama` | `GET {root}/api/tags`（自动剥掉 `/v1` 后缀） | `models[].name` / `model` |
+| `claude` | `GET {base}/v1/models`（`x-api-key` + `anthropic-version`） | `data[].id` |
+| `gemini` | `GET {base}/v1beta/models?key=` | `models[].name`，剥掉 `models/` 前缀 |
+
+设计约束：
+
+- **不猜官方域名**。`openai_compatible` 等「自定义端点」类 provider 缺 `base_url` 时直接返回
+  `ok=false`，绝不悄悄改打 `api.openai.com`——那会查询一个与用户配置无关的服务。
+- **远端失败是软失败**。连接失败 / 4xx / 非 JSON 一律返回 `ok=false` + 可读 `error`（HTTP 200），
+  因为模型名始终可手填，不可达的端点不该让向导整页报红。
+- **只读**。不读也不写 `config.toml`；`api/app.py` 的 degraded 中间件白名单放行本端点，
+  因为首次运行（还没有可用 LLM）时后端按定义处于降级模式。
+- `reasoning_efforts` 是**本地建议表**（协议侧没有 effort 枚举端点），仅供前端 datalist 使用。
+
 ### LLMService
 
 ```python

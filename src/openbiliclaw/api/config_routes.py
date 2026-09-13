@@ -15,6 +15,8 @@ from openbiliclaw.api.models import (
     BilibiliConfigOut,
     BilibiliSourceConfigOut,
     ConfigIssueOut,
+    ConfigModelDiscoveryIn,
+    ConfigModelDiscoveryResponse,
     ConfigResponse,
     ConfigUpdateIn,
     ConfigUpdateResponse,
@@ -1156,3 +1158,56 @@ def register_config_routes(
     ) -> SourceShareSuggestionResponse:
         """Suggest pool source shares from unsaved settings form state."""
         return _build_source_share_suggestion_response(payload)
+
+    @app.post(
+        "/api/config/discover-models",
+        response_model=ConfigModelDiscoveryResponse,
+    )
+    async def discover_config_models(
+        payload: ConfigModelDiscoveryIn,
+    ) -> ConfigModelDiscoveryResponse:
+        """List the model ids the submitted endpoint advertises.
+
+        Backs the setup wizard's 「获取模型」 button. Reads nothing from and
+        writes nothing to ``config.toml`` — the wizard asks this *before* its
+        first successful save, so the credentials only exist in the form.
+
+        Blank ``api_key`` / ``base_url`` fall back to the persisted
+        ``[llm.<provider>]`` block: on a relaunch the wizard shows a masked key
+        and promises "留空则沿用当前 Key", so re-pasting it just to enumerate
+        models would be a needless step.
+
+        Failures come back as ``ok=False`` with a rendered-inline message
+        rather than a 4xx, because the model field stays hand-editable and an
+        unreachable endpoint must not look like a broken wizard.
+        """
+        from openbiliclaw.config import load_config
+        from openbiliclaw.llm.model_discovery import (
+            REASONING_EFFORT_SUGGESTIONS,
+            discover_models,
+        )
+
+        provider = str(payload.provider_type or "").strip().lower()
+        api_key = str(payload.api_key or "").strip()
+        base_url = str(payload.base_url or "").strip()
+        if not api_key or not base_url:
+            saved = getattr(ctx.config or load_config(), "llm", None)
+            provider_cfg = getattr(saved, provider, None) if saved is not None else None
+            if provider_cfg is not None:
+                if not api_key:
+                    api_key = str(getattr(provider_cfg, "api_key", "") or "").strip()
+                if not base_url:
+                    base_url = str(getattr(provider_cfg, "base_url", "") or "").strip()
+
+        result = await discover_models(
+            provider_type=provider,
+            api_key=api_key,
+            base_url=base_url,
+            auth_mode=payload.auth_mode,
+        )
+        return ConfigModelDiscoveryResponse(
+            ok=result.ok,
+            models=list(result.models),
+            reasoning_efforts=list(REASONING_EFFORT_SUGGESTIONS),
+            error=result.error,
+        )

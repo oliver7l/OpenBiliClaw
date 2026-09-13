@@ -4,6 +4,31 @@
 
 ---
 
+## 修复：setup 首启动向导与后端失配——保存链路 + 模型发现（2026-09-13）
+
+> 来源：`docs/project-audit-2026-09-13.md` §1 F1。复核发现初稿低估了范围：
+> 向导第 0 步「保存并继续」自 **2026-09-01**（`76d965c8` 引入上游新版 setup 页）起**完全无法落盘**。
+
+- **根因**：向导提交的是上游 **routing v2** 形状（`llm.instances` / `default_chain` / `routing_version`），
+  而本 fork 后端只认 **provider-name** 形状（`_apply_llm_update`，`config_routes.py:415`）。
+  `instances` 被整块忽略 → `api_key` 从未写入 → `PUT /api/config` 恒 **400**「配置校验失败，未写入 config.toml」，
+  所有新装用户卡在向导第一步。`git log -S` 证实全仓 `.py` 从未支持过 routing v2（非本次回归）。
+- **修复**：
+  - 新增 `llm/model_discovery.py` + `POST /api/config/discover-models`：支持 OpenAI 兼容 `/models`、
+    Ollama `/api/tags`、Anthropic `/v1/models`、Gemini `v1beta/models`；空凭据回退到已保存的
+    `[llm.<provider>]`（兑现「留空则沿用当前 Key」）；远端失败一律软失败（`ok=False` + 内联文案），不猜官方域名。
+  - 向导保存改回 provider-name 形状，并删除 routing v2 脚手架、`apply-status` 轮询、
+    embedding 修复按钮链路（后两者在本 fork **不可达**：后端从不发 `apply_state` / `embedding_check`），
+    以及后端不支持的 `orcarouter`。`web/setup/index.html` 1813 → 1701 行。
+  - `api/app.py` degraded 中间件白名单放行 `/api/config/discover-models`——首次运行无可用 LLM 时
+    后端**按定义**处于降级模式，不放行则该页面自己被 503 挡住。
+- **验证**：`tests/llm/test_model_discovery.py` 19 例 + `tests/api/test_config_setup_wizard.py` 11 例
+  （含「向导引用的全部 `/api` 路径必须存在于路由表」的端点级对账，与禁止死分支回流的静态检查）。ruff 全绿。
+- **遗留（未改可见 UI，待另立小专项）**：`#apiFlavor`（`responses` 协议）与 `num_ctx` 后端不持久化；
+  `_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`。
+
+---
+
 ## 重构：重复路由收敛第二轮——6 对全部澄清，重复归零（2026-09-13）
 
 - **逐对澄清**（正文精确 diff + 引用链追踪，此前"实义差异"5 对全部澄清为等价）：

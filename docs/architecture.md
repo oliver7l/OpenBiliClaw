@@ -178,6 +178,7 @@ X 是第六个内容源，分两条独立通路：
 - 结构化输出共享解析：`llm/json_utils.py` 为 discovery eval-batch、recommendation copy、delight scorer、soul awareness/insight/profile/speculator 提供统一 JSON 容错，兼容 MiMo / OpenAI-compatible wrapper、fenced JSON、JSONL、schema echo 和 malformed `{ [ ... ] }`
 - v0.3.0+ embedding 兜底：`OllamaProvider.embed()` 走原生 `/api/embeddings`，配 `bge-m3` 模型可在 Mac/Win/Linux CPU 跑相似度计算，不需额外 API Key
 - `EmbeddingService` L1 内存 + L2 SQLite 双层缓存；`embedding.provider="ollama"` 且 embedding 凭据为空时直接使用本地 Ollama 默认地址，不再产生向后兼容 warning
+- `model_discovery.py`：首启动向导「获取模型」的后端实现（`POST /api/config/discover-models`）。按 provider 打 OpenAI 兼容 `GET /models` / Ollama `/api/tags` / Anthropic `/v1/models` / Gemini `v1beta/models`，不写 `config.toml`，远端失败一律软失败返回可读 `error`。刻意不依赖 `Config` 对象——向导在 config 保存成功之前就要用表单里的原始凭据查询
 
 ### Storage (`storage/`)
 - SQLite 数据库管理

@@ -25,33 +25,66 @@
 
 ## 1. 真坏代码 / 回归（用户点得到）
 
-### 🔴 F1：setup 向导页 3 个端点 404 —— 抽取式重构漏迁（上游有、本 fork 丢）
+### ✅ F1：setup 向导与后端整体失配 —— 已修（2026-09-13，含一个初稿漏掉的更大缺陷）
 
-**现象**：`create_app()` 路由表中**不存在**以下 3 条，但前端 setup 向导页确实在调用 → 功能失效：
+**现象（初稿）**：`create_app()` 路由表中**不存在**以下 3 条，但前端 setup 向导页确实在调用：
 
-| 端点 | 前端调用处 | TestClient 实测 |
-|------|-----------|----------------|
-| `POST /api/config/discover-models` | `web/setup/index.html:652` | **404** |
-| `GET /api/config/apply-status` | `web/setup/index.html:762` | **404** |
-| `POST /api/embedding/repair` | `web/setup/index.html:1211` | **404** |
+| 端点 | 前端调用处 | 初稿判定 | 复核后定性 |
+|------|-----------|---------|-----------|
+| `POST /api/config/discover-models` | `setup/index.html:652` | 404 | 🔴 **真实可达缺陷**（按钮无条件渲染） |
+| `GET /api/config/apply-status` | `setup/index.html:762` | 404 | ⚪ **不可达死分支** |
+| `POST /api/embedding/repair` | `setup/index.html:1211` | 404 | ⚪ **不可达死分支** |
 
-**根因（2026-09-13 复核后更正）**：不是「抽取时漏迁一行」，而是**整块上游子系统从未合入本 fork**。
-本 fork 落后上游 `origin/main` **1328 个提交**；这 3 条端点及其依赖属于上游后续加入的能力，
-本 fork 从未有过。复核证据（依赖在本 fork 的存在性）：
+**复核更正（可达性实证，而非静态推断）**：
 
-| 端点 | 上游实现规模 | 关键依赖 | 依赖在本 fork |
-|------|------------|---------|--------------|
-| `POST /api/embedding/repair` | ~200 行 | `llm/ollama_diagnostics.py`（448 行）+ repair 锁/状态/缓存 | ❌ 模块**整个不存在** |
-| `GET /api/config/apply-status` | 4 行 handler | `_config_apply_status_response` + config-apply 状态机（`config_apply_state/task/pending/...`） | ❌ 均无 |
-| `POST /api/config/discover-models` | ~16 行 | `_discover_llm_models` + `ConfigModelDiscoveryIn/Response` | ⚠️ 仅 `_apply_llm_update` 已有（`config_routes.py:415`） |
+- `apply-status` 不可达：`waitForConfigApply()` 仅在 `result.apply_state ∈ {queued, applying}` 时被调用，
+  而本 fork 的 `ConfigUpdateResponse`（`models.py:1413`）**没有 `apply_state` / `apply_revision` 字段** → 该分支永不执行。
+- `embedding/repair` 不可达：修复按钮仅在 `prereq.embedding_check` 非空时渲染，而本 fork 的
+  `InitPrerequisitesOut`（`models.py:57`）只有 `bilibili_logged_in/bilibili_check/llm_ready/embedding_ready/
+  embedding_required/enabled_platforms` **六个字段**，从不发 `embedding_check` / `embedding_repair_*` /
+  `embedding_pull_status` / `ollama_phase` → 按钮永不出现。移植 448 行的 `ollama_diagnostics` 子系统
+  **对终端用户零可感知收益**。
+- 端点级对账（新增脚本化检查，已固化为测试）：向导页引用的 9 个 `/api` 路径中，**只有**上述 3 个缺失，
+  其余 6 个均存在 → 问题范围就此收敛，不存在其它漏迁端点。
 
-关键提交 `d3aaa480`（新增 `ollama_diagnostics.py`）**仅在上游、不在本 fork main**（`merge-base --is-ancestor` 判定 NO）。
-而 setup 页之所以会调用它们，是本 fork 用户侧提交 `76d965c8`（2026-09-01「feat: 阅读库/多源抓取/质量评分与前端迭代」）
-把**上游新版 setup 页**引入了前端、但后端未同步 **→ 前端超前于后端**。
+**🔴 初稿漏掉的更大缺陷：向导第 0 步「保存并继续」自 2026-09-01 起完全无法落盘。**
 
-**影响**：setup 向导的「模型发现」「配置热重载状态轮询」「embedding 修复」三项不可用。
-**修法**：这不是「补一行接线」，而是**移植上游子系统**（工作量按上表，embedding/repair 最重）。
-需先决策（见 §7）：① 完整移植 3 个子系统；② 只移植轻量的 `discover-models`；③ 让 setup 页对齐本 fork 现有能力（删/禁用对应 UI）。
+- 向导页把 LLM 配置构造成**上游 routing v2** 形状：`llm: {routing_version: 2, instances: {...},
+  default_chain: [...], routes: {...}}`（`setup/index.html:847`）。
+- 本 fork 后端只认 **provider-name** 形状：`_apply_llm_update()`（`config_routes.py:415`）遍历的是
+  `default_provider` / `openai` / `claude` / `gemini` / `deepseek` / `ollama` / `openrouter` /
+  `openai_compatible` / `embedding` / 4 个 module 段。`instances` 被整块忽略 → `api_key` 从未写入。
+- **实测**：同 payload 下 `PUT /api/config` → **400**，`message = "配置校验失败，未写入 config.toml。"`，
+  issues 为 `blocking llm: LLM registry would fail to build` + `warning llm.deepseek.api_key: 缺少 api_key`，
+  `config.toml` 中确实没有该 key。即：所有新装用户卡在向导第一步。
+- **归因证据**：`git log -S "routing_version"` / `-S "default_chain"` 均只命中 `76d965c8`
+  （2026-09-01）；全仓 `src/**/*.py` 检索 `"instances"` **零命中** → 后端从未支持过 routing v2，
+  属既有缺陷，与 2026-09-13 的路由收敛无关。
+- **对照组**：桌面设置页（`profile.js:2131` `buildConfigUpdate`）用的是后端真实形状，因此一直正常；
+  坏的只有首启动向导。
+
+**修法（用户选定：实现 discover-models + 修复保存链路 + 删死分支）**：
+
+| # | 动作 | 位置 |
+|---|------|------|
+| 1 | 新增模型发现纯逻辑层：OpenAI 兼容 `/models`、Ollama `/api/tags`、Anthropic `/v1/models`、Gemini `v1beta/models`；错误一律软失败（`ok=False` + 内联文案），绝不猜官方域名 | `llm/model_discovery.py`（新增） |
+| 2 | 新增 `POST /api/config/discover-models`；空 `api_key`/`base_url` 回退到已保存的 `[llm.<provider>]`（兑现向导「留空则沿用当前 Key」） | `api/config_routes.py` |
+| 3 | 向导保存改回 provider-name 形状；删除 routing v2 脚手架（`buildSetupLlmRouting`/`savedLlmInstances`/…）、`apply-status` 轮询、embedding 修复按钮链路 | `web/setup/index.html`（1813 → 1701 行） |
+| 4 | 移除 `orcarouter`（后端无该 provider 配置段；全仓仅向导页 4 处引用） | `web/setup/index.html` |
+| 5 | **降级模式白名单放行新端点** —— 首次运行无可用 LLM 时后端**按定义**处于降级模式，degraded 中间件默认拒绝一切未列白名单路径，不放行则「获取模型」照样 503 | `api/app.py:1305` `_degraded_mode_guard` |
+
+**验证**：`tests/llm/test_model_discovery.py`（19 例）+ `tests/api/test_config_setup_wizard.py`（11 例）。
+其中 `test_wizard_llm_payload_shape_is_persisted` 断言新 payload 落盘且 `load_config` 回读一致；
+`test_wizard_payload_does_not_use_upstream_routing_schema` 反向锁定 routing v2 仍是 400；
+`test_setup_wizard_calls_no_unregistered_endpoint` 对向导页引用的全部 `/api` 路径做注册表对账；
+`test_wizard_page_drops_dead_upstream_branches` 静态禁止 `apply-status` / `embedding/repair` /
+`routing_version` / `default_chain` / `orcarouter` 回流。
+
+**遗留（未在本轮动，避免越权改动可见 UI）**：
+- 向导页 `#apiFlavor`（`responses` 协议）：`api_flavor` 不在 `LLMProviderConfig` 中，
+  `_apply_llm_update` 也不处理 → 选了不生效（payload 里仍会带上，后端静默忽略）。
+- `[llm.<provider>].num_ctx` 有配置字段，但 `_apply_llm_update` 不处理 → 无法经 API 设置。
+- `_apply_llm_update` 的 provider 白名单缺 `zhipu` / `modelscope` / `siliconflow`（配置模型里有，API 改不到）。
 
 ### 🔴 F2：`GET /api/diary/rag/stats` 恒 422 —— 装饰器误挂 + 注册遮蔽
 
@@ -207,9 +240,10 @@
 
 ## 7. 待用户拍板
 
-1. **F1 的 3 个 setup 端点**（实为移植上游子系统，见 §1 依赖表）——选其一：
-   ① 完整移植（含 448 行 `ollama_diagnostics` + config-apply 状态机）；② 只移植轻量的 `discover-models`；
-   ③ 让 setup 页对齐本 fork 现有能力（删/禁用对应 UI）。
+1. ~~**F1 的 setup 端点**~~：✅ 已完成（2026-09-13）——实现 `discover-models` + 修复向导保存链路
+   （routing v2 → provider-name，含降级模式白名单放行），删除 `apply-status` / `embedding/repair` 两处不可达死分支。
+   复核结论：初稿的「移植 448 行 `ollama_diagnostics`」并非必要——那两个端点在本 fork 无任何可达路径。
+   遗留的 `api_flavor` / `num_ctx` / `zhipu·modelscope·siliconflow` 三处 API 缺口待另立小专项（见 §1 F1 末）。
 2. ~~**39 条重复路由**~~：✅ 全部收敛（两轮：32 对闭包树等价 + 6 对逐对澄清后删除，重复 0 对，见 §2）。
 3. **P2 磁盘清理**（v2ex 重复 + tax_frames）是否执行？
 4. **P4 大重构**（obc_runtime 抽取收口、224 处旧 import、上帝文件 `cli.py`/`app.py`）——本次仍未启动，是否另立专项？

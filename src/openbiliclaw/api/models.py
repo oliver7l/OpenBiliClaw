@@ -1403,6 +1403,29 @@ class ConfigServiceProbeResponse(BaseModel):
     latency_ms: int = 0
 
 
+class ConfigModelDiscoveryIn(BaseModel):
+    """No-write request to list the models an endpoint advertises.
+
+    Carries the raw wizard form values rather than a saved provider block:
+    first-run users discover models *before* ``PUT /api/config`` has ever
+    succeeded, so there is nothing persisted to look up yet.
+    """
+
+    provider_type: str
+    api_key: str = ""
+    base_url: str = ""
+    auth_mode: str = ""
+
+
+class ConfigModelDiscoveryResponse(BaseModel):
+    """Result of a user-triggered model-catalogue request."""
+
+    ok: bool
+    models: list[str] = Field(default_factory=list)
+    reasoning_efforts: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
 class SourceShareSuggestionIn(BaseModel):
     """Optional overrides from a settings form that has not been saved yet."""
 

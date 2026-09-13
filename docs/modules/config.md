@@ -679,6 +679,47 @@ flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 
 当 daemon 因 LLM registry 配置错误进入降级模式时，`GET /api/config` 会返回 `degraded=true`、`degraded_reason="llm_registry_unavailable"` 和 blocking issues；`PUT /api/config` 会保存修复配置但不尝试热重载，返回 `restart_required=true`，要求用户重启 daemon。
 
+### 首启动向导（`/setup/`）的写入形状
+
+向导第 0 步写的是与设置页、与 `_apply_llm_update()` 完全一致的 **provider-name 形状**：
+
+```json
+{
+  "suppress_background_llm_work": true,
+  "llm": { "default_provider": "deepseek",
+           "deepseek": { "model": "deepseek-chat", "api_key": "sk-..." } }
+}
+```
+
+> ⚠️ **不要**改成上游的 routing v2 形状（`llm.instances` / `llm.default_chain` / `routing_version`）。
+> 本 fork 的后端从未支持过它：`_apply_llm_update()` 只遍历 provider 名与 module 段，`instances` 会被整块忽略，
+> `api_key` 不会落盘，`PUT /api/config` 直接 400「配置校验失败，未写入 config.toml」。
+> 2026-09-01 ~ 09-13 期间向导正是这样坏的，见 `docs/project-audit-2026-09-13.md` §1 F1。
+> 该约束由 `tests/api/test_config_setup_wizard.py` 静态锁定。
+
+### `POST /api/config/discover-models`
+
+向导「获取模型」按钮用它列出端点实际提供的模型 id。请求体是**表单原始值**（不是已保存的 provider 段）：
+
+| 字段 | 说明 |
+|------|------|
+| `provider_type` | 必填。`openai` / `deepseek` / `openrouter` / `openai_compatible` / `claude` / `gemini` |
+| `api_key` | 留空则回退到已保存的 `[llm.<provider>].api_key` |
+| `base_url` | 留空则回退到已保存值；再空则用该 provider 的默认域名（`openai_compatible` 除外，它必须显式给） |
+| `auth_mode` | 仅用于识别 `openai` + `codex_oauth`（该通道无 `/models`，返回 `ok=false` 提示手填） |
+
+响应 `{ok, models[], reasoning_efforts[], error}`。连接失败 / 4xx / 非 JSON 一律 `ok=false` + 可读 `error`
+（HTTP 200），因为模型名始终可手填。本端点**不读不写** `config.toml`，且已在 `api/app.py` 的 degraded
+中间件白名单中放行——首次运行无可用 LLM 时后端按定义处于降级模式。
+
+### 已知 API 缺口（待补，勿误以为可用）
+
+| 字段 | 现状 |
+|------|------|
+| `[llm.openai_compatible].api_flavor` | `LLMProviderConfig` 中**不存在**该字段，`_apply_llm_update` 也不处理；设置页/向导选择 `responses` 协议不生效 |
+| `[llm.<provider>].num_ctx` | 配置模型里有该字段，但 `_apply_llm_update` 不处理 → 无法经 API 设置 |
+| `zhipu` / `modelscope` / `siliconflow` | `LLMConfig` 里有对应配置段，但 `_apply_llm_update` 的 provider 白名单未包含 → 只能手改 `config.toml` |
+
 ## 环境变量
 
 | 变量 | 说明 |

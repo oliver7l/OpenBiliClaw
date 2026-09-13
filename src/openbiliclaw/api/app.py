@@ -1322,6 +1322,11 @@ def create_app(
             # so the recovery surface must stay reachable while degraded.
             or path in ("/api/update-status", "/api/update/check", "/api/update/apply")
             or (path == "/api/config" and method in {"GET", "PUT"})
+            # Setup wizard's model discovery. Read-only (no config write) and
+            # needed *precisely* while degraded: a first-run install with no
+            # usable LLM yet is degraded by definition, so blocking this would
+            # 503 the one screen that exists to fix that state.
+            or path == "/api/config/discover-models"
             or path.startswith("/api/auth")
             or path.startswith("/m")
         )
