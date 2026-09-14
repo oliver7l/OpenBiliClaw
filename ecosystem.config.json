@@ -3,198 +3,307 @@
     {
       "name": "openbiliclaw-api",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./start-api.sh",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/start-api.sh",
       "interpreter": "bash",
-      "max_memory_restart": "1G",
-      "instances": 1,
       "exec_mode": "fork",
+      "instances": 1,
       "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-error.log",
-      "out_file": "/tmp/openbiliclaw-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      "watch": false
     },
     {
-      "name": "openbiliclaw-xhs-feed",
+      "name": "openbiliclaw-bili-favorites",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/xhs_producer.py",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/bilibili_favorites_producer.py", "--loop", "--all"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
-      "exec_mode": "fork",
-      "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-xhs-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-xhs-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
-    },
-    {
-      "name": "openbiliclaw-zhihu-feed",
-      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/zhihu_producer.py",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
-      "env": {
-        "PYTHONHOME": "",
-        "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
-      "exec_mode": "fork",
-      "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-zhihu-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-zhihu-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      }
     },
     {
       "name": "openbiliclaw-bili-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/bilibili_producer.py",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/bilibili_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
-      "exec_mode": "fork",
-      "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-bili-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-bili-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      }
     },
     {
-      "name": "openbiliclaw-youtube-feed",
+      "name": "openbiliclaw-douyin-favorites",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/youtube_producer.py",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/douyin_producer.py", "--favorites", "--interval", "24"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
+      }
+    },
+    {
+      "name": "openbiliclaw-douyin-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/douyin_producer.py", "--interval", "6"],
+      "interpreter": "none",
       "exec_mode": "fork",
+      "instances": 1,
       "autorestart": true,
       "watch": false,
-      "error_file": "/tmp/openbiliclaw-youtube-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-youtube-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-douyin-likes",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/douyin_producer.py", "--likes", "--interval", "24"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-hupu-bxj",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/hupu_feed_producer.py", "--bxj", "--interval", "12"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-hupu-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/hupu_feed_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-inbox-merger",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/inbox_merger.py", "--interval", "5"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-toutiao-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/toutiao_feed_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
     },
     {
       "name": "openbiliclaw-v2ex-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/v2ex_producer.py",
-      "args": "--mode api",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/v2ex_producer.py", "--mode", "api"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
-      "exec_mode": "fork",
-      "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-v2ex-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-v2ex-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      }
     },
     {
-      "name": "openbiliclaw-v2ex-archive",
+      "name": "openbiliclaw-v2ex-rss",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./scripts/content_library/collect_v2ex_archive.py",
-      "args": "--loop --interval 24",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/v2ex_producer.py", "--mode", "rss"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
-      "exec_mode": "fork",
-      "autorestart": true,
-      "watch": false,
-      "error_file": "/tmp/openbiliclaw-v2ex-archive-error.log",
-      "out_file": "/tmp/openbiliclaw-v2ex-archive-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      }
     },
     {
-      "name": "openbiliclaw-v2ex-cli",
+      "name": "openbiliclaw-x-favorites",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/v2ex_producer.py",
-      "args": "--mode cli --interval 24 --limit 20",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/x_favorites_producer.py", "--loop", "--all"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
+      }
+    },
+    {
+      "name": "openbiliclaw-xhs-favorites",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/xhs_favorites_producer.py", "--loop"],
+      "interpreter": "none",
       "exec_mode": "fork",
+      "instances": 1,
       "autorestart": true,
       "watch": false,
-      "error_file": "/tmp/openbiliclaw-v2ex-cli-error.log",
-      "out_file": "/tmp/openbiliclaw-v2ex-cli-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-xhs-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/xhs_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-xiaoyuzhou-favorites",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/xiaoyuzhou_favorites_producer.py", "--loop", "--all"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
     },
     {
       "name": "openbiliclaw-xiaoyuzhou-feed",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./src/openbiliclaw/runtime/xiaoyuzhou_feed_producer.py",
-      "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
-      "interpreter_args": "-u",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/xiaoyuzhou_feed_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
       "env": {
         "PYTHONHOME": "",
         "PYTHONPATH": ""
-      },
-      "max_memory_restart": "500M",
-      "instances": 1,
+      }
+    },
+    {
+      "name": "openbiliclaw-youtube-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/youtube_producer.py"],
+      "interpreter": "none",
       "exec_mode": "fork",
+      "instances": 1,
       "autorestart": true,
       "watch": false,
-      "error_file": "/tmp/openbiliclaw-xiaoyuzhou-feed-error.log",
-      "out_file": "/tmp/openbiliclaw-xiaoyuzhou-feed-out.log",
-      "merge_logs": true,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss",
-      "restart_delay": 3000,
-      "max_restarts": 10
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-zhihu-favorites",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/zhihu_favorites_producer.py", "--loop"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "openbiliclaw-zhihu-feed",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
+      "args": ["src/openbiliclaw/runtime/zhihu_producer.py"],
+      "interpreter": "none",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "env": {
+        "PYTHONHOME": "",
+        "PYTHONPATH": ""
+      }
+    },
+    {
+      "name": "pool-feed-api",
+      "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
+      "script": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/start-pool-feed.sh",
+      "interpreter": "bash",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false
     }
   ]
 }
