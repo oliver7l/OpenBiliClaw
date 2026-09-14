@@ -45,6 +45,27 @@ notes/阅读收藏库/阅读收藏库.md            ← 索引（8 列，含「�
 | `sync_content_cache_to_library.py` | 推荐池 `content_cache` → `articles` 增量同步 | **自动化任务**（每日 0 点） |
 | `zhihu_api_body.py` | 知乎正文抓取 helper（被 refill 调用，非独立 CLI） | 内部调用 |
 
+### Fetch Hub（统一数据获取，2026-09-14 上线）
+| 脚本/包 | 用途 | 触发方式 |
+|------|------|----------|
+| `fetch_hub.py` + `fetchhub/` | 任意 URL → 规格化文档（UnifiedDoc）：每平台声明式降级链，AgentLimb（真 Chrome 桥）为全平台最终兜底 | 手动 / 归档前取数 |
+| `fetchhub/core.py` | UnifiedDoc、降级编排、`fetch_log` 健康度表（`data/content.db`） | 内部 |
+| `fetchhub/{v2ex,zhihu,xhs,bilibili,generic}.py` | 各平台通道（MindBack/官方API代理/各 CLI） | 内部 |
+| `fetchhub/agentlimb.py` | AgentLimb 桥适配器（挑战页判定用内容选择器；拿不到元数据标 partial） | 内部 |
+
+```bash
+# 抓取（自动降级）
+.venv/bin/python scripts/content_library/fetch_hub.py <url> [--json]
+# 顺手生成五段式归档草稿（解读/批注留 TODO 人写）→ notes/阅读收藏库/.drafts/
+.venv/bin/python scripts/content_library/fetch_hub.py <url> --archive-draft
+# 通道健康度
+.venv/bin/python scripts/content_library/fetch_hub.py --health [--days 7]
+```
+
+通道链：v2ex=[mindback→api-proxy→agentlimb]、zhihu=[cli→agentlimb]、xhs=[cli(短链自解析)→agentlimb]、
+bilibili=[cli(PGC ep 自解析)→agentlimb]、generic=[webfetch→agentlimb]。
+测试：`tests/test_fetch_hub.py`（14 用例，全离线）。方案：`docs/plans/2026-09-14-fetch-hub-unification-design.md`。
+
 ### 已读库（`notes/已读库` → `read_archive`）
 | 脚本 | 用途 | 触发方式 |
 |------|------|----------|

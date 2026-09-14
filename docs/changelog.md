@@ -267,6 +267,20 @@ does_not_block_on_speculator` 单跑通过。ruff 全绿。
 
 ---
 
+## 新功能：Fetch Hub 统一数据获取通道（2026-09-14）
+
+- `scripts/content_library/fetch_hub.py` + `fetchhub/` 包：任意 URL → UnifiedDoc 规格化输出
+  （标题/作者/发布时间/正文/回复/images/fetched_via/confidence），每平台声明式降级链，
+  AgentLimb（真 Chrome 桥 7791）为全平台最终兜底；挑战页判定用内容选择器而非 h1/title。
+- 通道链：v2ex=[mindback→api-proxy→agentlimb]、zhihu=[cli→agentlimb]、xhs=[cli+短链自解析→agentlimb]、
+  bilibili=[cli+PGC ep 自解析→agentlimb]、generic=[直连→agentlimb-text]。
+- `fetch_log` 健康度表落 `data/content.db`（只记录不自动调序）；`--health` 报表；
+  `--archive-draft` 生成五段式草稿至 `notes/阅读收藏库/.drafts/`（解读/批注留 TODO 人写）。
+- 验证：`tests/test_fetch_hub.py` 14 用例全过（离线 mock）；真实重放 v2ex×4（两条走通降级链）+
+  zhihu/xhs/bilibili 各 1 条成功。
+
+---
+
 ## 重构：init 引导组抽离 _cmd_init（P4 第六刀，2026-09-14）
 
 - **抽离规模**：`init` 命令（372 行，含全部 typer 选项）+ 11 个问询 / 落盘 helper
