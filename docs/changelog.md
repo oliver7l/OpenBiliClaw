@@ -4,6 +4,34 @@
 
 ---
 
+## 重构：知乎/抖音任务入队-收集-落库 helper 抽离 _collect（P4 第十刀，2026-09-14）
+
+- **抽离规模**：11 个顶层 helper（`_import_xhs_bootstrap_events` / `_event_memory_key` /
+  `_load_existing_event_keys` / `_write_events_to_memory` + 知乎 5 个、抖音 2 个
+  `_enqueue_*` / `_collect_*`），共 **~429 行** → `cli/_collect.py`（481 行）。
+  `cli/__init__.py` **1409 → 996 行**（十刀累计 7087 → 996，**-6091 行 / 约 -86%**）。
+- **无 register()**：该簇**不含 typer 命令**（纯 helper），故无需挂载，只由主文件顶层
+  导入后在 cli 命名空间 re-export 全部 11 个符号。
+- **patch 语义**：被 `tests/cli` patch 到 **cli 命名空间** 的 5 个符号
+  （`_get_runtime_database` / `_build_memory_manager` / `_enqueue_xhs_bootstrap_task` /
+  `_collect_xhs_bootstrap_events` / `console`）一律改为函数体内
+  `from openbiliclaw import cli as _cli` + `_cli.X` 动态取。
+  `_kick_task_dispatcher` 只被 patch 到 `runtime.init_flow` 命名空间（供 init_flow 自身
+  使用），故保持顶层直接 `from ... import`——**与抽取前行为逐位一致**。
+- **零改动确认**：外部唯一调用方 `_cmd_fetch.py` 的 9 处调用**早已是** `_cli.X` 形式
+  （第五刀时铺好），本刀无需任何改动。
+- **验证**：`tests/cli` **210 passed**（203 + 新增守门 `test_cli_collect_module.py` 7 例，
+  含 3 条补丁命中行为锁）；定向子集
+  `tests/{cli,config,soul,recommendation,weekend,discovery,init,auth}` +
+  `tests/api/test_api_auth.py` **1211 passed**；全部 **90 条命令路径** worktree 对照 HEAD
+  `diff` 为空；原块 ↔ 新模块正文逐行对账**仅注入 import 及其相邻空行差异**（零语义改动）；
+  `ruff check` / `mypy` 全绿。
+- **背景校准**：第九刀后的干净全量 **3547 passed / 5 failed / 16 skipped**（13:38），
+  5 例失败全为已知环境性（`tests/llm/test_llm_routing.py` 3 例读真实 config、
+  `tests/test_packaging_entry.py` 2 例沙箱 shim `mkdir(EEXIST)`），**零回归**。
+
+---
+
 ## 重构：服务与运维命令族抽离 _cmd_service（P4 第九刀，2026-09-14）
 
 - **抽离规模**：13 条命令（`setup-embedding` / `start` / `set-password` / `serve-api` /

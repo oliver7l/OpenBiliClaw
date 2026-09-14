@@ -330,17 +330,27 @@
    3 符号在 cli 命名空间 re-export。守门 `tests/cli/test_cli_service_module.py`
    （6 例，含 2 条补丁命中行为锁）。
    九刀累计 **7087 → 1410 行**（-5677，约 -80%）；90 条命令路径对账 `diff` 为空。
+   **第十刀**：知乎 / 抖音任务「入队 → 收集 → 落库」helper 族（`_import_xhs_bootstrap_events` /
+   `_event_memory_key` / `_load_existing_event_keys` / `_write_events_to_memory` + 知乎 5 个、
+   抖音 2 个 `_enqueue_*` / `_collect_*`，共 11 个无 typer 命令的顶层函数，~429 行）抽至
+   `cli/_collect.py`；无需 `register()`，仅 cli 顶层导入 + re-export 11 符号。被 patch 到 cli
+   命名空间的 5 个符号（`_get_runtime_database` / `_build_memory_manager` /
+   `_enqueue_xhs_bootstrap_task` / `_collect_xhs_bootstrap_events` / `console`）全部 `_cli.X`
+   动态取；`_kick_task_dispatcher` 只被 patch 到 `runtime.init_flow` 命名空间，保持顶层直
+   import（与抽取前逐位一致）。守门 `tests/cli/test_cli_collect_module.py`（7 例，含 3 条
+   补丁命中行为锁）。
+   十刀累计 **7087 → 996 行**（-6091，约 -86%）；90 条命令路径对账 `diff` 为空。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（余 zhihu/dy 任务入队与收集 helper `_enqueue_*` / `_collect_*` /
-   `_*_bootstrap_events`、`_build_*` 构建 helper 族、`main` 与零散渲染/配置 helper）待续。
+   与上帝文件后续簇（余 `_build_*` 构建 helper 族约 300 行、`main` 与零散进程/日志/
+   配置渲染 helper）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **1410 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导 / 服务运维 八簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（zhihu/dy 任务 helper、`_build_*` 族等） |
+   | 上帝文件 | `cli/__init__.py` **996 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导 / 服务运维 / 任务入队-收集 九簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（`_build_*` 族、`main` 等） |
 
 ---
 
