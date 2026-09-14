@@ -66,9 +66,10 @@ def _build_bilibili_client() -> Any:
 def _build_soul_engine() -> Any:
     """Build the configured soul engine with initialized memory storage."""
 
+    from obc_llm.service import module_overrides_from_config
+
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm.service import module_overrides_from_config
     from openbiliclaw.soul.engine import SoulEngine
 
     class _UnavailableLLM:
@@ -120,9 +121,10 @@ def _build_soul_engine() -> Any:
 def _build_recommendation_engine() -> Any:
     """Build the recommendation engine with core-memory-aware LLM access."""
 
+    from obc_llm.service import LLMService, module_overrides_from_config
+
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
     from openbiliclaw.recommendation.engine import (
         RecommendationEngine,
         SupportsEmbeddingService,
@@ -221,6 +223,8 @@ def _build_memory_manager() -> Any:
 def _build_discovery_engine() -> Any:
     """Build the discovery engine with currently implemented strategies."""
 
+    from obc_llm.service import LLMService, module_overrides_from_config
+
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.discovery.engine import (
         ContentDiscoveryEngine,
@@ -232,7 +236,6 @@ def _build_discovery_engine() -> Any:
         SearchStrategy,
         TrendingStrategy,
     )
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
 
     memory = _cli._build_memory_manager()
     database = _cli._get_runtime_database()
@@ -322,7 +325,7 @@ def _build_usage_recorder() -> Any:
     if cached is not None:
         return cached
 
-    from openbiliclaw.llm.usage_recorder import UsageRecorder
+    from obc_llm.usage_recorder import UsageRecorder
 
     recorder = UsageRecorder(sink=_cli._get_runtime_database())
     _cli._RUNTIME_COMPONENTS["usage_recorder"] = recorder

@@ -123,6 +123,7 @@
         <button class="tab-btn" id="mediaBtn" type="button">🎬 媒体</button>
         <button class="tab-btn" id="ed2kBtn" type="button">⬇ ed2k 下载</button>
         <button class="tab-btn" id="doubanBtn" type="button">📚 豆瓣</button>
+        <button class="tab-btn" id="ossResearchBtn" type="button">🔬 开源研究</button>
       </div>
       <!-- 推荐流/惊喜工具按钮已归拢到顶栏右侧 top-actions -->
     </nav>
@@ -1244,6 +1245,24 @@
       </section>
 
       <!-- 豆瓣书影音：影视/书/音乐 × 看过/想看/在看，展示清单并跳转原文 -->
+      <section class="main-col content-page" id="ossResearchPage" aria-label="开源项目研究" hidden>
+        <div class="page-body">
+          <div class="ed2k-toolbar">
+            <div class="ed2k-search" style="flex:1;min-width:220px;max-width:460px">
+              <input type="search" id="ossSearchInput" class="ed2k-search-input" placeholder="搜索项目名 / 定位 / 用途 / owner…" aria-label="搜索开源项目" autocomplete="off">
+            </div>
+            <div class="ed2k-actions">
+              <button type="button" id="ossAddBtn" class="ed2k-action-btn">＋ 新增</button>
+              <button type="button" id="ossRefreshBtn" class="ed2k-action-btn">刷新</button>
+            </div>
+          </div>
+          <div class="ed2k-netstrip"><span id="ossStatsInfo">加载中…</span></div>
+          <div class="oss-tagbar" id="ossTagTabs"></div>
+          <div class="card-grid is-minimal" id="ossResearchGrid"></div>
+          <p class="ed2k-empty" id="ossResearchEmpty" hidden>暂无数据。把 GitHub 链接发给我，我会研究并入库。</p>
+        </div>
+      </section>
+
       <section class="main-col content-page" id="doubanPage" aria-label="豆瓣书影音" hidden>
         <div class="page-subtabbar" style="position:static">
           <div class="page-subtabbar-inner">
@@ -1381,6 +1400,7 @@
         <div class="page-subtabbar">
           <div class="page-subtabbar-inner" id="interviewSubtabbar">
             <button class="page-subtab-btn is-active" data-subtab="schedule" type="button">📅 面试安排</button>
+            <button class="page-subtab-btn" data-subtab="todos" type="button">✅ 待办</button>
             <button class="page-subtab-btn" data-subtab="companies" type="button">🏢 公司岗位</button>
             <button class="page-subtab-btn" data-subtab="ammo" type="button">🧨 弹药库</button>
             <button class="page-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>

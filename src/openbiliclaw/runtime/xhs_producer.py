@@ -33,7 +33,8 @@ from openbiliclaw.runtime.keyword_fetch import PLATFORM_XIAOHONGSHU as _PLATFORM
 from openbiliclaw.sources.xhs_keyword_gen import generate_xhs_keywords
 
 if TYPE_CHECKING:
-    from openbiliclaw.llm.service import LLMService
+    from obc_llm.service import LLMService
+
     from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 
 logger = logging.getLogger(__name__)

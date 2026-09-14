@@ -42,6 +42,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     from claude_agent_sdk import ClaudeAgentOptions
+    from obc_llm.prompts import build_speculation_generation_prompt
 
     from openbiliclaw.eval.agents import (
         ONION_PROFILE_SCHEMA,
@@ -52,10 +53,10 @@ async def main() -> None:
     )
     from openbiliclaw.eval.optimizer import MODIFIABLE_FILES, ParamChange, PromptOptimizer
     from openbiliclaw.eval.persona_judge import judge_speculations
+    from openbiliclaw.eval.persona_pool import PersonaPool
     from openbiliclaw.eval.report import render_speculation_training_summary
     from openbiliclaw.eval.run_logger import RunLogger, RunStep
     from openbiliclaw.eval.speculation_evaluator import SpeculationEvaluator
-    from openbiliclaw.llm.prompts import build_speculation_generation_prompt
     from openbiliclaw.soul.profile import OnionProfile
     from openbiliclaw.soul.speculator import (
         SpeculativeInterest,
@@ -64,8 +65,6 @@ async def main() -> None:
         observe_events,
         promote_ready,
     )
-
-    from openbiliclaw.eval.persona_pool import PersonaPool
 
     rl = RunLogger(task="speculation_auto", data_dir=Path("data"))
     rl.setup_file_logging()

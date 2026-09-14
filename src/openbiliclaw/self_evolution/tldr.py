@@ -331,7 +331,8 @@ class TLDRGenerator:
 
         Returns dict with key_points, conclusion, model.
         """
-        from openbiliclaw.llm.generation import generate_structured
+        from obc_llm.generation import generate_structured
+
         from openbiliclaw.self_evolution.insight_report import _run_async
 
         system_instruction = (

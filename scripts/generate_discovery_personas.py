@@ -110,11 +110,12 @@ async def main(args: argparse.Namespace) -> None:
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
+    from obc_llm.service import LLMService
+
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.discovery_scenario import ScenarioPool
     from openbiliclaw.eval.persona_pool import PersonaPool
     from openbiliclaw.llm.registry import build_llm_registry
-    from openbiliclaw.llm.service import LLMService
     from openbiliclaw.memory.manager import MemoryManager
 
     cfg = load_config()

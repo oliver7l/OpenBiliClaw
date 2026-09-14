@@ -607,7 +607,7 @@ async def test_forced_homonym_payload_distinguishes_by_category(tmp_path: Path) 
 
 
 def test_consolidation_system_prompt_has_homonym_keep_rule() -> None:
-    from openbiliclaw.llm.prompts import _PROFILE_CONSOLIDATION_SYSTEM_PROMPT
+    from obc_llm.prompts import _PROFILE_CONSOLIDATION_SYSTEM_PROMPT
 
     assert "同名异义" in _PROFILE_CONSOLIDATION_SYSTEM_PROMPT
     assert "category" in _PROFILE_CONSOLIDATION_SYSTEM_PROMPT

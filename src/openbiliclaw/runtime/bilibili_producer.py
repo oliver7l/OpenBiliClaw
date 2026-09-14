@@ -21,17 +21,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from obc_llm.json_utils import parse_llm_json_tolerant
+from obc_llm.prompts import build_search_queries_prompt
+
 from openbiliclaw.discovery.strategies._utils import (
     build_profile_summary,
     search_cooldown_remaining,
 )
-from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
-from openbiliclaw.llm.prompts import build_search_queries_prompt
 from openbiliclaw.runtime._db import connect_inbox
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BILIBILI
 
 if TYPE_CHECKING:
-    from openbiliclaw.llm.service import LLMService
+    from obc_llm.service import LLMService
+
     from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.sources.bili_tasks import BiliTaskQueue
 

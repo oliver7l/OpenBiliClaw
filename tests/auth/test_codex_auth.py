@@ -6,8 +6,7 @@ import time
 from typing import TYPE_CHECKING
 
 import pytest
-
-from openbiliclaw.llm.codex_auth import (
+from obc_llm.codex_auth import (
     CodexAuthError,
     CodexCredentials,
     delete_codex_credentials,

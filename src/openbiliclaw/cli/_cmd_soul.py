@@ -211,10 +211,11 @@ def profile_consolidate(
     """
     import asyncio as _asyncio
 
+    from obc_llm.service import LLMService, module_overrides_from_config
+
     from openbiliclaw import cli as _cli
     from openbiliclaw.config import load_config
     from openbiliclaw.llm._compat_registry import build_embedding_service
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
     from openbiliclaw.soul.consolidator import ProfileConsolidator
 
     _print_page_title("画像整理", "profile-consolidate")

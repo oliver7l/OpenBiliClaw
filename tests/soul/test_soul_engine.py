@@ -6,9 +6,9 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from obc_llm.base import LLMResponse
+from obc_llm.service import ModuleOverride
 
-from openbiliclaw.llm.base import LLMResponse
-from openbiliclaw.llm.service import ModuleOverride
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.soul.engine import SoulEngine
 from openbiliclaw.soul.overrides import ProfileOverrides, apply_edit

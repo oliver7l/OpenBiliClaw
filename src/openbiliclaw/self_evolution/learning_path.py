@@ -353,7 +353,8 @@ class LearningPathGenerator:
 
         Returns a dict with: title, description, steps (list of {article_id, learning_point, estimated_minutes})  # noqa: E501
         """
-        from openbiliclaw.llm.generation import generate_structured
+        from obc_llm.generation import generate_structured
+
         from openbiliclaw.self_evolution.insight_report import _run_async
 
         # Build article list for LLM (compact)

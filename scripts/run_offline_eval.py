@@ -54,9 +54,10 @@ def _run_eval_with_llm_rerank(
     """Build LLM service + soul profile, then run async eval with LLM rerank."""
     import asyncio
 
+    from obc_llm.service import LLMService, module_overrides_from_config
+
     from openbiliclaw.config import load_config
     from openbiliclaw.llm import build_llm_registry
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
     from openbiliclaw.memory.manager import MemoryManager
     from openbiliclaw.soul.engine import SoulEngine
 

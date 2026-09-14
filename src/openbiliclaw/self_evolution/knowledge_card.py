@@ -314,7 +314,7 @@ class KnowledgeCardGenerator:
         """Generate cards using LLM."""
         import json as json_mod
 
-        from openbiliclaw.llm.generation import generate_structured
+        from obc_llm.generation import generate_structured
 
         content = (article.get("content_text") or "")[:3000]
         summary = article.get("ai_summary") or ""

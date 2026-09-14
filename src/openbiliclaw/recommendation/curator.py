@@ -17,8 +17,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from obc_llm.embedding import SupportsEmbeddingService
+
     from openbiliclaw.discovery.engine import DiscoveredContent
-    from openbiliclaw.llm.embedding import SupportsEmbeddingService
     from openbiliclaw.recommendation.bandit import (
         ArmStats,
         SlidingWindowThompsonSampler,
@@ -512,7 +513,7 @@ class PoolCurator:
                 if vec:
                     _liked_vecs[t] = vec
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         for item in candidates:
             base = item.relevance_score * w.relevance

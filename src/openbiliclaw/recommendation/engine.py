@@ -19,9 +19,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
+from obc_llm.service import is_llm_rate_limit_error
+
 from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
-from openbiliclaw.llm.json_utils import extract_llm_json_list, extract_llm_json_object
-from openbiliclaw.llm.service import is_llm_rate_limit_error
 from openbiliclaw.soul.tone import ToneProfile, build_tone_profile
 
 
@@ -75,8 +76,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
     from types import TracebackType
 
+    from obc_llm.base import LLMResponse
+
     from openbiliclaw.discovery.engine import DiscoveredContent
-    from openbiliclaw.llm.base import LLMResponse
     from openbiliclaw.recommendation.curator import PoolCurator
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
     from openbiliclaw.soul.profile import InterestTag, SoulProfile
@@ -740,7 +742,7 @@ class RecommendationEngine:
         if self._embedding_service is None:
             return all_interests[:top_k]
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         content_text = f"{content.title} {content.description or ''}"
         content_vec = await self._embedding_service.embed(content_text)
@@ -794,7 +796,7 @@ class RecommendationEngine:
             self._supergroup_canonical_map = {}
             return len(groups)
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         embedding_service = self._embedding_service
 
@@ -1278,7 +1280,7 @@ class RecommendationEngine:
         Mutates each item in-place: sets ``relevance_score``,
         ``relevance_reason``, ``topic_group``, and ``style_key``.
         """
-        from openbiliclaw.llm.prompts import build_batch_content_evaluation_prompt
+        from obc_llm.prompts import build_batch_content_evaluation_prompt
 
         profile_data = _recommendation_profile_summary(profile)
         content_items = [
@@ -1497,7 +1499,7 @@ class RecommendationEngine:
             (delight_reason, delight_hook) tuple.
 
         """
-        from openbiliclaw.llm.prompts import build_delight_reason_prompt
+        from obc_llm.prompts import build_delight_reason_prompt
 
         tone_profile = self._expression_tone_profile(profile, content)
         messages = build_delight_reason_prompt(
@@ -1555,7 +1557,7 @@ class RecommendationEngine:
         fallback_to_single: bool = True,
     ) -> int:
         """Generate expressions for a batch via one LLM call."""
-        from openbiliclaw.llm.prompts import build_batch_expression_prompt
+        from obc_llm.prompts import build_batch_expression_prompt
 
         tone_profile = build_tone_profile(
             profile=profile,
@@ -2046,7 +2048,7 @@ class RecommendationEngine:
         profile: SoulProfile,
     ) -> tuple[str, str] | None:
         """Try to generate personalized copy without applying a generic fallback."""
-        from openbiliclaw.llm.prompts import build_recommendation_expression_prompt
+        from obc_llm.prompts import build_recommendation_expression_prompt
 
         tone_profile = self._expression_tone_profile(profile, content)
         # Select most relevant interests for this content via embedding similarity
@@ -2202,7 +2204,7 @@ class RecommendationEngine:
         agree on the cache key — otherwise the warm side fills L2 with
         one shape while serve() looks up a different one and never hits.
         """
-        from openbiliclaw.llm.embedding import mmr_cache_text
+        from obc_llm.embedding import mmr_cache_text
 
         return mmr_cache_text(content.title, content.description)
 
@@ -2508,7 +2510,7 @@ class RecommendationEngine:
         pick — items violating them go to ``deferred`` and are only
         reconsidered if MMR ran out of compliant candidates.
         """
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         per_topic_cap = cls._topic_cap(limit)
         soft_topic_cap = cls._soft_topic_cap(limit)

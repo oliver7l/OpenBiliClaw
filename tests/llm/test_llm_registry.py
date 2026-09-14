@@ -6,9 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 
 import pytest
-
-from openbiliclaw.config import Config, EmbeddingConfig, LLMConfig, LLMProviderConfig
-from openbiliclaw.llm.base import (
+from obc_llm.base import (
     LLMFallbackError,
     LLMProvider,
     LLMProviderError,
@@ -17,9 +15,11 @@ from openbiliclaw.llm.base import (
     LLMResponse,
     LLMResponseError,
 )
-from openbiliclaw.llm.gemini_provider import gemini_sdk_available
-from openbiliclaw.llm.registry import (
-    RegistryBuildError,
+from obc_llm.gemini_provider import gemini_sdk_available
+from obc_llm.registry import RegistryBuildError
+
+from openbiliclaw.config import Config, EmbeddingConfig, LLMConfig, LLMProviderConfig
+from openbiliclaw.llm.registry import (  # 适配入口：接受主项目 Config
     build_embedding_service,
     build_llm_registry,
 )
@@ -81,7 +81,7 @@ def test_build_llm_registry_registers_available_providers() -> None:
 def test_build_llm_registry_registers_openai_with_codex_oauth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.llm.codex_auth import CodexCredentials
+    from obc_llm.codex_auth import CodexCredentials
 
     config = Config(
         llm=LLMConfig(
@@ -404,7 +404,7 @@ def test_ollama_embedding_with_empty_credentials_uses_local_default_without_warn
         data_dir=str(tmp_path),
     )
 
-    with caplog.at_level(logging.WARNING, logger="openbiliclaw.llm.registry"):
+    with caplog.at_level(logging.WARNING, logger="obc_llm.registry"):
         service = build_embedding_service(config, LLMRegistry())
 
     assert service is not None
@@ -434,7 +434,7 @@ def test_ollama_embedding_without_base_url_uses_local_default(
         data_dir=str(tmp_path),
     )
 
-    with caplog.at_level(logging.WARNING, logger="openbiliclaw.llm.registry"):
+    with caplog.at_level(logging.WARNING, logger="obc_llm.registry"):
         service = build_embedding_service(config, LLMRegistry())
 
     assert service is not None
@@ -869,7 +869,7 @@ def test_openai_embedding_uses_independent_dimension_config(
 
 
 def test_openai_embedding_dimensions_are_limited_to_embedding_3_models() -> None:
-    from openbiliclaw.llm.openai_provider import OpenAIProvider
+    from obc_llm.openai_provider import OpenAIProvider
 
     openai_provider = OpenAIProvider(
         api_key="sk-test",
@@ -915,7 +915,7 @@ def test_ollama_embedding_cache_model_ignores_unhonored_dimension(tmp_path) -> N
 
 
 def test_embedding_cache_separates_same_text_by_dimension(tmp_path) -> None:
-    from openbiliclaw.llm.embedding import EmbeddingCache, EmbeddingService
+    from obc_llm.embedding import EmbeddingCache, EmbeddingService
 
     class StaticEmbedder:
         name = "static"
@@ -1017,7 +1017,7 @@ def test_openai_embedding_chat_credential_fallback_still_warns_once(
         data_dir=str(tmp_path),
     )
 
-    with caplog.at_level(logging.WARNING, logger="openbiliclaw.llm.registry"):
+    with caplog.at_level(logging.WARNING, logger="obc_llm.registry"):
         service = build_embedding_service(config, build_llm_registry(config))
         again = build_embedding_service(config, build_llm_registry(config))
 
@@ -1039,8 +1039,9 @@ def test_openai_embedding_chat_credential_fallback_still_warns_once(
 def test_build_embedding_service_supports_openrouter_when_requested_explicitly(
     tmp_path,
 ) -> None:
+    from obc_llm.openrouter_provider import OpenRouterProvider
+
     from openbiliclaw.config import EmbeddingConfig
-    from openbiliclaw.llm.openrouter_provider import OpenRouterProvider
 
     config = Config(
         llm=LLMConfig(
@@ -1122,7 +1123,7 @@ def test_emit_embedding_compat_warning_fires_once_per_provider(
 
     registry_mod._embedding_compat_warned.clear()
 
-    with caplog.at_level(logging.WARNING, logger="openbiliclaw.llm.registry"):
+    with caplog.at_level(logging.WARNING, logger="obc_llm.registry"):
         registry_mod._emit_embedding_compat_warning("openai")
         registry_mod._emit_embedding_compat_warning("openai")
         registry_mod._emit_embedding_compat_warning("openai")
@@ -1139,11 +1140,11 @@ def test_openai_provider_supports_embedding_flag_is_set() -> None:
     canonical signal used by ``build_embedding_service`` — replacing the
     fragile ``hasattr(provider, "embed")`` check.
     """
-    from openbiliclaw.llm.claude_provider import ClaudeProvider
-    from openbiliclaw.llm.gemini_provider import gemini_sdk_available
-    from openbiliclaw.llm.ollama_provider import OllamaProvider
-    from openbiliclaw.llm.openai_provider import DeepSeekProvider, OpenAIProvider
-    from openbiliclaw.llm.openrouter_provider import OpenRouterProvider
+    from obc_llm.claude_provider import ClaudeProvider
+    from obc_llm.gemini_provider import gemini_sdk_available
+    from obc_llm.ollama_provider import OllamaProvider
+    from obc_llm.openai_provider import DeepSeekProvider, OpenAIProvider
+    from obc_llm.openrouter_provider import OpenRouterProvider
 
     # Have a working /v1/embeddings backend
     assert OpenAIProvider.supports_embedding is True
@@ -1157,7 +1158,7 @@ def test_openai_provider_supports_embedding_flag_is_set() -> None:
     assert ClaudeProvider.supports_embedding is False
 
     if gemini_sdk_available():
-        from openbiliclaw.llm.gemini_provider import GeminiProvider
+        from obc_llm.gemini_provider import GeminiProvider
 
         assert GeminiProvider.supports_embedding is True
 
@@ -1300,7 +1301,7 @@ async def test_registry_temporarily_cools_down_rate_limited_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = {"now": 100.0}
-    monkeypatch.setattr("openbiliclaw.llm.base.time.monotonic", lambda: clock["now"])
+    monkeypatch.setattr("obc_llm.base.time.monotonic", lambda: clock["now"])
 
     openai = FakeProvider("openai", errors=[LLMRateLimitError("limited")])
     claude = FakeProvider("claude")
@@ -1371,7 +1372,7 @@ async def test_registry_complete_provider_rate_limit_does_not_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = {"now": 100.0}
-    monkeypatch.setattr("openbiliclaw.llm.base.time.monotonic", lambda: clock["now"])
+    monkeypatch.setattr("obc_llm.base.time.monotonic", lambda: clock["now"])
 
     openai = FakeProvider("openai")
     claude = FakeProvider("claude", errors=[LLMRateLimitError("limited")])

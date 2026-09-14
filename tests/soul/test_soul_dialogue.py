@@ -6,9 +6,9 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from obc_llm.base import LLMResponse
+from obc_llm.service import LLMServiceError, ModuleOverride
 
-from openbiliclaw.llm.base import LLMResponse
-from openbiliclaw.llm.service import LLMServiceError, ModuleOverride
 from openbiliclaw.soul.dialogue import DialogueTurn, SocraticDialogue
 
 

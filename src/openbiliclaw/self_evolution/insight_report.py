@@ -803,7 +803,7 @@ class InsightReportGenerator:
 
     def _generate_llm_summary(self, report: InsightReport) -> None:
         """Generate natural-language summary using LLM."""
-        from openbiliclaw.llm.generation import generate_structured
+        from obc_llm.generation import generate_structured
 
         # Build a compact data summary for the LLM
         data_summary = {

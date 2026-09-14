@@ -45,8 +45,8 @@ import functools
 import logging
 from typing import Any, Protocol
 
-from openbiliclaw.llm.generation import generate_structured
-from openbiliclaw.llm.json_utils import extract_llm_json_list
+from obc_llm.generation import generate_structured
+from obc_llm.json_utils import extract_llm_json_list
 
 logger = logging.getLogger(__name__)
 

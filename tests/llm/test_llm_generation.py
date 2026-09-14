@@ -10,10 +10,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
-from openbiliclaw.llm.base import LLMResponse
-from openbiliclaw.llm.generation import generate_json_list, generate_json_object
-from openbiliclaw.llm.service import LLMRateLimitError, LLMResponseContentError
+from obc_llm.base import LLMResponse
+from obc_llm.generation import generate_json_list, generate_json_object
+from obc_llm.service import LLMRateLimitError, LLMResponseContentError
 
 
 class _FakeLLM:

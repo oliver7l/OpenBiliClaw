@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "conversationArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "conversationArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage", "ossResearchPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1279,7 +1279,7 @@
       document.body.classList.toggle("clone-page-open", pageId === "clonePage");
       document.body.classList.toggle("travel-page-open", pageId === "travelPage");
       document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", conversationArchivePage: "convArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", conversationArchivePage: "convArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn", ossResearchPage: "ossResearchBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1341,6 +1341,7 @@
         mediaPage: () => { if (window.reloadMediaPage) window.reloadMediaPage(); },
         ed2kPage: () => { if (window.reloadEd2kPage) window.reloadEd2kPage(); },
         doubanPage: () => { if (window.reloadDoubanPage) window.reloadDoubanPage(); },
+        ossResearchPage: () => { if (window.reloadOssResearchPage) window.reloadOssResearchPage(); },
       };
       const globalRefreshBtn = document.getElementById("globalRefreshBtn");
       if (globalRefreshBtn) {
@@ -1396,6 +1397,7 @@
       travel: () => openTravelPage(),
       ed2k: () => openEd2kPage(),
       douban: () => openDoubanPage(),
+      "oss-research": () => openOssResearchPage(),
     };
     window.DESKTOP_PAGE_ROUTES = DESKTOP_PAGE_ROUTES;
 
@@ -1492,6 +1494,15 @@
       document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
       showMainPage("doubanPage");
       setTimeout(() => { if (window.reloadDoubanPage) window.reloadDoubanPage(); }, 50);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openOssResearchPage() {
+      if (window.initOssResearchPage) window.initOssResearchPage();
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("ossResearchPage");
+      setTimeout(() => { if (window.reloadOssResearchPage) window.reloadOssResearchPage(); }, 50);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -4011,6 +4022,7 @@
     safeBind("#mediaBtn", "click", () => { window.navigateTo("/web/media"); });
     safeBind("#ed2kBtn", "click", () => { window.navigateTo("/web/ed2k"); });
     safeBind("#doubanBtn", "click", () => { window.navigateTo("/web/douban"); });
+    safeBind("#ossResearchBtn", "click", () => { window.navigateTo("/web/oss-research"); });
     safeBind("#cloneBtn", "click", () => navigateTo("/web/clone"));
     safeBind("#homeBtn", "click", () => navigateTo("/web"));
     safeBind("#customFilterBtn", "click", () => { closeFilterDropdown(); navigateTo("/web/custom-filter"); });

@@ -7,9 +7,8 @@ import logging
 from typing import TYPE_CHECKING
 
 import pytest
-
-from openbiliclaw.llm.base import LLMProviderError, LLMRateLimitError, LLMResponse
-from openbiliclaw.llm.service import (
+from obc_llm.base import LLMProviderError, LLMRateLimitError, LLMResponse
+from obc_llm.service import (
     LLMProviderExecutionError,
     LLMResponseContentError,
     LLMService,
@@ -18,6 +17,7 @@ from openbiliclaw.llm.service import (
     is_llm_rate_limit_error,
     module_overrides_from_config,
 )
+
 from openbiliclaw.memory.manager import MemoryManager
 
 if TYPE_CHECKING:

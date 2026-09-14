@@ -585,7 +585,8 @@ class AutoTopicGenerator:
 请生成综述（300-500字）："""
 
             # 调用 LLM（统一使用 generate_structured）
-            from openbiliclaw.llm.generation import generate_structured
+            from obc_llm.generation import generate_structured
+
             from openbiliclaw.self_evolution.insight_report import _run_async
 
             result = _run_async(

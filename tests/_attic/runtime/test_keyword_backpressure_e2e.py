@@ -97,7 +97,7 @@ class _MergedKeywordLLM:
         reasoning_effort: str | None = None,
     ) -> Any:
         self.calls.append({"caller": caller, "user": user_input})
-        from openbiliclaw.llm.base import LLMResponse
+        from obc_llm.base import LLMResponse
 
         return LLMResponse(
             content=json.dumps(self.payload, ensure_ascii=False),

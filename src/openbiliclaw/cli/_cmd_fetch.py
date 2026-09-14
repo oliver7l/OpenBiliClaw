@@ -788,9 +788,10 @@ def fetch_x(
 def _run_xhs_discovery(*, force: bool) -> None:
     """Trigger one Soul-driven xhs keyword production cycle."""
 
+    from obc_llm.service import LLMService, module_overrides_from_config
+
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
     from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
     from openbiliclaw.soul.engine import SoulProfileNotInitializedError
     from openbiliclaw.sources.xhs_tasks import XhsTaskQueue

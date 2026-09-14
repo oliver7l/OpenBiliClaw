@@ -26,7 +26,8 @@ def register_probe_routes(
     """Register config service probe endpoints on the FastAPI app."""
 
     async def _probe_llm_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS
+        from obc_llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS
+
         from openbiliclaw.llm.registry import build_llm_registry
 
         started = time.perf_counter()
@@ -83,7 +84,8 @@ def register_probe_routes(
             )
 
     async def _probe_embedding_config(cfg: Any) -> ConfigServiceProbeResponse:
-        from openbiliclaw.llm.base import LLMRegistry
+        from obc_llm.base import LLMRegistry
+
         from openbiliclaw.llm.registry import build_embedding_service
 
         started = time.perf_counter()

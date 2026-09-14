@@ -335,7 +335,7 @@ class ProactivePushEngine:
 
     def _generate_notification_body_with_llm(self, content: dict[str, Any]) -> str:
         """Generate notification body using LLM."""
-        from openbiliclaw.llm.generation import generate_structured
+        from obc_llm.generation import generate_structured
 
         title = content.get("title") or ""
         summary = content.get("ai_summary") or ""

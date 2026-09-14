@@ -1,6 +1,6 @@
 """Tests for tolerant JSON parsing helpers."""
 
-from openbiliclaw.llm.json_utils import (
+from obc_llm.json_utils import (
     extract_llm_json_list,
     extract_llm_json_object,
     parse_llm_json_tolerant,

@@ -31,9 +31,9 @@ async def generate_mock_pool(
     count: int = 20,
 ) -> list[dict[str, Any]]:
     """Generate a simulated discovery pool for a persona."""
-    from openbiliclaw.eval.agents import collect_json
-
     from claude_agent_sdk import ClaudeAgentOptions
+
+    from openbiliclaw.eval.agents import collect_json
 
     profile_ctx = persona.to_llm_context() if hasattr(persona, "to_llm_context") else str(persona)
 
@@ -69,9 +69,9 @@ async def evaluate_recommendations(
     llm_service: Any,
 ) -> dict[str, Any]:
     """Evaluate recommendation quality across multiple dimensions."""
-    from openbiliclaw.eval.agents import collect_json
-
     from claude_agent_sdk import ClaudeAgentOptions
+
+    from openbiliclaw.eval.agents import collect_json
 
     profile_ctx = persona.to_llm_context() if hasattr(persona, "to_llm_context") else str(persona)
     rec_text = json.dumps(recommendations, ensure_ascii=False, indent=2)[:3000]
@@ -113,6 +113,8 @@ async def main() -> None:
     parser.add_argument("--explore-rate", type=float, default=0.2)
     args = parser.parse_args()
 
+    from obc_llm.service import LLMService
+
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.agents import (
         ONION_PROFILE_SCHEMA,
@@ -125,7 +127,6 @@ async def main() -> None:
     from openbiliclaw.eval.persona_pool import PersonaPool
     from openbiliclaw.eval.run_logger import RunLogger
     from openbiliclaw.llm.registry import build_llm_registry
-    from openbiliclaw.llm.service import LLMService
     from openbiliclaw.memory.manager import MemoryManager
     from openbiliclaw.soul.profile import OnionProfile
 
@@ -252,8 +253,8 @@ async def main() -> None:
                 # Build embedding service if available
                 emb_service = None
                 try:
-                    from openbiliclaw.llm.embedding import EmbeddingService
-                    from openbiliclaw.llm.gemini_provider import GeminiProvider
+                    from obc_llm.embedding import EmbeddingService
+                    from obc_llm.gemini_provider import GeminiProvider
                     g = registry.get("gemini")
                     if isinstance(g, GeminiProvider):
                         emb_service = EmbeddingService(g)

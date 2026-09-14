@@ -46,14 +46,15 @@ import socket
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from obc_llm.prompts import (
+    build_merged_keywords_prompt,
+    parse_merged_keywords_with_presence,
+)
+
 from openbiliclaw.discovery.keyword_digest import profile_kw_digest
 from openbiliclaw.discovery.pool_snapshot import (
     build_cold_start_pool_snapshot,
     build_pool_distribution_snapshot,
-)
-from openbiliclaw.llm.prompts import (
-    build_merged_keywords_prompt,
-    parse_merged_keywords_with_presence,
 )
 
 if TYPE_CHECKING:

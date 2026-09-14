@@ -5,10 +5,10 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+from obc_llm.base import LLMProviderError, LLMResponse
+from obc_llm.prompts import build_preference_analysis_prompt
+from obc_llm.service import LLMServiceError
 
-from openbiliclaw.llm.base import LLMProviderError, LLMResponse
-from openbiliclaw.llm.prompts import build_preference_analysis_prompt
-from openbiliclaw.llm.service import LLMServiceError
 from openbiliclaw.soul.preference_analyzer import (
     DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE,
     MAX_CONCURRENT_PREFERENCE_CHUNKS,
@@ -815,7 +815,8 @@ async def test_chunked_analysis_batches_initial_chunk_fanout() -> None:
 
 @pytest.mark.asyncio
 async def test_chunked_analysis_splits_by_prompt_budget_before_llm_call() -> None:
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
+
     from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
@@ -849,7 +850,8 @@ async def test_chunked_analysis_splits_by_prompt_budget_before_llm_call() -> Non
 
 @pytest.mark.asyncio
 async def test_analyze_events_splits_by_prompt_budget_without_explicit_chunk_size() -> None:
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
+
     from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
@@ -878,7 +880,8 @@ async def test_analyze_events_splits_by_prompt_budget_without_explicit_chunk_siz
 
 @pytest.mark.asyncio
 async def test_single_oversized_preference_event_is_compacted_before_llm_call() -> None:
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
+
     from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
@@ -919,7 +922,8 @@ async def test_single_oversized_preference_event_is_compacted_before_llm_call() 
 async def test_single_event_is_skipped_when_compact_prompt_still_exceeds_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
+
     from openbiliclaw.soul import preference_analyzer as analyzer_module
     from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
 

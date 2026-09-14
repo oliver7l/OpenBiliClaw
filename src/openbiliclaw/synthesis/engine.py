@@ -30,7 +30,7 @@ from .store import SynthesisStore
 logger = logging.getLogger(__name__)
 
 try:
-    from openbiliclaw.llm.generation import generate_structured
+    from obc_llm.generation import generate_structured
 except ImportError:
     generate_structured = None
 

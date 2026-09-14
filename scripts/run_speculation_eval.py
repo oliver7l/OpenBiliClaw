@@ -20,11 +20,12 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
 async def main() -> None:
+    from obc_llm.prompts import build_speculation_generation_prompt
+
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.report import render_speculation_report
     from openbiliclaw.eval.run_logger import RunLogger
     from openbiliclaw.eval.speculation_evaluator import SpeculationEvaluator
-    from openbiliclaw.llm.prompts import build_speculation_generation_prompt
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
     from openbiliclaw.soul.profile import OnionProfile

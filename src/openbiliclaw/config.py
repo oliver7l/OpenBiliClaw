@@ -2002,7 +2002,7 @@ def _collect_config_issues(config: Config) -> list[ConfigIssue]:
                 )
             )
         try:
-            from openbiliclaw.llm.codex_auth import codex_credentials_exist
+            from obc_llm.codex_auth import codex_credentials_exist
 
             has_codex_credentials = codex_credentials_exist()
         except Exception:

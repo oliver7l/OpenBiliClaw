@@ -303,11 +303,11 @@ def test_login_codex_status_reports_credentials(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,
 ) -> None:
-    from openbiliclaw.llm.codex_auth import CodexCredentials
+    from obc_llm.codex_auth import CodexCredentials
 
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
     monkeypatch.setattr(
-        "openbiliclaw.llm.codex_auth.load_codex_credentials",
+        "obc_llm.codex_auth.load_codex_credentials",
         lambda: CodexCredentials(
             access_token="secret-access",
             refresh_token="secret-refresh",
@@ -330,7 +330,7 @@ def test_login_codex_import_uses_source_path(
     runner: CliRunner,
     tmp_path: Path,
 ) -> None:
-    from openbiliclaw.llm.codex_auth import CodexCredentials
+    from obc_llm.codex_auth import CodexCredentials
 
     source = tmp_path / "auth.json"
     calls: list[Path | None] = []
@@ -340,7 +340,7 @@ def test_login_codex_import_uses_source_path(
         return CodexCredentials("access", "refresh", 4_102_444_800.0, "acct_imported")
 
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
-    monkeypatch.setattr("openbiliclaw.llm.codex_auth.import_codex_credentials", fake_import)
+    monkeypatch.setattr("obc_llm.codex_auth.import_codex_credentials", fake_import)
 
     result = runner.invoke(app, ["login", "codex", "--import", "--source", str(source)])
 
@@ -357,7 +357,7 @@ def test_login_codex_logout_deletes_local_credentials(
 
     monkeypatch.setattr(cli_module, "_initialize_logging", lambda log_level_override=None: None)
     monkeypatch.setattr(
-        "openbiliclaw.llm.codex_auth.delete_codex_credentials",
+        "obc_llm.codex_auth.delete_codex_credentials",
         lambda: calls.append(True) or True,
     )
 
@@ -1133,9 +1133,10 @@ def test_db_repair_reports_successful_rebuild(
 def test_runtime_builders_share_database_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
+    import obc_llm.service as llm_service_module
+
     import openbiliclaw.discovery.engine as discovery_module
     import openbiliclaw.discovery.strategies.strategies as strategy_module
-    import openbiliclaw.llm.service as llm_service_module
     import openbiliclaw.memory.manager as memory_module
     import openbiliclaw.recommendation.engine as recommendation_module
     import openbiliclaw.storage.database as database_module

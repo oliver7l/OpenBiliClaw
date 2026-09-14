@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from obc_llm.registry import RegistryBuildError
 
 from openbiliclaw.api.app import create_app
 from openbiliclaw.api.runtime_context import build_runtime_context
 from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig, save_config
-from openbiliclaw.llm.registry import RegistryBuildError
 
 
 def _clear_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:

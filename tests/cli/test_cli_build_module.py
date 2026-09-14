@@ -109,7 +109,7 @@ def test_build_memory_manager_honors_cli_namespace_patch(monkeypatch: pytest.Mon
         def __init__(self, *, sink: object) -> None:
             created.append({"sink": sink})
 
-    monkeypatch.setattr("openbiliclaw.llm.usage_recorder.UsageRecorder", FakeUsageRecorder)
+    monkeypatch.setattr("obc_llm.usage_recorder.UsageRecorder", FakeUsageRecorder)
     monkeypatch.setattr(cli_module, "_get_runtime_database", lambda: sentinel_db, raising=False)
     # 两个命名空间的缓存 dict 都清空（本体在 runtime.init_flow，cli 是 import 引用）
     import openbiliclaw.runtime.init_flow as init_flow_module

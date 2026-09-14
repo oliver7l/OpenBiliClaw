@@ -216,7 +216,7 @@ class RankAgent:
             return {}
         import math
 
-        from openbiliclaw.llm.embedding import mmr_cache_text
+        from obc_llm.embedding import mmr_cache_text
 
         sums: dict[str, list[float]] = {}
         counts: dict[str, int] = {}
@@ -302,7 +302,7 @@ class RankAgent:
         centroids at all the behaviour is byte-identical to pre-centroid.
         """
         profile_domains = {k for k, w in profile_keywords if w >= 0.5}
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         # --- score each item ---
         scored_items: list[dict[str, Any]] = []

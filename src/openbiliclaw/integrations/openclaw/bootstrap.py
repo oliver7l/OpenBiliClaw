@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
+from obc_llm.service import LLMService, module_overrides_from_config
+from obc_llm.usage_recorder import UsageRecorder
+
 from openbiliclaw.api.runtime_context import build_youtube_discovery_producer
 from openbiliclaw.bilibili.api import BilibiliAPIClient
 from openbiliclaw.bilibili.auth import resolve_runtime_cookie
@@ -18,8 +21,6 @@ from openbiliclaw.discovery.strategies.strategies import (
     TrendingStrategy,
 )
 from openbiliclaw.llm import build_llm_registry
-from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-from openbiliclaw.llm.usage_recorder import UsageRecorder
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.recommendation.engine import RecommendationEngine
 from openbiliclaw.runtime.account_sync import AccountSyncService

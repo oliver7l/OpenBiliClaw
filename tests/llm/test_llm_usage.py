@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from obc_llm.pricing import PRICING, estimate_cost
+from obc_llm.usage_recorder import UsageRecorder
 
-from openbiliclaw.llm.pricing import PRICING, estimate_cost
-from openbiliclaw.llm.usage_recorder import UsageRecorder
 from openbiliclaw.storage.database import Database
 
 if TYPE_CHECKING:

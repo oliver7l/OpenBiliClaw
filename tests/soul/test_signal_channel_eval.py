@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 
 import pytest
+from obc_llm.base import LLMResponse
 
-from openbiliclaw.llm.base import LLMResponse
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.soul.pipeline import (
     _BUFFERED_LAYERS,

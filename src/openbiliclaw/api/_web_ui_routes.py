@@ -90,6 +90,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 "media-app.js",
                 "ed2k-app.js",
                 "douban-app.js",
+                "oss-research-app.js",
             ):
                 src = f'src="/web/assets/js/{script}"'
                 html = html.replace(src, f'src="/web/assets/js/{script}?v={version}"')
@@ -145,6 +146,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "ed2k",
             "douban",
             "conversation-archive",
+            "oss-research",
         }
 
         @app.get("/web/{page}", include_in_schema=False)

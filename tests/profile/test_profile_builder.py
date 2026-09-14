@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from openbiliclaw.llm.base import LLMResponse
+from obc_llm.base import LLMResponse
 
 
 class FakeRegistry:

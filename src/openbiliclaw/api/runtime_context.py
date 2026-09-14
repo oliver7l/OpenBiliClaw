@@ -388,6 +388,9 @@ class RuntimeContext:
         for _seg in ("llm", "recommendation"):
             if not hasattr(new_config, _seg):
                 setattr(new_config, _seg, SimpleNamespace())
+        from obc_llm.service import LLMService, module_overrides_from_config
+        from obc_llm.usage_recorder import UsageRecorder
+
         from openbiliclaw.bilibili.api import BilibiliAPIClient
         from openbiliclaw.bilibili.auth import resolve_runtime_cookie
         from openbiliclaw.discovery.engine import (
@@ -402,8 +405,6 @@ class RuntimeContext:
         )
         from openbiliclaw.llm import build_llm_registry
         from openbiliclaw.llm.registry import build_embedding_service
-        from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-        from openbiliclaw.llm.usage_recorder import UsageRecorder
         from openbiliclaw.recommendation.engine import RecommendationEngine
         from openbiliclaw.runtime.account_sync import AccountSyncService
         from openbiliclaw.runtime.refresh import ContinuousRefreshController

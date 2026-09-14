@@ -5,19 +5,18 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
-from openbiliclaw.llm.base import (
+from obc_llm.base import (
     LLM_CONNECTIVITY_PROBE_MAX_TOKENS,
     LLMProviderError,
     LLMRateLimitError,
     LLMResponseError,
     LLMTimeoutError,
 )
-from openbiliclaw.llm.claude_provider import ClaudeProvider
-from openbiliclaw.llm.gemini_provider import GeminiProvider, gemini_sdk_available
-from openbiliclaw.llm.ollama_provider import OllamaProvider
-from openbiliclaw.llm.openai_provider import DeepSeekProvider, OpenAIProvider
-from openbiliclaw.llm.openrouter_provider import OpenRouterProvider
+from obc_llm.claude_provider import ClaudeProvider
+from obc_llm.gemini_provider import GeminiProvider, gemini_sdk_available
+from obc_llm.ollama_provider import OllamaProvider
+from obc_llm.openai_provider import DeepSeekProvider, OpenAIProvider
+from obc_llm.openrouter_provider import OpenRouterProvider
 
 
 def _openai_response(content: str = "ok") -> SimpleNamespace:
@@ -147,7 +146,7 @@ async def test_openai_provider_retries_transient_failure(
         return _openai_response("retry-ok")
 
     monkeypatch.setattr(provider._client.chat.completions, "create", fake_create)
-    monkeypatch.setattr("openbiliclaw.llm.openai_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.openai_provider.asyncio.sleep", fake_sleep)
 
     response = await provider.complete([{"role": "user", "content": "hi"}])
 
@@ -198,7 +197,7 @@ async def test_openai_provider_maps_timeout(monkeypatch: pytest.MonkeyPatch) -> 
         raise TimeoutError("slow")
 
     monkeypatch.setattr(provider._client.chat.completions, "create", fake_create)
-    monkeypatch.setattr("openbiliclaw.llm.openai_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.openai_provider.asyncio.sleep", fake_sleep)
 
     with pytest.raises(LLMTimeoutError):
         await provider.complete([{"role": "user", "content": "hi"}])
@@ -222,7 +221,7 @@ async def test_openai_provider_does_not_retry_rate_limit(
         raise RateLimitError("too many requests")
 
     monkeypatch.setattr(provider._client.chat.completions, "create", fake_create)
-    monkeypatch.setattr("openbiliclaw.llm.openai_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.openai_provider.asyncio.sleep", fake_sleep)
 
     with pytest.raises(LLMRateLimitError):
         await provider.complete([{"role": "user", "content": "hi"}])
@@ -384,7 +383,7 @@ async def test_claude_provider_maps_provider_error(monkeypatch: pytest.MonkeyPat
         raise RuntimeError("boom")
 
     monkeypatch.setattr(provider._client.messages, "create", fake_create)
-    monkeypatch.setattr("openbiliclaw.llm.claude_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.claude_provider.asyncio.sleep", fake_sleep)
 
     with pytest.raises(LLMProviderError):
         await provider.complete([{"role": "user", "content": "hi"}])
@@ -405,7 +404,7 @@ async def test_claude_provider_does_not_retry_rate_limit(
         raise RuntimeError("rate limit exceeded")
 
     monkeypatch.setattr(provider._client.messages, "create", fake_create)
-    monkeypatch.setattr("openbiliclaw.llm.claude_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.claude_provider.asyncio.sleep", fake_sleep)
 
     with pytest.raises(LLMRateLimitError):
         await provider.complete([{"role": "user", "content": "hi"}])
@@ -480,7 +479,7 @@ def test_openai_provider_logs_http_400_response_body(
             text='{"error":{"message":"MiMo rejected request: invalid response_format"}}'
         )
 
-    caplog.set_level("WARNING", logger="openbiliclaw.llm.openai_provider")
+    caplog.set_level("WARNING", logger="obc_llm.openai_provider")
 
     mapped = provider._map_error(BadRequestError("Error code: 400"))
 
@@ -969,7 +968,7 @@ async def test_gemini_provider_does_not_retry_rate_limit(
         raise RateLimitError("too many requests")
 
     monkeypatch.setattr(provider._client.aio.models, "generate_content", fake_generate_content)
-    monkeypatch.setattr("openbiliclaw.llm.gemini_provider.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("obc_llm.gemini_provider.asyncio.sleep", fake_sleep)
 
     with pytest.raises(LLMRateLimitError):
         await provider.complete([{"role": "user", "content": "hi"}])
@@ -1040,7 +1039,7 @@ async def test_openai_provider_retries_empty_length_with_bigger_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Reasoning models that burn the whole budget retry once with more tokens."""
-    from openbiliclaw.llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
+    from obc_llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
 
     provider = OpenAIProvider(api_key="test-key")
     budgets: list[int] = []
@@ -1067,7 +1066,7 @@ async def test_openai_provider_retries_empty_length_with_bigger_budget(
 async def test_openai_provider_raises_when_bigger_budget_still_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
+    from obc_llm.openai_provider import _REASONING_RETRY_MAX_TOKENS
 
     provider = OpenAIProvider(api_key="test-key")
     budgets: list[int] = []

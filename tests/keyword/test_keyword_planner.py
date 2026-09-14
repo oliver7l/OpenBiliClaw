@@ -64,7 +64,7 @@ class _FakeLLM:
             self.entered.set()
         if self.gate is not None:
             await self.gate.wait()
-        from openbiliclaw.llm.base import LLMResponse
+        from obc_llm.base import LLMResponse
 
         return LLMResponse(
             content=json.dumps(self.payload, ensure_ascii=False),
@@ -953,7 +953,7 @@ class _CaptureLLM:
     ) -> Any:
         self.calls.append({"user": user_input, "caller": caller})
         self.max_tokens_seen.append(max_tokens)
-        from openbiliclaw.llm.base import LLMResponse
+        from obc_llm.base import LLMResponse
 
         return LLMResponse(
             content=json.dumps(self.payload, ensure_ascii=False), provider="t", model="t"

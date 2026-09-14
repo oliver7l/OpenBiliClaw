@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from openbiliclaw.llm.embedding import EmbeddingCache, EmbeddingService
+from obc_llm.embedding import EmbeddingCache, EmbeddingService
 
 
 class _FakeEmbedProvider:

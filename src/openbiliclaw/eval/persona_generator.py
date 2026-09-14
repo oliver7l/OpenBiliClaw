@@ -12,7 +12,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openbiliclaw.llm.base import LLMResponse
+    from obc_llm.base import LLMResponse
 
 from openbiliclaw.soul.profile import OnionProfile
 

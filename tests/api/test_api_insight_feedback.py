@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
+from obc_llm.base import LLMResponse
 
 from openbiliclaw.api.app import create_app
-from openbiliclaw.llm.base import LLMResponse
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.soul.engine import SoulEngine
 

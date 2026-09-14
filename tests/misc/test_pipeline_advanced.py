@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from obc_llm.base import LLMResponse
 
-from openbiliclaw.llm.base import LLMResponse
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.soul.layer_updaters import _update_surface
 from openbiliclaw.soul.pipeline import (

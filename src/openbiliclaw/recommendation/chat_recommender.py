@@ -169,7 +169,7 @@ async def parse_chat_intent(
 
     if llm_service is not None:
         try:
-            from openbiliclaw.llm.generation import generate_structured
+            from obc_llm.generation import generate_structured
 
             def _parse_intent(content: str) -> ChatIntent | None:
                 import json
@@ -314,7 +314,7 @@ async def generate_chat_response(
     # LLM-driven response
     if llm_service is not None:
         try:
-            from openbiliclaw.llm.generation import generate_structured
+            from obc_llm.generation import generate_structured
 
             rec_block = _format_recommendations_for_prompt(recommendations)
             profile_summary = ""

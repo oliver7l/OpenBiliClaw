@@ -20,6 +20,7 @@ Endpoints（prefix ``/api/interview``）：
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -445,6 +446,105 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         new_id = c.lastrowid
         conn.close()
         return {"ok": True, "id": new_id}
+
+    # ========== 待办事项 ==========
+    todo_priorities = ("高", "中", "低")
+
+    def _ensure_todo_table(conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS todo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                detail TEXT DEFAULT '',
+                company TEXT DEFAULT '',
+                due_date TEXT DEFAULT '',
+                priority TEXT DEFAULT '中',
+                status TEXT DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                done_at TEXT DEFAULT ''
+            )
+        """)
+
+    @router.get("/todos")
+    def interview_todos(include_done: bool = False, limit: int = 200) -> dict[str, Any]:
+        """待办列表（pending 在前：逾期→有截止日→无截止日；done 沉底）。"""
+        conn = sqlite3.connect(_scripts_db())
+        conn.row_factory = sqlite3.Row
+        _ensure_todo_table(conn)
+        c = conn.cursor()
+        sql = "SELECT * FROM todo"
+        if not include_done:
+            sql += " WHERE status='pending'"
+        sql += " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, due_date='', priority='高' DESC, priority='中' DESC, due_date ASC, id DESC LIMIT ?"
+        c.execute(sql, (limit,))
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return {"total": len(rows), "items": rows}
+
+    @router.post("/todos", status_code=201)
+    def interview_todo_add(data: dict[str, Any]) -> dict[str, Any]:
+        """新增待办 {title, detail?, company?, due_date?, priority?}。"""
+        title = str(data.get("title") or "").strip()
+        if not title:
+            raise HTTPException(status_code=422, detail="title 不能为空")
+        priority = data.get("priority") or "中"
+        if priority not in todo_priorities:
+            raise HTTPException(status_code=422, detail=f"priority 必须是 {todo_priorities} 之一")
+        due_date = str(data.get("due_date") or "").strip()
+        if due_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", due_date):
+            raise HTTPException(status_code=422, detail="due_date 格式须为 YYYY-MM-DD")
+        conn = sqlite3.connect(_scripts_db())
+        _ensure_todo_table(conn)
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO todo (title, detail, company, due_date, priority, status, created_at)"
+            " VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            (
+                title,
+                str(data.get("detail") or "").strip(),
+                str(data.get("company") or "").strip(),
+                due_date,
+                priority,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+        new_id = c.lastrowid
+        conn.close()
+        return {"ok": True, "id": new_id}
+
+    @router.post("/todos/{todo_id}/status")
+    def interview_todo_status(todo_id: int, status: str) -> dict[str, Any]:
+        """更新待办状态（pending/done）。"""
+        if status not in ("pending", "done"):
+            raise HTTPException(status_code=422, detail="status 必须是 pending 或 done")
+        conn = sqlite3.connect(_scripts_db())
+        _ensure_todo_table(conn)
+        c = conn.cursor()
+        c.execute("SELECT id FROM todo WHERE id=?", (todo_id,))
+        if not c.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"待办 {todo_id} 不存在")
+        done_at = datetime.now().isoformat(timespec="seconds") if status == "done" else ""
+        c.execute("UPDATE todo SET status=?, done_at=? WHERE id=?", (status, done_at, todo_id))
+        conn.commit()
+        conn.close()
+        return {"ok": True, "id": todo_id, "status": status}
+
+    @router.delete("/todos/{todo_id}")
+    def interview_todo_delete(todo_id: int) -> dict[str, Any]:
+        """删除待办。"""
+        conn = sqlite3.connect(_scripts_db())
+        _ensure_todo_table(conn)
+        c = conn.cursor()
+        c.execute("SELECT id FROM todo WHERE id=?", (todo_id,))
+        if not c.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"待办 {todo_id} 不存在")
+        c.execute("DELETE FROM todo WHERE id=?", (todo_id,))
+        conn.commit()
+        conn.close()
+        return {"ok": True, "id": todo_id}
 
     return router
 

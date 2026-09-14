@@ -1228,7 +1228,7 @@ Keep keywords focused and specific. Remove stop words."""
             def _rank_offloop() -> dict[str, Any]:
                 content_embeds: dict[str, list[float]] = {}
                 if emb_service is not None and q_embed and any(q_embed):
-                    from openbiliclaw.llm.embedding import mmr_cache_text
+                    from obc_llm.embedding import mmr_cache_text
 
                     lookup = getattr(emb_service, "lookup_cached", None)
                     if callable(lookup):

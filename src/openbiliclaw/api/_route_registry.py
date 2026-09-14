@@ -317,6 +317,14 @@ def register_all_routes(
     except Exception as _exc:  # noqa: BLE001
         _failures.record("douban routes", _exc)
 
+    # ── 开源项目研究 API（发给助手的开源项目 → 研究 → 入库 → 前端 tab）──
+    try:
+        from openbiliclaw.api.oss_research_routes import build_oss_research_router
+
+        app.include_router(build_oss_research_router())
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("oss-research routes", _exc)
+
     # ── 周末怎么玩 API ───────────────────────────────────────────
     try:
         from openbiliclaw.weekend.routes import build_weekend_router

@@ -60,6 +60,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _format_ref_range(component: Any) -> str:
+    """把化验明细的参考范围字段拼成可读文本。"""
+    if component.ref_range_text:
+        return component.ref_range_text
+    lo, hi = component.ref_range_min, component.ref_range_max
+    if lo is not None and hi is not None:
+        return f"{lo}–{hi}"
+    if lo is not None:
+        return f"≥ {lo}"
+    if hi is not None:
+        return f"≤ {hi}"
+    return "无"
+
+
 class HealthService:
     """健康管理业务服务。
 
@@ -454,7 +468,7 @@ class HealthService:
         components = self.store.list_lab_components(lab_result_id)
         components_text = "\n".join(
             f"- {c.test_name}: {c.value} {c.unit or ''} "
-            f"(参考范围 {c.reference_range or '无'}) "
+            f"(参考范围 {_format_ref_range(c)} ) "
             f"[{'异常' if c.status != 'normal' else '正常'}]"
             for c in components
         )

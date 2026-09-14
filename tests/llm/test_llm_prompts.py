@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS
-from openbiliclaw.llm.prompts import (
+from obc_llm.prompts import (
     _AWARENESS_SYSTEM_PROMPT,
     _BATCH_CONTENT_EVALUATION_SYSTEM_PROMPT,
     _MERGED_KEYWORDS_SYSTEM_PROMPT,
@@ -25,6 +24,8 @@ from openbiliclaw.llm.prompts import (
     parse_merged_keywords,
     parse_merged_keywords_with_presence,
 )
+
+from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS
 from openbiliclaw.memory.manager import MemoryManager
 
 
@@ -812,7 +813,7 @@ def test_prompt_builder_system_messages_are_call_invariant() -> None:
     stays in system. See ``build_batch_content_evaluation_prompt`` for
     the canonical pattern.
     """
-    from openbiliclaw.llm import prompts as prompts_mod
+    from obc_llm import prompts as prompts_mod
 
     failures: list[str] = []
     for name, args1, args2 in _builder_test_inputs():
@@ -843,7 +844,8 @@ def test_profile_consolidation_prompt_requires_representative_item_names() -> No
 
 
 def test_category_mapping_prompt_user_message_carries_vocab_and_histogram() -> None:
-    from openbiliclaw.llm.prompts import build_category_mapping_prompt
+    from obc_llm.prompts import build_category_mapping_prompt
+
     from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
 
     messages = build_category_mapping_prompt(categories=[{"category": "泛娱乐", "tag_count": 12}])
@@ -858,7 +860,8 @@ def test_category_mapping_prompt_user_message_carries_vocab_and_histogram() -> N
 
 
 def test_preference_analysis_system_prompt_contains_full_vocab() -> None:
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
+
     from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
 
     messages = build_preference_analysis_prompt(events=[], existing_preference={})

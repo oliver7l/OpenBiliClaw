@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
+from obc_llm.base import LLMResponse
 
-from openbiliclaw.llm.base import LLMResponse
 from openbiliclaw.soul.profile import AwarenessNote
 
 

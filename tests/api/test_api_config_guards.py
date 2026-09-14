@@ -115,11 +115,11 @@ def test_put_config_writes_real_new_chat_provider_model(monkeypatch, tmp_path) -
 
 
 def test_put_config_round_trips_openai_auth_mode(monkeypatch, tmp_path) -> None:
-    from openbiliclaw.llm.codex_auth import CodexCredentials
+    from obc_llm.codex_auth import CodexCredentials
 
     client, _cfg, config_path = _make_client(monkeypatch, tmp_path, _base_config())
     monkeypatch.setattr(
-        "openbiliclaw.llm.codex_auth.load_codex_credentials",
+        "obc_llm.codex_auth.load_codex_credentials",
         lambda: CodexCredentials("access-token", "refresh-token", 9999999999),
     )
 

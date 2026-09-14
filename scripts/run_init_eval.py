@@ -124,7 +124,7 @@ async def main() -> None:
     pref_step.save_json("events_input.json", events[:50])  # Save sample
 
     # Log the preference analysis prompt
-    from openbiliclaw.llm.prompts import build_preference_analysis_prompt
+    from obc_llm.prompts import build_preference_analysis_prompt
     pref_prompt_msgs = build_preference_analysis_prompt(
         events=events[:20], existing_preference={},
     )
@@ -164,7 +164,8 @@ async def main() -> None:
         })
 
     # Log the profile generation prompt
-    from openbiliclaw.llm.prompts import build_soul_profile_prompt
+    from obc_llm.prompts import build_soul_profile_prompt
+
     from openbiliclaw.soul.profile_builder import ProfileBuilder
     profile_prompt_msgs = build_soul_profile_prompt(
         history_summary=ProfileBuilder._summarize_history(combined_history),

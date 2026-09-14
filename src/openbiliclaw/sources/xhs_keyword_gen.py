@@ -11,10 +11,11 @@ import json
 import logging
 from typing import TYPE_CHECKING, cast
 
-from openbiliclaw.llm.json_utils import parse_llm_json_tolerant
+from obc_llm.json_utils import parse_llm_json_tolerant
 
 if TYPE_CHECKING:
-    from openbiliclaw.llm.service import LLMService
+    from obc_llm.service import LLMService
+
     from openbiliclaw.soul.profile import OnionProfile, SoulProfile
 
 logger = logging.getLogger(__name__)

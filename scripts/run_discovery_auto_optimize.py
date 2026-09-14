@@ -126,7 +126,8 @@ async def main(args: argparse.Namespace) -> None:
     registry = build_llm_registry(cfg)
 
     # Build LLMService (needs a MemoryManager for core memory injection)
-    from openbiliclaw.llm.service import LLMService
+    from obc_llm.service import LLMService
+
     from openbiliclaw.memory.manager import MemoryManager
 
     memory = MemoryManager(PROJECT_ROOT / "data")

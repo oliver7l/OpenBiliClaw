@@ -77,6 +77,9 @@
       case "schedule":
         renderSchedule(area);
         break;
+      case "todos":
+        renderTodos(area);
+        break;
       case "companies":
         renderCompanies(area);
         break;
@@ -156,6 +159,116 @@
         <div class="interview-schedule-status ${statusClass}">${escapeHtml(job.status || "未知")}</div>
       </div>
     `;
+  }
+
+  // ── 待办事项 ──────────────────────────────────────────────
+
+  function renderTodos(area) {
+    requestJson(API_BASE + "/todos?include_done=true")
+      .then((data) => {
+        area.innerHTML = renderTodosHtml(data);
+        bindTodoEvents(area);
+      })
+      .catch(() => {
+        area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  function todoDueLabel(item) {
+    if (!item.due_date) return "";
+    const today = new Date();
+    const todayStr = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+    if (item.status !== "done" && item.due_date < todayStr) {
+      return `<span style="color:var(--err,#e5484d);font-weight:600;">⏰ 已逾期（${item.due_date}）</span>`;
+    }
+    if (item.due_date === todayStr) return `<span style="color:var(--warn,#f5a623);font-weight:600;">📍 今天到期</span>`;
+    return `<span>🗓 ${item.due_date}</span>`;
+  }
+
+  function renderTodosHtml(data) {
+    const items = data.items || [];
+    const pending = items.filter((t) => t.status === "pending");
+    const done = items.filter((t) => t.status !== "pending");
+    let html = `
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <input id="todoTitleInput" placeholder="待办内容，如：问比亚迪HR资料是否收到" style="flex:2;min-width:220px;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:8px;background:var(--bg,#fff);color:var(--text,#222);" />
+        <input id="todoDueInput" type="date" style="padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:8px;background:var(--bg,#fff);color:var(--text,#222);" />
+        <select id="todoPriorityInput" style="padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:8px;background:var(--bg,#fff);color:var(--text,#222);">
+          <option value="高">高优先</option>
+          <option value="中" selected>中优先</option>
+          <option value="低">低优先</option>
+        </select>
+        <button id="todoAddBtn" type="button" style="padding:8px 16px;border:none;border-radius:8px;background:var(--accent,#4a7dff);color:#fff;font-weight:600;cursor:pointer;">＋ 添加</button>
+      </div>
+    `;
+    if (pending.length === 0 && done.length === 0) {
+      html += '<div class="interview-empty">暂无待办，用上方输入框添加一条吧</div>';
+      return html;
+    }
+    html += `<div style="margin-bottom:12px;font-size:13px;color:var(--muted);">📌 待办 ${pending.length} 项${done.length ? "，已完成 " + done.length + " 项" : ""}</div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    pending.forEach((t) => { html += renderTodoCard(t); });
+    done.forEach((t) => { html += renderTodoCard(t); });
+    html += "</div>";
+    return html;
+  }
+
+  function renderTodoCard(t) {
+    const isDone = t.status === "done";
+    const opacity = isDone ? 'style="opacity:0.55;"' : "";
+    const priBadge = `<span style="padding:1px 8px;border-radius:6px;font-size:12px;background:${t.priority === "高" ? "rgba(229,72,77,.14);color:#e5484d" : t.priority === "中" ? "rgba(245,166,35,.16);color:#b57d0a" : "rgba(120,120,120,.14);color:var(--muted,#888)"};">${t.priority}</span>`;
+    const companyTag = t.company ? `<span style="padding:1px 8px;border-radius:6px;font-size:12px;background:rgba(74,125,255,.12);color:var(--accent,#4a7dff);">${escapeHtml(t.company)}</span>` : "";
+    const titleStyle = isDone ? "text-decoration:line-through;" : "font-weight:600;";
+    return `
+      <div class="interview-schedule-card" ${opacity} data-todo-id="${t.id}">
+        <div style="display:flex;align-items:center;gap:10px;width:100%;">
+          <button class="interview-action-btn todo-toggle-btn" data-id="${t.id}" data-status="${isDone ? "pending" : "done"}" type="button"
+            title="${isDone ? "重新打开" : "标记完成"}"
+            style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone ? "var(--accent,#4a7dff)" : "var(--border,#ccc)"};background:${isDone ? "var(--accent,#4a7dff)" : "transparent"};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone ? "✓" : ""}</button>
+          <div style="flex:1;min-width:0;">
+            <div style="${titleStyle}font-size:14px;color:var(--text,#222);">${escapeHtml(t.title)}</div>
+            ${t.detail ? `<div style="font-size:12.5px;color:var(--muted,#888);margin-top:2px;">${escapeHtml(t.detail)}</div>` : ""}
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;font-size:12px;color:var(--muted,#888);">
+              ${priBadge} ${companyTag} ${todoDueLabel(t)}
+            </div>
+          </div>
+          <button class="interview-action-btn todo-del-btn" data-id="${t.id}" type="button" title="删除"
+            style="border:none;background:transparent;color:var(--muted,#999);cursor:pointer;font-size:15px;flex-shrink:0;">🗑</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindTodoEvents(area) {
+    const addBtn = document.getElementById("todoAddBtn");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        const title = (document.getElementById("todoTitleInput") || {}).value || "";
+        const due = (document.getElementById("todoDueInput") || {}).value || "";
+        const priority = (document.getElementById("todoPriorityInput") || {}).value || "中";
+        if (!title.trim()) { showToast("待办内容不能为空"); return; }
+        requestJson(API_BASE + "/todos", {
+          method: "POST",
+          body: JSON.stringify({ title: title.trim(), due_date: due, priority: priority }),
+        })
+          .then(() => renderTodos(area))
+          .catch(() => showToast("添加失败，请重试"));
+      });
+    }
+    area.querySelectorAll(".todo-toggle-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        requestJson(API_BASE + `/todos/${btn.dataset.id}/status?status=${btn.dataset.status}`, { method: "POST" })
+          .then(() => renderTodos(area))
+          .catch(() => showToast("操作失败，请重试"));
+      });
+    });
+    area.querySelectorAll(".todo-del-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        requestJson(API_BASE + `/todos/${btn.dataset.id}`, { method: "DELETE" })
+          .then(() => renderTodos(area))
+          .catch(() => showToast("删除失败，请重试"));
+      });
+    });
   }
 
   // ── 公司岗位信息 ──────────────────────────────────────────

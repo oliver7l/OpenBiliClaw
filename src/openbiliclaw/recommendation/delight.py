@@ -17,12 +17,12 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from openbiliclaw.llm.generation import generate_structured
-from openbiliclaw.llm.json_utils import extract_llm_json_list
-from openbiliclaw.llm.prompts import build_delight_score_batch_prompt
+from obc_llm.generation import generate_structured
+from obc_llm.json_utils import extract_llm_json_list
+from obc_llm.prompts import build_delight_score_batch_prompt
 
 if TYPE_CHECKING:
-    from openbiliclaw.llm.embedding import SupportsEmbeddingService
+    from obc_llm.embedding import SupportsEmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -521,7 +521,7 @@ class DelightScorer:
         if not deep_needs:
             return 0.0
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         content_vec = await self._embedding.embed(content_text)
         if not content_vec:
@@ -554,7 +554,7 @@ class DelightScorer:
         if not active_insights:
             return 0.0
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         content_vec = await self._embedding.embed(content_text)
         if not content_vec:
@@ -629,7 +629,7 @@ class DelightScorer:
         if not like_texts:
             return 0.0
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         content_vec = await self._embedding.embed(content_text)
         if not content_vec:
@@ -677,7 +677,7 @@ class DelightScorer:
         if not topical:
             return 0.0
 
-        from openbiliclaw.llm.embedding import cosine_similarity
+        from obc_llm.embedding import cosine_similarity
 
         content_vec = await self._embedding.embed(content_text)
         if not content_vec:

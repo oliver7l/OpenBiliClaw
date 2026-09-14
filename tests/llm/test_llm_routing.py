@@ -17,9 +17,10 @@ Pins the properties we depend on after the 2026-09-01 fallback rework:
 
 from __future__ import annotations
 
+from obc_llm.base import LLMRegistry
+from obc_llm.openai_provider import OpenAIProvider
+
 from openbiliclaw.config import Config
-from openbiliclaw.llm.base import LLMRegistry
-from openbiliclaw.llm.openai_provider import OpenAIProvider
 from openbiliclaw.llm.registry import build_llm_registry
 
 
@@ -124,7 +125,7 @@ def test_empty_reasoning_effort_sends_no_extra_body() -> None:
 
 def test_deepseek_provider_injects_thinking_schema() -> None:
     """DeepSeekProvider uses its own thinking schema, not plain reasoning_effort."""
-    from openbiliclaw.llm.openai_provider import DeepSeekProvider
+    from obc_llm.openai_provider import DeepSeekProvider
 
     provider = DeepSeekProvider(
         api_key="sk-test",

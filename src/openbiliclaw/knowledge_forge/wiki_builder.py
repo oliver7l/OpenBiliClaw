@@ -50,10 +50,11 @@ def _default_db_path() -> Path:
 
 def _build_embedding_service() -> Any:
     """惰性构建 embedding 服务（配置 [llm.embedding]，含 fallback）。"""
-    from openbiliclaw.config import load_config
-    from openbiliclaw.llm.registry import (  # type: ignore[attr-defined]
+    from obc_llm.registry import (  # type: ignore[attr-defined]
         build_embedding_service as _build,
     )
+
+    from openbiliclaw.config import load_config
 
     cfg = load_config()
     registry = None

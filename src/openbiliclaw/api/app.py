@@ -971,6 +971,8 @@ def create_app(
     # 测试多次 create_app 时若不清理，同 path 的 GET 会命中前一个 app 的缓存
     # （响应被旧 app 的注入组件数据污染，见 test_recommendations_endpoint_*）。
     _api_cache.invalidate_namespace(_API_CACHE_NAMESPACE)
+    from obc_llm.registry import RegistryBuildError
+
     from openbiliclaw.api._route_registry import register_all_routes
     from openbiliclaw.api._web_ui_routes import register_web_ui_routes
     from openbiliclaw.api.recommendation_routes import build_recommendation_router
@@ -980,7 +982,6 @@ def create_app(
         build_runtime_context,
     )
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm.registry import RegistryBuildError
 
     app = FastAPI(title="OpenBiliClaw API", default_response_class=JSONResponse)
 

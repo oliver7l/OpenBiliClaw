@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-
-from openbiliclaw.llm.base import LLMProvider, LLMRegistry, LLMResponse
+from obc_llm.base import LLMProvider, LLMRegistry, LLMResponse
 
 
 @dataclass

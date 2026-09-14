@@ -99,7 +99,7 @@ def test_douyin_direct_client_never_uses_environment_proxy(
 def test_openai_provider_client_never_uses_environment_proxy(
     _capture_httpx: list[dict[str, Any]],
 ) -> None:
-    from openbiliclaw.llm.openai_provider import OpenAIProvider
+    from obc_llm.openai_provider import OpenAIProvider
 
     OpenAIProvider(
         api_key="sk-test",

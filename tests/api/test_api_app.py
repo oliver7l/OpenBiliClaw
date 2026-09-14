@@ -601,9 +601,10 @@ class TestBackendAPI:
         from pathlib import Path
         from types import SimpleNamespace
 
+        from obc_llm.base import LLMResponse
+
         from openbiliclaw.api.runtime_context import RuntimeContext
         from openbiliclaw.config import Config
-        from openbiliclaw.llm.base import LLMResponse
         from openbiliclaw.recommendation.engine import RecommendationEngine
         from openbiliclaw.soul.profile import PreferenceLayer, SoulProfile
         from openbiliclaw.storage.database import Database
@@ -845,9 +846,10 @@ class TestBackendAPI:
     ) -> None:
         from types import SimpleNamespace
 
+        import obc_llm.service as llm_service_module
+
         import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
-        import openbiliclaw.llm.service as llm_service_module
         import openbiliclaw.memory.manager as memory_module
         import openbiliclaw.storage.database as database_module
 
@@ -943,11 +945,12 @@ class TestBackendAPI:
     ) -> None:
         from types import SimpleNamespace
 
+        import obc_llm.service as llm_service_module
+
         import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
         import openbiliclaw.discovery.engine as discovery_engine_module
         import openbiliclaw.discovery.strategies.strategies as strategies_module
-        import openbiliclaw.llm.service as llm_service_module
         import openbiliclaw.memory.manager as memory_module
         import openbiliclaw.recommendation.engine as recommendation_module
         import openbiliclaw.runtime.account_sync as account_sync_module
@@ -9057,8 +9060,8 @@ class TestProfileEditEndpoints:
 
     def _client(self, tmp_path: Path) -> object:
         from fastapi.testclient import TestClient
+        from obc_llm.base import LLMResponse
 
-        from openbiliclaw.llm.base import LLMResponse
         from openbiliclaw.memory.manager import MemoryManager
         from openbiliclaw.soul.engine import SoulEngine
         from openbiliclaw.soul.profile import (

@@ -961,7 +961,7 @@ class HealthStore:
         ).fetchone()
         if row is None:
             raise ValueError(f"化验结果不存在: {lab_result_id}")
-        components = self._get_components(lab_result_id)
+        components = self.list_lab_components(lab_result_id)
         return LabResult(
             id=row["id"],
             patient_id=row["patient_id"],
@@ -980,7 +980,7 @@ class HealthStore:
             updated_at=_parse_dt(row["updated_at"]),
         )
 
-    def _get_components(self, lab_result_id: int) -> list[LabTestComponent]:
+    def list_lab_components(self, lab_result_id: int) -> list[LabTestComponent]:
         rows = self.conn.execute(
             "SELECT * FROM health_lab_components WHERE lab_result_id = ? ORDER BY id",
             (lab_result_id,),

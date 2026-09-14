@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from fastapi.testclient import TestClient
+from obc_llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS, LLMProviderError, LLMResponse
 
 from openbiliclaw.api.app import create_app
 from openbiliclaw.api.models import ConfigServiceProbeIn, ConfigServiceProbeResponse
 from openbiliclaw.config import Config, EmbeddingConfig, LLMConfig, LLMProviderConfig, save_config
-from openbiliclaw.llm.base import LLM_CONNECTIVITY_PROBE_MAX_TOKENS, LLMProviderError, LLMResponse
 
 if TYPE_CHECKING:
     from pathlib import Path

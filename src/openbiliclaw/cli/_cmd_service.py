@@ -353,9 +353,10 @@ def _normalize_strategy_names(raw: list[str] | None) -> list[str]:
 
 def config_show() -> None:
     """显示当前配置."""
+    from obc_llm import RegistryBuildError
+
     from openbiliclaw import cli as _cli
     from openbiliclaw.config import load_config_with_diagnostics
-    from openbiliclaw.llm import RegistryBuildError
     from openbiliclaw.llm._compat_registry import summarize_registry
 
     cfg, diagnostics = load_config_with_diagnostics()
@@ -441,8 +442,7 @@ def login_codex(
     """导入或管理 Codex CLI 的 ChatGPT OAuth 凭据."""
     from datetime import datetime
 
-    from openbiliclaw import cli as _cli
-    from openbiliclaw.llm.codex_auth import (
+    from obc_llm.codex_auth import (
         CodexAuthError,
         CodexCredentials,
         delete_codex_credentials,
@@ -450,6 +450,8 @@ def login_codex(
         load_codex_credentials,
         run_codex_cli_login,
     )
+
+    from openbiliclaw import cli as _cli
 
     def _print_codex_credentials(credentials: CodexCredentials) -> None:
         expires = datetime.fromtimestamp(credentials.expires_at).strftime("%Y-%m-%d %H:%M:%S")
@@ -501,8 +503,9 @@ def login_codex(
 
 def health_check() -> None:
     """检查当前已注册 LLM provider 的可用性."""
+    from obc_llm import RegistryBuildError
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.llm import RegistryBuildError
 
     try:
         registry = _cli._build_registry()

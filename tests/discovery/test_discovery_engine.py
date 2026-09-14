@@ -10,6 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from obc_llm.service import LLMProviderExecutionError
 
 from openbiliclaw.discovery.engine import (
     ContentDiscoveryEngine,
@@ -20,7 +21,6 @@ from openbiliclaw.discovery.engine import (
     llm_eval_candidate_limit,
 )
 from openbiliclaw.discovery.pool_snapshot import PoolDistributionSnapshot
-from openbiliclaw.llm.service import LLMProviderExecutionError
 from openbiliclaw.soul.profile import InterestTag, SoulProfile
 from openbiliclaw.storage.database import Database
 
@@ -695,10 +695,10 @@ async def test_multimodal_evaluation_e2e_binds_cached_cover_to_content_id(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from obc_llm.base import LLMResponse
+    from obc_llm.service import LLMService
     from PIL import Image
 
-    from openbiliclaw.llm.base import LLMResponse
-    from openbiliclaw.llm.service import LLMService
     from openbiliclaw.runtime import image_cache
 
     cover_url = "https://i.ytimg.com/vi/openbiliclaw-e2e/hqdefault.jpg"

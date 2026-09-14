@@ -214,7 +214,7 @@ def note_video(
     # 注入 llm_service（如果可用）
     llm_service = None
     try:
-        from openbiliclaw.llm.service import LLMService, module_overrides_from_config
+        from obc_llm.service import LLMService, module_overrides_from_config
 
         overrides = module_overrides_from_config(config)
         from openbiliclaw.llm._compat_registry import build_llm_registry as _build_registry
