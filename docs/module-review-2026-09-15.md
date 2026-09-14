@@ -3,7 +3,9 @@
 > 目的：按模块逐个回答「**还有哪些没理清、会变成维护负担**」。
 > 范围：**日记 / 旅游 / 周末活动 / 阅读库 / 面试 / 健康监控** 六个模块。
 > 方法：全部来自当天**只读实测**（读代码、`git log`、`sqlite3 ?mode=ro`、curl 线上 openapi），不引用二手描述。
-> 姊妹文档：全局底账见 `docs/module-cleanup-inventory-2026-09-14.md`（部署拓扑①、路由注册② 已收口）。
+> 姊妹文档：全局底账见 `docs/module-cleanup-inventory-2026-09-14.md`（部署拓扑①、路由注册② 已收口）；
+> **全部模块的清单**见 `docs/module-inventory-2026-09-15.md`（35 个源码包逐个标注 + 聊天分析专项）；
+> 框架怎么跑见 `docs/architecture-map.md`。
 
 ## 0. 六模块速览（实测）
 
