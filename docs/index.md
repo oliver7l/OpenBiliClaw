@@ -56,7 +56,7 @@
 | 集成适配层 | [modules/integrations.md](modules/integrations.md) | `src/openbiliclaw/integrations/` | ✅ OpenClaw adapter 已接入 |
 | 运行时服务 | [modules/runtime.md](modules/runtime.md) | `src/openbiliclaw/runtime/` | ✅ refresh / candidate pipeline / presence gate / autostart / Ollama preflight / degraded boot / runtime-stream / 扩展 E2E 控制事件 / backend tag auto-update |
 | 引导初始化 | [modules/init.md](modules/init.md) | `src/openbiliclaw/cli.py`（`run_guided_init`）+ `runtime/init_coordinator.py` + `runtime/init_prereqs.py` | ✅ v0.3.102 共享流水线 + `InitCoordinator` 状态机 + `/api/init*` + 写者门控 + 插件推荐 tab CTA |
-| 求职面试备战 | [modules/interview.md](modules/interview.md) | `src/openbiliclaw/interview/` | ✅ v0.3.217 接入外部三层求职知识库：CLI `interview` 命令组 + `/api/interview/*` |
+| 求职面试备战 | [modules/interview.md](modules/interview.md) | `src/openbiliclaw/interview/` | ✅ v0.3.217 接入外部三层求职知识库：CLI `interview` 命令组 + `/api/interview/job/*`（期 2 URL 分区，旧前缀双挂载兼容） |
 | 对话归档 | [modules/conversation_archive.md](modules/conversation_archive.md) | `src/openbiliclaw/conversation_archive/` + `api/conversation_archive_routes.py` + `scripts/content_library/sync_library_to_db.py` | ✅ v2（2026-09-13）：阅读收藏库 md 为**单一数据源**、本表为**派生镜像**；单表 + FTS5 trigram 全文检索；v2 增 `entry_num`/`group_name`/`dialog_excerpt`/`annotations`/`md_file` 列 + `GET /{id}/raw-md`（三件套闭环）；桌面 `/web/conversation-archive`（类型筛选 + 状态互通）与移动端 tab（v0.3.242 编号被阅读库补抓占用，changelog 记为 v0.3.246 补记） |
 | 本地媒体浏览 | [modules/media.md](modules/media.md) | `src/openbiliclaw/media/` | ✅ v0.3.222 桌面 `/web/media` 页（视频 + 图片）+ `/api/media/*` |
 | ed2k 下载管理 | [modules/ed2k.md](modules/ed2k.md) | `src/openbiliclaw/ed2k/` | ✅ v0.3.223 桌面「⬇ ed2k 下载」tab + `/api/ed2k/*` |

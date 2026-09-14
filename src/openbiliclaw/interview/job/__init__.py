@@ -7,7 +7,8 @@
 ``interview.db`` 裸表族 + ``resume.db``（投递域）。
 
 - 引擎：``engine.InterviewEngine``
-- 路由：``routes.build_interview_router``（prefix ``/api/interview``）
+- 路由：``routes.build_interview_router``（无 prefix 本体）+ ``routes.mount_interview_router``
+  （挂到 ``/api/interview/job``，并兼容旧 ``/api/interview``）
 - 文档：``docs/modules/interview.md``
 """
 

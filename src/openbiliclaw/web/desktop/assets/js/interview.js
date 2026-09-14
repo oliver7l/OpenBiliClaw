@@ -2,7 +2,10 @@
 (function () {
   "use strict";
 
-  const API_BASE = "/api/interview";
+  // 期 2 URL 分区：按子系统取前缀（旧前缀 /api/interview 仍兼容，见后端双挂载别名）。
+  const API_JOB = "/api/interview/job"; // A 岗位备战（面试安排/待办）
+  const API_STUDY = "/api/interview/study"; // B 题目研习（今日待读/队列/题目/统计/弹药/反问）
+  const API_REVIEW = "/api/interview/review"; // C 面试复盘
   let currentSubtab = "schedule";
   let currentBank = "iq"; // 「全部题目」页当前题库源：iq=追踪题库 / kb=岗位题库
   let cachedData = {
@@ -116,7 +119,7 @@
       area.innerHTML = renderScheduleHtml(cachedData.schedule);
       return;
     }
-    requestJson(API_BASE + "/schedule")
+    requestJson(API_STUDY + "/schedule")
       .then((data) => {
         cachedData.schedule = data;
         area.innerHTML = renderScheduleHtml(data);
@@ -166,7 +169,7 @@
   // ── 待办事项 ──────────────────────────────────────────────
 
   function renderTodos(area) {
-    requestJson(API_BASE + "/todos?include_done=true")
+    requestJson(API_JOB + "/todos?include_done=true")
       .then((data) => {
         area.innerHTML = renderTodosHtml(data);
         bindTodoEvents(area);
@@ -249,7 +252,7 @@
         const due = (document.getElementById("todoDueInput") || {}).value || "";
         const priority = (document.getElementById("todoPriorityInput") || {}).value || "中";
         if (!title.trim()) { showToast("待办内容不能为空"); return; }
-        requestJson(API_BASE + "/todos", {
+        requestJson(API_JOB + "/todos", {
           method: "POST",
           body: JSON.stringify({ title: title.trim(), due_date: due, priority: priority }),
         })
@@ -259,14 +262,14 @@
     }
     area.querySelectorAll(".todo-toggle-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        requestJson(API_BASE + `/todos/${btn.dataset.id}/status?status=${btn.dataset.status}`, { method: "POST" })
+        requestJson(API_JOB + `/todos/${btn.dataset.id}/status?status=${btn.dataset.status}`, { method: "POST" })
           .then(() => renderTodos(area))
           .catch(() => showToast("操作失败，请重试"));
       });
     });
     area.querySelectorAll(".todo-del-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        requestJson(API_BASE + `/todos/${btn.dataset.id}`, { method: "DELETE" })
+        requestJson(API_JOB + `/todos/${btn.dataset.id}`, { method: "DELETE" })
           .then(() => renderTodos(area))
           .catch(() => showToast("删除失败，请重试"));
       });
@@ -280,7 +283,7 @@
       area.innerHTML = renderCompaniesHtml(cachedData.companies);
       return;
     }
-    requestJson(API_BASE + "/company-profiles")
+    requestJson(API_STUDY + "/company-profiles")
       .then((data) => {
         cachedData.companies = data;
         area.innerHTML = renderCompaniesHtml(data);
@@ -366,8 +369,8 @@
 
   function renderAmmo(area) {
     Promise.all([
-      requestJson("/api/interview/ammo"),
-      requestJson("/api/interview/ammo/reading"),
+      requestJson("/api/interview/study/ammo"),
+      requestJson("/api/interview/study/ammo/reading"),
     ])
       .then(([data, reading]) => {
         cachedData.ammo = data;
@@ -496,7 +499,7 @@
     if (!reader) return;
     reader.innerHTML = '<div class="interview-ammo-reader-loading">加载中…</div>';
     const q = new URLSearchParams({ company, category, name }).toString();
-    requestJson("/api/interview/ammo/file?" + q)
+    requestJson("/api/interview/study/ammo/file?" + q)
       .then((d) => {
         const status = ammoStatusOf(company, category, name);
         reader.innerHTML = `
@@ -533,7 +536,7 @@
       statusEl.className = "interview-ammo-reader-status is-" + status;
     }
     bindAmmoFileButtons(area);
-    requestJson("/api/interview/ammo/reading", {
+    requestJson("/api/interview/study/ammo/reading", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ company: file.company, category: file.category, name: file.name, status }),
@@ -616,7 +619,7 @@
       bindReviews(area);
       return;
     }
-    requestJson("/api/interview/reviews?limit=100")
+    requestJson(API_REVIEW + "?limit=100")
       .then((data) => {
         cachedData.reviews = data || [];
         area.innerHTML = renderReviewsHtml(cachedData.reviews);
@@ -675,7 +678,7 @@
   }
 
   function loadReviewDetail(area, id) {
-    requestJson("/api/interview/reviews/" + id)
+    requestJson(API_REVIEW + "/" + id)
       .then((r) => {
         area.innerHTML = renderReviewDetailHtml(r);
         const back = area.querySelector("#reviewBack");
@@ -732,7 +735,7 @@
       area.innerHTML = renderQuestionsHtml(cachedData.today.questions, "今日待读");
       return;
     }
-    requestJson(API_BASE + "/today")
+    requestJson(API_STUDY + "/today")
       .then((data) => {
         cachedData.today = data;
         area.innerHTML = renderQuestionsHtml(data.questions, "今日待读", data.plan);
@@ -750,7 +753,7 @@
       area.innerHTML = renderQuestionsHtml(cachedData.queue.queue, "待看队列");
       return;
     }
-    requestJson(API_BASE + "/queue")
+    requestJson(API_STUDY + "/queue")
       .then((data) => {
         cachedData.queue = data;
         area.innerHTML = renderQuestionsHtml(data.queue, "待看队列");
@@ -770,8 +773,8 @@
       return;
     }
     const url = currentBank === "kb"
-      ? API_BASE + "/kb-questions?limit=300"
-      : API_BASE + "/questions?limit=200";
+      ? API_STUDY + "/kb-questions?limit=300"
+      : API_STUDY + "/questions?limit=200";
     requestJson(url)
       .then((data) => {
         cachedData[cacheKey] = data;
@@ -904,7 +907,7 @@
       area.innerHTML = renderStatsHtml(cachedData.stats);
       return;
     }
-    requestJson(API_BASE + "/stats")
+    requestJson(API_STUDY + "/stats")
       .then((data) => {
         cachedData.stats = data;
         area.innerHTML = renderStatsHtml(data);
@@ -1017,7 +1020,7 @@
     const endpoint = action === "mastered" ? "/master" : action === "review" ? "/review" : "/read";
     const body = action === "read" || action === "understood" ? JSON.stringify({ mastery }) : undefined;
 
-    return requestJson(API_BASE + "/questions/" + id + endpoint, { method: "POST", body })
+    return requestJson(API_STUDY + "/questions/" + id + endpoint, { method: "POST", body })
       .then(() => {
         showToast("已更新：" + (MASTERY_LABELS[mastery] || mastery));
         // 清除缓存，重新加载
@@ -1064,7 +1067,7 @@
       bindRebuttalEvents();
       return;
     }
-    requestJson(API_BASE + "/rebuttals")
+    requestJson(API_STUDY + "/rebuttals")
       .then((data) => {
         cachedData.rebuttals = data;
         area.innerHTML = renderRebuttalsHtml(data);
@@ -1140,7 +1143,7 @@
       btn.addEventListener("click", () => {
         const id = btn.dataset.id;
         if (btn.dataset.action === "use") {
-          requestJson(API_BASE + `/rebuttals/${id}/use`, { method: "POST" })
+          requestJson(API_STUDY + `/rebuttals/${id}/use`, { method: "POST" })
             .then(() => {
               // 刷新缓存
               delete cachedData.rebuttals;
@@ -1158,7 +1161,7 @@
   function loadInterviewData() {
     bindEvents();
     // 预加载统计数据（其他tab按需加载）
-    requestJson(API_BASE + "/stats").then((data) => { cachedData.stats = data; }).catch(() => {});
+    requestJson(API_STUDY + "/stats").then((data) => { cachedData.stats = data; }).catch(() => {});
     // 默认渲染第一个tab
     renderSubtab(currentSubtab);
   }

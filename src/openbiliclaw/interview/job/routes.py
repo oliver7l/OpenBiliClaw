@@ -1,17 +1,21 @@
-"""求职面试备战 API 路由。
+"""求职面试备战（A · job）API 路由。
 
-Endpoints（prefix ``/api/interview``）：
-- GET  /api/interview/status      — 根目录配置与系统总览
-- GET  /api/interview/jobs        — 岗位列表（?keyword=）
-- GET  /api/interview/search      — 全文检索（?q=&limit=）
-- GET  /api/interview/numbers     — 真实数字表（?keyword=）
-- GET  /api/interview/projects    — 项目库（?keyword=）
-- GET  /api/interview/card/{company} — 某公司速记卡
-- GET  /api/interview/directions  — 方向知识库清单
-- GET  /api/interview/index       — 全库文件索引（?keyword=&layer=）
-- GET  /api/interview/logs        — 面试日志（最新在前）
-- POST /api/interview/logs        — 追加面试日志 {company, round, points}
-- POST /api/interview/scaffold    — 新岗位建档 {company, role}
+正规前缀 ``PREFIX = /api/interview/job``（期 2 URL 分区）；旧前缀
+``/api/interview`` 作为**双挂载别名**保留一版（``include_in_schema=False``），
+由 ``mount_interview_router`` 同时挂载两者。
+
+Endpoints（下列路径为相对路径，需加上前缀）：
+- GET  /status        — 根目录配置与系统总览
+- GET  /jobs          — 岗位列表（?keyword=）
+- GET  /search        — 全文检索（?q=&limit=）
+- GET  /numbers       — 真实数字表（?keyword=）
+- GET  /projects      — 项目库（?keyword=）
+- GET  /card/{company} — 某公司速记卡
+- GET  /directions    — 方向知识库清单
+- GET  /index         — 全库文件索引（?keyword=&layer=）
+- GET  /logs          — 面试日志（最新在前）
+- POST /logs          — 追加面试日志 {company, round, points}
+- POST /scaffold      — 新岗位建档 {company, role}
 
 数据目录由 ``[interview] root`` 配置（见 config.toml），引擎只读检索；
 仅日志追加与新岗位建档两个 POST 会写入引擎数据目录。
@@ -34,6 +38,10 @@ from openbiliclaw.interview.job.engine import InterviewEngine, resolve_root
 
 logger = logging.getLogger(__name__)
 
+# 期 2 URL 分区：A 的正规前缀；LEGACY_PREFIX 是兼容旧调用方的别名前缀（双挂载）。
+PREFIX = "/api/interview/job"
+LEGACY_PREFIX = "/api/interview"
+
 
 class InterviewLogIn(BaseModel):
     company: str = Field(..., min_length=1, max_length=100)
@@ -48,7 +56,9 @@ class InterviewScaffoldIn(BaseModel):
 
 def build_interview_router(*, root: str | None = None) -> APIRouter:
     """创建 interview 路由。root 为空时引擎按默认路径解析。"""
-    router = APIRouter(prefix="/api/interview", tags=["interview"])
+    # 注意：这里**不设 prefix**——由 mount_interview_router 挂载时传入，
+    # 以便同一份路由同时挂到新前缀与旧前缀（双挂载别名）。
+    router = APIRouter(tags=["interview-job"])
     engine = InterviewEngine(resolve_root(root))
 
     def _ready() -> None:
@@ -558,8 +568,24 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     return router
 
 
+def mount_interview_router(app: Any, *, root: str | None = None) -> APIRouter:
+    """把 A（岗位备战）路由挂到新前缀 + 兼容旧前缀。
+
+    双挂载别名：同一份 router 挂两次——新前缀进 OpenAPI，旧前缀
+    ``include_in_schema=False``（不进文档、不做重定向，故 POST/PUT/DELETE 全兼容）。
+    下一个大版本摘除旧前缀时，删掉第二行 ``include_router`` 即可。
+    """
+    router = build_interview_router(root=root)
+    app.include_router(router, prefix=PREFIX)
+    app.include_router(router, prefix=LEGACY_PREFIX, include_in_schema=False)
+    return router
+
+
 __all__ = [
     "build_interview_router",
+    "mount_interview_router",
+    "PREFIX",
+    "LEGACY_PREFIX",
     "InterviewLogIn",
     "InterviewScaffoldIn",
 ]

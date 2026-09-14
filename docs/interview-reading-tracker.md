@@ -2,7 +2,7 @@
 
 > ⚠️ **本文只描述「面试域」三子系统中的 B · 题目研习**。三子系统总览见
 > [`modules/interview-overview.md`](./modules/interview-overview.md)（另有 A · 岗位备战、
-> C · 面试复盘，三者共用 `/api/interview` 命名空间）。
+> C · 面试复盘，期 2 URL 分区后 B 独占前缀 `/api/interview/study/*`，旧 `/api/interview/*` 仍兼容）。
 
 ## 概述
 

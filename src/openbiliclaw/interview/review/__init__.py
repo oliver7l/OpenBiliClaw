@@ -3,7 +3,8 @@
 面试后的结构化复盘记录：转录、AI 评价、情绪复盘、技术复盘、行动计划。
 数据落在 ``interview.db`` 的 ``interview_reviews`` 表族。
 
-- 路由：``routes.build_review_router``（prefix ``/api/interview/reviews``）
+- 路由：``routes.build_review_router``（无 prefix 本体）+ ``routes.mount_review_router``
+  （挂到 ``/api/interview/review``，并兼容旧 ``/api/interview/reviews``）
 - 服务：``service.InterviewReviewService``
 """
 

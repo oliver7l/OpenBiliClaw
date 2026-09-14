@@ -4,6 +4,34 @@
 
 ---
 
+## 重构：面试模块期 2 API URL 分区（2026-09-14）
+
+按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 2（API 分区）**：把三个子系统挤在同一命名空间
+的 64 条端点按归属分区，URL 上一眼可辨。
+
+- **新前缀**：A `/api/interview/job/*`（30 端点）／B `/api/interview/study/*`（24）／
+  C `/api/interview/review/*`（10，由原 `reviews` 单数化）。
+- **兼容策略 = 双挂载别名（否决了原方案的 307 重定向）**：三份 router 改为**无 prefix** 定义，
+  注册处 `include_router` **挂两次**——新前缀进 OpenAPI，旧前缀 `/api/interview/*` 与
+  `/api/interview/reviews/*` 以 `include_in_schema=False` 保活。307 被否决的原因：重定向虽保方法
+  但不保证客户端重发 body，POST/PUT 会踩坑；双挂载则零 handler 复制、POST 全兼容、摘除只需删 3 行
+  （`job.routes.mount_interview_router` / `study.routes.register_interview_routes` / `review.routes.mount_review_router`）。
+- **前端**：`web/js/api.js` 22 处（全 A）加 `/job`；`web/desktop/assets/js/interview.js` 把单个
+  `API_BASE` 拆为 `API_JOB`/`API_STUDY`/`API_REVIEW`，23 处调用点逐处归位（含反引号模板串里的 4 处 `/todos`）；
+  `web/js/views/interview.js` 走 `api.js` 封装，零改动。
+- **测试**：`tests/api/test_api_interview.py` 断言切到新前缀，并新增参数化兼容回归
+  （8 组新↔旧 GET 响应逐字相同）+ POST 兼容 + 旧前缀不出现在 OpenAPI + router 本体无 prefix。
+
+**验证**：真实 `create_app()` 中 interview route 对象 **128 = 64 × 2**、106 唯一路径、
+**(路径,方法) 严格重复冲突 0**；OpenAPI 仅含新前缀且 operationId 无重复；A/B/C 新旧前缀冒烟
+11/11 响应**逐字节一致**；`tests/interview/` + `tests/api/test_api_interview.py` 41 passed；ruff 0 error；两个前端 JS `node --check` 通过。
+
+**已知既有问题（非本次引入）**：`create_app().openapi()` 在改动前的 HEAD 上即因
+`article_routes.ArticleUpdateIn` 未解析抛 `PydanticUserError`（已用 git worktree 在改动前复现），
+`/docs` 与 `/openapi.json` 早已不可用，与面试模块无关。
+
+---
+
 ## 重构：面试模块期 3 代码分层（2026-09-14）
 
 按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 3（代码分层）**：把混装的 `interview/` 包

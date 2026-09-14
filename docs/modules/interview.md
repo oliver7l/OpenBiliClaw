@@ -2,7 +2,7 @@
 
 > ⚠️ **本文只描述「面试域」三子系统中的 A · 岗位备战**。三子系统总览见
 > [`interview-overview.md`](./interview-overview.md)（另有 B · 题目研习、C · 面试复盘，
-> 三者共用 `/api/interview` 命名空间）。
+> 期 2 URL 分区后 A 独占前缀 `/api/interview/job/*`，旧 `/api/interview/*` 仍兼容）。
 
 > 把外部「三层求职知识库」接入 OpenBiliClaw 的统一入口：岗位信息、全文检索、
 > 真实数字、项目库、面试速记卡、全库索引、面试日志、新岗位建档，CLI 与 API 双通道。
@@ -23,7 +23,7 @@
 |------|------|----------|
 | 引擎 | 岗位/检索/数字/项目/速记卡/索引/日志/建档，统一返回结构化数据 | `engine.py` |
 | CLI | `openbiliclaw interview` 命令组（对应原 `kb.py` 中文命令） | `cli.py` |
-| API | `/api/interview/*` REST 接口 | `routes.py` |
+| API | `/api/interview/job/*` REST 接口 | `routes.py` |
 | 配置 | `[interview] root` 指向知识库根目录 | `config.py` `InterviewConfig` |
 
 设计原则：**原始材料始终保留在原目录**，引擎只读检索；仅「面试日志追加」与
@@ -47,7 +47,7 @@
 | 全库索引重建 | ✅ | `rebuild_index()` 扫描三层 → 覆盖写 `06_全库文件索引.csv` + `knowledge.db`（`file_index` + `layer_stats`），不动原始文件 |
 | 健康检查 | ✅ | `doctor()`：C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（full）；`--fix` 自动重建过期索引 |
 | CLI 命令 | ✅ | `interview search/job/card/numbers/projects/direction/index/logs/log/scaffold/status/root/doctor`；`index --rebuild` |
-| API 路由 | ✅ | `GET/POST /api/interview/*`（见公开 API） |
+| API 路由 | ✅ | `GET/POST /api/interview/job/*`（见公开 API） |
 
 ## 模块结构
 
@@ -61,7 +61,7 @@ src/openbiliclaw/interview/
 ├── cli.py                # interview 命令组（register(app) 注册到主 CLI；跨 A + C）
 └── job/                  # A · 岗位备战
     ├── engine.py         # InterviewEngine：数据表读取/检索/速记卡/日志/建档 + resolve_root
-    └── routes.py         # build_interview_router → /api/interview/*
+    └── routes.py         # build_interview_router → /api/interview/job/*
 ```
 
 旧导入路径（`interview.engine` / `interview.routes`）保留 re-export 垫片一版，下一个大版本摘除。
@@ -111,19 +111,19 @@ eng.scaffold("新公司", "广告算法")   # 新岗位建档
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/interview/status` | 系统总览（未配置也返回状态） |
-| GET | `/api/interview/jobs?keyword=` | 岗位列表 |
-| GET | `/api/interview/search?q=&limit=` | 全文检索（空关键词 422） |
-| GET | `/api/interview/numbers?keyword=` | 真实数字表 |
-| GET | `/api/interview/projects?keyword=` | 项目库 |
-| GET | `/api/interview/card/{company}` | 速记卡（未登记 404） |
-| GET | `/api/interview/directions` | 方向知识库清单 |
-| GET | `/api/interview/index?keyword=&layer=` | 全库索引（layer 仅 01/02/03） |
-| POST | `/api/interview/index/rebuild` | 重建全库索引（覆盖 06 CSV + knowledge.db） |
-| GET | `/api/interview/doctor?fix=&full=` | 健康检查（C1-C5，fix 自动重建过期索引） |
-| GET | `/api/interview/logs` | 面试日志（最新在前） |
-| POST | `/api/interview/logs` | 追加日志 `{company, round, points}` |
-| POST | `/api/interview/scaffold` | 新岗位建档 `{company, role}` |
+| GET | `/api/interview/job/status` | 系统总览（未配置也返回状态） |
+| GET | `/api/interview/job/jobs?keyword=` | 岗位列表 |
+| GET | `/api/interview/job/search?q=&limit=` | 全文检索（空关键词 422） |
+| GET | `/api/interview/job/numbers?keyword=` | 真实数字表 |
+| GET | `/api/interview/job/projects?keyword=` | 项目库 |
+| GET | `/api/interview/job/card/{company}` | 速记卡（未登记 404） |
+| GET | `/api/interview/job/directions` | 方向知识库清单 |
+| GET | `/api/interview/job/index?keyword=&layer=` | 全库索引（layer 仅 01/02/03） |
+| POST | `/api/interview/job/index/rebuild` | 重建全库索引（覆盖 06 CSV + knowledge.db） |
+| GET | `/api/interview/job/doctor?fix=&full=` | 健康检查（C1-C5，fix 自动重建过期索引） |
+| GET | `/api/interview/job/logs` | 面试日志（最新在前） |
+| POST | `/api/interview/job/logs` | 追加日志 `{company, round, points}` |
+| POST | `/api/interview/job/scaffold` | 新岗位建档 `{company, role}` |
 
 未配置/目录不存在时，除 `status` 外的接口返回 404（detail 说明配置方法）。
 

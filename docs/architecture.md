@@ -197,7 +197,7 @@ X 是第六个内容源，分两条独立通路：
 - 面试速记卡 = 数据表（岗位/数字/项目/题库）⊕ 岗位定制弹药（`03_速成包` 速记卡全文 + 预测题库/速成问答清单 + `02_面试备战资料` 清单）
 - 全库索引：`knowledge.db`（`file_index` + `layer_stats` 视图）优先，回退 `06_全库文件索引.csv`；`--rebuild` / POST `/index/rebuild` 覆盖重建
 - 健康检查 `doctor`：C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（`--full`，`--fix` 自动重建索引）
-- 对外接口：CLI `openbiliclaw interview <子命令>`（12+ 命令）+ API `/api/interview/*`（13 路由）+ Web「面试」tab
+- 对外接口：CLI `openbiliclaw interview <子命令>`（12+ 命令）+ API `/api/interview/{job,study,review}/*`（64 端点，期 2 URL 分区后；旧 `/api/interview/*` 与 `/api/interview/reviews/*` 保留双挂载兼容别名）+ Web「面试」tab
 
 ## 运行时数据库约束
 

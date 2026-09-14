@@ -1,4 +1,9 @@
-"""面试题阅读追踪 API 路由。"""
+"""面试题阅读追踪（B · study）API 路由。
+
+正规前缀 ``PREFIX = /api/interview/study``（期 2 URL 分区）；旧前缀
+``/api/interview`` 作为**双挂载别名**保留一版（``include_in_schema=False``），
+由 ``register_interview_routes`` 同时挂载两者。
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,13 @@ from openbiliclaw.interview._paths import PROJECT_ROOT
 from openbiliclaw.interview.study.models import MasteryLevel, QuestionCategory
 from openbiliclaw.interview.study.store import InterviewQuestionStore
 
-router = APIRouter(prefix="/api/interview", tags=["interview"])
+# 注意：这里**不设 prefix**——由 register_interview_routes 挂载时传入，
+# 以便同一份路由同时挂到新前缀与旧前缀（双挂载别名）。
+router = APIRouter(tags=["interview-study"])
+
+# 期 2 URL 分区：B 的正规前缀；LEGACY_PREFIX 是兼容旧调用方的别名前缀（双挂载）。
+PREFIX = "/api/interview/study"
+LEGACY_PREFIX = "/api/interview"
 
 DB_PATH = PROJECT_ROOT / "data" / "interview_questions.db"
 INTERVIEW_DB_PATH = PROJECT_ROOT / "data" / "interview.db"
@@ -941,5 +952,10 @@ def mark_rebuttal_used(rebuttal_id: int) -> dict[str, Any]:
 
 
 def register_interview_routes(app: Any, ctx: Any) -> None:
-    """注册面试题阅读追踪路由。"""
-    app.include_router(router)
+    """注册 B（题目研习）路由：新前缀 + 兼容旧前缀（双挂载别名）。
+
+    旧前缀 ``include_in_schema=False``——不进 OpenAPI、不做重定向，
+    故 POST/PUT/DELETE 全兼容。下一个大版本摘除旧前缀时删掉第二行即可。
+    """
+    app.include_router(router, prefix=PREFIX)
+    app.include_router(router, prefix=LEGACY_PREFIX, include_in_schema=False)

@@ -10,8 +10,19 @@
 | **B** | **题目研习**（study） | 题库 / 待看队列 / 阅读计划 / 掌握度 / 学习统计 / 反问话术 / 弹药阅读状态 | `interview/study/{routes,store,models,cli}.py` | `data/interview_questions.db`（`iq_*`）+ 读 `03_岗位弹药库/` 文件 + `interview.db`（`ammo_doc` / `ammo_reading` / `interview_rebuttals` / `interview_questions`） | 桌面「📖今日待读 / 📋待看队列 / 📚全部题目 / 📊学习统计 / ❓反问话术 / 🧨弹药库 / 🏢公司岗位 / 📅面试安排」 | [`../interview-reading-tracker.md`](../interview-reading-tracker.md) |
 | **C** | **面试复盘**（review） | 复盘记录 / 搜索 / 统计 | `interview/review/{routes,service,store,models}.py` | `interview.db`（`interview_reviews`） | 桌面「📝复盘」 | 本文件 §C |
 
-**API 前缀**：三者都挂在 `/api/interview` 下（路径不冲突，但无法从 URL 区分）。
-原计划**期 2（URL 分区 `/api/interview/{job,study,review}/*`）缓做**，理由见方案文档执行记录。
+**API 前缀**（✅ 期 2 URL 分区已完成，2026-09-14）：
+
+| 子系统 | 正规前缀 | 兼容别名（旧） |
+|---|---|---|
+| A 岗位备战 | `/api/interview/job/*` | `/api/interview/*` |
+| B 题目研习 | `/api/interview/study/*` | `/api/interview/*` |
+| C 面试复盘 | `/api/interview/review/*` | `/api/interview/reviews/*` |
+
+**兼容策略 = 双挂载别名**（不是 307 重定向）：三份 router 本体**不带 prefix**，注册时
+`include_router` **挂两次**——新前缀进 OpenAPI，旧前缀 `include_in_schema=False`。
+好处：POST/PUT/DELETE 带 body 也全兼容（重定向会让部分客户端丢 body）、不复制 handler、
+摘除只需删 3 行 `include_router`。⚠️ 注意 A 的岗位列表在新前缀下是
+`/api/interview/job/jobs`（唯一一处叠词，已接受）。
 
 ---
 
@@ -23,15 +34,15 @@ src/openbiliclaw/interview/
 ├── cli.py              # 统一 CLI 入口（跨 A + C）
 ├── job/                # A 岗位备战
 │   ├── engine.py
-│   └── routes.py       # prefix /api/interview
+│   └── routes.py       # PREFIX /api/interview/job（+ mount_interview_router 双挂载旧前缀）
 ├── study/              # B 题目研习
-│   ├── routes.py       # prefix /api/interview
+│   ├── routes.py       # PREFIX /api/interview/study（+ register_interview_routes 双挂载旧前缀）
 │   ├── store.py
 │   ├── models.py
 │   ├── cli.py          # python -m openbiliclaw.interview.study.cli
 │   └── seed_iq_questions.py
 └── review/             # C 面试复盘
-    ├── routes.py       # prefix /api/interview/reviews
+    ├── routes.py       # PREFIX /api/interview/review（+ mount_review_router 兼容旧 /reviews）
     ├── service.py
     ├── store.py
     └── models.py
@@ -53,7 +64,7 @@ src/openbiliclaw/interview/
 ### ⚠️ 已知数据层问题（待整合，见 `docs/plans/面试模块梳理与整合方案.md`）
 
 - **「面试题」有三套表示**：`interview.db.question`(25，文件指针表) ／ `interview.db.interview_questions`(199，从 `03` 题库 md 解析) ／ `interview_questions.db.iq_questions`(51，B 在用)。三表同名不同义、互不相通。
-  - ✅ **期1 已接线**：`interview_questions`(199) 现经 `GET /api/interview/kb-questions` 暴露，在桌面「全部题目」页以「📚 岗位题库」源只读展示（按公司/分类筛选）。
+  - ✅ **期1 已接线**：`interview_questions`(199) 现经 `GET /api/interview/study/kb-questions` 暴露，在桌面「全部题目」页以「📚 岗位题库」源只读展示（按公司/分类筛选）。
 - **两个同名导入脚本写向不同库**（✅ 期1 已消歧）：`interview/study/seed_iq_questions.py`（原 `import_questions.py`，内置题→`iq_questions`）vs `scripts/import_interview_questions.py`（`03` 题库 md→`interview_questions`）。
 - **`interview.db` 表命名三种风格并存**：裸名（`question`/`concept`/…）、`interview_` 前缀、`ammo_` 前缀。
 
@@ -62,7 +73,7 @@ src/openbiliclaw/interview/
 ## §C 面试复盘
 
 - 表：`interview.db.interview_reviews`（公司 / 岗位 / 面试日期 / 轮次 / 结果 / …）
-- API：`/api/interview/reviews/*`（列表 / 搜索 / 统计 / 详情 / 新建 / 删除）
+- API：`/api/interview/review/*`（列表 / 搜索 / 统计 / 详情 / 新建 / 更新 / 删除）；旧 `/api/interview/reviews/*` 仍兼容
 - CLI：`openbiliclaw interview` 命令组中的复盘相关子命令
 - 岗位级别的复盘笔记另存在 `03_岗位弹药库/{公司}-面试准备/05_面试复盘/`
 

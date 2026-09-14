@@ -254,24 +254,23 @@ def register_all_routes(
     except Exception as _exc:  # noqa: BLE001
         _failures.record("Travel routes", _exc)
 
-    # ── 求职面试备战 API ─────────────────────────────────────────
+    # ── 求职面试备战 API（A · 前缀 /api/interview/job + 兼容旧 /api/interview）──
     try:
-        from openbiliclaw.interview.job.routes import build_interview_router
+        from openbiliclaw.interview.job.routes import mount_interview_router
 
         _interview_cfg = getattr(config, "interview", None)
-        app.include_router(
-            build_interview_router(
-                root=str(getattr(_interview_cfg, "root", "") or "") or None,
-            )
+        mount_interview_router(
+            app,
+            root=str(getattr(_interview_cfg, "root", "") or "") or None,
         )
     except Exception as _exc:  # noqa: BLE001
         _failures.record("Interview routes", _exc)
 
-    # ── 面试复盘记录 API ─────────────────────────────────────────
+    # ── 面试复盘记录 API（C · 前缀 /api/interview/review + 兼容旧 /reviews）──
     try:
-        from openbiliclaw.interview.review.routes import build_review_router
+        from openbiliclaw.interview.review.routes import mount_review_router
 
-        app.include_router(build_review_router())
+        mount_review_router(app)
     except Exception as _exc:  # noqa: BLE001
         _failures.record("Interview review routes", _exc)
 

@@ -1,4 +1,8 @@
-"""面试域模块（interview）——三个相互独立的子系统，历史上共用 ``/api/interview`` 前缀。
+"""面试域模块（interview）——三个相互独立的子系统。
+
+期 2 URL 分区后三者各有前缀：A ``/api/interview/job``、B ``/api/interview/study``、
+C ``/api/interview/review``（历史前缀 ``/api/interview`` 与 ``/api/interview/reviews``
+作为双挂载别名保留一版）。
 
 - **A 岗位备战**（``job/``）：读三层求职知识库——岗位/检索/数字/项目/速记卡/索引/日志/建档。
   数据 = ``求职知识库/`` 文件 + ``knowledge.db`` + ``interview.db`` 裸表族 + ``resume.db``。
@@ -9,7 +13,7 @@
   数据 = ``interview.db``(interview_reviews)。
 
 - **A 引擎**：``InterviewEngine`` 封装检索能力，CLI（``openbiliclaw interview``）与
-  API（``/api/interview``）共用同一引擎。
+  API（``/api/interview/job``）共用同一引擎。
 - **A 数据源**：外部三层求职知识库（默认项目内 ``求职知识库/``，见 ``[interview] root``）
   = 01_原始资料库（只读源）/ 02_方向知识库（方法论）/ 03_岗位弹药库（按岗位备战包），
   由 ``_系统_知识库引擎``（CSV 数据表 + ``knowledge.db``）驱动。
@@ -37,7 +41,7 @@ from .review.models import (
     InterviewReviewSummary,
     InterviewReviewUpdate,
 )
-from .review.routes import build_review_router
+from .review.routes import build_review_router, mount_review_router
 from .review.service import InterviewReviewService
 from .review.store import InterviewReviewStore
 
@@ -55,4 +59,5 @@ __all__ = [
     "InterviewReviewService",
     "InterviewReviewStore",
     "build_review_router",
+    "mount_review_router",
 ]

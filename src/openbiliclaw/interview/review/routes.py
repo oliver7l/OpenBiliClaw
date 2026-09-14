@@ -1,14 +1,18 @@
-"""面试复盘记录 API 路由。
+"""面试复盘记录（C · review）API 路由。
 
-Endpoints（prefix ``/api/interview/reviews``）：
-- GET    /api/interview/reviews          — 列表（?company=&result=&limit=&offset=）
-- GET    /api/interview/reviews/{id}     — 详情
-- POST   /api/interview/reviews          — 创建
-- PATCH  /api/interview/reviews/{id}     — 更新
-- DELETE /api/interview/reviews/{id}     — 删除
-- GET    /api/interview/reviews/search   — 全文检索（?q=）
-- GET    /api/interview/reviews/stats    — 统计
-- GET    /api/interview/reviews/companies — 公司列表
+正规前缀 ``PREFIX = /api/interview/review``（期 2 URL 分区，注意由原 ``reviews``
+单数化）；旧前缀 ``/api/interview/reviews`` 作为**双挂载别名**保留一版
+（``include_in_schema=False``），由 ``mount_review_router`` 同时挂载两者。
+
+Endpoints（下列为相对路径）：
+- GET    /            — 列表（?company=&result=&limit=&offset=）
+- GET    /{id}        — 详情
+- POST   /            — 创建
+- PATCH  /{id}        — 更新
+- DELETE /{id}        — 删除
+- GET    /search      — 全文检索（?q=）
+- GET    /stats       — 统计
+- GET    /companies   — 公司列表
 """
 
 from __future__ import annotations
@@ -31,6 +35,10 @@ from openbiliclaw.interview.review.service import InterviewReviewService
 
 logger = logging.getLogger(__name__)
 
+# 期 2 URL 分区：C 的正规前缀（原 reviews 单数化）；LEGACY_PREFIX 为别名前缀（双挂载）。
+PREFIX = "/api/interview/review"
+LEGACY_PREFIX = "/api/interview/reviews"
+
 
 def _default_db_path() -> str:
     """默认数据库路径：data/interview.db（面试复盘子库，独立锁域）。"""
@@ -49,7 +57,9 @@ def _default_db_path() -> str:
 
 def build_review_router(db_path: str | None = None) -> APIRouter:
     """创建面试复盘路由。"""
-    router = APIRouter(prefix="/api/interview/reviews", tags=["interview-review"])
+    # 注意：这里**不设 prefix**——由 mount_review_router 挂载时传入，
+    # 以便同一份路由同时挂到新前缀与旧前缀（双挂载别名）。
+    router = APIRouter(tags=["interview-review"])
     svc = InterviewReviewService(db_path or _default_db_path())
 
     @router.get("", response_model=list[InterviewReviewSummary])
@@ -115,4 +125,17 @@ def build_review_router(db_path: str | None = None) -> APIRouter:
     return router
 
 
-__all__ = ["build_review_router"]
+def mount_review_router(app: Any, db_path: str | None = None) -> APIRouter:
+    """把 C（面试复盘）路由挂到新前缀 + 兼容旧前缀。
+
+    双挂载别名：新前缀 ``/api/interview/review`` 进 OpenAPI；旧前缀
+    ``/api/interview/reviews`` 以 ``include_in_schema=False`` 挂载（不做重定向，
+    故 POST/PATCH/DELETE 全兼容）。卸载旧前缀时删掉第二行即可。
+    """
+    router = build_review_router(db_path=db_path)
+    app.include_router(router, prefix=PREFIX)
+    app.include_router(router, prefix=LEGACY_PREFIX, include_in_schema=False)
+    return router
+
+
+__all__ = ["build_review_router", "mount_review_router", "PREFIX", "LEGACY_PREFIX"]
