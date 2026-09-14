@@ -7263,6 +7263,53 @@ class TestBackendAPI:
         # view is read-marking only — no feedback_type write, no learning purge.
         assert database.writes == []
 
+    def test_delight_sent_ack_marks_candidate_notified(self) -> None:
+        """推送回执端点：``POST /api/delight/sent`` 必须把候选标记为已通知。
+
+        该端点曾被 K5 批量清理误删（见 ``tests/api/test_api_route_regressions.py``
+        的 F6），而调用方（``api.js`` 的 ``markDelightSent`` 与 openclaw 的
+        ``_acknowledge_delight``）都是 fire-and-forget 并吞掉异常，所以 404 长期无人
+        发现。故这里补上**行为**断言，而不只是「路由是否存在」。
+        """
+        from fastapi.testclient import TestClient
+
+        class FakeDatabase:
+            def __init__(self) -> None:
+                self.notified: list[str] = []
+
+            def mark_delight_notified(self, bvid: str) -> None:
+                self.notified.append(bvid)
+
+        database = FakeDatabase()
+        app = create_app(memory_manager=object(), database=database, soul_engine=object())
+        client = TestClient(app)
+
+        response = client.post("/api/delight/sent", json={"bvid": "BV1DL"})
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "bvid": "BV1DL"}
+        assert database.notified == ["BV1DL"]
+
+    def test_delight_sent_rejects_blank_bvid(self) -> None:
+        """空 bvid 必须在写库之前被拒，不能回 200 却什么都没更新。"""
+        from fastapi.testclient import TestClient
+
+        class FakeDatabase:
+            def __init__(self) -> None:
+                self.notified: list[str] = []
+
+            def mark_delight_notified(self, bvid: str) -> None:
+                self.notified.append(bvid)
+
+        database = FakeDatabase()
+        app = create_app(memory_manager=object(), database=database, soul_engine=object())
+        client = TestClient(app)
+
+        response = client.post("/api/delight/sent", json={"bvid": "   "})
+
+        assert response.status_code == 422
+        assert database.notified == []
+
     def test_delight_pending_batch_keeps_liked_candidates_with_state(self) -> None:
         """Liked delights survive queue re-hydration and come back as state=liked."""
         from fastapi.testclient import TestClient

@@ -23,6 +23,16 @@
   方法名冲突。此前被 ``/openapi.json`` 恒 500（F4）长期掩盖，F4 修复后才暴露。
   两者是**语义不同的端点**（概念共现图 / 实体-文章图），故显式指定
   ``operation_id`` 加以区分，而非合并。
+- F6（2026-09-14 发现，与 F4/F5 同源于 app.py 拆分）：``d5f02792``（K5 批量清理
+  「重复」函数）删掉了 ``app.py`` 的 ``POST /api/delight/sent``，理由是它已在
+  ``_delight_routes.py`` 里有副本——但那个模块**从未被 ``_route_registry`` 接线**
+  （K3 孤儿路由修复清单漏项），于是端点直接消失。同批被误删的
+  ``@app.post("/api/delight/respond")`` 装饰器已由 ``9eb97451`` 补回，``/sent``
+  当时漏补。调用方（移动 Web ``api.js`` 的 ``markDelightSent``、openclaw 的
+  ``_acknowledge_delight``）都是 fire-and-forget 且 ``except: pass``，所以 404
+  长期无人发现。「假定某模块已接线」与「删了装饰器但函数体还在」都会让端点**静默
+  消失**——本组同时断言路由存在、JSON body 契约，以及客户端引用的 delight 路径
+  必须真实存在。
 
 这里用「真实注册顺序」而非静态源码判断，因为重复注册的胜负由注册顺序决定；
 另用「能否生成 OpenAPI」「参数是否被降级」「operationId 是否唯一」三条断言
@@ -204,3 +214,74 @@ def test_knowledge_graph_endpoints_have_distinct_operation_ids(
     assert concept_id != entity_id, (
         f"两条 knowledge graph 端点 operationId 撞名：{concept_id}"
     )
+
+
+# ── F6：delight 端点契约（K5 误删 / 孤儿模块从未接线） ────────────
+
+_DELIGHT_ENDPOINTS = (
+    ("/api/delight/pending", "GET"),
+    ("/api/delight/pending-batch", "GET"),
+    ("/api/delight/respond", "POST"),
+    ("/api/delight/sent", "POST"),
+)
+
+
+def test_delight_endpoints_registered() -> None:
+    """F6 回归：四条 delight 端点必须全部注册（且方法正确）。
+
+    ``POST /api/delight/sent`` 曾被 ``d5f02792`` 删除（假定已随
+    ``_delight_routes.py`` 拆分出去），而该模块从未接线，端点因此静默消失。
+    断言 (路径, 方法) 组合而非仅路径，可同时锁住方法被改错的情况。
+
+    注意：不能靠「请求返回 404」来锁这条——降级门（LLM 不可用）会在路由之前
+    统一返回 503，把 404 完全掩盖（实测该写法在修复前也照样通过）。
+    """
+    table = _route_endpoints(create_app())
+    missing = [pair for pair in _DELIGHT_ENDPOINTS if pair not in table]
+    assert missing == [], f"delight 端点未注册：{missing}"
+
+
+def test_delight_sent_is_in_openapi_with_json_body(isolated_client: TestClient) -> None:
+    """F6 回归：``/api/delight/sent`` 必须在 OpenAPI 中且声明 JSON body。
+
+    「在路由表里」不等于契约正常——参数被降级为 query 时端点依然存在（见 F4），
+    故同时断言 requestBody 指向 ``DelightAckIn`` 且没有名为 payload 的 query 参数。
+    """
+    operation = (
+        isolated_client.app.openapi()["paths"].get("/api/delight/sent", {}).get("post")
+    )
+    assert operation is not None, "/api/delight/sent 未进 OpenAPI"
+    request_body = operation.get("requestBody")
+    assert request_body, "/api/delight/sent 未声明 requestBody（body 可能被降级为 query）"
+    ref = request_body["content"]["application/json"]["schema"].get("$ref", "")
+    assert ref.endswith("/DelightAckIn"), f"requestBody schema 应为 DelightAckIn，实际 {ref}"
+    assert all(param.get("name") != "payload" for param in operation.get("parameters", [])), (
+        "payload 被降级成了 query 参数"
+    )
+
+
+def test_delight_clients_reference_existing_endpoints() -> None:
+    """F6 泛化断言：客户端引用的 delight 路径必须真实存在。
+
+    与 F3 同类（客户端调用不存在的端点），但按 delight 前缀**自动发现**，避免下次
+    端点在别处被改名或误删时又要靠人肉发现。扫描范围限定在两个前端与 openclaw
+    集成；刻意不含 ``src/openbiliclaw/api/``，否则装饰器会自我满足该断言。
+    """
+    import re
+
+    repo_root = Path(__file__).resolve().parents[2]
+    pattern = re.compile(r"/api/delight/([A-Za-z0-9_-]+)|[\"'`]/delight/([A-Za-z0-9_-]+)")
+    routes = {getattr(route, "path", "") for route in create_app().routes}
+    offenders: set[str] = set()
+    for root in (_WEB_DIR, repo_root / "src" / "openbiliclaw" / "integrations"):
+        for asset in root.rglob("*"):
+            if asset.suffix not in {".js", ".py"} or not asset.is_file():
+                continue
+            text = asset.read_text(encoding="utf-8")
+            for match in pattern.finditer(text):
+                segment = match.group(1) or match.group(2)
+                if f"/api/delight/{segment}" not in routes:
+                    offenders.add(
+                        f"{asset.relative_to(repo_root)} -> /api/delight/{segment}"
+                    )
+    assert offenders == set(), f"客户端引用了不存在的 delight 端点：{sorted(offenders)}"

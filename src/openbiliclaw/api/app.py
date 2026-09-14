@@ -34,6 +34,8 @@ from openbiliclaw.api.models import (
     ChatTurnListResponse,
     ChatTurnOut,
     CognitionUpdateSummary,
+    DelightAckIn,
+    DelightAckResponse,
     EventIngestResponse,
     EventRejectedOut,
     ExtensionE2EAction,
@@ -3359,6 +3361,36 @@ def create_app(
         )
         await _publish_probe_event("delight.chat", f"关于「{label}」你说：{raw_message}", bvid)
         return JSONResponse(content={"ok": True, "action": "chat", "bvid": bvid, "reply": reply})
+
+    @app.post("/api/delight/sent", response_model=DelightAckResponse)
+    async def mark_delight_sent(payload: DelightAckIn) -> DelightAckResponse:
+        """Ack a delivered delight push so the backend marks the item notified.
+
+        Callers: ``web/js/api.js`` 的 ``markDelightSent``（被 ``views/recommend.js``
+        与 ``views/chat.js`` 在永久消费一次惊喜后调用）以及
+        ``integrations/openclaw/cli.py`` 的 ``_acknowledge_delight``（推送后回执）。
+        两者都是 fire-and-forget，失败被静默吞掉，所以端点缺失时不会有人察觉。
+
+        与 ``/api/delight/respond`` 的 ``view`` 的区别：``view`` 只置
+        ``delight_notified=1``（浏览即已读，**不**重置 4 小时主动推送冷却）；
+        本端点走 ``mark_delight_sent``，在置位之外额外刷新
+        ``last_delight_notification_at``，即「刚推过一条」——推送回执需要的正是后者，
+        否则同一条惊喜会被反复推送。
+
+        历史：该端点曾在 ``d5f02792``（K5 批量清理重复函数）被误删——当时假定它已随
+        ``_delight_routes.py`` 拆分出去，而那个模块从未被 ``_route_registry`` 接线；
+        同批被误删的 ``/api/delight/respond`` 装饰器已由 ``9eb97451`` 补回，本端点当时
+        漏补，导致上述调用方长期 404。
+        """
+        bvid = payload.bvid.strip()
+        if not bvid:
+            raise HTTPException(status_code=422, detail="Delight bvid is required.")
+        mark_sent = getattr(ctx.runtime_controller, "mark_delight_sent", None)
+        if callable(mark_sent):
+            mark_sent(bvid)
+        else:
+            ctx.database.mark_delight_notified(bvid)
+        return DelightAckResponse(ok=True, bvid=bvid)
 
     # ── Conversational recommendation (生成式推荐第二步) ──
     _chat_recommend_sessions: dict[str, Any] = {}

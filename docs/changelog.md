@@ -4,6 +4,51 @@
 
 ---
 
+## 修复：恢复被 K5 误删的 `POST /api/delight/sent`（推送回执长期 404）（2026-09-14）
+
+`d5f02792`（K5 批量清理「重复」函数）删掉了 `app.py` 里的 `POST /api/delight/sent`，
+理由是它已在 `_delight_routes.py` 里有副本。但那个模块**从未被 `_route_registry.py`
+接线**（「K3 孤儿路由修复」清单漏项），端点于是直接消失；同批被误删的
+`@app.post("/api/delight/respond")` 装饰器已由 `9eb97451` 补回，`/sent` 当时漏补，
+此后一直 404。
+
+**影响**：所有调用方都是 fire-and-forget 且吞掉异常，因此**静默失败、长期无人察觉**——
+
+- 移动 Web `web/js/api.js` 的 `markDelightSent`（被 `views/recommend.js` 与
+  `views/chat.js` 在永久消费一条惊喜后调用）
+- openclaw 集成 `integrations/openclaw/cli.py` 的 `_acknowledge_delight`（推送回执）
+
+后果：惊喜推送后 `last_delight_notification_at` 从不刷新，4 小时主动推送冷却失效，
+同一条惊喜可能被反复推送。
+
+**修复**：在 `/api/delight/respond` 旁恢复该端点。它走 `mark_delight_sent`
+（置 `delight_notified=1` **并**刷新推送冷却），与 `/respond` 的 `view`（只置已读、
+刻意不动冷却）语义不同，故不合并、不改为调用 `/respond`。同时**删除孤儿模块
+`_delight_routes.py`**——其 `pending` / `pending-batch` 与 `app.py` 内联实现逻辑等价，
+接线只会造成重复注册遮蔽。
+
+**回归**：
+
+- `tests/api/test_api_route_regressions.py` F6 组 3 条：四条 delight 端点的
+  `(路径, 方法)` 必须注册、`/api/delight/sent` 必须在 OpenAPI 且 requestBody 指向
+  `DelightAckIn`、**客户端引用的 delight 路径必须真实存在**（按前缀自动发现，扫描两个
+  前端与 openclaw 集成）。注意不能用「请求返回 404」来锁——降级门（LLM 不可用）会在
+  路由前统一返回 503，把 404 掩盖（实测该写法在修复前也照样通过）。
+- `tests/api/test_api_app.py` 补 2 条**行为**断言（与既有 5 条 delight 契约测试同组）：
+  回执确实写入 `mark_delight_notified`、空 bvid 在写库前被拒。
+- 两组均用 `git worktree` 在修复前的 HEAD 上验证会失败（3 failed / 2 failed），修复后全通过。
+
+**顺带更正**：`docs/project-audit-2026-09-11.md` 曾把 `_delight_routes` 判为「实测是活的」，
+依据是「/api/delight 有 3 条端点」——但那 3 条来自 `app.py` 的内联实现。**端点计数无法
+归因到模块**，该误判正是它长期无人接线的根因，已在原文档就地加更正说明。
+
+**验证**：本地 `create_app()` 四条 delight 端点齐全、`/api/delight/sent` 进 OpenAPI 且
+operationId 唯一、全量 `(路径, 方法)` 严格重复冲突 0；线上 `POST /api/delight/sent`
+由 404 变为命中路由（空 bvid 返回 422）、`GET` 返回 405、`pending`/`pending-batch` 仍 200；
+定向测试 54 passed + delight 组 11 passed；ruff 0 error。
+
+---
+
 ## 修复：OpenAPI 重复 operationId（两条 knowledge graph 端点撞名）（2026-09-14）
 
 上一条修复让 `/openapi.json` 恢复可生成后，立刻暴露出一个被 500 长期掩盖的**文档契约**

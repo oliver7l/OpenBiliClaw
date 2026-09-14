@@ -29,6 +29,14 @@
 
 静态分析器看不到这些，所以把 `article_routes`、`diary_routes`、`health_routes`、`knowledge_routes`、`reading_routes`、`_delight_routes` 全误判为死代码。**实测运行时，它们全部是活的**（/api/articles 13 条、/api/diary 113 条、/api/delight 3 条等）。
 
+> **⚠️ 更正（2026-09-14）**：上句中 `_delight_routes` 一项**不成立**。`_route_registry.py`
+> 的动态导入是**显式白名单**（「K3 孤儿路由修复」清单），`_delight_routes` 从未被列入，
+> 所以它确实是死模块；那「/api/delight 3 条」实际来自 `app.py` 的**内联实现**
+> （`pending` / `pending-batch` / `respond`），与该模块无关。教训：**端点数量证明不了
+> 某个模块已接线**——计数无法归因到模块，这正是它被误判为「活代码」而长期无人接线的
+> 根因（后果见 changelog：K5 误以为其副本在模块里，删掉了 `app.py` 的
+> `POST /api/delight/sent`）。该模块已删除。
+
 ---
 
 ## 1. 真实坏代码（必须修）
