@@ -4,6 +4,40 @@
 
 ---
 
+## 修复：`/openapi.json` 恒 500 + 文章端点 body 被静默降级为 query（2026-09-14）
+
+本次为面试模块期 2 验收时顺带发现的**既存回归**，属 `260683c8`（把 `app.py` 拆成
+11 个路由模块）引入：`article_routes.py` 把 `ArticleUpdateIn` / `ArticleNoteIn` 的
+导入放进了 `TYPE_CHECKING` 块。该模块有 `from __future__ import annotations`，注解
+因此永远是字符串，FastAPI 无法在模块全局命名空间解析它，于是：
+
+- `PATCH /api/articles/{id}` 与 `POST /api/articles/{id}/notes` 的 `payload` 被
+  **静默降级为 query 参数**——端点仍然注册着，但按 JSON body 调用恒 422；
+- `create_app().openapi()` 抛 `PydanticUserError`（未解析的 `ForwardRef`），使
+  `/openapi.json` 恒 500（`/docs` 页面本身 200，但其前端拉取 openapi 失败，接口列表为空）。
+
+拆分前 `app.py` 是**运行时导入**这两个模型，故属拆分引入的回归。
+
+**修复**：两个模型改为模块级运行时导入（与其余 20+ 路由模块一致），并在 `TYPE_CHECKING`
+块内留注释说明为何不可放回。
+
+**验证**：`/openapi.json` 200（425 条路径）、`/docs` 与 `/redoc` 200；
+`PATCH /api/articles/0` 带非法 status 的 JSON body 返回 400「invalid status」（证明 body
+被真正解析，且处理器在校验通过前不触及数据库）；OpenAPI 中该端点恢复
+`requestBody → ArticleUpdateIn`（5 字段）。
+
+**新增回归测试**（`tests/api/test_api_route_regressions.py`，F4 组 4 条）：OpenAPI 可生成、
+不得有 body 参数降级为 query、article PATCH 必须声明 JSON requestBody、面试域新前缀进
+OpenAPI 而旧别名不进。已用 `git worktree` 在修复前的 HEAD 上验证：**4 failed / 4 passed**
+（失败原因即上述 `PydanticUserError`），修复后全通过。
+
+**顺带发现（未处理，非本次范围）**：`knowledge_forge_routes.py` 的 `knowledge_graph` 存在
+重复 operationId（OpenAPI 生成告警，此前被 500 掩盖），可能影响客户端代码生成。
+
+**另**：本条目修正了下方「期 2」条目里「`/docs` 与 `/openapi.json` 早已不可用」的记录——问题现已修复。
+
+---
+
 ## 重构：面试模块期 4 前端分组（2026-09-14）
 
 按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 4（前端分组）**：桌面端面试页（`/web`）的

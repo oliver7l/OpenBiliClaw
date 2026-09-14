@@ -14,13 +14,16 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi.responses import JSONResponse
 
+from openbiliclaw.api.models import ArticleNoteIn, ArticleUpdateIn
 from openbiliclaw.api.utils import article_fit_score as _article_fit_score
 from openbiliclaw.api.utils import article_tags_for_context as _article_tags_for_context
 
 if TYPE_CHECKING:
+    # 注意：ArticleUpdateIn / ArticleNoteIn 必须在上方**运行时**导入。
+    # 本模块有 ``from __future__ import annotations``，把它们放进 TYPE_CHECKING
+    # 会让 FastAPI 无法在模块全局命名空间解析注解，导致端点参数被静默降级为
+    # query 参数（PATCH /api/articles/{id} 不再接收 body），并使 /openapi.json 500。
     from fastapi import FastAPI
-
-    from openbiliclaw.api.models import ArticleNoteIn, ArticleUpdateIn
 
 logger = logging.getLogger(__name__)
 
