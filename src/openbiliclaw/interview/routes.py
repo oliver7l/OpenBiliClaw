@@ -165,17 +165,8 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
 
     @router.get("/topics")
     def interview_topics(company: str | None = None, limit: int = 50) -> dict[str, Any]:
-        """面试专题库（从 interview.db 的 kb_documents 表读取，doc_type=面试专题）。"""
-        db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
-        try:
-            from openbiliclaw.config import load_config
-            settings = load_config()
-            if settings.storage.interview_db_path:
-                p = Path(settings.storage.interview_db_path)
-                db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
-        except Exception:
-            pass
-        conn = sqlite3.connect(str(db_path))
+        """面试专题库（从 knowledge.db 的 kb_documents 表读取，doc_type=面试专题）。"""
+        conn = sqlite3.connect(_knowledge_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         if company:
@@ -195,16 +186,7 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     @router.get("/topics/{topic_id}")
     def interview_topic_detail(topic_id: int) -> dict[str, Any]:
         """面试专题详情（含完整内容）。"""
-        db_path = Path(__file__).resolve().parents[3] / "data" / "interview.db"
-        try:
-            from openbiliclaw.config import load_config
-            settings = load_config()
-            if settings.storage.interview_db_path:
-                p = Path(settings.storage.interview_db_path)
-                db_path = p if p.is_absolute() else Path(__file__).resolve().parents[3] / p
-        except Exception:
-            pass
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(_knowledge_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         c.execute("SELECT * FROM kb_documents WHERE id=?", (topic_id,))
@@ -221,6 +203,32 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
             settings = load_config()
             if settings.storage.interview_db_path:
                 p = Path(settings.storage.interview_db_path)
+                return str(p if p.is_absolute() else Path(__file__).resolve().parents[3] / p)
+        except Exception:
+            pass
+        return str(db_path)
+
+    def _resume_db() -> str:
+        """投递域库（data/resume.db：companies/job_postings/applications/resume_texts/job_ammo）。"""
+        db_path = Path(__file__).resolve().parents[3] / "data" / "resume.db"
+        try:
+            from openbiliclaw.config import load_config
+            settings = load_config()
+            if getattr(settings.storage, "resume_db_path", None):
+                p = Path(settings.storage.resume_db_path)
+                return str(p if p.is_absolute() else Path(__file__).resolve().parents[3] / p)
+        except Exception:
+            pass
+        return str(db_path)
+
+    def _knowledge_db() -> str:
+        """加工层知识库（data/knowledge.db：kb_documents 系已于 2026-09-14 迁入）。"""
+        db_path = Path(__file__).resolve().parents[3] / "data" / "knowledge.db"
+        try:
+            from openbiliclaw.config import load_config
+            settings = load_config()
+            if getattr(settings.storage, "knowledge_db_path", None):
+                p = Path(settings.storage.knowledge_db_path)
                 return str(p if p.is_absolute() else Path(__file__).resolve().parents[3] / p)
         except Exception:
             pass
@@ -294,10 +302,10 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         limit: int = 100,
     ) -> dict[str, Any]:
         """岗位列表（支持按公司/城市/状态筛选，默认按匹配度降序）。"""
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        sql = "SELECT * FROM job_positions WHERE 1=1"
+        sql = "SELECT * FROM job_postings WHERE 1=1"
         params: list[Any] = []
         if company:
             sql += " AND company=?"
@@ -318,10 +326,10 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     @router.get("/positions/{position_id}")
     def interview_position_detail(position_id: int) -> dict[str, Any]:
         """岗位详情（含完整JD和要求）。"""
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("SELECT * FROM job_positions WHERE id=?", (position_id,))
+        c.execute("SELECT * FROM job_postings WHERE id=?", (position_id,))
         row = c.fetchone()
         conn.close()
         if not row:
@@ -336,9 +344,9 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         valid_status = {"待投递", "已投递", "面试中", "已offer", "已拒绝", "已归档"}
         if status not in valid_status:
             raise HTTPException(status_code=400, detail=f"状态必须是 {valid_status} 之一")
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         c = conn.cursor()
-        c.execute("SELECT id FROM job_positions WHERE id=?", (position_id,))
+        c.execute("SELECT id FROM job_postings WHERE id=?", (position_id,))
         if not c.fetchone():
             conn.close()
             raise HTTPException(status_code=404, detail=f"岗位 {position_id} 不存在")
@@ -354,7 +362,7 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
             updates.append("applied_at=?")
             params.append(datetime.now().isoformat())
         params.append(position_id)
-        c.execute(f"UPDATE job_positions SET {', '.join(updates)} WHERE id=?", params)
+        c.execute(f"UPDATE job_postings SET {', '.join(updates)} WHERE id=?", params)
         conn.commit()
         conn.close()
         return {"ok": True, "id": position_id, "status": status}
@@ -366,11 +374,11 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         for f in required:
             if f not in data:
                 raise HTTPException(status_code=400, detail=f"缺少必填字段 {f}")
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         c = conn.cursor()
         now = datetime.now().isoformat()
         c.execute("""
-            INSERT INTO job_positions
+            INSERT INTO job_postings
             (company, bg, title, city, years_required, education, job_url, job_id,
              description, requirements, match_score, match_points, status, tags, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -394,7 +402,7 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         page: int = 1,
         page_size: int = 50,
     ):
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         where = []
@@ -406,11 +414,11 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
             where.append("position_id = ?")
             params.append(position_id)
         where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-        c.execute(f"SELECT COUNT(*) FROM resumes{where_sql}", params)
+        c.execute(f"SELECT COUNT(*) FROM resume_texts{where_sql}", params)
         total = c.fetchone()[0]
         offset = (page - 1) * page_size
         c.execute(
-            f"SELECT id, position_id, company, target_position, version_name, highlights, matched_keywords, file_path, created_at, updated_at FROM resumes{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT id, position_id, company, target_position, version_name, highlights, matched_keywords, file_path, created_at, updated_at FROM resume_texts{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
             params + [page_size, offset],
         )
         items = [dict(r) for r in c.fetchall()]
@@ -419,10 +427,10 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
 
     @router.get("/resumes/{resume_id}")
     def interview_resume_detail(resume_id: int):
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("SELECT * FROM resumes WHERE id = ?", (resume_id,))
+        c.execute("SELECT * FROM resume_texts WHERE id = ?", (resume_id,))
         row = c.fetchone()
         conn.close()
         if not row:
@@ -431,11 +439,11 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
 
     @router.post("/resumes", status_code=201)
     def interview_create_resume(data: dict):
-        conn = sqlite3.connect(_scripts_db())
+        conn = sqlite3.connect(_resume_db())
         c = conn.cursor()
         now = datetime.now().isoformat()
         c.execute("""
-            INSERT INTO resumes (position_id, company, target_position, version_name, full_text, highlights, matched_keywords, file_path, created_at, updated_at)
+            INSERT INTO resume_texts (position_id, company, target_position, version_name, full_text, highlights, matched_keywords, file_path, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get("position_id"), data.get("company"), data.get("target_position"),

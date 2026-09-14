@@ -123,9 +123,9 @@ def md_to_docx(md_path: Path, output_path: Path):
 
 
 def main():
-    conn = sqlite3.connect(str(PROJECT_ROOT / "data" / "interview.db"))
+    conn = sqlite3.connect(str(PROJECT_ROOT / "data" / "resume.db"))
     c = conn.cursor()
-    c.execute("SELECT id, company, target_position, version_name, file_path FROM resumes ORDER BY id")
+    c.execute("SELECT id, company, target_position, version_name, file_path FROM resume_texts ORDER BY id")
     resumes = c.fetchall()
     conn.close()
 

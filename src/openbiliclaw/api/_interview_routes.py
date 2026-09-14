@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview_questions.db"
 INTERVIEW_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "interview.db"
+APPLICATION_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "resume.db"
 AMMO_DIR = Path(__file__).resolve().parents[3] / "求职知识库" / "03_岗位弹药库"
 
 
@@ -289,8 +290,9 @@ def create_plan(req: PlanRequest) -> dict[str, Any]:
 
 # ── 面试安排（job 表）──────────────────────────────────────
 
-def _get_interview_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+def _get_application_conn() -> sqlite3.Connection:
+    """投递域连接（data/resume.db applications 表，job 表已于 2026-09-14 迁入）。"""
+    conn = sqlite3.connect(str(APPLICATION_DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -298,11 +300,11 @@ def _get_interview_conn() -> sqlite3.Connection:
 @router.get("/schedule")
 def get_schedule() -> dict[str, Any]:
     """获取面试安排列表。"""
-    conn = _get_interview_conn()
+    conn = _get_application_conn()
     try:
         rows = conn.execute(
             "SELECT company, role, interview_at, status, direction, prep_dir, resume_ver, note "
-            "FROM job ORDER BY interview_at DESC"
+            "FROM applications ORDER BY interview_at DESC"
         ).fetchall()
         jobs = []
         today = date.today().isoformat()
@@ -571,10 +573,10 @@ def _extract_company_profile(company_dir: Path, company_name: str) -> dict[str, 
 
     # 1. 从 job 表获取基本信息
     try:
-        conn = sqlite3.connect(str(INTERVIEW_DB_PATH))
+        conn = sqlite3.connect(str(APPLICATION_DB_PATH))
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT * FROM job WHERE company LIKE ?", (f"%{company_name}%",)
+            "SELECT * FROM applications WHERE company LIKE ?", (f"%{company_name}%",)
         ).fetchone()
         if row:
             result["position"] = row["role"] or ""

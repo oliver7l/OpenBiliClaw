@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""导入求职知识库方向专题文档（02_方向知识库/*.md）到 interview.db 的 kb_documents 表，按章节切块。
+"""导入求职知识库方向专题文档（02_方向知识库/*.md）到 knowledge.db 的 kb_documents 表，按章节切块。
 
 用法
 ----
@@ -7,7 +7,7 @@ python scripts/import_kb_documents.py          # dry-run 预览
 python scripts/import_kb_documents.py --apply  # 实际写入
 python scripts/import_kb_documents.py --apply --force  # 清空重导
 
-Schema (interview.db):
+Schema (knowledge.db):
 ```sql
 CREATE TABLE IF NOT EXISTS kb_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +37,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DIRECTION_KB_ROOT = PROJECT_ROOT / "求职知识库" / "02_方向知识库"
-INTERVIEW_DB = PROJECT_ROOT / "data" / "interview.db"
+INTERVIEW_DB = PROJECT_ROOT / "data" / "knowledge.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kb_documents (
