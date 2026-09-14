@@ -136,6 +136,19 @@ def register_all_routes(
             _failures.record(_mod_name, _exc)
 
     # ── 有额外依赖参数的路由注册 ────────────────────────────────
+    # ── 聊天记录分析 routes（data/chat_analysis.db）──────────────
+    # 2026-09-14 前只在 cli/_build.py 里注册，``create_app()`` 产出的 app 少了
+    # 整组 /api/chat-analysis/*（同 delight/sent 一族的「拆分后漏接线」缺陷）。
+    # 统一到此处保证**任何入口**生成的 app 端点一致。
+    try:
+        from openbiliclaw.api.chat_analysis_routes import (
+            register_chat_analysis_routes,
+        )
+
+        register_chat_analysis_routes(app, ctx)
+    except Exception as _exc:  # noqa: BLE001
+        _failures.record("chat_analysis_routes", _exc)
+
     try:
         from openbiliclaw.api.chat_probe_routes import register_chat_probe_routes
 

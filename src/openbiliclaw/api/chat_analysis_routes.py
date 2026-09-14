@@ -20,8 +20,47 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_chat_analysis_service: ChatAnalysisService | None = None
-_CHAT_DB_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "chat_analysis.db"
+# 按解析后的库路径缓存 service：项目根被（测试）重指向时不会串用到上一个库的实例。
+_chat_analysis_service: dict[str, ChatAnalysisService] = {}
+
+
+def _chat_db_path() -> Path:
+    """聊天分析库路径（延迟解析）。
+
+    早先这里用 ``Path(__file__).resolve().parent.parent.parent.parent`` 往上数
+    四级取项目根——一旦本文件换个目录层级就静默指错位置，且**不认**
+    ``OPENBILICLAW_PROJECT_ROOT``，测试无法隔离。统一改走 ``config._project_root()``
+    （唯一支持化的项目根锚点）。做成函数而非模块级常量，是因为常量在 import 时就
+    固化路径，测试设了 env 也不会生效。
+    """
+    from openbiliclaw.config import _project_root
+
+    return _project_root() / "data" / "chat_analysis.db"
+
+
+def _resolve_llm_service(ctx: Any) -> Any:
+    """从 ctx 取 LLM service —— 兼容两种调用形态。
+
+    历史上调用方传的是 ``app.state``（故走 ``ctx.runtime_context.llm_service``），
+    现在统一入口 ``_route_registry`` 传的是 ``RuntimeContext``（其自身就有
+    ``llm_service``）。两种都支持，避免哪一边被悄悄降级成 None。
+    """
+    if ctx is None:
+        return None
+    service = getattr(ctx, "llm_service", None)
+    if service is not None:
+        return service
+    runtime_ctx = getattr(ctx, "runtime_context", None)
+    return getattr(runtime_ctx, "llm_service", None) if runtime_ctx is not None else None
+
+
+def _resolve_openbiliclaw_db(ctx: Any) -> str | None:
+    """同上：两种 ctx 形态都要能拿到主库路径。"""
+    database = getattr(ctx, "database", None)
+    if database is None:
+        runtime_ctx = getattr(ctx, "runtime_context", None)
+        database = getattr(runtime_ctx, "database", None) if runtime_ctx is not None else None
+    return str(database.db_path) if database is not None and hasattr(database, "db_path") else None
 
 
 def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
@@ -30,26 +69,27 @@ def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
     def chat_analysis_health() -> JSONResponse:
         import os
 
+        db_path = _chat_db_path()
         return JSONResponse(
             {
                 "ok": True,
-                "db_exists": _CHAT_DB_PATH.exists(),
-                "db_path": str(_CHAT_DB_PATH),
+                "db_exists": db_path.exists(),
+                "db_path": str(db_path),
                 "cwd": os.getcwd(),
             }
         )
 
     def _get_svc() -> ChatAnalysisService | None:
-        global _chat_analysis_service
-        if _chat_analysis_service is not None:
-            return _chat_analysis_service
-        if not _CHAT_DB_PATH.exists():
-            logger.warning("聊天分析数据库不存在: %s", _CHAT_DB_PATH)
+        db_path = _chat_db_path()
+        cached = _chat_analysis_service.get(str(db_path))
+        if cached is not None:
+            return cached
+        if not db_path.exists():
+            logger.warning("聊天分析数据库不存在: %s", db_path)
             return None
-        runtime_ctx = getattr(ctx, "runtime_context", None)
-        llm_service = getattr(runtime_ctx, "llm_service", None) if runtime_ctx else None
-        _chat_analysis_service = ChatAnalysisService(db_path=_CHAT_DB_PATH, llm_service=llm_service)
-        return _chat_analysis_service
+        cached = ChatAnalysisService(db_path=db_path, llm_service=_resolve_llm_service(ctx))
+        _chat_analysis_service[str(db_path)] = cached
+        return cached
 
     # ── 全局统计 ──
 
@@ -348,9 +388,7 @@ def register_chat_analysis_routes(app: FastAPI, ctx: Any) -> None:
         if svc is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
-            openbiliclaw_db = (
-                str(ctx.database.db_path) if hasattr(ctx.database, "db_path") else None
-            )
+            openbiliclaw_db = _resolve_openbiliclaw_db(ctx)
             results = svc.import_all(
                 mindback_root=mindback_root,
                 openbiliclaw_db=openbiliclaw_db,

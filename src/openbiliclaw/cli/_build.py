@@ -181,10 +181,9 @@ def _run_api_server(*, host: str = "127.0.0.1", port: int = 8420) -> None:
 
     from openbiliclaw.api.app import create_app
 
+    # chat_analysis_routes 曾在此单独注册（cli 独占），导致裸 ``create_app()``
+    # 静默缺失整组 /api/chat-analysis/*；现已统一到 api/_route_registry.py。
     api_app = create_app()
-    from openbiliclaw.api.chat_analysis_routes import register_chat_analysis_routes
-
-    register_chat_analysis_routes(api_app, getattr(api_app, "state", None))
     state = getattr(api_app, "state", None)
     if bool(getattr(state, "degraded", False)):
         issues = []

@@ -34,6 +34,17 @@
   消失**——本组同时断言路由存在、JSON body 契约，以及客户端引用的 delight 路径
   必须真实存在。
 
+- F7（2026-09-14 发现，与 F4/F5/F6 同源于 app.py 拆分）：``chat_analysis_routes``
+  的注册**只写在 ``cli/_build.py`` 的 ``_run_api_server`` 里**，而不在
+  ``create_app()`` 的注册路径上。于是「裸 ``create_app()``」产出的 app 静默少了
+  16 个 ``/api/chat-analysis/*`` 端点——现网走 CLI 启动路径所以看起来一切正常，
+  但任何别的入口（测试、未来的 embed-asgi、别的 server 包装）拿到的都是残缺 app。
+  根因是**注册入口不唯一**（除了 ``_route_registry`` 还有 ``cli/_build.py``），
+  故本组不只锁这 16 个端点，还用「每个 ``api/*_routes.py`` 必须贡献端点」的
+  运行时归属断言，堵住下一批孤儿模块。
+- F8（2026-09-14，同批发现）：同一个 ``(path, method)`` 被注册两次时，Starlette
+  **先注册者胜**，后者永不执行（F2 的具体形态）。全局断言杜绝。
+
 这里用「真实注册顺序」而非静态源码判断，因为重复注册的胜负由注册顺序决定；
 另用「能否生成 OpenAPI」「参数是否被降级」「operationId 是否唯一」三条断言
 守住静默降级与文档契约类缺陷。
@@ -50,6 +61,7 @@ from openbiliclaw.api.app import create_app
 from openbiliclaw.config import Config, save_config
 
 _WEB_DIR = Path(__file__).resolve().parents[2] / "src" / "openbiliclaw" / "web"
+_API_DIR = Path(__file__).resolve().parents[2] / "src" / "openbiliclaw" / "api"
 
 
 def _route_endpoints(app) -> dict[tuple[str, str], list[object]]:
@@ -285,3 +297,117 @@ def test_delight_clients_reference_existing_endpoints() -> None:
                         f"{asset.relative_to(repo_root)} -> /api/delight/{segment}"
                     )
     assert offenders == set(), f"客户端引用了不存在的 delight 端点：{sorted(offenders)}"
+
+
+# ── F7：create_app() 必须产出完整 app（注册入口不得分流） ─────────
+
+
+def test_chat_analysis_endpoints_registered_by_create_app() -> None:
+    """F7 回归：``create_app()`` 必须自带 chat-analysis 路由，无需调用方补注册。
+
+    ``register_chat_analysis_routes`` 之前只在 ``cli/_build.py`` 里被调用，
+    因此现网（走 CLI）正常、而任何直接 ``create_app()`` 的入口都拿不到这 16 条
+    端点。断言 ``(路径, 方法)`` 而非发请求：降级门会先返回 503，把缺失完全掩盖。
+
+    同时断言这些 endpoint 的 ``__module__`` 归属——否则「同名路径由别的模块
+    （如 ``app.py`` 内联）顶替」也能骗过本断言。
+    """
+    app = create_app()
+    owners = {
+        getattr(route, "path", ""): getattr(route, "endpoint", None).__module__
+        for route in app.routes
+        if getattr(route, "path", "").startswith("/api/chat-analysis")
+        and getattr(route, "endpoint", None) is not None
+    }
+    expected = {
+        "/api/chat-analysis/health",
+        "/api/chat-analysis/stats",
+        "/api/chat-analysis/sessions",
+        "/api/chat-analysis/search",
+        "/api/chat-analysis/tags",
+        "/api/chat-analysis/import/all",
+    }
+    missing = sorted(expected - set(owners))
+    assert missing == [], f"create_app() 未注册 chat-analysis 端点：{missing}"
+    assert set(owners.values()) == {"openbiliclaw.api.chat_analysis_routes"}, (
+        f"chat-analysis 端点来自非预期模块：{sorted(set(owners.values()))}"
+    )
+
+
+# 不贡献任何端点的 ``api/*_routes.py`` 白名单 —— 每一项必须写清理由，
+# 否则等于给「下一个孤儿模块」留后门。
+_ROUTE_MODULE_EXEMPT = {
+    "_interview_routes": "期 3 兼容垫片：只是把 openbiliclaw.interview.study.routes 的 "
+    "register_interview_routes / router 再导出一遍，本身不注册端点。",
+}
+
+
+def test_every_api_route_module_contributes_endpoints() -> None:
+    """F7 泛化：``api/*_routes.py`` 每个模块都必须真的注册出端点。
+
+    这是「孤儿端点」家族的通用闸。判断用**运行时端点归属**（``endpoint.__module__``）
+    而不是「源码里有没有被 import」——后者曾得出两个相反的误判：
+    ``probe_routes`` 在三个注册入口里都搜不到名字（它其实是被 ``config_routes``
+    内部调用的），而 ``chat_analysis_routes`` 明明被 CLI import 了，却对
+    ``create_app()`` 毫无贡献。端点归属计数是唯一不撒谎的口径。
+    """
+    app = create_app()
+    contributed: dict[str, int] = {}
+    for route in app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None:
+            continue
+        module = getattr(endpoint, "__module__", "") or ""
+        contributed[module] = contributed.get(module, 0) + 1
+
+    orphans = []
+    for module_file in sorted(_API_DIR.glob("*_routes.py")):
+        stem = module_file.stem
+        if stem in _ROUTE_MODULE_EXEMPT:
+            continue
+        if contributed.get(f"openbiliclaw.api.{stem}", 0) == 0:
+            orphans.append(stem)
+    assert orphans == [], (
+        f"以下 api/*_routes.py 未贡献任何端点（注册没接线？）：{orphans}\n"
+        f"若确属有意豁免，请加进 _ROUTE_MODULE_EXEMPT 并写明理由。"
+    )
+
+    stale = sorted(set(_ROUTE_MODULE_EXEMPT) - {p.stem for p in _API_DIR.glob("*_routes.py")})
+    assert stale == [], f"白名单指向已不存在的模块，请清理：{stale}"
+
+
+def test_exempt_route_modules_really_register_nothing() -> None:
+    """F7 反向：白名单里的模块一旦开始贡献端点，说明豁免理由失效了。
+
+    例如 ``_interview_routes`` 若哪天真注册了端点，就会与 ``interview.study.routes``
+    的正主重复；豁免清单必须跟着失效或从测试里被点名。
+    """
+    app = create_app()
+    for stem in _ROUTE_MODULE_EXEMPT:
+        hits = [
+            getattr(route, "path", "")
+            for route in app.routes
+            if getattr(getattr(route, "endpoint", None), "__module__", "")
+            == f"openbiliclaw.api.{stem}"
+        ]
+        assert hits == [], (
+            f"{stem} 已在注册端点 {hits}，其豁免理由（{_ROUTE_MODULE_EXEMPT[stem]}）"
+            f"不再成立，请从 _ROUTE_MODULE_EXEMPT 移除。"
+        )
+
+
+# ── F8：同一 (path, method) 不得重复注册（先注册者胜，后者永不执行）──
+
+
+def test_no_duplicate_endpoint_registration() -> None:
+    """F8 回归：同一 ``(path, method)`` 只能有一个 handler。
+
+    Starlette 按注册顺序匹配，第一个命中的路由胜出，第二个**永不执行**——
+    这就是 F2（``/api/diary/rag/stats`` 被辅助函数的装饰器抢注）的通用形态。
+    """
+    duplicated = {
+        pair: [f"{ep.__module__}.{ep.__name__}" for ep in endpoints]
+        for pair, endpoints in _route_endpoints(create_app()).items()
+        if len(endpoints) > 1
+    }
+    assert duplicated == {}, f"以下 (path, method) 被重复注册，先注册者会遮蔽后者：{duplicated}"

@@ -63,19 +63,49 @@
 
 **取证**：`docs/project-audit-2026-09-11.md:80-89` 已记录此漂移（当时 9 vs 22），修复项写的是「从 `pm2 jlist` 导出真实配置，回写 `ecosystem.config.json`」——**至今未执行**。
 
-### B. 路由注册入口不唯一（3 处）——「孤儿端点」的结构性根因
+### B. 路由注册入口不唯一（3 处）——「孤儿端点」的结构性根因 → **✅ 已收口（2026-09-14）**
 
-| 注册点 | 内容 |
-|---|---|
-| `api/_route_registry.py` | `register_all_routes()`，30+ 模块显式白名单 |
-| `api/app.py` | 15 个内联 `@app.*` 装饰器 + `register_web_ui_routes` |
-| `cli/_build.py:187` | **仅此一处**注册 `chat_analysis_routes` |
+| 注册点 | 内容 | 状态 |
+|---|---|---|
+| `api/_route_registry.py` | `register_all_routes()`，30+ 模块显式白名单 | 唯一「应有尽有」入口 |
+| `api/app.py` | 15 个内联 `@app.*` 装饰器 + `register_web_ui_routes` | 保留（`create_app` 自己注册） |
+| `cli/_build.py:187` | 原**仅此一处**注册 `chat_analysis_routes` | **已移除**（`_run_api_server` 不再手写补注册） |
 
-**具体缺陷**：`chat_analysis_routes` 只在 CLI 启动路径（`openbiliclaw serve-api` → `_run_api_server`）注册。现网走 CLI 所以 15 个 `/api/chat-analysis/*` 端点正常；但**任何裸 `create_app()`（测试、嵌入式、改用 uvicorn 直启）都会缺这 15 个端点，且无任何告警**。
+**修复内容**：`chat_analysis_routes` 的注册从 `cli/_build.py` 收回 `api/_route_registry.py`，
+即 `create_app()` 产出即完整；顺带修掉该模块两处历史不一致：
 
-这与刚修完的 `POST /api/delight/sent` 404（`8a9dffb6`）是**同一族缺陷**：模块存在、能力存在，但注册路径分叉 → 端点静默消失。
+1. `_get_svc()` 走 `ctx.runtime_context.llm_service`（历史上 CLI 传 `app.state`），而
+   `/import/all` 走 `ctx.database.db_path`（期望 `RuntimeContext`）——**同一个模块认两种
+   ctx 形态**，统一入口传 `RuntimeContext` 后前者会静默降级成 `llm_service=None`。
+   现改为 `_resolve_llm_service()` / `_resolve_openbiliclaw_db()` 兼容两种形态。
+2. `_CHAT_DB_PATH` 用 `Path(__file__)...parent.parent.parent.parent` 硬数四级取项目根
+   ——违反「项目根锚点」契约，且不认 `OPENBILICLAW_PROJECT_ROOT`，测试无法隔离。
+   改为延迟调用 `config._project_root()`；service 缓存改为**按解析后的库路径**做 key
+   （原来是进程级单例，项目根被重指向时会串到上一个库的实例）。
 
-**非缺陷**：`api/_interview_routes.py`（11 行）是期 3 有意留的兼容垫片，不接线是对的。
+**回归测试**（`tests/api/test_api_route_regressions.py`）新增 F7/F8 四组：
+
+| 测试 | 断言 | 修复前 |
+|---|---|---|
+| `test_chat_analysis_endpoints_registered_by_create_app` | 6 个代表端点在路由表内 **且** endpoint 归属本模块 | ❌ fail |
+| `test_every_api_route_module_contributes_endpoints` | 每个 `api/*_routes.py` 必须贡献端点（白名单须写理由） | ❌ fail |
+| `test_exempt_route_modules_really_register_nothing` | 白名单模块若开始贡献端点则断言失败（防豁免腐烂） | ✅ pass（前置守卫） |
+| `test_no_duplicate_endpoint_registration` | 同一 `(path, method)` 不得重复注册（Starlette 先注册者胜） | ✅ pass（前置守卫） |
+
+**方法论更正**（重要）：本节原先按「源码里能否搜到模块名 × 3 条注册路径」判定孤儿，
+实测会**双向误判**：
+
+- `probe_routes` 在三个注册入口里搜不到名字 → 误判为孤儿，其实它被 `config_routes` **内部**调用（注册是传递的）；
+- `chat_analysis_routes` 明明被 `cli` import 了 → 按源码判断是「已接线」，实际对 `create_app()` 贡献 **0 个**端点。
+
+改用**运行时端点归属**（`endpoint.__module__` 计数）后两处都归位；这也是唯一能随着注册方式演变而自动正确的口径。
+
+**非缺陷**：`api/_interview_routes.py`（11 行）是期 3 有意留的兼容垫片，不接线是对的（已在测试白名单里写明理由）。
+
+**实测（修复后）**：`create_app()` 的 `(path, method)` 组合 **603 个，重复 0**；
+`chat_analysis_routes` 端点贡献 **0 → 17 个操作（15 条路径）**；线上重跑后
+`/api/chat-analysis/health` 返回 `db_exists=true`、
+`db_path=/…/data/chat_analysis.db`（项目根锚点解析正确）。
 
 ### C. 文档缺口：14 个模块有代码、无 `docs/modules/*.md`
 
@@ -150,6 +180,7 @@
 | 面试模块 期 0–期 4 + 3 个路由契约修复 | ✅ 已完 |
 | `_delight_routes.py` 孤儿模块 / `/api/delight/sent` 404 | ✅ 已修（`8a9dffb6`） |
 | 部署拓扑漂移（pm2 实跑 21 / 声明 9） | ✅ 已修（2026-09-14）：声明重建为 21 个 + 一致性检查脚本 + `docs/pm2-deployment.md` |
+| 路由注册入口不唯一（3 处）/ `chat_analysis` 端点在 `create_app()` 中缺失 | ✅ 已修（2026-09-14）：注册收回 `_route_registry`，端点贡献 0 → 16；F7/F8 四组回归 |
 | `obc_runtime` 抽取 | ⛔ 已评估关闭（2026-09-14，见 §2.F） |
 
 ---
@@ -159,7 +190,7 @@
 | 批次 | 模块 / 主题 | 风险 | 为什么排这里 |
 |---|---|---|---|
 | ~~**①**~~ | ~~**部署拓扑**：重建 `ecosystem.config.json` + 加一致性检查~~ → **✅ 已完成**（2026-09-14，见 `docs/pm2-deployment.md`） | — | 声明从 9 个补到 21 个、19 个 Python producer 的启动写法纠正为实跑形式；一致性检查落 `scripts/devops/check_pm2_ecosystem.py` |
-| **②** | **路由注册单一化**：`chat_analysis` 归位 + 「注册表 ⟺ 所有 `*_routes.py`」一致性测试 | 低 | 与刚修完的重构线同源，可根治「孤儿端点」这一族 |
+| ~~**②**~~ | ~~**路由注册单一化**：`chat_analysis` 归位 + 「注册表 ⟺ 所有 `*_routes.py`」一致性测试~~ → **✅ 已完成**（2026-09-14，见 §2.B） | — | `cli/_build.py` 的独占注册已收回 `_route_registry`；改用「运行时端点归属」做通用孤儿闸（F7/F8 四组测试） |
 | **③** | **质量门禁**：`mypy` 55 → 0、`ruff` 3 → 0 | 低 | 纯机械修复，且是 AGENTS.md 要求的门禁 |
 | **④** | **`api/` 总览文档**：37 文件 / 441 路径的归属表 | 低 | 最大模块、最缺文档；后续所有路由改动都靠它 |
 | **⑤** | **`sources/` + `runtime/` 生产者矩阵**：20 个进程 ↔ 脚本 ↔ 库 ↔ 频率 | 低 | 31.6K 行 / 109 文件 / 零文档，是「黑盒」最大的一块 |
@@ -171,6 +202,6 @@
 
 ## 5. 待你拍板
 
-1. 从哪一批开始？（建议 ①，最低风险且已有结论）
+1. ~~从哪一批开始？（建议 ①，最低风险且已有结论）~~ → ① 部署拓扑、② 路由注册单一化**均已完成**（2026-09-14）；下一批建议 **③ 质量门禁**（mypy 55 → 0）。
 2. ~~`obc_runtime` 抽取：继续做，还是判定为「计划已过期」正式关闭？~~ → **已决策：正式关闭**（2026-09-14，依据见 §2.F）
 3. `mypy` 55 项：一次性收口，还是按模块随修随清？
