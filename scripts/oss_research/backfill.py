@@ -784,6 +784,64 @@ PROJECTS = [
         "report_path": "references/AppleNotesCLI-借鉴分析.md",
         "tags": ["macos", "cli", "sqlite", "readonly", "local-first", "mcp-plan-reference", "reference", "deep-research"],
     },
+    # 微信读书研究批次（000-微信读书，09-14 迁入 references/；012 weread-skill-web 为用户自研不入库）
+    {
+        "name": "awesome-weread", "owner": "BENZEMA216",
+        "url": "https://github.com/BENZEMA216/awesome-weread",
+        "one_liner": "微信读书笔记导出/自动化工具合集（bot 自动更新 seen.json）",
+        "caveats": "仅克隆未精读。克隆位置：references/awesome-weread。",
+        "tags": ["explore-archive", "unstudied", "weread", "export", "reference"],
+    },
+    {
+        "name": "carl-weread", "owner": "LearnPrompt",
+        "url": "https://github.com/LearnPrompt/carl-weread",
+        "one_liner": "carl-weread：微信读书 Skill + reading coach（v0.3），Python 包结构含 workflows/examples",
+        "caveats": "仅克隆未精读。克隆位置：references/carl-weread。",
+        "tags": ["explore-archive", "unstudied", "weread", "skill", "reference"],
+    },
+    {
+        "name": "WeRead-Agent", "owner": "WenWen610",
+        "url": "https://github.com/WenWen610/WeRead-Agent",
+        "one_liner": "WeRead-Agent：微信读书对话 Agent（前后端+Docker+Prometheus/Grafana+evals）",
+        "caveats": "仅克隆未精读。克隆位置：references/WeRead-Agent。",
+        "tags": ["explore-archive", "unstudied", "weread", "agent", "reference"],
+    },
+    {
+        "name": "weread-skill-api", "owner": "lucis-yg",
+        "url": "https://github.com/lucis-yg/weread-skill-api",
+        "one_liner": "微信读书 Skill 的 Node.js API 封装（Express server + src）",
+        "caveats": "仅克隆未精读；用户自研 weread-skill-web（二创/）即基于此 API。克隆位置：references/weread-skill-api。",
+        "tags": ["explore-archive", "unstudied", "weread", "nodejs", "api", "reference"],
+    },
+    {
+        "name": "weread-skill-desktop", "owner": "Duosl",
+        "url": "https://github.com/Duosl/weread-skill-desktop",
+        "one_liner": "微信读书 Skill 桌面端（Tauri + Vite，含 landing/docs/ui-style-guide）",
+        "caveats": "仅克隆未精读；迁移时已清 node_modules(154M)+src-tauri/target(2.8G) 构建缓存入废纸篓。克隆位置：references/weread-skill-desktop。",
+        "tags": ["explore-archive", "unstudied", "weread", "tauri", "desktop", "reference"],
+    },
+    # 小宇宙研究批次（000-小宇宙，09-14 迁入 references/）
+    {
+        "name": "xiaoyuzhou_script_skill", "owner": "zdhgreat",
+        "url": "https://github.com/zdhgreat/xiaoyuzhou_script_skill",
+        "one_liner": "小宇宙播客脚本技能（SKILL.md + scripts，抓取/转写工作流）",
+        "caveats": "仅克隆未精读。克隆位置：references/xiaoyuzhou_script_skill。",
+        "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "skill", "reference"],
+    },
+    {
+        "name": "xiaoyuzhou-api", "owner": "ylw1997",
+        "url": "https://github.com/ylw1997/xiaoyuzhou-api",
+        "one_liner": "小宇宙播客非官方 API 封装（Python，含 docs/tests）",
+        "caveats": "仅克隆未精读。克隆位置：references/xiaoyuzhou-api。",
+        "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "api", "reference"],
+    },
+    {
+        "name": "xiaoyuzhou-mcp", "owner": "r266-tech",
+        "url": "https://github.com/r266-tech/xiaoyuzhou-mcp",
+        "one_liner": "小宇宙播客 MCP 服务（只读形态，与 mcp-readonly-server 方案同类）",
+        "caveats": "仅克隆未精读；只读 MCP 形态与 OpenBiliClaw MCP 只读服务方案（docs/plans/mcp-readonly-server.md）同类。克隆位置：references/xiaoyuzhou-mcp。",
+        "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "mcp", "reference"],
+    },
 ]
 
 
