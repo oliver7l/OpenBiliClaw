@@ -3,6 +3,11 @@
 > 编写日期：2026-09-07
 > 目标：将 4 个核心模块从主项目提取为独立 Python 包，支持独立开发、测试和复用
 
+> **执行状态（2026-09-14 核对）**
+> - ✅ §2 `obc-llm`（7,844 行）、§3 `obc-soul`（13,883 行）、§4 `obc-discovery`（8,610 行）—— **均已提取完成**，位于 `packages/`。
+> - ⛔ §5 `obc-runtime` —— **已评估并决定不做（正式关闭）**。实测依据：剩余解耦面 **75 处越界 import**（方案 §5.3 只预见 5 类，实测多出 `self_evolution`/`weekend`/`recommendation`/`bilibili` 4 类）；单是最大的解耦对象 `sources/`（56 文件 / 11,263 行）方案只给了一句「定义 Protocol」；爆炸半径覆盖 **20 个 pm2 进程**；而 runtime 是本项目调度核心（依赖全为本项目业务概念），**复用价值在四者中最低**。完整论证见 `docs/module-cleanup-inventory-2026-09-14.md` §2.F。
+> - 残余旧导入路径（`openbiliclaw.llm|soul|discovery`）**21 处**，由 `src/openbiliclaw/llm/` 之类薄转发层保兼容，不阻塞任何事。
+
 ---
 
 ## 1. 总体架构
