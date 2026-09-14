@@ -114,10 +114,41 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 > - 因该 API 路径本身不标记 analyzed，已用 `--mark-with-output` 把 244 补标为已分析，避免被定时任务重复分析产生重复行
 > - 后续行为：定时任务每 6 小时分析 10 个、每天约 40 个 → 799 个约 **20 天**跑完；若 LLM 缺失则整轮跳过（不再毒化）
 
-### 🔴 C2. 导入不幂等：832 条 chunk 里 419 条是重复（**已亲自复核**）
+### ~~🔴 C2. 导入不幂等：832 条 chunk 里 419 条是重复~~ → **误判，已更正 + 已加护栏**
 
-`importer.py:236`（deepseek）、`:339`（articles）无条件 INSERT；`chat_analysis_chunks` 无 UNIQUE 约束。
-实测：413 组重复、419 行多余 / 总 832 行 —— **重复率约 50%**。消息表 3,614,760 行里大概率同样有重复。
+**⚠️ 更正说明（2026-09-15，重要）**：本节原写「413 组重复、419 行多余、重复率约 50%」，
+**这个结论是错的**，错在用了错误的判重键（`session_title + start_line + end_line`）。
+
+动手前逐列比对才发现：
+
+```
+组 ('人工智能交流群8', start_line=0, end_line=0) → 8 行
+   组内不一致的列: analysis_content, analysis_file   ← 内容各不相同
+按「全部内容列」分组统计 → 重复组 = 0，多余行 = 0（总 832）
+analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
+```
+
+那 419 组只是**标题与行区间相同**（绝大多数落在默认区间 `(0,0)`，共 8 行是这种情况），
+但 `analysis_content` / `analysis_file` 各不相同 —— 是**不同分析文件产出的不同内容**。
+若按最初的结论删除，会**删掉 419 行真实数据**。
+
+**真正的缺陷（确实存在，但形态不同）**：`importer.py:236/339` 无条件 INSERT，
+而表上没有唯一约束 ⇒ **同一份分析文件被导入两次就会堆两行**（当前库里恰好没发生过，
+因为没人重复导入过）。
+
+**已修（本次）**：
+- `store._initialize_tables()` 增加**部分唯一索引**
+  `CREATE UNIQUE INDEX ... ON chat_analysis_chunks(analysis_file) WHERE analysis_file <> ''`
+  （用部分索引是刻意的：`analysis_file` 默认值为 `''`，对空值也约束会误拒第二条空值行；
+  老库若已有历史重复则只告警、不阻塞启动）
+- `store.create_analysis_chunk()` 改 `INSERT OR IGNORE`，被挡下时**回读既有行**（不抛错）
+- 新增 `store.has_analysis_chunk()`；`importer` 两个导入点先查后插，并如实计入
+  `skipped`（新增 `DeepseekAnalysisImportResult.chunks_skipped` 字段）
+- 回归＝`tests/chat_analysis/test_chunk_idempotency.py`（5 条，**含 3 条反向守卫**：
+  不同来源都要保留 / 同标题同行区间但来源不同必须都留 / 空来源不去重）
+  修复前 **2 failed / 3 passed**，修复后 5 passed
+
+**未动数据**：全程只加索引与逻辑，**没有删除任何行**。
 
 ### 🔴 C3. `chat_fts` 是孤儿表
 
@@ -159,7 +190,7 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 ## 5. 需要你拍板的（承接上一轮）
 
 1. ~~**存量 219 个假已分析会话**：要不要把它们的 `analyzed` 重置为 0？~~ → **已重置（2026-09-15，用户授权）**，见 §2 C1 修复记录。
-2. **重复的 419 条 chunk / 可能成倍的消息重复**：要不要加 UNIQUE 约束 + `INSERT OR IGNORE`，并清洗存量？（会动 924 MB 的库，建议先备份）
+2. ~~**重复的 419 条 chunk**：要不要加 UNIQUE 约束 + `INSERT OR IGNORE`，并清洗存量？~~ → **已处理**：核实为误判（无真实重复，见 §2 C2），改为给 `analysis_file` 加唯一索引 + `INSERT OR IGNORE` 护栏，**未删任何数据**。
 3. 上一轮那 4 项仍待定：旅游真值源 / 阅读库真值源 / saved_sync 去留 / 面试 12 个垫片。
 
 ---
@@ -170,7 +201,7 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 
 | 待办 | 现状 | 起点 |
 |---|---|---|
-| **聊天分析重复数据** | 未处理 | 本文 §2 C2；先跑一次重复统计再决定是否加约束 |
+| ~~**聊天分析重复数据**~~ | ✅ 已处理（误判→改加幂等护栏，未删数据） | 本文 §2 C2 |
 | **旅游真值源** | 待你拍板 | `module-review-2026-09-15.md` §2 T1 |
 | **阅读库真值源（稍后读双写）** | 待你拍板 | 同上 §4 R2 |
 | **saved_sync 原生保存：补 adapter 还是删** | 待你拍板 | 同上 §4 R3 |

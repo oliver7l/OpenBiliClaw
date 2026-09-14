@@ -217,6 +217,24 @@ class ChatAnalysisStore:
             except sqlite3.OperationalError:
                 pass  # column already exists
         c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        # 幂等护栏（2026-09-15）：``analysis_file`` 是 chunk 的来源标识
+        #（分析结果文件路径，或 ``chat-analysis://<会话>/第a-b行`` URL），
+        # 实测 832/832 行唯一 → 用它做唯一键，让「重复导入同一份分析文件」
+        # 变成 no-op，而不是悄悄再堆一份。
+        #
+        # 用**部分索引**（排除空串）：``analysis_file`` 的默认值是 ''，
+        # 若对空值也加唯一约束，第二条空值行会被拒绝——那不是我们想要的语义。
+        # 老库若已存在历史重复，建索引会抛 IntegrityError：只告警、不阻塞启动。
+        try:
+            c.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_analysis_chunks_file "
+                "ON chat_analysis_chunks(analysis_file) WHERE analysis_file <> ''"
+            )
+        except sqlite3.IntegrityError:
+            logger.warning(
+                "chat_analysis: chat_analysis_chunks.analysis_file 已存在重复值，"
+                "跳过唯一索引创建（需先人工清洗存量后再建）。"
+            )
 
     # ── 会话 CRUD ──
 
@@ -512,10 +530,26 @@ class ChatAnalysisStore:
 
     # ── 分析片段 CRUD ──
 
+    def has_analysis_chunk(self, analysis_file: str) -> bool:
+        """该来源（分析文件 / URL）是否已入库 —— 供导入方幂等判断。"""
+        if not analysis_file:
+            return False
+        row = self.conn.execute(
+            "SELECT 1 FROM chat_analysis_chunks WHERE analysis_file = ? LIMIT 1",
+            (analysis_file,),
+        ).fetchone()
+        return row is not None
+
     def create_analysis_chunk(self, data: ChatAnalysisChunkCreate) -> ChatAnalysisChunk:
+        """写入一条分析片段。
+
+        幂等（2026-09-15）：``analysis_file`` 上有唯一部分索引，重复导入同一来源时
+        本次插入会被忽略，方法改为**返回已存在的那一行**（而不是抛错或堆重复行）。
+        调用方若想区分「新增 vs 已存在」，先调 ``has_analysis_chunk()``。
+        """
         c = self.conn
         cur = c.execute(
-            """INSERT INTO chat_analysis_chunks
+            """INSERT OR IGNORE INTO chat_analysis_chunks
                (session_title, start_line, end_line, analysis_content, analysis_file, model_used)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
@@ -527,11 +561,17 @@ class ChatAnalysisStore:
                 data.model_used,
             ),
         )
-        return self._row_to_chunk(
-            c.execute(
+        if cur.rowcount and cur.lastrowid:
+            row = c.execute(
                 "SELECT * FROM chat_analysis_chunks WHERE id = ?", (cur.lastrowid,)
             ).fetchone()
-        )
+        else:
+            # 被唯一索引挡下（同一 analysis_file 已存在）→ 回读既有行
+            row = c.execute(
+                "SELECT * FROM chat_analysis_chunks WHERE analysis_file = ? LIMIT 1",
+                (data.analysis_file,),
+            ).fetchone()
+        return self._row_to_chunk(row)
 
     def get_analysis_chunks(
         self,

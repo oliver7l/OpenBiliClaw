@@ -225,6 +225,13 @@ class ChatImporter:
                     lines = content.strip().split("\n")
                     result.total_lines += len(lines)
 
+                    # 幂等（2026-09-15）：同一来源文件已入库则跳过，不重复计数。
+                    # store 层另有唯一索引兜底（重复插入会被忽略），这里判断是为了
+                    # 让 result.chunks_imported 反映真实新增数。
+                    if self.store.has_analysis_chunk(str(txt_file)):
+                        result.chunks_skipped += 1
+                        continue
+
                     chunk_data = ChatAnalysisChunkCreate(
                         session_title=session_title,
                         start_line=start_line,
@@ -327,7 +334,11 @@ class ChatImporter:
                     self.store.create_session(session_data)
                     stats.sessions_imported += 1
 
-                # 导入分析片段
+                # 导入分析片段（幂等：同一 URL 已入库则跳过，见 store 的唯一索引）
+                if self.store.has_analysis_chunk(url):
+                    stats.skipped += 1
+                    continue
+
                 chunk_data = ChatAnalysisChunkCreate(
                     session_title=session_title,
                     start_line=start_line or 0,

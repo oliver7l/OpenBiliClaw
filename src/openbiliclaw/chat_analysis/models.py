@@ -252,5 +252,6 @@ class DeepseekAnalysisImportResult(BaseModel):
 
     session_title: str = Field(description="会话标题")
     chunks_imported: int = Field(description="导入的片段数")
+    chunks_skipped: int = Field(default=0, description="已存在而跳过的片段数（幂等）")
     total_lines: int = Field(description="总分析行数")
     errors: list[str] = Field(default_factory=list, description="错误")
