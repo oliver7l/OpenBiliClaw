@@ -79,7 +79,7 @@
 
 规模：2,355 行 / 5 文件；库 `data/chat_analysis.db` **924 MB**（全项目第二大）；15 条端点；**零测试**。
 
-### 🔴 C1. 219 个会话被标记「已分析」，但一条产出都没有（**已亲自复核**）
+### 🔴 C1. 219 个会话被标记「已分析」，但一条产出都没有（**已修复** `5d31f193`，数据未重置）
 
 ```
 self_evolution/loop_engine.py:857  svc = ChatAnalysisService(db_path=Path("data/chat_analysis.db"))
@@ -100,6 +100,11 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 
 **后果**：这 219 个会话被永久跳过（`get_unanalyzed_sessions` 不会再看它们），而定时任务**每 6 小时跑一次、每次 10 个**——也就是说污染每晚继续，且不可自愈。
 对照：同一个文件里紧挨着的 `_do_synthesis`（`loop_engine.py:872-876`）**是传了 `llm_service=self._llm_service` 的**，所以这是漏写，不是设计。
+
+> **修复记录（`5d31f193`，2026-09-15）**：已止血——`loop_engine` 无 LLM 直接跳过并传 `llm_service`、路径改走 `_project_root()`；`service` 新增 `_analysis_has_output()`，分析为空**不**标记。
+> 顺带修掉一个**掩盖本 bug 的读路径缺陷**：`store._row_to_session` 压根没映射 `analyzed` / `last_analyzed_at`，`ChatSession.analyzed` 恒为 False —— 服务层错标了，界面却一律显示「未分析」，两者互相掩盖。
+> 回归 4 条（worktree 修复前 3 failed / 1 passed），**断言刻意直接查库而非读模型字段**（否则又会被掩盖成恒 False）。
+> ⚠️ **存量 219 个会话未重置**（重置 = 800 会话 × 3 次 LLM 真实消耗，需你授权）。
 
 ### 🔴 C2. 导入不幂等：832 条 chunk 里 419 条是重复（**已亲自复核**）
 
@@ -145,6 +150,6 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 
 ## 5. 需要你拍板的（承接上一轮）
 
-1. **聊天分析的 219 个假已分析会话**：要不要我把它们 `analyzed` 重置为 0 并修掉 `loop_engine.py:858`？（修了之后每晚会自动重试，但会**真实消耗 LLM**——581 个队列 + 219 个重置 = 800 个会话 × 3 次调用）
+1. **存量 219 个假已分析会话**：要不要把它们的 `analyzed` 重置为 0？（代码已修，不会**再**污染；但存量需要重置才能被重新分析，代价是约 800 会话 × 3 次 LLM 真实消耗）
 2. **重复的 419 条 chunk / 可能成倍的消息重复**：要不要加 UNIQUE 约束 + `INSERT OR IGNORE`，并清洗存量？（会动 924 MB 的库，建议先备份）
 3. 上一轮那 4 项仍待定：旅游真值源 / 阅读库真值源 / saved_sync 去留 / 面试 12 个垫片。
