@@ -1445,7 +1445,7 @@ class ContentDiscoveryEngine:
         if database is None:
             return None
 
-        from openbiliclaw.soul.negative_exemplars import recent_negative_exemplars
+        from obc_soul.negative_exemplars import recent_negative_exemplars
 
         latest_id = self._negative_exemplar_revision()
 

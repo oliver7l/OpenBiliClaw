@@ -32,8 +32,8 @@ from obc_discovery.strategies.search import SearchStrategy
 
 if TYPE_CHECKING:
     from obc_llm.embedding import SupportsEmbeddingService
+    from obc_soul.profile import SoulProfile
 
-    from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.storage.database import Database
 
 

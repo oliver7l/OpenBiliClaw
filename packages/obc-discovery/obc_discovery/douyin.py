@@ -18,7 +18,7 @@ from obc_discovery.strategies.douyin_direct import (
 )
 
 if TYPE_CHECKING:
-    from openbiliclaw.soul.profile import SoulProfile
+    from obc_soul.profile import SoulProfile
 
 
 @dataclass(frozen=True)

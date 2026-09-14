@@ -39,8 +39,9 @@ from obc_discovery.strategies._utils import build_profile_summary
 from obc_discovery.x_normalize import normalize_tweet
 
 if TYPE_CHECKING:
+    from obc_soul.profile import SoulProfile
+
     from obc_discovery.engine import DiscoveredContent
-    from openbiliclaw.soul.profile import SoulProfile
 
 logger = logging.getLogger(__name__)
 

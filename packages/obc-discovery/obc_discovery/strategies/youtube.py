@@ -35,7 +35,8 @@ from obc_discovery.engine import (
 from obc_discovery.strategies._utils import build_profile_summary
 
 if TYPE_CHECKING:
-    from openbiliclaw.soul.profile import SoulProfile
+    from obc_soul.profile import SoulProfile
+
     from openbiliclaw.storage.database import Database
     from openbiliclaw.youtube.client import YtScraperClient
 

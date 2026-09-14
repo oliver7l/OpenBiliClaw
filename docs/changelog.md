@@ -4,6 +4,45 @@
 
 ---
 
+## 重构：摘除 discovery/soul 兼容垫片，旧 import 专项收官（2026-09-14）
+
+旧 import 专项三批迁移（llm 186 处 / discovery 189 处 / soul 433 处，提交
+b6a70489 / 9fda427b / e68369b7）完成后，src/tests/scripts 中
+`openbiliclaw.discovery` / `openbiliclaw.soul` 外部消费者排查为零，
+据此摘除兼容垫片：
+
+- **删除** `src/openbiliclaw/soul/`（25 个 sys.modules 别名垫片 + `__init__`）
+  与 `src/openbiliclaw/discovery/`（纯 re-export stub 含 strategies 子包），
+  共 47 文件。旧路径自此不可导入，统一走 `obc_soul.*` / `obc_discovery.*`。
+- **保留** `src/openbiliclaw/llm/`：它是适配层 + 真实现
+  （`_compat.py` / `_compat_registry.py` / `model_discovery.py`），
+  `openbiliclaw.llm[.registry]` 是文档明说的稳定导入路径（build_llm_registry /
+  build_embedding_service / summarize_registry 等接受主项目 Config），
+  全仓 60 处合法消费均指向它。
+- 验证：导入冒烟（api/cli/llm 适配层/新包）通过；全量 3564 passed /
+  18 skipped / 0 failed，与基线一致。
+
+---
+
+## 新增：开源项目研究库 + 前端「🔬 开源研究」tab（2026-09-14）
+
+把「发给助手的开源项目 → 研究 → 入库 → 前端展示」做成可持续闭环。
+
+- **数据层**：新建独立 SQLite 库 `data/oss_research.db`，表 `oss_projects`
+  （name/owner/url/one_liner/purpose/tech_stack/structure_notes/key_features/
+  relevance_summary/reusable_techniques/caveats/report_path/tags +
+  created_at/updated_at）。与既有各业务库隔离。
+- **API**：`src/openbiliclaw/api/oss_research_routes.py`
+  `build_oss_research_router()`（在 `_route_registry.py` 注册），端点
+  `GET /api/oss-research/projects`（支持 `?tag=&search=`）、
+  `GET /api/oss-research/tags`、`GET/POST/PUT/DELETE /api/oss-research/projects/{id}`；
+  导出可复用 `insert_project(db_path, data)`。
+- **前端**：桌面 SPA 新增 `oss-research-app.js` + 导航「🔬 开源研究」按钮 +
+  `/web/oss-research` 页面，卡片网格展示、标签筛选、搜索、详情弹窗
+  （核心能力/可迁移手法/坑/报告链接）、手动新增与删除。
+- **回填**：`scripts/oss_research/backfill.py` 幂等写入已分析的
+  TraeWorkAssistant-mac / wikitok / lushu 三条记录。
+
 ## 测试：全量 6 例环境性失败全部定性并修复（2026-09-14）
 
 P4 第十一刀全量 `3560 passed / 6 failed` 的 6 例失败逐一定性，**生产代码零 bug**，全部为测试侧问题，已修复：

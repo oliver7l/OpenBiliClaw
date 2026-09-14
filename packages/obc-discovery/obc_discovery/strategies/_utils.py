@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Protocol, TypeVar, cast, runtime_checkable
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from obc_soul.profile import InterestDomain, OnionProfile, SoulProfile
+
     from obc_discovery.engine import DiscoveredContent
-    from openbiliclaw.soul.profile import InterestDomain, OnionProfile, SoulProfile
 
 _T = TypeVar("_T")
 
@@ -213,7 +214,7 @@ def _extract_interest_domains(profile: SoulProfile) -> list[dict[str, object]]:
     This gives LLM prompts visibility into both broad domains AND
     specific sub-interests, enabling queries at different granularity.
     """
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     # OnionProfile has the tree structure directly
     if isinstance(profile, OnionProfile):
@@ -264,7 +265,7 @@ def _extract_interest_domains(profile: SoulProfile) -> list[dict[str, object]]:
 
 def _extract_interest_tags(profile: SoulProfile) -> list[dict[str, object]]:
     """Extract flat interest tags with provenance metadata."""
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     if isinstance(profile, OnionProfile):
         ranked = _likes_by_weight(profile)
@@ -336,7 +337,7 @@ def _extract_interest_tags(profile: SoulProfile) -> list[dict[str, object]]:
 
 def _summarize_mbti(profile: SoulProfile) -> dict[str, object] | None:
     """Return compact MBTI context when available."""
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     if isinstance(profile, OnionProfile):
         mbti = profile.core.mbti
