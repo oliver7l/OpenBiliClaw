@@ -311,17 +311,27 @@
    守门 `tests/cli/test_cli_soul_module.py`（9 例，含 recommend / chat 两条行为锁）。
    七刀累计 **7087 → 3057 行**（-4030，约 -57%）；90 条命令路径 worktree 对账
    `diff` 为空。
+   **第八刀**：运行时配置写入 + 交互引导族（`_save_runtime_provider_config` 340 行 +
+   Ollama 族 + `_save_embedding_config` / `_save_module_overrides` + 6 个菜单常量 +
+   4 个 `_interactive_*` 向导，~1158 行）抽至 `cli/_cmd_config.py`；该族**无 typer 命令**，
+   无需 `register()`，仅 cli 顶层导入 + re-export 20 个符号。6 个被 patch 的跨模块符号
+   `_cli.X` 动态取——**注意 `_save_embedding_config` / `_save_module_overrides` 虽定义在本
+   模块，同样被 patch 到 cli 命名空间，故也须动态取**（初版遗漏，被
+   `test_init_guides_missing_runtime_config_interactively` 抓到）。守门
+   `tests/cli/test_cli_config_module.py`（6 例，含 2 条补丁命中行为锁）。
+   八刀累计 **7087 → 1926 行**（-5161，约 -73%）；90 条命令路径 worktree 对账 `diff` 为空，
+   原块 ↔ 新模块正文逐行对账仅 4 处 `_cli` 导入空行差异。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（probe 已随第七刀迁出；config 显示 / start / set-password /
-   引导交互 _save_runtime_provider_config 家族与构建 helper 等约 25 命令）待续。
+   与上帝文件后续簇（probe / soul / config 引导均已迁出；余 config 显示 / start /
+   set-password / auth / browser / db-repair / health-check 及构建 helper 等约 20 命令）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **4039 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init 五簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（profile 系 / probe / config 显示等） |
+   | 上帝文件 | `cli/__init__.py` **1926 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导七簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（config 显示 / start / auth / browser 等约 20 命令） |
 
 ---
 

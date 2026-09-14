@@ -4,6 +4,43 @@
 
 ---
 
+## 重构：运行时配置写入 + 交互引导族抽离 _cmd_config（P4 第八刀，2026-09-14）
+
+- **抽离规模**：`_save_runtime_provider_config`（provider 落盘，340 行）+
+  Ollama 族（`_ollama_has_model` / `_ollama_pull_model` / `_ollama_install_if_missing`）+
+  落盘族（`_save_embedding_config` / `_save_module_overrides`）+
+  菜单常量 6 个（`_PROVIDER_DEFAULTS` / `_PROVIDER_HINTS` / `_PROVIDER_MODEL_HINT` /
+  `_OPENAI_COMPAT_PRESETS` / `_SUPPORTED_PROVIDERS` / `_LLM_MENU`）+
+  菜单渲染与问询（`_print_provider_table` / `_resolve_menu_choice` /
+  `_prompt_openai_compat` / `_prompt_provider_triplet`）+
+  交互向导 4 个（`_interactive_embedding_setup` / `_interactive_module_overrides` /
+  `_interactive_runtime_config_setup` / `_interactive_auth_setup`），
+  共 **~1158 行** → `cli/_cmd_config.py`（1204 行）。该族**不含 typer 命令**（纯 helper +
+  常量），故无需 `register()`，只由 cli 顶层导入并 re-export。
+  `cli/__init__.py` **3057 → 1926 行**（八刀累计 7087 → 1926，**-5161 行 / 约 -73%**）。
+- **patch 语义**：6 个被 `tests/cli` patch 到 cli 命名空间的跨模块符号
+  （`_load_runtime_config_error` / `_print_runtime_config_error` / `_print_auth_status` /
+  `_save_embedding_config` / `_save_module_overrides` / `_save_runtime_provider_config`）
+  一律改为**函数体内** `from openbiliclaw import cli as _cli` + `_cli.X` 动态取
+  （顶层 from-import 会绑定旧值、静默破坏 `monkeypatch.setattr`）；cli 命名空间
+  re-export **20 个符号**（6 常量 + 14 helper），保 tests 直引与补丁点不变。
+- **首次遗漏 → 修复（本刀唯一回归）**：初版按「定义在 cli、被本模块调用」筛动态取名单，
+  漏掉 `_save_embedding_config` / `_save_module_overrides`——它们**定义在本模块**，但同样被
+  `monkeypatch.setattr(cli_module, ...)` patch，且由本模块内 `_interactive_*` 调用，
+  因此**必须同样走 `_cli.X`**。`tests/cli::test_init_guides_missing_runtime_config_interactively`
+  首轮即抓到。教训：动态取名单要按「**被 patch 的名字**」筛，而非按「定义位置」筛。
+- **顺带清理**：`from rich.table import Table` 随块迁走（cli 顶层已无引用）；新模块按需
+  只 import `_print_page_title`（`cli._render`）+ `console`（`runtime.init_flow`）+
+  `_ollama_is_running` / `_ollama_start_serve_background`（`runtime.ollama_supervisor`），
+  行为与 cli / `_render` 完全同源。
+- **验证**：`tests/cli` **197 passed**（191 + 新增守门 `test_cli_config_module.py` 6 例）；
+  定向子集 `tests/{cli,config,soul,recommendation,weekend,discovery}` **1093 passed**、
+  `tests/{init,auth}` + `tests/api/test_api_auth.py` **105 passed**；全部 **90 条命令路径**
+  worktree 对照 HEAD `diff` 为空；原块 ↔ 新模块正文逐行对账**仅 4 处 `_cli` 导入后空行差异**；
+  `ruff check` / `mypy` 全绿。
+
+---
+
 ## 内容链路脚本收尾修复：脚本失效、语法错误、参数误触（2026-09-14）
 
 - **修 `scripts/collect_mindback_caches.py` 的「掏空 main」缺陷（真 bug）**：`ATTACH content.db`
