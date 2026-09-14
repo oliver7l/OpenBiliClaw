@@ -718,13 +718,12 @@ PROJECTS = [
         "caveats": "仅克隆未精读。克隆位置：002-探索项目/045-苹果CMS研究/wanfeng-video。",
         "tags": ["explore-archive", "unstudied", "video-cms", "windows", "player", "reference"],
     },
-    # 自媒体爬虫（xhs_refill）
-    # 自媒体爬虫（xhs_refill）
+    # 自媒体爬虫（二创/xhs_refill 内嵌克隆）
     {
         "name": "MediaCrawler", "owner": "NanmiCoder",
         "url": "https://github.com/NanmiCoder/MediaCrawler",
         "one_liner": "自媒体平台爬虫：小红书/抖音/快手/B站/微博/贴吧/知乎（签名逆向+Playwright）",
-        "caveats": "仅克隆未精读；xhs_refill 目录还含用户自己的 agentlimb_* 小红书采集实验脚本（非第三方）。克隆位置：002-探索项目/xhs_refill/MediaCrawler。",
+        "caveats": "仅克隆未精读；xhs_refill 目录还含用户自己的 agentlimb_* 小红书采集实验脚本（非第三方）。克隆位置：040-OpenBiliClaw/二创/xhs_refill/MediaCrawler。",
         "tags": ["explore-archive", "unstudied", "crawler", "xhs", "playwright", "reference"],
     },
     # 日记类研究批次（references/diary-projects，09-06 建；nightDiary 与 references/ 根目录重复不重复入库）
