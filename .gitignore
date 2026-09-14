@@ -139,4 +139,4 @@ config.toml
 
 # 二创项目与参考克隆（各自独立 git，勿被外层跟踪）
 二创/
-参考/
+references/
