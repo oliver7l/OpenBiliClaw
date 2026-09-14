@@ -256,7 +256,7 @@ def register_all_routes(
 
     # ── 求职面试备战 API ─────────────────────────────────────────
     try:
-        from openbiliclaw.interview.routes import build_interview_router
+        from openbiliclaw.interview.job.routes import build_interview_router
 
         _interview_cfg = getattr(config, "interview", None)
         app.include_router(
@@ -269,7 +269,7 @@ def register_all_routes(
 
     # ── 面试复盘记录 API ─────────────────────────────────────────
     try:
-        from openbiliclaw.interview.review_routes import build_review_router
+        from openbiliclaw.interview.review.routes import build_review_router
 
         app.include_router(build_review_router())
     except Exception as _exc:  # noqa: BLE001
@@ -277,7 +277,7 @@ def register_all_routes(
 
     # ── 面试题阅读追踪 API ───────────────────────────────────────
     try:
-        from openbiliclaw.api._interview_routes import register_interview_routes
+        from openbiliclaw.interview.study.routes import register_interview_routes
 
         register_interview_routes(app, ctx)
     except Exception as _exc:  # noqa: BLE001

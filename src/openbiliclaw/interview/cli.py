@@ -14,8 +14,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from openbiliclaw.interview.engine import InterviewEngine, resolve_root
-from openbiliclaw.interview.review_service import InterviewReviewService
+from openbiliclaw.interview._paths import PROJECT_ROOT
+from openbiliclaw.interview.job.engine import InterviewEngine, resolve_root
+from openbiliclaw.interview.review.service import InterviewReviewService
 
 interview_app = typer.Typer(help="求职面试备战命令（查/速记/岗位/数字/项目/日志/建档）")
 console = Console()
@@ -370,7 +371,7 @@ def interview_root() -> None:
 
 def _review_service() -> InterviewReviewService | None:
     """创建复盘服务（使用 data/interview.db，面试复盘子库）。"""
-    project_root = Path(__file__).resolve().parents[3]
+    project_root = PROJECT_ROOT
     db_path = project_root / "data" / "interview.db"
     try:
         from openbiliclaw.config import load_config
@@ -518,7 +519,7 @@ def review_add(
     """添加一条面试复盘记录。"""
     from datetime import date as date_cls
 
-    from openbiliclaw.interview.review_models import InterviewReviewCreate
+    from openbiliclaw.interview.review.models import InterviewReviewCreate
 
     svc = _review_service()
     if svc is None:

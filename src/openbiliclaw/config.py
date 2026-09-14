@@ -732,7 +732,7 @@ class InterviewConfig:
     指向外部「三层求职知识库」根目录（01_原始资料库 / 02_方向知识库 /
     03_岗位弹药库 + _系统_知识库引擎）。留空时按环境变量
     ``OPENBILICLAW_INTERVIEW_ROOT`` 或默认路径解析（见
-    ``openbiliclaw.interview.engine``）。
+    ``openbiliclaw.interview.job.engine``）。
     """
 
     root: str = ""

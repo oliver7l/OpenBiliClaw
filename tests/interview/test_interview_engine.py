@@ -1,4 +1,4 @@
-"""Unit tests for the interview module engine (openbiliclaw.interview.engine)."""
+"""Unit tests for the interview module engine (openbiliclaw.interview.job.engine)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from openbiliclaw.interview.engine import (
+from openbiliclaw.interview.job.engine import (
     DEFAULT_INTERVIEW_ROOT,
     ENV_INTERVIEW_ROOT,
     InterviewEngine,

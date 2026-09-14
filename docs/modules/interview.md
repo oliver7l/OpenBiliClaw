@@ -51,13 +51,20 @@
 
 ## 模块结构
 
+> 期 3「代码分层」后，`interview/` 包按 A/B/C 三子系统拆为 `job/` / `study/` / `review/`
+> 三个子包；下表只列 A 相关，完整结构见 [interview-overview.md](./interview-overview.md)。
+
 ```
 src/openbiliclaw/interview/
 ├── __init__.py           # 导出引擎公开 API
-├── engine.py             # InterviewEngine：数据表读取/检索/速记卡/日志/建档 + resolve_root
-├── cli.py                # interview 命令组（register(app) 注册到主 CLI）
-└── routes.py             # build_interview_router → /api/interview/*
+├── _paths.py             # PROJECT_ROOT：唯一项目根锚点
+├── cli.py                # interview 命令组（register(app) 注册到主 CLI；跨 A + C）
+└── job/                  # A · 岗位备战
+    ├── engine.py         # InterviewEngine：数据表读取/检索/速记卡/日志/建档 + resolve_root
+    └── routes.py         # build_interview_router → /api/interview/*
 ```
+
+旧导入路径（`interview.engine` / `interview.routes`）保留 re-export 垫片一版，下一个大版本摘除。
 
 ## 公开 API
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from openbiliclaw.interview.questions.models import Priority, QuestionCategory, QuestionCreate
-from openbiliclaw.interview.questions.store import InterviewQuestionStore
+from openbiliclaw.interview.study.models import Priority, QuestionCategory, QuestionCreate
+from openbiliclaw.interview.study.store import InterviewQuestionStore
 
 DB = str(Path(__file__).resolve().parents[3] / "data" / "interview_questions.db")
 SOURCE = "MiniOneRec生成式推荐(小红书)"

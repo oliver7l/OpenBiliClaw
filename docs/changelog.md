@@ -4,6 +4,26 @@
 
 ---
 
+## 重构：面试模块期 3 代码分层（2026-09-14）
+
+按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 3（代码分层）**：把混装的 `interview/` 包
+拆为三个子包，与 A/B/C 三子系统一一对应。
+
+- **包结构**：`interview/job/{engine,routes}.py`（A）／`interview/study/{routes,store,models,cli,seed_iq_questions}.py`（B）／
+  `interview/review/{routes,service,store,models}.py`（C）；统一 CLI 入口仍为 `interview/cli.py`。
+- **修 P4**：B 的 817 行路由（原 `api/_interview_routes.py`，孤悬包外、而其 store 却在包内）迁回
+  `interview/study/routes.py`，同一子系统的路由与数据层自此同居一处。
+- **路径锚点**：新增 `interview/_paths.PROJECT_ROOT` 作为唯一项目根锚点，替掉 5 个文件里散落的
+  `Path(__file__).resolve().parents[N]` —— 嵌套会让 `parents[3]` 从项目根变成 `src/`，进而静默错写 `data/*.db`。
+- **兼容垫片**：`interview.engine` / `interview.routes` / `interview.review_*` / `interview.questions.*` /
+  `api._interview_routes` 保留 re-export 垫片一版（下一个大版本摘除）；`python -m openbiliclaw.interview.questions.cli` 仍可用。
+
+**验证**：端点数与迁移前一致（A=30 / B=24 / C=10，无路径冲突）；TestClient 13 个端点全 200
+（`kb-questions`=199、`ammo`=83 文件/9 公司、`positions`=71、`reviews`=3）；旧导入路径经垫片指向同一对象；
+`tests/interview/` + `tests/api/test_api_interview.py` 30 passed；ruff 0 error。
+
+---
+
 ## 重构：面试模块期 1 数据层归一（2026-09-14）
 
 延续上一期的诊断，按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 1（数据层归一）**。
