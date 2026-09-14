@@ -340,17 +340,30 @@
    import（与抽取前逐位一致）。守门 `tests/cli/test_cli_collect_module.py`（7 例，含 3 条
    补丁命中行为锁）。
    十刀累计 **7087 → 996 行**（-6091，约 -86%）；90 条命令路径对账 `diff` 为空。
+   **第十一刀**：运行时构建族（`_build_registry` / `_build_auth_manager` / `_build_browser` /
+   `_build_bilibili_client` / `_build_soul_engine` / `_build_recommendation_engine` /
+   `_build_dialogue` / `_run_api_server` / `_build_memory_manager` / `_build_discovery_engine` /
+   `_build_usage_recorder` / `_runtime_database_path` / `_runtime_backup_dir` /
+   `_maybe_create_runtime_database_backup` / `_ensure_runtime_database_healthy` /
+   `_run_db_repair`，共 16 个无 typer 命令的顶层函数，~344 行）抽至 `cli/_build.py`；
+   无需 `register()`，cli 顶层导入 + re-export 16 符号（`main` 与 `@app.callback()` 留在
+   主文件）。被 patch 到 cli 命名空间的 7 个符号（`_build_registry` / `_build_bilibili_client` /
+   `_build_memory_manager` / `_build_usage_recorder` / `_get_runtime_database` /
+   `_RUNTIME_COMPONENTS` / `console`）在块内互调处全部 `_cli.X` 动态取；
+   `_runtime_database_path` / `_runtime_backup_dir` / `_print_status_panel` 直取。守门
+   `tests/cli/test_cli_build_module.py`（7 例，含 3 条补丁命中行为锁）。
+   十一刀累计 **7087 → 673 行**（-6414，约 -90.5%）；90 条命令路径对账 `diff` 为空。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（余 `_build_*` 构建 helper 族约 300 行、`main` 与零散进程/日志/
-   配置渲染 helper）待续。
+   与上帝文件残余（`main` / `_prepare_init_runtime` / 零散进程/日志/代理/渲染 helper
+   约 670 行，多为互相耦合的引导胶水）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **996 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导 / 服务运维 / 任务入队-收集 九簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（`_build_*` 族、`main` 等） |
+   | 上帝文件 | `cli/__init__.py` **673 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导 / 服务运维 / 任务入队-收集 / 运行时构建 十簇）；`api/app.py` 4084 行 | 残余 `main` / `_prepare_init_runtime` / 进程-日志-代理-渲染 helper（引导胶水，耦合高） |
 
 ---
 

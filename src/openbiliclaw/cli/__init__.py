@@ -9,8 +9,7 @@ import asyncio
 import os
 import sys
 from contextlib import suppress
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import typer
 
@@ -266,6 +265,30 @@ from openbiliclaw.cli._cmd_soul import register as _register_soul_commands  # no
 
 _register_soul_commands(app)
 
+# 运行时构建族已抽至 cli/_build.py（P4 第十一刀）；该模块不含 typer 命令，
+# 故无需 register()。re-export 全部 16 个符号：14 个是测试 patch 到 cli
+# 命名空间的补丁点（_build_* / _run_api_server / _run_db_repair / DB 健康族）
+# 或既有 _cli.X 动态取调用方的解析目标；_runtime_database_path /
+# _runtime_backup_dir 供本文件与子模块直引。
+from openbiliclaw.cli._build import (  # noqa: E402,F401
+    _build_auth_manager,
+    _build_bilibili_client,
+    _build_browser,
+    _build_dialogue,
+    _build_discovery_engine,
+    _build_memory_manager,
+    _build_recommendation_engine,
+    _build_registry,
+    _build_soul_engine,
+    _build_usage_recorder,
+    _ensure_runtime_database_healthy,
+    _maybe_create_runtime_database_backup,
+    _run_api_server,
+    _run_db_repair,
+    _runtime_backup_dir,
+    _runtime_database_path,
+)
+
 # 知乎 / 抖音任务入队-收集 + 事件落库 helper 已抽至 cli/_collect.py（P4 第十刀）；
 # 该模块不含 typer 命令，故无需 register()。re-export 全部 11 个符号：
 # 9 个是测试 patch 到 cli 命名空间的补丁点 / tests/cli 直引，其余供
@@ -469,352 +492,6 @@ def _initialize_logging(log_level_override: str | None = None) -> None:
         console_level_override=log_level_override,
         sweep_unmanaged=not skip_sweep,
     )
-
-
-def _build_registry() -> Any:
-    """Build the configured LLM registry."""
-    from openbiliclaw.config import load_config
-    from openbiliclaw.llm._compat_registry import build_llm_registry
-
-    return build_llm_registry(load_config())
-
-
-def _build_auth_manager() -> Any:
-    """Build the configured Bilibili auth manager."""
-    from openbiliclaw.bilibili.auth import AuthManager
-    from openbiliclaw.config import load_config
-
-    return AuthManager(load_config().data_path)
-
-
-def _build_browser() -> Any:
-    """Build the configured Bilibili browser integration."""
-    from openbiliclaw.bilibili.auth import resolve_runtime_cookie
-    from openbiliclaw.bilibili.browser import BilibiliBrowser
-    from openbiliclaw.config import load_config
-
-    config = load_config()
-    return BilibiliBrowser(
-        executable=config.bilibili.browser_executable,
-        headed=config.bilibili.browser_headed,
-        cookie=resolve_runtime_cookie(
-            data_dir=config.data_path,
-            configured_cookie=config.bilibili.cookie,
-        ),
-    )
-
-
-def _build_bilibili_client() -> Any:
-    """Build the configured Bilibili API client."""
-    from openbiliclaw.bilibili.api import BilibiliAPIClient
-    from openbiliclaw.bilibili.auth import resolve_runtime_cookie
-    from openbiliclaw.config import load_config
-
-    config = load_config()
-    return BilibiliAPIClient(
-        cookie=resolve_runtime_cookie(
-            data_dir=config.data_path,
-            configured_cookie=config.bilibili.cookie,
-        )
-    )
-
-
-def _build_soul_engine() -> Any:
-    """Build the configured soul engine with initialized memory storage."""
-    from openbiliclaw.config import load_config
-    from openbiliclaw.llm.service import module_overrides_from_config
-    from openbiliclaw.soul.engine import SoulEngine
-
-    class _UnavailableLLM:
-        default_provider = ""
-
-        def is_chat_capable(self, _name: str) -> bool:
-            return False
-
-        async def complete(self, *args: Any, **kwargs: Any) -> Any:
-            raise RuntimeError("LLM registry is unavailable for this command.")
-
-        async def complete_provider(self, *args: Any, **kwargs: Any) -> Any:
-            raise RuntimeError("LLM registry is unavailable for this command.")
-
-    cfg = load_config()
-    memory = _build_memory_manager()
-    try:
-        llm = _build_registry()
-    except Exception:
-        llm = _UnavailableLLM()
-    return SoulEngine(
-        llm=llm,
-        memory=memory,
-        usage_recorder=_build_usage_recorder(),
-        satisfaction_filter_enabled=cfg.soul.preference.satisfaction_filter_enabled,
-        module_overrides=module_overrides_from_config(cfg),
-        llm_concurrency=cfg.llm.concurrency,
-        speculation_interval_minutes=cfg.scheduler.speculation_interval_minutes,
-        speculation_ttl_days=cfg.scheduler.speculation_ttl_days,
-        speculation_cooldown_days=cfg.scheduler.speculation_cooldown_days,
-        speculation_confirmation_threshold=cfg.scheduler.speculation_confirmation_threshold,
-        speculation_max_active=cfg.scheduler.speculation_max_active,
-        speculation_max_primary_interests=cfg.scheduler.speculation_max_primary_interests,
-        speculation_max_secondary_interests=cfg.scheduler.speculation_max_secondary_interests,
-        avoidance_speculation_interval_minutes=(cfg.scheduler.avoidance_speculation_interval_minutes),
-        avoidance_speculation_ttl_days=cfg.scheduler.avoidance_speculation_ttl_days,
-        avoidance_speculation_cooldown_days=cfg.scheduler.avoidance_speculation_cooldown_days,
-        avoidance_speculation_confirmation_threshold=(cfg.scheduler.avoidance_speculation_confirmation_threshold),
-        avoidance_speculation_max_active=cfg.scheduler.avoidance_speculation_max_active,
-        speculator_idle_interval_minutes=cfg.scheduler.speculator_idle_interval_minutes,
-        profile_consolidation_enabled=cfg.scheduler.profile_consolidation_enabled,
-        profile_consolidation_interval_hours=(cfg.scheduler.profile_consolidation_interval_hours),
-        profile_consolidation_like_target_upper=(cfg.scheduler.profile_consolidation_like_target_upper),
-        profile_consolidation_like_target_soft=cfg.scheduler.profile_consolidation_like_target_soft,
-        profile_consolidation_archive_enabled=(cfg.scheduler.profile_consolidation_archive_enabled),
-    )
-
-
-def _build_recommendation_engine() -> Any:
-    """Build the recommendation engine with core-memory-aware LLM access."""
-    from openbiliclaw.config import load_config
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-    from openbiliclaw.recommendation.engine import (
-        RecommendationEngine,
-        SupportsEmbeddingService,
-    )
-
-    memory = _build_memory_manager()
-    database = _get_runtime_database()
-    cfg = load_config()
-    registry = _build_registry()
-    llm_service = LLMService(
-        registry=registry,
-        memory=memory,
-        usage_recorder=_build_usage_recorder(),
-        module_overrides=module_overrides_from_config(cfg),
-        concurrency=cfg.llm.concurrency,
-    )
-    from openbiliclaw.llm._compat_registry import build_embedding_service
-
-    _emb = build_embedding_service(cfg, registry)
-    embedding_service = cast("SupportsEmbeddingService | None", _emb)
-
-    def _xhs_self_info_provider() -> dict[str, object] | None:
-        state = memory.load_discovery_runtime_state()
-        info = state.get("xhs_self_info")
-        return info if isinstance(info, dict) else None
-
-    return RecommendationEngine(
-        llm=llm_service,
-        database=database,
-        embedding_service=embedding_service,
-        xhs_self_info_provider=_xhs_self_info_provider,
-        # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
-        # 防御性：测试 fake_config（SimpleNamespace）可能缺 recommendation 段
-        llm_reranker_enabled=bool(getattr(getattr(cfg, "recommendation", None), "llm_reranker_enabled", False)),
-        llm_reranker_top_k=int(getattr(getattr(cfg, "recommendation", None), "llm_reranker_top_k", 30)),
-        llm_reranker_weight=float(getattr(getattr(cfg, "recommendation", None), "llm_reranker_weight", 0.3)),
-        llm_reranker_batch_size=int(getattr(getattr(cfg, "recommendation", None), "llm_reranker_batch_size", 5)),
-    )
-
-
-def _build_dialogue(soul_engine: Any) -> Any:
-    """Build the Socratic dialogue helper for interactive chat."""
-    from openbiliclaw.soul.dialogue import SocraticDialogue
-
-    return SocraticDialogue(llm=_build_registry(), soul_engine=soul_engine, session="cli")
-
-
-def _run_api_server(*, host: str = "127.0.0.1", port: int = 8420) -> None:
-    """Run the local FastAPI service used by the browser extension."""
-    import uvicorn
-
-    from openbiliclaw.api.app import create_app
-
-    api_app = create_app()
-    from openbiliclaw.api.chat_analysis_routes import register_chat_analysis_routes
-
-    register_chat_analysis_routes(api_app, getattr(api_app, "state", None))
-    state = getattr(api_app, "state", None)
-    if bool(getattr(state, "degraded", False)):
-        issues = []
-        for issue in list(getattr(state, "degraded_issues", [])):
-            field = str(getattr(issue, "field", ""))
-            message = str(getattr(issue, "message", issue))
-            issues.append(f"- {field}: {message}" if field else f"- {message}")
-        reason = str(getattr(state, "degraded_reason", ""))
-        body = (
-            f"reason: {reason or 'unknown'}\n"
-            + "\n".join(issues)
-            + "\n\nOpen the extension popup settings to fix the LLM credentials, "
-            "then restart the daemon."
-        )
-        _print_status_panel("warning", "降级模式 / Degraded mode", body)
-    uvicorn.run(api_app, host=host, port=port, log_level="info")
-
-
-def _build_memory_manager() -> Any:
-    """Build the initialized memory manager for event writes."""
-    from openbiliclaw.config import load_config
-    from openbiliclaw.memory.manager import MemoryManager
-
-    cached = _RUNTIME_COMPONENTS.get("memory_manager")
-    if cached is not None:
-        return cached
-
-    config = load_config()
-    memory = MemoryManager(config.data_path, database=_get_runtime_database())
-    memory.initialize()
-    _RUNTIME_COMPONENTS["memory_manager"] = memory
-    return memory
-
-
-def _build_discovery_engine() -> Any:
-    """Build the discovery engine with currently implemented strategies."""
-    from openbiliclaw.discovery.engine import (
-        ContentDiscoveryEngine,
-        DiscoveryConcurrencyController,
-    )
-    from openbiliclaw.discovery.strategies.strategies import (
-        ExploreStrategy,
-        RelatedChainStrategy,
-        SearchStrategy,
-        TrendingStrategy,
-    )
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-
-    memory = _build_memory_manager()
-    database = _get_runtime_database()
-    bilibili_client = _build_bilibili_client()
-    from openbiliclaw.config import load_config
-
-    cfg = load_config()
-    registry = _build_registry()
-    llm_service = LLMService(
-        registry=registry,
-        memory=memory,
-        usage_recorder=_build_usage_recorder(),
-        module_overrides=module_overrides_from_config(cfg),
-        concurrency=cfg.llm.concurrency,
-    )
-    concurrency = DiscoveryConcurrencyController(
-        bilibili_request_concurrency=2,
-        # Inherit dataclass default (currently 32) — sized so an init
-        # discover's ~32 batches all fan out in a single wave instead
-        # of queueing behind a tight cap. See engine.py for rationale.
-    )
-
-    # Build embedding service from config (optional)
-    from openbiliclaw.llm._compat_registry import build_embedding_service
-
-    embedding_service = build_embedding_service(cfg, registry)
-    discovery_cfg = getattr(cfg, "discovery", None)
-
-    engine = ContentDiscoveryEngine(
-        llm_service=llm_service,
-        database=database,
-        concurrency=concurrency,
-        embedding_service=embedding_service,
-        multimodal_evaluation_enabled=bool(getattr(discovery_cfg, "multimodal_evaluation_enabled", False)),
-        multimodal_batch_size=int(getattr(discovery_cfg, "multimodal_batch_size", 8)),
-        multimodal_image_max_px=int(getattr(discovery_cfg, "multimodal_image_max_px", 384)),
-        multimodal_image_quality=int(getattr(discovery_cfg, "multimodal_image_quality", 72)),
-        multimodal_image_timeout_seconds=int(getattr(discovery_cfg, "multimodal_image_timeout_seconds", 6)),
-    )
-    search_strategy = SearchStrategy(
-        llm_service=llm_service,
-        bilibili_client=bilibili_client,
-        concurrency=concurrency,
-        database=database,
-    )
-    trending_strategy = TrendingStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        concurrency=concurrency,
-        database=database,
-    )
-    related_strategy = RelatedChainStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        memory_manager=cast("Any", memory),
-        search_strategy=search_strategy,
-        trending_strategy=trending_strategy,
-        concurrency=concurrency,
-        database=database,
-    )
-    explore_strategy = ExploreStrategy(
-        llm_service=llm_service,
-        bilibili_client=bilibili_client,
-        concurrency=concurrency,
-        embedding_service=embedding_service,
-        database=database,
-    )
-
-    engine.register_strategy(search_strategy)
-    engine.register_strategy(trending_strategy)
-    engine.register_strategy(related_strategy)
-    engine.register_strategy(explore_strategy)
-    return engine
-
-
-def _build_usage_recorder() -> Any:
-    """Build or return the shared LLM usage recorder (cost ledger sink).
-
-    CLI commands construct their own ``LLMService`` / ``SoulEngine``
-    instead of going through ``runtime_context``, so without this every
-    CLI-run LLM call was invisible in ``openbiliclaw cost``.
-    """
-    cached = _RUNTIME_COMPONENTS.get("usage_recorder")
-    if cached is not None:
-        return cached
-
-    from openbiliclaw.llm.usage_recorder import UsageRecorder
-
-    recorder = UsageRecorder(sink=_get_runtime_database())
-    _RUNTIME_COMPONENTS["usage_recorder"] = recorder
-    return recorder
-
-
-def _runtime_database_path() -> Path:
-    from openbiliclaw.config import load_config
-
-    config = load_config()
-    return config.data_path / "openbiliclaw.db"
-
-
-def _runtime_backup_dir() -> Path:
-    return _runtime_database_path().parent / "backups"
-
-
-def _maybe_create_runtime_database_backup() -> None:
-    from openbiliclaw.storage.maintenance import maybe_create_scheduled_backup
-
-    db_path = _runtime_database_path()
-    if not db_path.exists():
-        return
-    maybe_create_scheduled_backup(db_path, _runtime_backup_dir())
-
-
-def _ensure_runtime_database_healthy() -> None:
-    from openbiliclaw.storage.maintenance import check_database_integrity
-
-    db_path = _runtime_database_path()
-    if not db_path.exists():
-        return
-    report = check_database_integrity(db_path)
-    if report.healthy:
-        return
-    _print_status_panel(
-        "error",
-        "数据库损坏",
-        "检测到本地数据库损坏，请先执行 `openbiliclaw db-repair` 再启动服务。",
-    )
-    if report.error:
-        console.print(report.error)
-    raise typer.Exit(code=1)
-
-
-def _run_db_repair() -> Any:
-    from openbiliclaw.storage.maintenance import repair_database
-
-    return repair_database(_runtime_database_path(), backup_dir=_runtime_backup_dir())
 
 
 @app.callback()

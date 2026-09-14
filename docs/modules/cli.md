@@ -452,7 +452,7 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 
 ### 命令组子模块结构（P4 重构）
 
-上帝文件 `cli/__init__.py` 正在按自洽簇拆分（2026-09-13 ~ 09-14 已完成十刀，7087 → 996 行）：
+上帝文件 `cli/__init__.py` 正在按自洽簇拆分（2026-09-13 ~ 09-14 已完成十一刀，7087 → 673 行）：
 
 | 模块 | 内容 | patch 语义要点 |
 |------|------|--------------|
@@ -466,6 +466,7 @@ $ openbiliclaw profile-consolidate --revert 20260612-031500   # 按 run_id 回�
 | `cli/_cmd_service.py` | 服务与运维组（`setup-embedding` / `start` / `set-password` / `serve-api` / `db-repair` / `config-show` / `health-check` + `auth login\|status` / `login codex` / `browser status\|open\|content`，共 13 命令；含 `_CODEX_LOGIN_*_OPTION` 常量）——`register(app, auth_app, login_app, browser_app)` 四参挂载（唯一挂多个子 Typer 的簇） | 20 个共享符号（`_run_db_repair` / `_is_interactive_terminal` / `_build_*` / `_run_api_server` / `console` 等）全部 `_cli.X` 动态取；**A′ 类** `_bump_auth_epoch` / `_rebase_auth_fingerprint`（定义在本模块但被 patch 到 cli）亦走 `_cli.X`；`_bump_auth_epoch` / `_rebase_auth_fingerprint` / `_normalize_strategy_names` 在 cli 命名空间 re-export |
 | `cli/_collect.py` | 知乎 / 抖音任务「入队 → 收集 → 落库」helper（`_import_xhs_bootstrap_events` / `_event_memory_key` / `_load_existing_event_keys` / `_write_events_to_memory` + 知乎 5 个、抖音 2 个 `_enqueue_*` / `_collect_*`，共 11 个顶层函数）——**无 typer 命令**，无需 `register()` | 被 patch 到 cli 命名空间的 5 个符号（`_get_runtime_database` / `_build_memory_manager` / `_enqueue_xhs_bootstrap_task` / `_collect_xhs_bootstrap_events` / `console`）全部 `_cli.X` 动态取；`_kick_task_dispatcher` 只被 patch 到 `runtime.init_flow` 命名空间，故保持顶层直 import（与抽取前逐位一致）；11 个符号在 cli 命名空间 re-export |
 | `cli/_render.py` | 渲染共享 helper（`_print_page_title` / `_print_status_panel` / `_print_key_value_table` / `_print_discovered_content_preview` / `_print_recommendation_card`） | 测试须 patch 本体 `_render.console`，不得再 patch `cli.console` |
+| `cli/_build.py` | 运行时构建族（`_build_registry` / `_build_auth_manager` / `_build_browser` / `_build_bilibili_client` / `_build_soul_engine` / `_build_recommendation_engine` / `_build_dialogue` / `_run_api_server` / `_build_memory_manager` / `_build_discovery_engine` / `_build_usage_recorder` / `_runtime_database_path` / `_runtime_backup_dir` / `_maybe_create_runtime_database_backup` / `_ensure_runtime_database_healthy` / `_run_db_repair`，共 16 个顶层函数）——**无 typer 命令**，无需 `register()`；`main` 与 `@app.callback()` 留在主文件 | 被 patch 到 cli 命名空间的 7 个符号（`_build_registry` / `_build_bilibili_client` / `_build_memory_manager` / `_build_usage_recorder` / `_get_runtime_database` / `_RUNTIME_COMPONENTS` / `console`）在块内互调处全部 `_cli.X` 动态取；`_runtime_database_path` / `_runtime_backup_dir` / `_print_status_panel` 无补丁依赖直取；16 个符号在 cli 命名空间 re-export |
 
 子模块顶层**禁止** import `cli` 包本体（防循环依赖）；兄弟子模块互引允许。
 

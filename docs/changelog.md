@@ -4,6 +4,40 @@
 
 ---
 
+## 重构：运行时构建族抽离 _build（P4 第十一刀，2026-09-14）
+
+- **抽离规模**：16 个顶层函数（`_build_registry` / `_build_auth_manager` / `_build_browser` /
+  `_build_bilibili_client` / `_build_soul_engine` / `_build_recommendation_engine` /
+  `_build_dialogue` / `_run_api_server` / `_build_memory_manager` / `_build_discovery_engine` /
+  `_build_usage_recorder` / `_runtime_database_path` / `_runtime_backup_dir` /
+  `_maybe_create_runtime_database_backup` / `_ensure_runtime_database_healthy` /
+  `_run_db_repair`），共 **~344 行** → `cli/_build.py`（376 行）。
+  `cli/__init__.py` **996 → 673 行**（十一刀累计 7087 → 673，**-6414 行 / 约 -90.5%**）。
+- **无 register()**：该簇不含 typer 命令（纯构建 helper），由主文件顶层导入后 re-export
+  全部 16 个符号（`main` 与 `@app.callback()` 仍留在主文件）。
+- **patch 语义**：被 `tests/cli` patch 到 **cli 命名空间** 的 7 个符号
+  （`_build_registry` / `_build_bilibili_client` / `_build_memory_manager` /
+  `_build_usage_recorder` / `_get_runtime_database` / `_RUNTIME_COMPONENTS` / `console`）
+  在块内互调处一律 `_cli.X` 动态取（关键证据：tests/cli 既有测试 patch
+  `_build_registry`/`_build_bilibili_client` 后调用真 `_build_discovery_engine`，路由断了
+  补丁即失效）。`_runtime_database_path` / `_runtime_backup_dir` / `_print_status_panel`
+  无补丁依赖，保持直取；`console` 经 cli 动态取、`_print_status_panel` 从 `_render` 直取，
+  两者补丁面（`cli_module.console` vs `render_module.console`）互不干扰。
+- **验证**：`tests/cli` **217 passed**（210 + 新增守门 `test_cli_build_module.py` 7 例，
+  含 3 条补丁命中行为锁：`_build_usage_recorder` 走 `_cli._get_runtime_database`、
+  `_build_soul_engine` 走 `_cli._build_memory_manager/_build_registry/_build_usage_recorder`、
+  `_ensure_runtime_database_healthy` 走 `_cli.console`）；定向子集
+  `tests/{cli,config,soul,recommendation,weekend,discovery,init,auth,memory}` +
+  `tests/api/test_api_auth.py` **1252 passed**；全部 **90 条命令路径** worktree 对照 HEAD
+  `diff` 为空；原块 ↔ 新模块正文逐行对账**除 `_cli` 改写与注入空行外零差异**；
+  `ruff check` / `mypy` 全绿。
+- **背景校准**：第十刀后的全量 **3553 passed / 6 failed / 16 skipped**，6 例失败全为
+  环境性（`llm_routing` 3 例读真实 config、`packaging_entry` 2 例沙箱 shim、
+  `test_put_config_does_not_block_on_speculator` 1 例全量并发下的异步流 flaky——
+  单跑通过，与 cli 重构无关）。
+
+---
+
 ## 重构：知乎/抖音任务入队-收集-落库 helper 抽离 _collect（P4 第十刀，2026-09-14）
 
 - **抽离规模**：11 个顶层 helper（`_import_xhs_bootstrap_events` / `_event_memory_key` /
