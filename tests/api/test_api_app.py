@@ -126,8 +126,7 @@ class TestBackendAPI:
 
         events = memory.query_events(event_types=["feedback"], limit=10)
         metadata_by_type = {
-            json.loads(str(event["metadata"]))["feedback_type"]: json.loads(str(event["metadata"]))
-            for event in events
+            json.loads(str(event["metadata"]))["feedback_type"]: json.loads(str(event["metadata"])) for event in events
         }
         assert metadata_by_type["comment"]["signal_strength"] == 0.8
         assert metadata_by_type["dismiss"]["signal_strength"] == 0.5
@@ -591,9 +590,7 @@ class TestBackendAPI:
             await ctx.task_registry.cancel_all()
 
     @pytest.mark.asyncio
-    async def test_e2e_hot_reload_resumes_real_pool_fill(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_e2e_hot_reload_resumes_real_pool_fill(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """E2E (lever 2a): a config reload makes the *real* engine fill copy for
         a pending pool candidate against a *real* DB — pool-fill actually
         resumes (the seeded row becomes serveable), not just 'a task was
@@ -620,9 +617,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self.callers: list[str] = []
 
-            async def complete_structured_task(
-                self, *, caller: str = "", **_kw: object
-            ) -> LLMResponse:
+            async def complete_structured_task(self, *, caller: str = "", **_kw: object) -> LLMResponse:
                 self.callers.append(caller)
                 content = json.dumps(
                     [
@@ -786,9 +781,11 @@ class TestBackendAPI:
             transport=httpx.ASGITransport(app=app),
             base_url="http://testserver",
         ) as client:
+            # 5s（而非更紧的值）：本用例钉的是「端点不等待挂死的 speculator」，
+            # 真阻塞会挂满 force_tick 的 60s；全量并发 + 慢盘下 0.5s 会误报。
             response = await asyncio.wait_for(
                 client.put("/api/config", json={"language": "zh"}),
-                timeout=0.5,
+                timeout=5.0,
             )
 
         assert response.status_code == 200
@@ -1222,13 +1219,9 @@ class TestBackendAPI:
         assert captured["engine_concurrency"] is captured["controller"]
         assert all(item is captured["controller"] for item in captured["strategy_concurrency"])
         assert captured["runtime_controller_kwargs"]["scheduler_config"] is fake_config.scheduler
-        assert (
-            captured["runtime_controller_kwargs"]["presence"] is app.state.runtime_context.presence
-        )
+        assert captured["runtime_controller_kwargs"]["presence"] is app.state.runtime_context.presence
         assert captured["runtime_controller_kwargs"]["bilibili_producer"] is not None
-        assert (
-            captured["bilibili_producer_kwargs"]["presence"] is app.state.runtime_context.presence
-        )
+        assert captured["bilibili_producer_kwargs"]["presence"] is app.state.runtime_context.presence
         assert captured["bilibili_producer_kwargs"]["bilibili_client"].cookie == ""
         assert captured["runtime_controller_kwargs"]["check_interval_seconds"] == 77
         assert captured["runtime_controller_kwargs"]["signal_event_threshold"] == 9
@@ -1605,9 +1598,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self._embedding_service = object()
 
-        app = create_app(
-            memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine()
-        )
+        app = create_app(memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine())
         client = TestClient(app)
 
         response = client.get("/api/health")
@@ -1626,9 +1617,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self._embedding_service = _ProbeService()
 
-        app = create_app(
-            memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine()
-        )
+        app = create_app(memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine())
         client = TestClient(app)
 
         response = client.get("/api/health")
@@ -1651,9 +1640,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self._embedding_service = _FailingProbeService()
 
-        app = create_app(
-            memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine()
-        )
+        app = create_app(memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine())
         client = TestClient(app)
 
         response = client.get("/api/health")
@@ -1680,9 +1667,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self._embedding_service = service
 
-        app = create_app(
-            memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine()
-        )
+        app = create_app(memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine())
         client = TestClient(app)
 
         client.get("/api/health")
@@ -1690,9 +1675,7 @@ class TestBackendAPI:
 
         assert service.calls == 1
 
-    def test_health_endpoint_strict_when_probe_times_out(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_health_endpoint_strict_when_probe_times_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import asyncio
 
         from fastapi.testclient import TestClient
@@ -1714,9 +1697,7 @@ class TestBackendAPI:
             def __init__(self) -> None:
                 self._embedding_service = _SlowProbeService()
 
-        app = create_app(
-            memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine()
-        )
+        app = create_app(memory_manager=object(), database=object(), soul_engine=EmbeddingSoulEngine())
         client = TestClient(app)
 
         response = client.get("/api/health")
@@ -1724,9 +1705,7 @@ class TestBackendAPI:
         assert response.status_code == 200
         assert response.json()["embedding_ready"] is False
 
-    def test_detect_lan_ip_prefers_rfc1918_interface_over_benchmark_tun(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_detect_lan_ip_prefers_rfc1918_interface_over_benchmark_tun(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from openbiliclaw.api import app as app_module
 
         monkeypatch.setattr(app_module, "_default_route_ip", lambda: "198.18.0.1")
@@ -1738,9 +1717,7 @@ class TestBackendAPI:
 
         assert app_module._detect_lan_ip() == "192.168.31.98"
 
-    def test_windows_interface_ipv4_probe_hides_ipconfig_console(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_windows_interface_ipv4_probe_hides_ipconfig_console(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
 
         from openbiliclaw.api import app as app_module
@@ -2961,9 +2938,7 @@ class TestBackendAPI:
         assert event["run_id"] == body["run_id"]
         assert isinstance(event["token"], str) and event["token"]
 
-    def test_extension_e2e_run_fails_fast_when_runtime_unavailable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_extension_e2e_run_fails_fast_when_runtime_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         import openbiliclaw.api.app as app_module
@@ -3532,9 +3507,7 @@ class TestBackendAPI:
             websocket.close()
             _wait_for_presence_count(ctx, 0)
 
-    def test_runtime_stream_requests_cookie_sync_for_background_client(
-        self, monkeypatch, tmp_path: Path
-    ) -> None:
+    def test_runtime_stream_requests_cookie_sync_for_background_client(self, monkeypatch, tmp_path: Path) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import Config, save_config
@@ -4154,9 +4127,7 @@ class TestBackendAPI:
         from fastapi.testclient import TestClient
 
         class FakeDatabase:
-            def get_notification_candidate(
-                self, *, min_confidence: float = 0.82
-            ) -> dict[str, object] | None:
+            def get_notification_candidate(self, *, min_confidence: float = 0.82) -> dict[str, object] | None:
                 assert min_confidence == 0.82
                 return {
                     "id": 9,
@@ -4516,9 +4487,7 @@ class TestBackendAPI:
         assert response.status_code == 200
         assert elapsed < 0.15
 
-    def test_autostart_status_reports_intent_and_registration(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_autostart_status_reports_intent_and_registration(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.config import Config
@@ -4560,9 +4529,7 @@ class TestBackendAPI:
             "detail": "开机自启动配置已开启，但系统自启动项缺失。",
         }
 
-    def test_autostart_status_remote_is_readable_but_not_manageable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_autostart_status_remote_is_readable_but_not_manageable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.runtime import autostart
@@ -4589,9 +4556,7 @@ class TestBackendAPI:
         assert response.status_code == 200
         assert response.json()["can_manage"] is False
 
-    def test_autostart_status_remote_hides_env_managed_keys(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_autostart_status_remote_hides_env_managed_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.runtime import autostart
@@ -4663,9 +4628,7 @@ class TestBackendAPI:
         assert response.status_code == 403
         assert response.json()["reason"] == "local_only"
 
-    def test_autostart_apply_rejects_unsupported_runtime(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_autostart_apply_rejects_unsupported_runtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.runtime import autostart
@@ -4674,9 +4637,7 @@ class TestBackendAPI:
         monkeypatch.setattr(
             autostart,
             "status",
-            lambda: AutostartStatus(
-                False, False, "darwin", "none", reason="unsupported_docker_runtime"
-            ),
+            lambda: AutostartStatus(False, False, "darwin", "none", reason="unsupported_docker_runtime"),
         )
         app = create_app()
         app.state.auth_gate.is_trusted_local = lambda request: True
@@ -4689,9 +4650,7 @@ class TestBackendAPI:
         assert response.json()["enabled"] is False
         assert response.json()["registered"] is False
 
-    def test_autostart_apply_rejects_env_managed_enable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_autostart_apply_rejects_env_managed_enable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         from openbiliclaw.runtime import autostart
@@ -4703,9 +4662,7 @@ class TestBackendAPI:
             "status",
             lambda: AutostartStatus(True, False, "darwin", "launchd"),
         )
-        monkeypatch.setattr(
-            guards, "active_env_managed_inputs", lambda loaded_cfg: ["GOOGLE_API_KEY"]
-        )
+        monkeypatch.setattr(guards, "active_env_managed_inputs", lambda loaded_cfg: ["GOOGLE_API_KEY"])
         app = create_app()
         app.state.auth_gate.is_trusted_local = lambda request: True
         client = TestClient(app)
@@ -5272,12 +5229,8 @@ class TestBackendAPI:
         app.state.runtime_context.config = SimpleNamespace(data_path=tmp_path)
         client = TestClient(app)
 
-        assert client.get("/api/interest-probes/pending").json()["items"][0]["domain"] == (
-            "城市基础设施观察"
-        )
-        assert client.get("/api/profile-summary").json()["speculative_interests"][0]["domain"] == (
-            "城市基础设施观察"
-        )
+        assert client.get("/api/interest-probes/pending").json()["items"][0]["domain"] == ("城市基础设施观察")
+        assert client.get("/api/profile-summary").json()["speculative_interests"][0]["domain"] == ("城市基础设施观察")
 
         response = client.post(
             "/api/interest-probes/respond",
@@ -6007,9 +5960,7 @@ class TestBackendAPI:
         assert response.status_code == 200
         buffer_state = memory.runtime_state["short_term_exploration_buffer"]
         assert buffer_state["entries"][0]["domain"] == "城市基础设施观察"
-        assert buffer_state["entries"][0]["recent_evidence"][0]["source_event"] == (
-            "weak_positive_chat"
-        )
+        assert buffer_state["entries"][0]["recent_evidence"][0]["source_event"] == ("weak_positive_chat")
 
     def test_interest_probe_chat_classifier_failure_defaults_to_neutral(self) -> None:
         from types import SimpleNamespace
@@ -6192,13 +6143,8 @@ class TestBackendAPI:
         app.state.runtime_context.config = SimpleNamespace(data_path=tmp_path)
         client = TestClient(app)
 
-        assert client.get("/api/avoidance-probes/pending").json()["items"][0]["domain"] == (
-            "浅层热点复读"
-        )
-        assert (
-            client.get("/api/profile-summary").json()["speculative_avoidances"][0]["domain"]
-            == "浅层热点复读"
-        )
+        assert client.get("/api/avoidance-probes/pending").json()["items"][0]["domain"] == ("浅层热点复读")
+        assert client.get("/api/profile-summary").json()["speculative_avoidances"][0]["domain"] == "浅层热点复读"
 
         response = client.post(
             "/api/avoidance-probes/respond",
@@ -7402,9 +7348,7 @@ class TestBackendAPI:
             database=database,
             soul_engine=object(),
         )
-        app.state.runtime_context.config = SimpleNamespace(
-            scheduler=SimpleNamespace(delight_queue_limit=7)
-        )
+        app.state.runtime_context.config = SimpleNamespace(scheduler=SimpleNamespace(delight_queue_limit=7))
         client = TestClient(app)
 
         response = client.get("/api/delight/pending-batch")
@@ -7435,9 +7379,7 @@ class TestBackendAPI:
             database=database,
             soul_engine=object(),
         )
-        app.state.runtime_context.config = SimpleNamespace(
-            scheduler=SimpleNamespace(delight_queue_limit=7)
-        )
+        app.state.runtime_context.config = SimpleNamespace(scheduler=SimpleNamespace(delight_queue_limit=7))
         client = TestClient(app)
 
         response = client.get("/api/delight/pending-batch?limit=11")
@@ -8060,9 +8002,7 @@ class TestEmbeddingAndCompatProviderE2E:
 
     # ── ConfigIssue surfacing ───────────────────────────────────────
 
-    def test_put_default_openai_compatible_without_base_url_surfaces_issue(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_put_default_openai_compatible_without_base_url_surfaces_issue(self, monkeypatch, tmp_path) -> None:
         """If the user picks openai_compatible as default but forgets
         base_url, ``_collect_config_issues`` flags it and the issue
         appears in the PUT response so the popup can highlight the
@@ -8135,9 +8075,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert "*" in emb["api_key"]
         assert "vllm-token-1234567890" not in emb["api_key"]
 
-    def test_put_embedding_masked_echo_does_not_overwrite_real_key(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_put_embedding_masked_echo_does_not_overwrite_real_key(self, monkeypatch, tmp_path) -> None:
         """Workflow: open settings → backend returns masked key → user
         edits an unrelated field (model) → submits — the masked api_key
         gets echoed back. Backend must detect the mask (any '*') and
@@ -8214,9 +8152,7 @@ class TestEmbeddingAndCompatProviderE2E:
             },
         )
         body = resp.json()
-        assert body["reloaded"] is True, (
-            f"expected hot-reload to succeed, got message: {body['message']}"
-        )
+        assert body["reloaded"] is True, f"expected hot-reload to succeed, got message: {body['message']}"
 
     # ── Coexistence: both providers usable in one config ────────────
 
@@ -8451,9 +8387,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert discovery["multimodal_image_quality"] == 80
         assert discovery["multimodal_image_timeout_seconds"] == 10
 
-    def test_put_config_normalizes_bad_multimodal_discovery_settings(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_put_config_normalizes_bad_multimodal_discovery_settings(self, monkeypatch, tmp_path) -> None:
         from openbiliclaw.config import Config, LLMConfig, LLMProviderConfig
 
         cfg = Config(llm=LLMConfig(openai=LLMProviderConfig(api_key="sk-openai")))
@@ -8480,9 +8414,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert discovery["multimodal_image_quality"] == 72
         assert discovery["multimodal_image_timeout_seconds"] == 6
 
-    def test_get_config_exposes_scheduler_pause_on_extension_disconnect(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_get_config_exposes_scheduler_pause_on_extension_disconnect(self, monkeypatch, tmp_path) -> None:
         from openbiliclaw.config import Config
 
         cfg = Config()
@@ -9418,9 +9350,7 @@ class TestGuidedInitEndpoints:
         assert resp.status_code == 403
         assert resp.json()["error"] == "local_only"
 
-    def test_init_rejects_docker_runtime(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_rejects_docker_runtime(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         monkeypatch.setenv("OPENBILICLAW_IN_CONTAINER", "1")
@@ -9564,9 +9494,7 @@ class TestGuidedInitEndpoints:
             time.sleep(0.02)
         return captured
 
-    def test_init_honors_source_selection(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_honors_source_selection(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         captured = self._capture_run_guided_init(monkeypatch)
@@ -9588,15 +9516,11 @@ class TestGuidedInitEndpoints:
         assert captured["include_yt"] is False
         assert captured["include_zhihu"] is True
 
-    def test_init_without_sources_uses_all_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_without_sources_uses_all_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi.testclient import TestClient
 
         captured = self._capture_run_guided_init(monkeypatch)
-        prereqs = _FakeInitPrereqs(
-            bili="ok", chat=True, platforms=["bilibili", "xiaohongshu", "douyin", "zhihu"]
-        )
+        prereqs = _FakeInitPrereqs(bili="ok", chat=True, platforms=["bilibili", "xiaohongshu", "douyin", "zhihu"])
         app, _ = self._make_app(tmp_path, prereqs=prereqs)
         with TestClient(app) as client:
             # No "sources" key → legacy behaviour: everything enabled.
@@ -9783,9 +9707,7 @@ class TestGuidedInitEndpoints:
         AuthManager(data_dir=load_config().data_path).set_cookie("SESSDATA=same")
         with TestClient(app) as client:
             app.state.runtime_context.init_coordinator.try_start("active")
-            resp = client.post(
-                "/api/bilibili/cookie", json={"cookie": "SESSDATA=same", "source": "test"}
-            )
+            resp = client.post("/api/bilibili/cookie", json={"cookie": "SESSDATA=same", "source": "test"})
         # Same effective cookie during init → 200 no-op, no rebuild, no error.
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
@@ -9796,9 +9718,7 @@ class TestGuidedInitEndpoints:
         app, _ = self._make_app(tmp_path)
         with TestClient(app) as client:
             app.state.runtime_context.init_coordinator.try_start("active")
-            resp = client.post(
-                "/api/bilibili/cookie", json={"cookie": "SESSDATA=different", "source": "test"}
-            )
+            resp = client.post("/api/bilibili/cookie", json={"cookie": "SESSDATA=different", "source": "test"})
         # A genuinely different cookie during init is rejected (not silently
         # dropped, not a mid-init rebuild) so the user knows it didn't apply.
         assert resp.status_code == 409

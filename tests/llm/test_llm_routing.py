@@ -17,20 +17,39 @@ Pins the properties we depend on after the 2026-09-01 fallback rework:
 
 from __future__ import annotations
 
-from openbiliclaw.config import load_config
+from openbiliclaw.config import Config
 from openbiliclaw.llm.base import LLMRegistry
 from openbiliclaw.llm.openai_provider import OpenAIProvider
 from openbiliclaw.llm.registry import build_llm_registry
 
 
-def test_registry_with_real_config_has_openai_and_fallback() -> None:
-    """The live config.toml must build: openai (default) + openai_compatible.
+def _sensenova_style_llm_config() -> object:
+    """The 2026-09-01 SenseNova arrangement as a synthetic config.
+
+    openai (default) + openai_compatible (fallback), both keyed; deepseek's
+    key left empty so it must never register. Built in-memory — the earlier
+    versions of these tests read the developer's live ``config.toml``,
+    which legitimately changes over time (e.g. default flipped to gemini)
+    and made them fail for reasons unrelated to registry behaviour.
+    """
+    cfg = Config().llm
+    cfg.default_provider = "openai"
+    cfg.fallback_enabled = True
+    cfg.fallback_provider = "openai_compatible"
+    cfg.openai.api_key = "sk-test-openai"
+    cfg.openai_compatible.api_key = "sk-test-compat"
+    cfg.openai_compatible.base_url = "https://token.sensenova.cn/v1"
+    cfg.deepseek.api_key = ""
+    return cfg
+
+
+def test_registry_openai_default_with_openai_compatible_fallback() -> None:
+    """openai (default) + openai_compatible (fallback) both build from config.
 
     This is the exact arrangement that restored chat output after the
     SenseNova reasoning/content issue.
     """
-    config = load_config()
-    registry = build_llm_registry(config)
+    registry = build_llm_registry(_sensenova_style_llm_config())  # type: ignore[arg-type]
 
     assert "openai" in registry.available_providers
     assert "openai_compatible" in registry.available_providers
@@ -39,8 +58,7 @@ def test_registry_with_real_config_has_openai_and_fallback() -> None:
 
 
 def test_fallback_order_contains_default_and_fallback() -> None:
-    config = load_config()
-    registry = build_llm_registry(config)
+    registry = build_llm_registry(_sensenova_style_llm_config())  # type: ignore[arg-type]
 
     order = registry._fallback_order()
     assert order[0] == "openai"
@@ -49,14 +67,12 @@ def test_fallback_order_contains_default_and_fallback() -> None:
 
 
 def test_dead_provider_with_empty_key_is_not_registered() -> None:
-    """A provider whose key was cleared must not appear in the registry.
+    """A provider whose key is empty must not appear in the registry.
 
-    This pins the deepseek cleanup: the old dead key is gone from
-    config.toml, so ``deepseek`` must not be registered and therefore can
-    never be picked as a fallback.
+    Pins the deepseek cleanup: an empty key can never sit in the chain and
+    therefore can never be picked as a fallback.
     """
-    config = load_config()
-    registry = build_llm_registry(config)
+    registry = build_llm_registry(_sensenova_style_llm_config())  # type: ignore[arg-type]
     assert "deepseek" not in registry.available_providers
 
 
@@ -64,17 +80,16 @@ def test_openai_compatible_uses_configured_base_url() -> None:
     """openai_compatible must honour its config base_url (SenseNova endpoint)."""
     from openbiliclaw.llm.registry import _maybe_openai_compatible_provider
 
-    config = load_config()
-    provider = _maybe_openai_compatible_provider(config, overrides={})
+    cfg = _sensenova_style_llm_config()
+    provider = _maybe_openai_compatible_provider(cfg, overrides={})  # type: ignore[arg-type]
     assert provider is not None
-    assert provider.base_url == config.llm.openai_compatible.base_url
-    assert config.llm.openai_compatible.base_url.startswith("https://")
+    assert provider.base_url == cfg.openai_compatible.base_url
+    assert provider.base_url.startswith("https://")
 
 
 def test_unknown_fallback_provider_does_not_extend_chain() -> None:
     """An unregistered fallback name must collapse to just the default."""
-    config = load_config()
-    registry = build_llm_registry(config)
+    registry = build_llm_registry(_sensenova_style_llm_config())  # type: ignore[arg-type]
     registry.fallback_provider = "does-not-exist"
 
     assert registry._fallback_order() == ["openai"]

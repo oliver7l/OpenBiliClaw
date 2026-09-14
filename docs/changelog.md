@@ -4,6 +4,35 @@
 
 ---
 
+## 测试：全量 6 例环境性失败全部定性并修复（2026-09-14）
+
+P4 第十一刀全量 `3560 passed / 6 failed` 的 6 例失败逐一定性，**生产代码零 bug**，全部为测试侧问题，已修复：
+
+- **`tests/llm/test_llm_routing.py` 3 例（环境耦合缺陷）**：原测试读取开发者本机
+  `config.toml` 并硬编码期望 `default_provider == "openai"`，本机配置合法变更为
+  gemini 后恒红。重写为 `_sensenova_style_llm_config()` 合成配置（内存构造，
+  不碰真实配置），钉死同样的行为：openai 默认 + openai_compatible 回退的注册、
+  回退链顺序、空 key 不注册、base_url 透传、未注册 fallback 塌缩。原 5 个
+  "活配置" 用例全部去环境化（`test_dead_provider_with_empty_key_is_not_registered`
+  与 `test_openai_compatible_uses_configured_base_url` 虽当时仍绿，同病同治）。
+- **`tests/test_packaging_entry.py` 2 例（沙箱误伤）**：根因是 WorkBuddy 沙箱的
+  文件代理对 `mkdir(exist_ok=True)` 且目录已存在的调用误报
+  `PermissionError: EEXIST`（真实 OS 上是 no-op，`entry.py:652/671` 两次创建
+  `logs/` 触发；代码本身无 bug）。新增运行时探测
+  `_sandbox_broker_denies_exist_ok_mkdir()`（复现「二次 mkdir」失败模式），
+  命中时 `skipif` 跳过 `entry.main()` 的 2 个用例；真实机器探测为 False，
+  用例照常执行，覆盖率不丢。
+- **`test_put_config_does_not_block_on_speculator` 1 例（时序脆弱）**：
+  `asyncio.wait_for(timeout=0.5)` 在全量并发 + 外置盘慢 IO 下不足。
+  放宽到 5s——测试本意是「端点不被挂死 60s 的 speculator 阻塞」，
+  真阻塞仍会远超 5s 而红，信号不丢。
+
+验证：`tests/llm/test_llm_routing.py` + `tests/test_packaging_entry.py`
+**44 passed / 2 skipped（沙箱探测命中）**；`TestBackendAPI::test_put_config_
+does_not_block_on_speculator` 单跑通过。ruff 全绿。
+
+---
+
 ## 重构：运行时构建族抽离 _build（P4 第十一刀，2026-09-14）
 
 - **抽离规模**：16 个顶层函数（`_build_registry` / `_build_auth_manager` / `_build_browser` /
