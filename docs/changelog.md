@@ -4,6 +4,32 @@
 
 ---
 
+## 修复：OpenAPI 重复 operationId（两条 knowledge graph 端点撞名）（2026-09-14）
+
+上一条修复让 `/openapi.json` 恢复可生成后，立刻暴露出一个被 500 长期掩盖的**文档契约**
+缺陷：`knowledge_routes.py` 与 `knowledge_forge_routes.py` 各有一个**同名函数**
+`knowledge_graph`，路径 `/api/knowledge/graph` 与 `/api/knowledge-graph` 规范化后
+（`/` 与 `-` 都变成 `_`）默认 operationId 完全相同
+（`knowledge_graph_api_knowledge_graph_get`），FastAPI 生成 OpenAPI 时报
+`Duplicate Operation ID` 告警。客户端代码生成器会因此产出重复方法名，或静默丢弃其中
+一个端点。
+
+两者是**语义不同的端点**——前者＝概念共现图谱（读 `knowledge_concepts`）／后者＝
+实体-文章图谱（读 `entities` + `article_entities`），故只做 ID 区分而**不合并**：
+给无前端调用方的 `/api/knowledge/graph` 显式指定
+`operation_id="knowledge_concept_graph_get"`（只影响 OpenAPI 文档，不改 URL 与行为）。
+
+**验证**：OpenAPI 生成期告警数 0；本地 `create_app()` 507 个 operationId 全唯一；
+线上 `/openapi.json` 523 个全唯一；`/docs`、`/redoc`、`/openapi.json` 均 200；
+重启日志无 `Duplicate Operation ID`。
+
+**新增回归测试**（`tests/api/test_api_route_regressions.py`，F5 组 2 条）：全量
+operationId 必须唯一；两条 knowledge graph 端点 ID 必须可区分。已用 `git worktree`
+在修复前的 HEAD 上验证：**2 failed / 8 passed**（失败信息即
+`Duplicate Operation ID ... for function knowledge_graph`），修复后 10 passed。
+
+---
+
 ## 修复：`/openapi.json` 恒 500 + 文章端点 body 被静默降级为 query（2026-09-14）
 
 本次为面试模块期 2 验收时顺带发现的**既存回归**，属 `260683c8`（把 `app.py` 拆成
@@ -31,8 +57,9 @@
 OpenAPI 而旧别名不进。已用 `git worktree` 在修复前的 HEAD 上验证：**4 failed / 4 passed**
 （失败原因即上述 `PydanticUserError`），修复后全通过。
 
-**顺带发现（未处理，非本次范围）**：`knowledge_forge_routes.py` 的 `knowledge_graph` 存在
-重复 operationId（OpenAPI 生成告警，此前被 500 掩盖），可能影响客户端代码生成。
+**顺带发现（已在上一修复条目处理）**：`knowledge_forge_routes.py` 的 `knowledge_graph`
+与 `knowledge_routes.py` 的同名函数撞 operationId（OpenAPI 生成告警，此前被 500
+掩盖），可能影响客户端代码生成。
 
 **另**：本条目修正了下方「期 2」条目里「`/docs` 与 `/openapi.json` 早已不可用」的记录——问题现已修复。
 

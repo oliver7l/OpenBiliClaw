@@ -200,9 +200,16 @@ def register_knowledge_routes(app: FastAPI, ctx: Any) -> None:
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
-    @app.get("/api/knowledge/graph")
+    # 显式 operation_id：本模块的 ``knowledge_graph`` 与 knowledge_forge_routes.py 的
+    # 同名函数（路径 /api/knowledge-graph）会撞出同一个默认 operationId
+    # （``knowledge_graph_api_knowledge_graph_get``，因为路径里的 ``/`` 与 ``-`` 都
+    # 规范化为 ``_``），使 OpenAPI 生成客户端代码时方法名冲突。
+    @app.get("/api/knowledge/graph", operation_id="knowledge_concept_graph_get")
     def knowledge_graph(limit: int = 50) -> JSONResponse:
-        """知识图谱数据（节点 + 边），用于可视化。"""
+        """知识图谱数据（概念共现：节点 + 边），用于可视化。
+
+        对应实体-文章图谱见 ``GET /api/knowledge-graph``（knowledge_forge_routes）。
+        """
         database = getattr(ctx, "database", None)
         if database is None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)

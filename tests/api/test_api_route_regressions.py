@@ -15,9 +15,18 @@
   变成字符串后 FastAPI 无法在模块全局命名空间解析它，于是把 ``payload`` **静默
   降级为 query 参数**（PATCH 不再接收 JSON body），同时 ``/openapi.json`` 恒 500。
   拆分会掩盖这类问题：端点仍「存在」，只是参数位置错了。
+- F5（2026-09-14 发现，与 F4 同源）：``knowledge_routes.py`` 与
+  ``knowledge_forge_routes.py`` 各有一个同名函数 ``knowledge_graph``，路径
+  ``/api/knowledge/graph`` 与 ``/api/knowledge-graph`` 规范化后
+  （``/``、``-`` 都变成 ``_``）默认 operationId 完全相同
+  （``knowledge_graph_api_knowledge_graph_get``）→ OpenAPI 生成客户端代码时
+  方法名冲突。此前被 ``/openapi.json`` 恒 500（F4）长期掩盖，F4 修复后才暴露。
+  两者是**语义不同的端点**（概念共现图 / 实体-文章图），故显式指定
+  ``operation_id`` 加以区分，而非合并。
 
 这里用「真实注册顺序」而非静态源码判断，因为重复注册的胜负由注册顺序决定；
-另用「能否生成 OpenAPI」以及「参数是否被降级」两条断言守住静默降级类缺陷。
+另用「能否生成 OpenAPI」「参数是否被降级」「operationId 是否唯一」三条断言
+守住静默降级与文档契约类缺陷。
 """
 
 from __future__ import annotations
@@ -152,3 +161,46 @@ def test_interview_prefixed_paths_in_openapi(isolated_client: TestClient) -> Non
         "/api/interview/reviews",
     ):
         assert legacy not in paths, f"旧前缀别名不应进 OpenAPI：{legacy}"
+
+
+# ── F5：OpenAPI operationId 必须唯一 ─────────────────────────────
+
+
+def test_openapi_operation_ids_are_unique(isolated_client: TestClient) -> None:
+    """F5 回归：OpenAPI 的 operationId 必须全局唯一。
+
+    默认 operationId = ``{函数名}_{规范化路径}_{方法}``，而规范化会把路径里的
+    ``/`` 与 ``-`` 都变成 ``_``。于是两个**同名函数**即使挂在不同路径
+    （如 ``/api/knowledge/graph`` 与 ``/api/knowledge-graph``）也会撞成同一个 ID，
+    使客户端代码生成器产出重复方法名或静默丢弃其中一个端点。
+    """
+    locations: dict[str, list[str]] = {}
+    for path, operations in isolated_client.app.openapi()["paths"].items():
+        for method, operation in operations.items():
+            if not isinstance(operation, dict):
+                continue
+            oid = operation.get("operationId")
+            if oid:
+                locations.setdefault(oid, []).append(f"{method.upper()} {path}")
+    duplicates = {oid: locs for oid, locs in locations.items() if len(locs) > 1}
+    assert duplicates == {}, f"operationId 重复（客户端代码生成会冲突）：{duplicates}"
+
+
+def test_knowledge_graph_endpoints_have_distinct_operation_ids(
+    isolated_client: TestClient,
+) -> None:
+    """F5 回归锁定：两条 knowledge graph 端点各有可区分的 operationId。
+
+    两者语义不同、数据源不同，故只做 ID 区分而不合并：
+    - ``/api/knowledge/graph`` —— 概念共现图谱（``knowledge.knowledge_concepts``）
+    - ``/api/knowledge-graph`` —— 实体-文章图谱（``knowledge.entities`` +
+      ``article_entities``）
+    """
+    paths = isolated_client.app.openapi()["paths"]
+    assert "/api/knowledge/graph" in paths, "概念共现图谱端点未注册"
+    assert "/api/knowledge-graph" in paths, "实体-文章图谱端点未注册"
+    concept_id = paths["/api/knowledge/graph"]["get"]["operationId"]
+    entity_id = paths["/api/knowledge-graph"]["get"]["operationId"]
+    assert concept_id != entity_id, (
+        f"两条 knowledge graph 端点 operationId 撞名：{concept_id}"
+    )
