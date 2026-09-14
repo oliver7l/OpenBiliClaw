@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -266,5 +266,29 @@ def build_oss_research_router(db_path: str | None = None) -> APIRouter:
             return {"deleted": cur.rowcount, "id": pid}
         finally:
             conn.close()
+
+    # ── 研究报告静态服务（白名单目录，只读） ───────────────────
+    # report_path 存的是仓库相对路径（如 references/xxx.md），
+    # 前端拼成 /references/xxx.md 站内链接。只允许白名单目录下的
+    # .md 文件，resolve 后必须仍落在白名单目录内（防路径穿越）。
+    _REPO_ROOT = DEFAULT_DB_PATH.parent.parent  # 项目根
+    _ALLOWED_DIRS = (_REPO_ROOT / "references", _REPO_ROOT / "docs")
+    _ALLOWED_SUFFIXES = {".md"}
+
+    @router.get("/references/{file_path:path}")
+    @router.get("/docs/{file_path:path}")
+    def serve_report_file(file_path: str):
+        if not file_path or Path(file_path).suffix.lower() not in _ALLOWED_SUFFIXES:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        for base in _ALLOWED_DIRS:
+            base_resolved = base.resolve()
+            candidate = (base_resolved / file_path).resolve()
+            try:
+                candidate.relative_to(base_resolved)
+            except ValueError:
+                continue  # 路径穿越，拒绝
+            if candidate.is_file():
+                return FileResponse(candidate, media_type="text/markdown; charset=utf-8")
+        return JSONResponse({"error": "not found"}, status_code=404)
 
     return router

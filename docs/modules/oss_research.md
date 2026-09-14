@@ -19,16 +19,18 @@
 | 删除 | `DELETE /api/oss-research/projects/{id}` |
 | 前端展示 | 卡片网格 + 标签筛选 + 搜索 + 详情弹窗（核心能力/可迁移手法/坑/报告链接）+ 手动新增/删除 |
 | 幂等回填 | `scripts/oss_research/backfill.py` 按 (owner,name) 去重写入已分析项目 |
+| 报告服务 | 研究报告统一放在 `references/` 下；API 以 `/api/oss-research/references/{path}` 与 `/api/oss-research/docs/{path}` 只读 serve（白名单目录 + 仅 .md + resolve 路径穿越防护） |
 
-### 数据现状（2026-09-14 两轮盘点后）
+### 数据现状（2026-09-14 盘点归档后）
 
-库内共 82 条，来源四批：
-1. **当日深度研究 6 个**：TraeWorkAssistant-mac / wikitok / lushu / brosis / exercise-helper / red（各附借鉴分析报告）。
+库内共 88 条，来源五批：
+1. **当日深度研究 7 个**：TraeWorkAssistant-mac / wikitok / lushu / brosis / exercise-helper / red / apple-notes-cli（各附借鉴分析报告，均在 `references/` 下）。
 2. **`references/` 历史研究存量 13 个**（tag=`references-archive`）：求职知识库调研 11 + 深度蓝图 2（my-interview / agent-interview-hub）。
 3. **`references/` 仅克隆未精读 18 个**（tag=`references-archive`+`unstudied`）。
 4. **`002-探索项目/` 各主题探索批次第三方仓库 45 个**（tag=`explore-archive`+`unstudied`）：小宇宙播客 3、微信读书 5、Telegram 3、123 云盘 6、115 网盘 8、夸克网盘 4、视频/CMS/TVBox 15（含 FongMi/TV 源码包与 JlenVideo 精简改造副本说明）、自媒体爬虫 1（MediaCrawler）。caveats 字段记录各克隆的原始位置。
+5. **`references/diary-projects` 日记类研究批次 5 个**（tag=`diary`+`explore-archive`）：Night-Journal / cube-diary / journiv-app / memex / nightly-journal（nightDiary 与 references/ 根目录重复，只入一条）。
 
-注：`references/diary-projects` 初判为本项目克隆，实为 **09-06 的日记类项目研究批次**：内含 6 个日记/记忆应用克隆（Night-Journal/cube-diary/journiv-app/memex/nightDiary/nightly-journal），其 `.git` 是主仓库复制残留（源码已清空），5 个新项目已补入库（nightDiary 与 references/ 根目录重复，只入一条）。用户自有仓库（oliver7l / tanxue0118 名下）与自研应用（WebDAVViewer、editable-table-app、tvbox-web、wechat-tools、039 等）均不属于研究对象，未入库。
+注：`references/diary-projects` 是 09-06 建的日记类项目研究批次，内含 6 个日记/记忆应用克隆；其顶层 `.git`（主仓库复制残留）已于 09-14 确认清理，目录现仅含 6 个项目本体。用户自有仓库（oliver7l / tanxue0118 名下）与自研应用（WebDAVViewer、editable-table-app、tvbox-web、wechat-tools、039 等）均不属于研究对象，未入库。
 
 ## 公开 API
 

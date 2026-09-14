@@ -154,7 +154,7 @@
     if (it.url) links += '<a href="' + esc(it.url) + '" target="_blank" rel="noopener">GitHub ↗</a>';
     if (it.report_path) {
       if (links) links += '<span class="oss-link-sep">·</span>';
-      links += '<a href="/' + esc(it.report_path) + '" target="_blank" rel="noopener">研究报告 ↗</a>';
+      links += '<a href="/api/oss-research/' + esc(it.report_path) + '" target="_blank" rel="noopener">研究报告 ↗</a>';
     }
     foot.innerHTML = links +
       '<button type="button" class="oss-detail-btn">详情</button>' +
@@ -193,7 +193,7 @@
       html += block("不建议照搬", it.caveats);
       html += block("标签", it.tags);
       if (it.report_path) {
-        html += '<section><h3>研究报告</h3><p><a href="/' + esc(it.report_path) +
+        html += '<section><h3>研究报告</h3><p><a href="/api/oss-research/' + esc(it.report_path) +
           '" target="_blank" rel="noopener">' + esc(it.report_path) + " ↗</a></p></section>";
       }
       html += "</div>";

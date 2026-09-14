@@ -39,7 +39,7 @@ PROJECTS = [
         "relevance_summary": "形态不同（桌面应用非浏览器扩展），但工程手法可迁移：原子写、错误冷却状态机、代理回环防护、退出清理、确定性身份派生、NDJSON 流式 IPC。",
         "reusable_techniques": ["原子写 tmp+rename 防半截文件", "错误分类→冷却状态机+持久化", "NO_PROXY=* 防代理回环", "退出清理子进程/还原系统代理", "确定性身份派生 seeded_hex", "NDJSON 子进程流式 IPC", "严格契约文档(AGENT.md 式)"],
         "caveats": "桌面应用，不能解密 HTTPS；与知乎卡片化扩展架构不同，MITM 那套扩展做不了。",
-        "report_path": "TraeWorkAssistant-架构分析.md",
+        "report_path": "references/TraeWorkAssistant-架构分析.md",
         "tags": ["desktop", "tauri", "multi-account", "reference"],
     },
     {
@@ -53,7 +53,7 @@ PROJECTS = [
         "relevance_summary": "直接有用——本身就是 TikTok 式全屏竖向卡片流，正是知乎首页卡片化要的视觉形态，且纯前端、feed 机制能搬进 content script。",
         "reusable_techniques": ["snap-y snap-mandatory 吸附滚动", "IntersectionObserver 哨兵预取(rootMargin 100px)", "双缓冲缩略图预加载(先 preload 再渲染)", "骨架+淡入+失败兜底", "100dvh 替代 100vh(移动端)", "scoped class 前缀隔离样式"],
         "caveats": "整页接管 DOM（扩展需注入 position:fixed 覆盖层）；调试用 console.log；点赞侧栏不适用于研究场景。",
-        "report_path": "WikiTok-借鉴分析.md",
+        "report_path": "references/WikiTok-借鉴分析.md",
         "tags": ["card-feed", "frontend", "reference", "zhihu-extension"],
     },
     {
@@ -67,7 +67,7 @@ PROJECTS = [
         "relevance_summary": "最有价值——自带 Chrome 扩展，与 OpenBiliClaw 扩展的 content/background/main 架构同构；LLM 抽取健壮性模板也可直接复用。",
         "reusable_techniques": ["content/background 分工协议(content 同源写回、background 跨站)", "MAIN world React 受控输入驱动(descriptor setter+_valueTracker)", "真点击派 Pointer/Mouse 事件而非 .click()", "流式输出稳定检测(连 4 次相同+长度阈值)", "健壮 LLM JSON 抽取(剥围栏→子串兜底→多形状)", "客户端/边缘共享纯逻辑(orderedIds 只是缓存)"],
         "caveats": "默认高德 POI/OSRM，国内需 WGS84↔GCJ-02 偏移；自托管路书需 Cloudflare 账号。",
-        "report_path": "Lushu-借鉴分析.md",
+        "report_path": "references/Lushu-借鉴分析.md",
         "tags": ["chrome-extension", "llm", "reference", "zhihu-extension", "xhs"],
     },
     {
@@ -82,7 +82,7 @@ PROJECTS = [
         "relevance_summary": "形态是桌面 App 与扩展不重叠，但「把本地数据变成 AI 可消费上下文」的四套机制正是 OpenBiliClaw 强化 agentic 能力最该抄的：MCP 出口、混合检索、确定性规则层、入库前脱敏——且 OpenBiliClaw 已有 Python API 与 sqlite-vec，迁移成本极低。",
         "reusable_techniques": ["MCP 只读服务+grant 细粒度授权暴露本地数据", "字段路由+FTS5+sqlite-vec+RRF(k=60) 混合检索", "确定性规则层替代 LLM 做理解/聚合", "入库前规则脱敏(gitleaks+Luhn+验证码,33 测试向量)", "严格时间口径(半开区间/桶对齐/区间并集/三类时间)", "规则纯数据+引擎执行+合成树单测(抽取层范式)", "原子写配置(tmp+replaceItemAt+时间戳备份)", "本地 IPC 对端校验(getpeereid+audit token)+限流", "硬性 fail-closed 约束(不离机/必脱敏/固定上限)"],
         "caveats": "macOS 原生 App，AX/OCR/SQLCipher/Metal 构建链平台绑定；Chrome 扩展无法做桌面采集。与知乎卡片化扩展的视觉形态无关。",
-        "report_path": "Brosis-借鉴分析.md",
+        "report_path": "references/Brosis-借鉴分析.md",
         "tags": ["macos", "desktop", "mcp", "local-first", "privacy", "reference", "sqlite-vec", "agentic"],
     },
     {
@@ -97,7 +97,7 @@ PROJECTS = [
         "relevance_summary": "与 WikiTok 同属纯前端+本地存储路线，但多了语音引导、离线 SW、引导式会话状态机、微信 WebView 适配四块，对 OpenBiliClaw Web UI（同为本地 serve 的 SPA）与扩展均有直接可抄的健壮性原语。",
         "reusable_techniques": ["事件表+预排程双轨定时：tick 兜底推进，节奏敏感 token(倒计时/蜂鸣)独立 setTimeout 预排，恢复按已过秒数跳过——setInterval catch-up 压缩节奏问题的标准解 (engine.js:181-237)", "语音三通道降级+token 防串音：预生成mp3(exact→前缀兜底)→<audio>→AudioContext解码→原生TTS→静默推进；lastSpeechToken 单调递增，onEnd 只认当前 token；_estimateDurationMs 超时兜底绝不挂起 (audio.js:120-354)", "SW 分层缓存+注释带真机根因：HTML/CSS/JS 网络优先(微信 WebView 懒更新会锁死旧版)、sw.js 自身网络优先、静态缓存优先；版本号激活期清旧缓存 (sw.js:39-98)", "mergeSettings：结构以默认为准、数值以存储为准(新增设置自动有默认值)；读取一律 clone 不外泄内部引用；dayType 归一化兼容旧记录 (storage.js:37-57)", "环境音 Web Audio 程序合成(雨声/心跳/和弦)零文件体积，语音播报 duckDown 0.2x 播完 duckUp (audio.js:443-632)", "llms.txt——给 LLM 看的项目说明书，AGENTS.md 思路的 Web 标准版"],
         "caveats": "morning/evening 两目录同构代码各复制一份——是零构建部署形态的取舍，勿照搬到有模块系统的项目；68 条 TTS_MAP 硬编码靠 tts/gen-*.js 生成脚本保证与播报文本逐字一致，手写必漂移；微信小程序版不开源，PWA 版才是完整实现",
-        "report_path": "ExerciseHelper-借鉴分析.md",
+        "report_path": "references/ExerciseHelper-借鉴分析.md",
         "tags": ["pwa", "vanilla-js", "voice-guidance", "web-ui", "local-first", "reference"],
     },
     {
@@ -112,7 +112,7 @@ PROJECTS = [
         "relevance_summary": "与用户既有工作流同构：docs/plans/≈E、docs/modules+AGENTS.md≈D、借鉴分析≈R、MEMORY.md≈D、工作日志≈R(append-only)。项目已自发实践 RED,缺的只是 E 态显式承载与「冲突必须记录」纪律。与 brosis 互补：brosis 管 AI 看得到什么数据,RED 管 AI 如何理解数据的状态。",
         "reusable_techniques": ["知识状态显式化：把 R/E/D 三态词汇写进 AGENTS.md,让 Agent 自动分清待查/推进中/已定 (spec/protocol.md)", "检查点授权语义原句：得到可行方案≠获得实施授权；宽泛早期请求不构成后面的转换授权——正是用户「先方案确认再开发」的协议化 (protocol.md Transitions)", "冲突显式化：发现文档与实现不符必须记录(如 changelog/drift_reports)而非默默绕过——补 AGENTS.md 文档强制同步规则的最大漏洞", "Skill 路由化按需加载：主文件极短+分路由 references,操作需要时才读 (SKILL.md:20-34)——写任何 SKILL 的范本", "双实现一致性：cases.json 就是 args+exitCode 序列,Node/Python 跑同一组用例 (cli/conformance/)", "机器可读契约三件套：config/artifact/output 各配 JSON Schema+独立 exit-codes 文档 (spec/)", "TOML front matter Markdown 工件(+++ 分隔,id/state/status/title/created 必填)：人可读+机器可校验", "policy 开关(document_requires_approval 等)：协议留开关项目自选严格度 (red.toml:12-14)"],
         "caveats": "对单人+单 Agent 项目,完整 CLI+red.toml 偏重——取其神(三态区分+检查点纪律+冲突显式化)舍其形(双CLI/conformance/自举CI)；方法论长文若要挂载给 Agent 读,摘核心十几行即可,不必整篇；Research/Evolve 记录是否入 Git 由项目自定,协议不强制",
-        "report_path": "RED-借鉴分析.md",
+        "report_path": "references/RED-借鉴分析.md",
         "tags": ["methodology", "ai-collaboration", "docs-as-state", "cli", "reference", "workflow"],
     },
     # ── references/ 目录历史研究存量统一归档（2026-09-14）──────────────
@@ -762,6 +762,28 @@ PROJECTS = [
         "one_liner": "nightly-journal：夜间日记应用",
         "caveats": "仅克隆未精读。克隆位置：references/diary-projects/nightly-journal。",
         "tags": ["explore-archive", "unstudied", "diary", "reference"],
+    },
+    # 2026-09-14 深度研究批次（7）
+    {
+        "name": "apple-notes-cli", "owner": "ingjieye",
+        "url": "https://github.com/ingjieye/apple-notes-cli",
+        "one_liner": "macOS 终端直读 Apple Notes 本地 NoteStore.sqlite 的只读 CLI：mode=ro + gzip/protobuf 解码出 Markdown，不用 AppleScript 不用云 API",
+        "purpose": "查-读-导三场景（search/recent/show/folders/export），零第三方运行时依赖（手写 protobuf varint 解码器），全文搜索 800 笔记 <1s，刻意不缓存永远反映实时库。",
+        "tech_stack": ["python3.10+", "sqlite(mode=ro)", "gzip+protobuf(手写解码)", "argparse", "uv/pipx"],
+        "key_features": ["全文搜索(支持regex/folder/since/json)", "增量导出(sha256签名manifest)", "纯函数解码层与IO层隔离", "grep约定退出码", "自带Claude Skill与CLAUDE.md导出"],
+        "reusable_techniques": [
+            "mode=ro vs immutable=1 陷阱：immutable 跳过 -wal 静默给陈旧快照；WAL 下 mode=ro 并发安全且永远最新（MCP 只读服务方案的活体印证）",
+            "长操作前用 SQLite backup() API 拷稳定时间点副本",
+            "增量导出 manifest：sha256签名(全文+附件指纹) + 四重跳过校验(签名/路径/文件存在/mtime±1s) + 孤儿清理只删带自家水印的文件",
+            "safe_output_path 路径穿越防护（已抄进 oss-research 静态服务路由）",
+            "回收站识别用 ZFOLDERTYPE==1 语言无关标志而非本地化字符串；嵌套子文件夹沿 parent 链全收",
+            "排序元组 (match_count, iso_time) 一次搞定相关度优先+新近度破平局",
+            "无 FTS 现实下：小数据量先量化再决定缓存与否（800条<1s 则不缓存）",
+            "SKILL.md 范本：双语触发词/先查可用性/两步读/退出码约定/隐私节",
+        ],
+        "caveats": "直读他人 App 私有库是其场景所限（Apple 无公开 API），OpenBiliClaw 数据源都是自家库无需解码 blob；SetFile 改创建时间是外部依赖锦上添花；recent 的 Python 侧 break 代替 LIMIT 是被 folder 过滤逼的，自家查询不拼父链可直接 SQL LIMIT。报告已挪至 references/。",
+        "report_path": "references/AppleNotesCLI-借鉴分析.md",
+        "tags": ["macos", "cli", "sqlite", "readonly", "local-first", "mcp-plan-reference", "reference", "deep-research"],
     },
 ]
 
