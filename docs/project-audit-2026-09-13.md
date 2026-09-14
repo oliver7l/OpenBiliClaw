@@ -321,17 +321,26 @@
    `tests/cli/test_cli_config_module.py`（6 例，含 2 条补丁命中行为锁）。
    八刀累计 **7087 → 1926 行**（-5161，约 -73%）；90 条命令路径 worktree 对账 `diff` 为空，
    原块 ↔ 新模块正文逐行对账仅 4 处 `_cli` 导入空行差异。
+   **第九刀**：服务与运维组（`setup-embedding` / `start` / `set-password` / `serve-api` /
+   `db-repair` / `config-show` / `health-check` + `auth` / `login` / `browser` 三个子组，
+   13 命令 + 3 helper + 4 个 `_CODEX_LOGIN_*_OPTION` 常量，~515 行）抽至
+   `cli/_cmd_service.py`；首个 **`register(app, auth_app, login_app, browser_app)` 四参**
+   挂载（唯一挂多个子 Typer 的簇）。20 个共享符号 + **A′ 类** `_bump_auth_epoch` /
+   `_rebase_auth_fingerprint`（定义在新模块但被 patch 到 cli）全部 `_cli.X` 动态取；
+   3 符号在 cli 命名空间 re-export。守门 `tests/cli/test_cli_service_module.py`
+   （6 例，含 2 条补丁命中行为锁）。
+   九刀累计 **7087 → 1410 行**（-5677，约 -80%）；90 条命令路径对账 `diff` 为空。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（probe / soul / config 引导均已迁出；余 config 显示 / start /
-   set-password / auth / browser / db-repair / health-check 及构建 helper 等约 20 命令）待续。
+   与上帝文件后续簇（余 zhihu/dy 任务入队与收集 helper `_enqueue_*` / `_collect_*` /
+   `_*_bootstrap_events`、`_build_*` 构建 helper 族、`main` 与零散渲染/配置 helper）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|
    | `obc_runtime` 包 | **维持不建（暂停评审结论）** | runtime 44 文件依赖全部模块，收益低成本高 |
    | 「旧 import」路径 | **776 处**（llm 183 + soul 407 + discovery 186） | 迁移须与测试 monkeypatch 补丁点同步核查 |
    | 兼容垫片 | **25 个 `sys.modules[__name__]` 模块别名** + 一批 3 行 re-export | 别名家族用于保留 `monkeypatch.setattr` 补丁语义（类身份唯一），**不可按「零引用即删」处理** |
-   | 上帝文件 | `cli/__init__.py` **1926 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导七簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（config 显示 / start / auth / browser 等约 20 命令） |
+   | 上帝文件 | `cli/__init__.py` **1410 行**（已拆 note / cost+logs-prune / autostart / fetch-* / init / soul / config 引导 / 服务运维 八簇）；`api/app.py` 4084 行 | 建议继续按自洽簇抽离（zhihu/dy 任务 helper、`_build_*` 族等） |
 
 ---
 

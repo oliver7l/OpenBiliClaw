@@ -4,6 +4,40 @@
 
 ---
 
+## 重构：服务与运维命令族抽离 _cmd_service（P4 第九刀，2026-09-14）
+
+- **抽离规模**：13 条命令（`setup-embedding` / `start` / `set-password` / `serve-api` /
+  `db-repair` / `config-show` / `health-check` + `auth login` / `auth status` /
+  `login codex` / `browser status` / `browser open` / `browser content`）+
+  3 个 helper（`_bump_auth_epoch` / `_rebase_auth_fingerprint` / `_normalize_strategy_names`）+
+  `_BILIBILI_STRATEGY_NAMES` + 4 个 `_CODEX_LOGIN_*_OPTION` 常量，共 **~515 行** →
+  `cli/_cmd_service.py`（594 行）。`cli/__init__.py` **1925 → 1410 行**
+  （九刀累计 7087 → 1410，**-5677 行 / 约 -80%**）。
+- **注册形状**：本刀是首个同时挂载**多个子 Typer** 的簇——`register(app, auth_app,
+  login_app, browser_app)` 四参签名（`auth` / `login` / `browser` 三个子组由主文件定义并
+  `add_typer`，注册时传入），13 条命令名与形状逐条对齐。
+- **patch 语义**：20 个共享符号（`_run_db_repair` / `_is_interactive_terminal` /
+  `_build_registry` / `_build_auth_manager` / `_build_browser` / `_run_api_server` /
+  `_ensure_runtime_database_healthy` / `_maybe_create_runtime_database_backup` /
+  `console` 等）一律改为**函数体内** `from openbiliclaw import cli as _cli` + `_cli.X`
+  动态取；**A′ 类** `_bump_auth_epoch` / `_rebase_auth_fingerprint`（定义在新模块内、
+  但被 `monkeypatch.setattr(cli_module, ...)` patch）同样走 `_cli.X`，
+  cli 命名空间 re-export 这 3 个符号（含 `_normalize_strategy_names`，供 `_cmd_fetch`
+  经 cli 命名空间调用）。
+- **踩坑（对账脚本）**：命令名对账脚本用 `c.name or c.callback.__name__`，对
+  `@app.command()` 无参装饰的隐式命名会拿到 Python 函数名 `config_show`（下划线），
+  而 typer 实际注册的是 `config-show`（下划线转连字符）——因此新模块显式写
+  `app.command("config-show")` 是**正确**的，最初误改成 `config_show` 反而让 4 条
+  `config-show` 测试报 exit 2。修正：dump 脚本统一 `.replace("_", "-")` 后再比对。
+- **验证**：`tests/cli` **203 passed**（197 + 新增守门 `test_cli_service_module.py` 6 例，
+  含 2 条补丁命中行为锁）；定向子集
+  `tests/{cli,config,soul,recommendation,weekend,discovery,init,auth}` +
+  `tests/api/test_api_auth.py` **1204 passed**；全部 **90 条命令路径** worktree 对照 HEAD
+  `diff` 为空；原块 ↔ 新模块正文逐行对账**仅 6 处 docstring 后空行差异**（import 排序
+  副产品，零语义改动）；`ruff check` / `mypy` 全绿。
+
+---
+
 ## 重构：运行时配置写入 + 交互引导族抽离 _cmd_config（P4 第八刀，2026-09-14）
 
 - **抽离规模**：`_save_runtime_provider_config`（provider 落盘，340 行）+
