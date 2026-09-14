@@ -4,6 +4,18 @@
 
 ---
 
+## 重构：求职资料库三层架构（期0/期1/期2 完成，2026-09-14）
+
+按 `docs/plans/求职资料库三层架构重构.md` 把混乱的 5 库混装 + 45 脚本 + 568 md 三层对齐。
+
+- **期0（8e576dc7）**：`knowledge_audit.db` 242MB 归档（百万行审计垃圾）；18 来源分库经验证为活跃 L2 现行架构保留不归档；45 脚本分常驻/归档；体检报告归位。
+- **期1（f8ab5158）**：`interview.db` 23→13 表（21MB→10MB，纯面试域）；`kb_documents`+FTS 迁入 `knowledge.db`（L2 加工层）；`job`/`job_positions`/`resumes` 迁入 `resume.db` 扩展为投递域（companies/job_postings/applications/job_ammo/resume_texts）+新建 companies；管线惰性状态表归档后 DROP。iq 双轨定性（interview_questions.db 活跃刷题系统不合并）。代码：routes.py 7 端点换库、_interview_routes.py job→applications 等，TestClient 8/8 200。
+- **期2（8e7d1d35）**：文件层对齐。`scripts/kb_sync_ammo.py` 幂等同步 `03_岗位弹药库/*.md`→`interview.db.ammo_doc`（替代已归档 kb_layers.py 的 ammo 部分，重建 ammo_fts）；`00_总索引.md` 按 L1/L2/L3+数据层重写；引擎 README 补 DB 层说明。
+- **关键偏差（记入计划文档）**：`02_方向知识库` 经盘点已全为加工产物（无混入原始件），原「原始件下沉 01 / 目录更名 02_加工知识库」实际为极小动作；**更名暂缓**——该路径硬编码于 kb.py(6处) 且作为文件路径存于 `knowledge.db.kb_documents.source_path`(684行) 与 18 来源分库 `question.answer_loc`(~1802行)，更名将令 ~2500 行 DB 路径失效并波及活跃 L2 管线，纯为改名收益不抵风险。
+- **kb.py 收编 insert_*（期3 步骤1）经核实为 no-op**：kb.py 已含 查/岗位/数字/项目/速记/方向/索引/全部/add/flush/记录/语义/watch 全套子命令，无独立 insert_* 散装脚本需收编。
+
+---
+
 ## 重构：摘除 discovery/soul 兼容垫片，旧 import 专项收官（2026-09-14）
 
 旧 import 专项三批迁移（llm 186 处 / discovery 189 处 / soul 433 处，提交
