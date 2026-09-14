@@ -23,8 +23,9 @@
 
 ### ⚠️ 已知数据层问题（待整合，见 `docs/plans/面试模块梳理与整合方案.md`）
 
-- **「面试题」有三套表示**：`interview.db.question`(25，文件指针表) ／ `interview.db.interview_questions`(199，从 `03` 题库 md 解析，**暂无消费方**) ／ `interview_questions.db.iq_questions`(51，B 在用)。三表同名不同义、互不相通。
-- **两个同名导入脚本写向不同库**：`interview/questions/import_questions.py` → `iq_questions`；`scripts/import_interview_questions.py` → `interview_questions`。
+- **「面试题」有三套表示**：`interview.db.question`(25，文件指针表) ／ `interview.db.interview_questions`(199，从 `03` 题库 md 解析) ／ `interview_questions.db.iq_questions`(51，B 在用)。三表同名不同义、互不相通。
+  - ✅ **期1 已接线**：`interview_questions`(199) 现经 `GET /api/interview/kb-questions` 暴露，在桌面「全部题目」页以「📚 岗位题库」源只读展示（按公司/分类筛选）。
+- **两个同名导入脚本写向不同库**（✅ 期1 已消歧）：`interview/questions/seed_iq_questions.py`（原 `import_questions.py`，内置题→`iq_questions`）vs `scripts/import_interview_questions.py`（`03` 题库 md→`interview_questions`）。
 - **`interview.db` 表命名三种风格并存**：裸名（`question`/`concept`/…）、`interview_` 前缀、`ammo_` 前缀。
 
 ---

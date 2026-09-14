@@ -110,10 +110,10 @@
 
 ## 导入新题目
 
-编辑 `src/openbiliclaw/interview/questions/import_questions.py`，在对应的列表中添加题目，然后运行：
+编辑 `src/openbiliclaw/interview/questions/seed_iq_questions.py`，在对应的列表中添加题目，然后运行：
 
 ```bash
-.venv/bin/python -m openbiliclaw.interview.questions.import_questions
+.venv/bin/python -m openbiliclaw.interview.questions.seed_iq_questions
 ```
 
 ## 阅读建议

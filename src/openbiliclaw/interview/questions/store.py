@@ -275,6 +275,14 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
+    def count_questions(self) -> int:
+        """题库总题数（轻量 COUNT，供 API 计数用）。"""
+        conn = self._conn()
+        try:
+            return conn.execute("SELECT COUNT(*) FROM iq_questions").fetchone()[0]
+        finally:
+            conn.close()
+
     # ── 待看队列 ───────────────────────────────────────────────
 
     def add_to_queue(self, qid: int, priority: Priority = Priority.MEDIUM, planned_date: date | None = None) -> bool:

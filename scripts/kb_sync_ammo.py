@@ -23,10 +23,10 @@
 from __future__ import annotations
 
 import re
-import sys
 import sqlite3
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 KB_ROOT = PROJECT_ROOT / "求职知识库"          # rel_path 以此为基准
@@ -42,22 +42,30 @@ CREATE TABLE IF NOT EXISTS ammo_doc(
 """
 
 
+# 通用资产目录（清单/模板/共享简历等）：其下文件不归属任何公司，company 归「通用」。
+_GENERIC_DIRS = {"00_投递清单", "模板", "定制简历"}
+
+
 def derive_company_kind(rel_parts: tuple[str, ...]) -> tuple[str, str]:
     """从相对路径推导 company / kind。
 
     ``rel_parts`` 形如 ``('03_岗位弹药库', '<面试准备目录>', ['<子目录>'], '<文件>')``。
-    company 取面试准备目录名，去掉尾部 '-面试准备' 与日期后缀；
+
+    - **根级文件**（``len == 2``，直接位于 03_岗位弹药库 下，如 README/总索引）→ company='通用'；
+    - **通用资产目录**（见 ``_GENERIC_DIRS``）下的文件 → company='通用'；
+    - 其余取目录名，去掉尾部 '-面试准备' 与日期后缀。
+
     kind 取子目录名（去数字前缀），无子目录则为 '根目录'。
     """
-    interview_dir = rel_parts[1] if len(rel_parts) > 1 else ""
-    company = interview_dir
-    if company.endswith("-面试准备"):
-        company = company[: -len("-面试准备")]
+    if len(rel_parts) < 2:
+        return ("通用", "根目录")
+    seg = rel_parts[1]
+    kind = re.sub(r"^\d+_", "", rel_parts[2]) if len(rel_parts) >= 3 else "根目录"
+    if len(rel_parts) == 2 or seg in _GENERIC_DIRS:
+        # 根级文件 / 通用资产目录 → 不归属任何公司
+        return ("通用", kind)
+    company = seg[: -len("-面试准备")] if seg.endswith("-面试准备") else seg
     company = re.sub(r"-\d{4}-\d{2}-\d{2}.*$", "", company)
-    if len(rel_parts) >= 3:
-        kind = re.sub(r"^\d+_", "", rel_parts[2])
-    else:
-        kind = "根目录"
     return (company or "通用"), kind
 
 

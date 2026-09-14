@@ -4,6 +4,7 @@
 
   const API_BASE = "/api/interview";
   let currentSubtab = "schedule";
+  let currentBank = "iq"; // 「全部题目」页当前题库源：iq=追踪题库 / kb=岗位题库
   let cachedData = {
     stats: null,
     schedule: null,
@@ -11,6 +12,7 @@
     today: null,
     queue: null,
     all: null,
+    all_kb: null,
     ammo: null,
     reviews: null,
   };
@@ -762,19 +764,97 @@
   // ── 全部题目 ──────────────────────────────────────────────
 
   function renderAll(area) {
-    if (cachedData.all) {
-      area.innerHTML = renderQuestionsHtml(cachedData.all.questions, "全部题目");
+    const cacheKey = currentBank === "kb" ? "all_kb" : "all";
+    if (cachedData[cacheKey]) {
+      renderAllHtml(area, cachedData[cacheKey]);
       return;
     }
-    requestJson(API_BASE + "/questions?limit=200")
+    const url = currentBank === "kb"
+      ? API_BASE + "/kb-questions?limit=300"
+      : API_BASE + "/questions?limit=200";
+    requestJson(url)
       .then((data) => {
-        cachedData.all = data;
-        area.innerHTML = renderQuestionsHtml(data.questions, "全部题目");
+        cachedData[cacheKey] = data;
+        renderAllHtml(area, data);
       })
       .catch((err) => {
         console.error("加载全部题目失败:", err);
         area.innerHTML = '<div class="interview-empty">加载失败，请刷新重试</div>';
       });
+  }
+
+  function renderAllHtml(area, data) {
+    const bank = data.bank || currentBank;
+    const iqTotal = data.iq_total != null ? data.iq_total : 0;
+    const kbTotal = data.kb_total != null ? data.kb_total : 0;
+    const bar = `
+      <div class="interview-bank-bar">
+        <button class="interview-bank-btn${bank === "iq" ? " is-active" : ""}" data-bank="iq" type="button">📖 追踪题库 (${iqTotal})</button>
+        <button class="interview-bank-btn${bank === "kb" ? " is-active" : ""}" data-bank="kb" type="button">📚 岗位题库 (${kbTotal})</button>
+      </div>
+    `;
+    area.innerHTML = bar + (bank === "kb" ? renderKbQuestionsHtml(data) : renderQuestionsHtml(data.questions, "全部题目"));
+    bindBankBar(area);
+  }
+
+  function bindBankBar(area) {
+    area.querySelectorAll(".interview-bank-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = btn.dataset.bank;
+        if (next === currentBank) return;
+        currentBank = next;
+        renderAll(area);
+      });
+    });
+    const chips = area.querySelectorAll(".interview-bank-chip");
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        chips.forEach((c) => c.classList.remove("is-active"));
+        chip.classList.add("is-active");
+        const target = chip.dataset.company || "";
+        area.querySelectorAll(".interview-kb-card").forEach((card) => {
+          card.style.display = !target || card.dataset.company === target ? "" : "none";
+        });
+      });
+    });
+  }
+
+  // 岗位题库（来源：03_岗位弹药库 题库/速成包 md，只读）
+  function renderKbQuestionsHtml(data) {
+    const questions = data.questions || [];
+    if (questions.length === 0) {
+      return '<div class="interview-empty">岗位题库为空（可运行 scripts/import_interview_questions.py --apply 生成）</div>';
+    }
+    const companies = data.companies || [];
+    const chips = [`<button class="interview-bank-chip is-active" data-company="" type="button">全部 (${questions.length})</button>`]
+      .concat(companies.map((c) => `<button class="interview-bank-chip" data-company="${escapeHtml(c)}" type="button">${escapeHtml(c)}</button>`))
+      .join("");
+    return `
+      <div style="margin-bottom:10px;font-size:13px;color:var(--muted);">
+        📚 岗位题库：共 ${data.total} 题 · 来源「03_岗位弹药库」题库/速成包 md（只读，不含掌握度）
+      </div>
+      <div class="interview-bank-filter">${chips}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${questions.map(renderKbQuestionCard).join("")}
+      </div>
+    `;
+  }
+
+  function renderKbQuestionCard(q) {
+    return `
+      <div class="interview-question-card interview-kb-card" data-company="${escapeHtml(q.company || "")}">
+        <div class="interview-question-header">
+          <div class="interview-question-title">${escapeHtml(q.title)}</div>
+          <div class="interview-question-meta">
+            <span class="interview-category">${escapeHtml(q.category || "未分类")}</span>
+          </div>
+        </div>
+        ${q.source ? `<div class="interview-question-tags">🏢 ${escapeHtml(q.source)}</div>` : ""}
+        ${q.answer ? `<div class="interview-kb-answer"><strong>参考答案</strong>${escapeHtml(q.answer)}</div>` : ""}
+        ${q.want_to_hear ? `<div class="interview-kb-want"><strong>面试官想听</strong>${escapeHtml(q.want_to_hear)}</div>` : ""}
+        ${q.source_path ? `<div class="interview-question-tags">📄 ${escapeHtml(q.source_path)}</div>` : ""}
+      </div>
+    `;
   }
 
   function renderQuestionsHtml(questions, title, plan) {

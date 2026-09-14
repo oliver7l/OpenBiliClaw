@@ -25,6 +25,29 @@ def _get_store() -> InterviewQuestionStore:
     return InterviewQuestionStore(DB_PATH)
 
 
+def _kb_question_conn() -> sqlite3.Connection:
+    """岗位题库（interview.db.interview_questions）只读连接。"""
+    conn = sqlite3.connect(str(INTERVIEW_DB_PATH), timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _kb_question_count() -> int:
+    """岗位题库题数（表不存在或库未建时返回 0）。"""
+    if not INTERVIEW_DB_PATH.exists():
+        return 0
+    try:
+        conn = _kb_question_conn()
+    except sqlite3.Error:
+        return 0
+    try:
+        return conn.execute("SELECT COUNT(*) FROM interview_questions").fetchone()[0]
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
+
+
 class ReadRequest(BaseModel):
     mastery: str = "reading"
     notes: str = ""
@@ -118,6 +141,7 @@ def list_questions(
         mastery = store.get_question_mastery(q.id)
         result.append({
             "id": q.id,
+            "bank": "iq",
             "title": q.title,
             "category": q.category.value,
             "difficulty": q.difficulty,
@@ -125,7 +149,110 @@ def list_questions(
             "tags": q.tags,
             "mastery": mastery.value,
         })
-    return {"questions": result, "total": len(result)}
+    return {
+        "bank": "iq",
+        "questions": result,
+        "total": len(result),
+        "iq_total": store.count_questions(),
+        "kb_total": _kb_question_count(),
+    }
+
+
+@router.get("/kb-questions")
+def list_kb_questions(
+    company: str | None = Query(None),
+    category: str | None = Query(None),
+    q: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """岗位题库（只读）：由 `03_岗位弹药库` 的题库/速成包 md 解析而来的真题。
+
+    数据源 `interview.db.interview_questions`（199 条），与 iq 追踪题库互补：
+    此处只做「查看/筛选」，掌握度追踪仍由 iq 题库承担。
+    """
+    empty = {
+        "bank": "kb",
+        "questions": [],
+        "total": 0,
+        "iq_total": _get_store().count_questions(),
+        "kb_total": 0,
+        "companies": [],
+        "categories": [],
+    }
+    if not INTERVIEW_DB_PATH.exists():
+        return empty
+
+    where: list[str] = []
+    params: list[Any] = []
+    if company:
+        where.append("company = ?")
+        params.append(company)
+    if category:
+        where.append("category = ?")
+        params.append(category)
+    if q:
+        where.append("(question LIKE ? OR answer LIKE ? OR want_to_hear LIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    conn = _kb_question_conn()
+    try:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM interview_questions{clause}", params
+        ).fetchone()[0]
+        rows = conn.execute(
+            "SELECT id, company, position, category, question, answer, want_to_hear, "
+            "source_path, source_type FROM interview_questions"
+            f"{clause} ORDER BY company, source_path, idx, id LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+        questions = [
+            {
+                "id": r["id"],
+                "bank": "kb",
+                "title": r["question"],
+                "answer": r["answer"] or "",
+                "want_to_hear": r["want_to_hear"] or "",
+                "category": r["category"] or "",
+                "difficulty": 0,  # 岗位题库无难度字段
+                "company": r["company"] or "",
+                "position": r["position"] or "",
+                "source": " · ".join(x for x in (r["company"], r["position"]) if x),
+                "tags": r["category"] or "",
+                "source_path": r["source_path"],
+                "source_type": r["source_type"] or "题库",
+                "mastery": "not_started",
+            }
+            for r in rows
+        ]
+        companies = [
+            r[0]
+            for r in conn.execute(
+                "SELECT company, COUNT(*) c FROM interview_questions "
+                "WHERE company != '' GROUP BY company ORDER BY c DESC"
+            )
+        ]
+        categories = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT category FROM interview_questions "
+                "WHERE category != '' ORDER BY category"
+            )
+        ]
+        return {
+            "bank": "kb",
+            "questions": questions,
+            "total": total,
+            "iq_total": _get_store().count_questions(),
+            "kb_total": total if not (company or category or q) else _kb_question_count(),
+            "companies": companies,
+            "categories": categories,
+        }
+    except sqlite3.Error:
+        return empty
+    finally:
+        conn.close()
 
 
 @router.get("/questions/{question_id}")

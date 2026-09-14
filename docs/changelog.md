@@ -4,6 +4,24 @@
 
 ---
 
+## 重构：面试模块期 1 数据层归一（2026-09-14）
+
+延续上一期的诊断，按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 1（数据层归一）**。
+
+- **接线孤儿题库**：`interview.db.interview_questions`(199，从 `03` 题库 md 解析、此前**无消费方**)
+  经新增 `GET /api/interview/kb-questions` 暴露，在桌面「全部题目」页以「📚 岗位题库」源**只读**展示
+  （题面 / 参考答案 / 面试官想听 / 来源路径，支持公司 + 关键词筛选），与「📖 追踪题库」(iq) 双源切换。
+- `GET /api/interview/questions` 纯增量返回 `bank` / `iq_total` / `kb_total`；store 增 `count_questions()`。
+- **消歧重名脚本**：`interview/questions/import_questions.py` → `seed_iq_questions.py`
+  （原与 `scripts/import_interview_questions.py` 名字近同、用途相反）；同步 pyproject 与两处文档。
+- **修派生索引 company 取值**：`scripts/kb_sync_ammo.py` 的 `derive_company_kind` 对根级文件/通用目录
+  （`00_投递清单` / `模板` / `定制简历`）不再取文件名/目录名为公司，统一归 `通用`。
+
+**验证**：TestClient 冒烟 `/questions` `/kb-questions` `/stats` `/today` `/queue` 全 200 且原行为不变；
+`kb_sync_ammo --apply --prune` 151 行、无伪公司。**未动** `interview_questions.db`（iq 双轨既有决策）。
+
+---
+
 ## 梳理：面试模块诊断与期 0 文件层整合（2026-09-14）
 
 按 `docs/plans/面试模块梳理与整合方案.md` 梳理「面试域」。诊断结论：**「面试模块」实为三个互不相关的

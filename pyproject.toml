@@ -129,7 +129,7 @@ ignore = ["TC001", "TC002", "TC003"]
 # 策略注册工厂：函数名即平台策略名（SearchStrategy() 等），大写为公共 API 约定
 "packages/obc-discovery/obc_discovery/strategies/__init__.py" = ["N802", "N813"]
 # 长文本内容文件：题目原文 / LLM prompt / SQL 模板为不可换行的整体字符串
-"src/openbiliclaw/interview/questions/import_questions.py" = ["E501"]
+"src/openbiliclaw/interview/questions/seed_iq_questions.py" = ["E501"]
 "packages/obc_llm/obc_llm/prompts.py" = ["E501"]
 "src/openbiliclaw/scripts/build_knowledge_backlinks.py" = ["E501"]
 "src/openbiliclaw/interview/routes.py" = ["E501"]

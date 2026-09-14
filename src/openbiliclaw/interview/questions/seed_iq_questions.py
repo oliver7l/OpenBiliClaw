@@ -1,7 +1,11 @@
-"""导入面试题到阅读追踪数据库。
+"""向 iq 题库（``data/interview_questions.db``）播种内置面试题。
+
+与 ``scripts/import_interview_questions.py`` **用途不同，勿混用**：
+- 本脚本：播撒硬编码的内置题（淘天生成式推荐 / ReAct / 作业帮），写 ``interview_questions.db`` 的 ``iq_*`` 表；
+- 那个脚本：把 ``求职知识库/03_岗位弹药库`` 的题库/速成包 md 解析进 ``interview.db.interview_questions``。
 
 用法：
-    python -m openbiliclaw.interview.questions.import_questions
+    python -m openbiliclaw.interview.questions.seed_iq_questions
 """
 
 from __future__ import annotations
