@@ -853,8 +853,20 @@ class SelfEvolutionLoopEngine:
         """增量分析未分析的聊天会话，每 6 小时最多处理 10 个会话。"""
         try:
             from openbiliclaw.chat_analysis.service import ChatAnalysisService
+            from openbiliclaw.config import _project_root
 
-            svc = ChatAnalysisService(db_path=Path("data/chat_analysis.db"))
+            # 2026-09-15 修复：原先这里 (1) 没传 llm_service、(2) 用 CWD 相对路径。
+            # 没有 llm_service 时分析会静默返回空，而旧版 service 仍把会话标记成
+            # analyzed=1 —— 造成 219 个「已分析但零产出」的会话且不可自愈。
+            # 现在 service 侧已加保护（空结果不标记），这里补齐前置条件：
+            #   无 LLM 直接跳过（避免空跑 + 避免标记），路径走项目根锚点。
+            if self._llm_service is None:
+                logger.debug("self_evolution: chat analysis skipped (no llm service)")
+                return {"skipped": "no_llm_service"}
+            svc = ChatAnalysisService(
+                db_path=_project_root() / "data" / "chat_analysis.db",
+                llm_service=self._llm_service,
+            )
             result = await svc.analyze_unanalyzed(limit=10, concurrency=2)
             if result:
                 logger.info("self_evolution: chat analysis done: %s", result)

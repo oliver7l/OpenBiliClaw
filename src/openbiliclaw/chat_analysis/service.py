@@ -521,12 +521,41 @@ class ChatAnalysisService:
 
         return result
 
-    async def analyze_unanalyzed(self, limit: int = 20, concurrency: int = 3) -> dict[str, int]:
-        """批量分析未分析的会话，每个会话执行完整分析后标记为已分析。
+    @staticmethod
+    def _analysis_has_output(result: dict[str, Any]) -> bool:
+        """判断一次分析是否真的产出了东西。
 
-        增量设计：每次只处理 limit 个未分析会话，分析完成后标记 analyzed=1，
-        下次再跑时会跳过已分析的。
+        本方法存在的理由（2026-09-15 修复）：``_call_llm`` 在「没有 llm_service /
+        配额耗尽 / 调用失败 / 返回空」时统一返回 ``None``，而三个分析函数又都静默返回
+        空结果——**不抛异常**。若调用方不看产出就标记 ``analyzed=1``，会话会被永久
+        跳过且永远不会有产出（实测库里 220 个已分析会话中 219 个零产出）。
         """
+        return bool(
+            result.get("topic_count")
+            or result.get("insight_count")
+            or result.get("summary")
+            or result.get("topics")
+            or result.get("insights")
+        )
+
+    async def analyze_unanalyzed(self, limit: int = 20, concurrency: int = 3) -> dict[str, int]:
+        """批量分析未分析的会话。
+
+        增量设计：每次只处理 limit 个未分析会话；**只有真的产出内容才标记
+        analyzed=1**，否则保持未分析，下轮再试。
+
+        修复记录（2026-09-15）：原先 ``analyze_session`` 只要不抛异常就标记已分析，
+        而 LLM 缺失时它恰好「不抛异常、只返回空」——于是定时任务把 219 个会话
+        标记成已分析却零产出，且它们此后不会再被捞到（污染不可自愈）。
+        """
+        if self._get_llm() is None:
+            logger.warning(
+                "chat_analysis: 未配置可用的 LLM 服务（缺 llm_service 或缺少 "
+                "complete_structured_task），跳过本轮增量分析 —— 不标记任何会话，"
+                "以免把会话标记成「已分析」却零产出。"
+            )
+            return {"analyzed": 0, "total": 0, "skipped_no_llm": 1}
+
         sessions = self.store.get_unanalyzed_sessions(limit=limit)
         if not sessions:
             return {"analyzed": 0, "total": 0}
@@ -539,7 +568,16 @@ class ChatAnalysisService:
                     logger.info(
                         "chat_analysis: analyzing session %d (%s)", session.id, session.title
                     )
-                    await self.analyze_session(session.id)
+                    result = await self.analyze_session(session.id)
+                    if not self._analysis_has_output(result):
+                        # LLM 缺失/失败时 analyze_session 返回全空且不抛异常。
+                        # 此时标记 analyzed=1 会让该会话永久失去被分析的机会。
+                        logger.warning(
+                            "chat_analysis: session %d 分析结果为空（LLM 无返回），"
+                            "保持未分析状态以便下轮重试",
+                            session.id,
+                        )
+                        return False
                     self.store.mark_session_analyzed(session.id)
                     return True
                 except Exception as exc:

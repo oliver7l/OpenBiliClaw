@@ -929,9 +929,24 @@ class ChatAnalysisStore:
             chat_type=ct,
             file_path=row["file_path"] or None,
             file_size=row["file_size"],
+            # 2026-09-15 修复：``analyzed`` / ``last_analyzed_at`` 原先**完全没被映射**，
+            # 于是 get_session() / list_sessions() / 各 API 永远报告 ``analyzed=False``
+            # ——已分析的会话在界面上显示为未分析。列是迁移时 ALTER 加的，可能不存在
+            # 于极旧的库，故按列名取值而非下标，并做缺省处理。
+            analyzed=bool(self._row_value(row, "analyzed", 0)),
+            last_analyzed_at=(self._row_value(row, "last_analyzed_at", "") or None),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    @staticmethod
+    def _row_value(row: sqlite3.Row, key: str, default):  # noqa: ANN001, ANN205
+        """按列名取值，列不存在（旧库缺迁移列）时返回默认值。"""
+        try:
+            value = row[key]
+        except (IndexError, KeyError):
+            return default
+        return default if value is None else value
 
     def _row_to_message(self, row: sqlite3.Row) -> ChatMessage:
         return ChatMessage(
