@@ -104,7 +104,15 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 > **修复记录（`5d31f193`，2026-09-15）**：已止血——`loop_engine` 无 LLM 直接跳过并传 `llm_service`、路径改走 `_project_root()`；`service` 新增 `_analysis_has_output()`，分析为空**不**标记。
 > 顺带修掉一个**掩盖本 bug 的读路径缺陷**：`store._row_to_session` 压根没映射 `analyzed` / `last_analyzed_at`，`ChatSession.analyzed` 恒为 False —— 服务层错标了，界面却一律显示「未分析」，两者互相掩盖。
 > 回归 4 条（worktree 修复前 3 failed / 1 passed），**断言刻意直接查库而非读模型字段**（否则又会被掩盖成恒 False）。
-> ⚠️ **存量 219 个会话未重置**（重置 = 800 会话 × 3 次 LLM 真实消耗，需你授权）。
+
+> **存量数据已重置（2026-09-15 07:07，用户授权）**：
+> - 脚本 `scripts/chat_analysis_reset_analyzed.py`（默认 dry-run，`--apply` 才写库）
+> - 结果：`analyzed=1` 由 **220 → 2**（只剩真正有产出的 session 1 与 244）；`analyzed=0` **581 → 799**
+> - 回滚清单（含 219 个 id + 原 `last_analyzed_at`）：`data/chat_analysis_backups/reset-analyzed-20260915-070729.json`
+>   回滚命令：`.venv/bin/python scripts/chat_analysis_reset_analyzed.py --revert <该 JSON> --apply`
+> - **冒烟验证**（重置前先证明管道可用，避免 800×3 次空转）：`POST /api/chat-analysis/sessions/244/analyze` → **8 个话题 + 10 条洞察 + 完整摘要**，消耗 3 次调用
+> - 因该 API 路径本身不标记 analyzed，已用 `--mark-with-output` 把 244 补标为已分析，避免被定时任务重复分析产生重复行
+> - 后续行为：定时任务每 6 小时分析 10 个、每天约 40 个 → 799 个约 **20 天**跑完；若 LLM 缺失则整轮跳过（不再毒化）
 
 ### 🔴 C2. 导入不幂等：832 条 chunk 里 419 条是重复（**已亲自复核**）
 
@@ -150,6 +158,34 @@ chat_topics 25 行 / chat_insights 20 行 / chat_embeddings 0 行 —— 全部�
 
 ## 5. 需要你拍板的（承接上一轮）
 
-1. **存量 219 个假已分析会话**：要不要把它们的 `analyzed` 重置为 0？（代码已修，不会**再**污染；但存量需要重置才能被重新分析，代价是约 800 会话 × 3 次 LLM 真实消耗）
+1. ~~**存量 219 个假已分析会话**：要不要把它们的 `analyzed` 重置为 0？~~ → **已重置（2026-09-15，用户授权）**，见 §2 C1 修复记录。
 2. **重复的 419 条 chunk / 可能成倍的消息重复**：要不要加 UNIQUE 约束 + `INSERT OR IGNORE`，并清洗存量？（会动 924 MB 的库，建议先备份）
 3. 上一轮那 4 项仍待定：旅游真值源 / 阅读库真值源 / saved_sync 去留 / 面试 12 个垫片。
+
+---
+
+## 6. 接续点（下次从这里开始）
+
+本轮（2026-09-15）**已收尾**。下次继续时直接看这张表：
+
+| 待办 | 现状 | 起点 |
+|---|---|---|
+| **聊天分析重复数据** | 未处理 | 本文 §2 C2；先跑一次重复统计再决定是否加约束 |
+| **旅游真值源** | 待你拍板 | `module-review-2026-09-15.md` §2 T1 |
+| **阅读库真值源（稍后读双写）** | 待你拍板 | 同上 §4 R2 |
+| **saved_sync 原生保存：补 adapter 还是删** | 待你拍板 | 同上 §4 R3 |
+| **面试 12 个兼容垫片** | 待你拍板（我建议现在摘） | 同上 §5 I3 |
+| **健康模块三修**（时间线分页 / 空壳表 / 文档） | 未开始，**风险低** | 同上 §6 H1/H2/H6 |
+| **路径统一**（34 处） | 已用棘轮冻住，未逐个改 | `tests/test_architecture_contracts.py` 基线即清单，改一处删一行 |
+| **`sources` + `storage` 模块文档** | 未开始（两个包都没文档） | 本文 §1 |
+| **`self_evolution` 零测试补课** | 未开始（9,284 行零测试） | 同上 |
+| **质量门禁 mypy 55 → 0** | 未开始 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
+
+**每批次的固定动作**（本轮已验证有效，照做即可）：
+
+1. 先只读取证（读码 + `sqlite3 ?mode=ro` + curl openapi），**关键结论自己复核一遍**
+2. 有缺陷就写回归测试，**先在 worktree@修复前跑一遍证明它会失败**（没失败＝零鉴别力，要改断言口径）
+3. 改完跑目标测试 + ruff + mypy（只比对该文件是否引入新错）
+4. Python 改动 → `pm2 restart openbiliclaw-api`；前端改动**不用**重启
+5. 提交只 add 自己的路径（工作树里常年有另一条工作线的改动）
+6. 落 `docs/` + 日志 + 必要时更新本文与 `architecture-map.md`
