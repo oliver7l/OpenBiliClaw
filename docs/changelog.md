@@ -4,6 +4,27 @@
 
 ---
 
+## 梳理：面试模块诊断与期 0 文件层整合（2026-09-14）
+
+按 `docs/plans/面试模块梳理与整合方案.md` 梳理「面试域」。诊断结论：**「面试模块」实为三个互不相关的
+子系统共用 `/api/interview` 命名空间**——A 岗位备战（`interview/{engine,routes,cli}.py`）、
+B 题目研习（`api/_interview_routes.py` + `interview/questions/`）、C 面试复盘（`interview/review_*.py`）。
+
+**期 0（文件层 + 文档，零代码）**：
+- 字节已合并归档目录归位至 `_系统_知识库引擎/存档/`（保住 4 个 `.url` 书签 + PDF 等独有件）
+- 根级 11 个投递/清单类文件收进 `03_岗位弹药库/00_投递清单/`；03 根级 13 文件 → 2 文件
+- 统一复盘目录名（`03_面试复盘`/`05_面试记录` → `05_面试复盘`）；字节目录去重号（`03_上次面试记录` → `06_`）与层名对齐
+- `00_岗位弹药库总索引.md` 全量重写（对齐 `resume.db.applications` 权威状态）；`README.md` 瘦身为指路，消除双索引
+- 新增 `docs/modules/interview-overview.md` 三子系统总览；`interview.md` / `interview-reading-tracker.md` 加交叉引用
+
+**验证**：`interview doctor` C1–C4 PASS；`/company-profiles` 9 家、`/ammo` 9 家 83 文件无断链；
+`kb_sync_ammo.py --apply --prune` 后 ammo_doc 151 行与磁盘零差异；`interview index --rebuild` 5806 文件。
+
+**方案修正**：上一层重构期 1 已把 `interview_questions.db` 定性为「活跃刷题系统，不合并」，
+本方案据此取消"合并双库"，改为只处置 `interview.db.interview_questions`(199，无消费方) 孤儿表。
+
+---
+
 ## 重构：求职资料库三层架构（期0/期1/期2 完成，2026-09-14）
 
 按 `docs/plans/求职资料库三层架构重构.md` 把混乱的 5 库混装 + 45 脚本 + 568 md 三层对齐。

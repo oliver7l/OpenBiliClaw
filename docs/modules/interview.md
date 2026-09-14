@@ -1,5 +1,9 @@
 # 求职面试备战模块（interview）
 
+> ⚠️ **本文只描述「面试域」三子系统中的 A · 岗位备战**。三子系统总览见
+> [`interview-overview.md`](./interview-overview.md)（另有 B · 题目研习、C · 面试复盘，
+> 三者共用 `/api/interview` 命名空间）。
+
 > 把外部「三层求职知识库」接入 OpenBiliClaw 的统一入口：岗位信息、全文检索、
 > 真实数字、项目库、面试速记卡、全库索引、面试日志、新岗位建档，CLI 与 API 双通道。
 
