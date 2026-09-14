@@ -223,19 +223,19 @@ def _build_memory_manager() -> Any:
 def _build_discovery_engine() -> Any:
     """Build the discovery engine with currently implemented strategies."""
 
-    from obc_llm.service import LLMService, module_overrides_from_config
-
-    from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.discovery.engine import (
+    from obc_discovery.engine import (
         ContentDiscoveryEngine,
         DiscoveryConcurrencyController,
     )
-    from openbiliclaw.discovery.strategies.strategies import (
+    from obc_discovery.strategies.strategies import (
         ExploreStrategy,
         RelatedChainStrategy,
         SearchStrategy,
         TrendingStrategy,
     )
+    from obc_llm.service import LLMService, module_overrides_from_config
+
+    from openbiliclaw import cli as _cli  # noqa: E402
 
     memory = _cli._build_memory_manager()
     database = _cli._get_runtime_database()

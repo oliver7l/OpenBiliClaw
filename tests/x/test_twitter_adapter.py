@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.sources.protocol import SourceAdapter, SourceRecipe
 from openbiliclaw.sources.twitter_adapter import XAdapter
 

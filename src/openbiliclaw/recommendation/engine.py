@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
 from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
 from obc_llm.service import is_llm_rate_limit_error
 
-from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
 from openbiliclaw.soul.tone import ToneProfile, build_tone_profile
 
 
@@ -76,9 +76,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
     from types import TracebackType
 
+    from obc_discovery.engine import DiscoveredContent
     from obc_llm.base import LLMResponse
 
-    from openbiliclaw.discovery.engine import DiscoveredContent
     from openbiliclaw.recommendation.curator import PoolCurator
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
     from openbiliclaw.soul.profile import InterestTag, SoulProfile
@@ -117,7 +117,7 @@ def _recommendation_profile_summary(
     embedding-selected, content-relevant tag list for the default weight-ranked
     one.
     """
-    from openbiliclaw.discovery.strategies._utils import build_profile_summary
+    from obc_discovery.strategies._utils import build_profile_summary
 
     return build_profile_summary(profile, interests=interests)
 
@@ -2886,7 +2886,7 @@ class RecommendationEngine:
         Single source of truth for the row → dataclass field mapping so
         adding/removing a pool column only needs one edit.
         """
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from obc_discovery.engine import DiscoveredContent
 
         return [
             DiscoveredContent(

@@ -6,7 +6,8 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.recommendation.curator import (
     FeedbackSignals,
     PoolCurator,
@@ -101,7 +102,8 @@ def test_combined_topic_fatigue_uses_max_of_key_and_group_axes() -> None:
     saturate the topic_group axis (动漫). The combined helper must take
     the max so the group signal isn't lost.
     """
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from obc_discovery.engine import DiscoveredContent
+
     from openbiliclaw.recommendation.curator import ScoringContext
 
     item = DiscoveredContent(bvid="BV1A", title="t", topic_key="动漫杂谈", topic_group="动漫")

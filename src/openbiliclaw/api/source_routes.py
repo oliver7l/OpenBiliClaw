@@ -537,7 +537,7 @@ def register_source_routes(
     xhs_url_prefix = "https://www.xiaohongshu.com/"
 
     def _discovery_candidate_pending_cap() -> int:
-        from openbiliclaw.discovery.candidate_pool import discovery_candidate_pending_cap
+        from obc_discovery.candidate_pool import discovery_candidate_pending_cap
 
         scheduler = getattr(config, "scheduler", None)
         target = int(getattr(scheduler, "pool_target_count", 300) or 300)
@@ -559,8 +559,8 @@ def register_source_routes(
         source_keyword_id: int | None = None,
     ) -> int:
         """Enqueue extension-collected Bilibili search videos for evaluation."""
-        from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from obc_discovery.candidate_pool import discovered_content_to_candidate_write
+        from obc_discovery.engine import DiscoveredContent
 
         enqueue = getattr(database, "enqueue_discovery_candidates", None)
         if not callable(enqueue):
@@ -961,8 +961,8 @@ def register_source_routes(
         each ingested candidate here so admission can backfill the keyword's
         yield. ``None`` for passive / observed / non-planner ingests.
         """
-        from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from obc_discovery.candidate_pool import discovered_content_to_candidate_write
+        from obc_discovery.engine import DiscoveredContent
 
         enqueue = getattr(database, "enqueue_discovery_candidates", None)
         if not callable(enqueue):

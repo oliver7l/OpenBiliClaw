@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from openbiliclaw.discovery.candidate_pool import (
+from obc_discovery.candidate_pool import (
     DiscoveryCandidateWrite,
     discovered_content_to_candidate_write,
     row_to_discovered_content,
 )
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.storage.database import Database
 
 if TYPE_CHECKING:

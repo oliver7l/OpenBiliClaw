@@ -37,8 +37,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 import pytest
-
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
 
 # ---------------------------------------------------------------------------
 # 1. Migration on an existing v0.3.17-shape database
@@ -173,7 +172,8 @@ async def test_evaluator_propagates_llm_franchise_key_through_to_db(
         with the value still attached)
       * persisted to ``content_cache.franchise_key`` after cache_content
     """
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
+    from obc_discovery.engine import ContentDiscoveryEngine
+
     from openbiliclaw.storage.database import Database
 
     # Fake LLM that returns the schema with franchise_key per item.
@@ -294,7 +294,7 @@ async def test_evaluate_content_batch_default_size_45_uses_single_llm_call(
     exactly 1 LLM call, not 2 (which the old 30-item batch_size would
     have caused: ceil(44/30) = 2).
     """
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
+    from obc_discovery.engine import ContentDiscoveryEngine
 
     class _Resp:
         def __init__(self, payload: list[dict[str, object]]) -> None:

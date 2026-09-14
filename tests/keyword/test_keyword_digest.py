@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from openbiliclaw.discovery.keyword_digest import profile_kw_digest
+from obc_discovery.keyword_digest import profile_kw_digest
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 

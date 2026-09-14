@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 from obc_llm.embedding import mmr_cache_text
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.agents import RankAgent
 from openbiliclaw.recommendation.engine import RecommendationEngine
 from openbiliclaw.storage.database import Database

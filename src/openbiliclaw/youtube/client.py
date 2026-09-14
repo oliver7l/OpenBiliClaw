@@ -28,7 +28,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 from urllib import request as urllib_request
 
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -9,11 +9,11 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+from obc_discovery.candidate_pool import DiscoveryCandidateWrite
+from obc_discovery.engine import ContentDiscoveryEngine
 from tests.discovery.test_search_strategy import _build_profile
 
-from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-from openbiliclaw.discovery.candidate_pool import DiscoveryCandidateWrite
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 from openbiliclaw.runtime.events import RuntimeEventHub
 from openbiliclaw.runtime.presence import PresenceTracker

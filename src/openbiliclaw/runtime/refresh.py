@@ -9,11 +9,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
-from openbiliclaw.config import SchedulerConfig
-from openbiliclaw.discovery.pool_snapshot import (
+from obc_discovery.pool_snapshot import (
     build_cold_start_pool_snapshot,
     build_pool_distribution_snapshot,
 )
+
+from openbiliclaw.config import SchedulerConfig
 from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
 from openbiliclaw.runtime._refresh_loop_supervision_mixin import LoopSupervisionMixin
 from openbiliclaw.runtime._refresh_notify_delight_mixin import NotifyDelightMixin

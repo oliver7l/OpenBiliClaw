@@ -41,17 +41,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+from obc_discovery.candidate_pool import discovered_content_to_candidate_write
+from obc_discovery.engine import ContentDiscoveryEngine, DiscoveredContent
+from obc_discovery.keyword_digest import profile_kw_digest
+from obc_discovery.strategies.douyin_direct import DouyinDirectStrategy
+from obc_discovery.strategies.search import SearchStrategy
+from obc_discovery.strategies.x import XSearchStrategy
+from obc_discovery.strategies.youtube import YoutubeSearchStrategy
 from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
 
 from openbiliclaw.config import DiscoveryConfig
-from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine, DiscoveredContent
-from openbiliclaw.discovery.keyword_digest import profile_kw_digest
-from openbiliclaw.discovery.strategies.douyin_direct import DouyinDirectStrategy
-from openbiliclaw.discovery.strategies.search import SearchStrategy
-from openbiliclaw.discovery.strategies.x import XSearchStrategy
-from openbiliclaw.discovery.strategies.youtube import YoutubeSearchStrategy
 from openbiliclaw.runtime.keyword_fetch import (
     PLATFORM_BILIBILI,
     PLATFORM_DOUYIN,

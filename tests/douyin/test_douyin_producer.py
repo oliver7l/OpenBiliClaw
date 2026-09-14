@@ -4,8 +4,9 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-from openbiliclaw.discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.runtime.douyin_producer import (
     DouyinDiscoveryProducer,
     douyin_runtime_hot_budget,

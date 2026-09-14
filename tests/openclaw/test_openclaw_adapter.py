@@ -9,8 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.integrations.openclaw.bootstrap import (
     OpenClawAdapterServices,
     build_openclaw_adapter,

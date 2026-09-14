@@ -326,9 +326,10 @@ class TestXhsObservedUrls:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+        from obc_discovery.engine import ContentDiscoveryEngine
+
         from openbiliclaw.api.app import create_app
-        from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-        from openbiliclaw.discovery.engine import ContentDiscoveryEngine
         from openbiliclaw.storage.database import Database
         from tests.discovery.test_search_strategy import _build_profile
 
@@ -415,9 +416,10 @@ class TestXhsObservedUrls:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+        from obc_discovery.engine import ContentDiscoveryEngine
+
         from openbiliclaw.api.app import create_app
-        from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-        from openbiliclaw.discovery.engine import ContentDiscoveryEngine
         from openbiliclaw.storage.database import Database
         from tests.discovery.test_search_strategy import _build_profile
 

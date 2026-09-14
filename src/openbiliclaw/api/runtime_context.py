@@ -82,7 +82,7 @@ def build_youtube_discovery_strategies(
     strategy_unit_budget: dict[str, int] | None = None,
 ) -> list[Any]:
     """Build YouTube discovery strategies from `[sources.youtube]` config."""
-    from openbiliclaw.discovery.strategies.youtube import (
+    from obc_discovery.strategies.youtube import (
         YoutubeChannelStrategy,
         YoutubeSearchStrategy,
         YoutubeTrendingStrategy,
@@ -388,21 +388,21 @@ class RuntimeContext:
         for _seg in ("llm", "recommendation"):
             if not hasattr(new_config, _seg):
                 setattr(new_config, _seg, SimpleNamespace())
-        from obc_llm.service import LLMService, module_overrides_from_config
-        from obc_llm.usage_recorder import UsageRecorder
-
-        from openbiliclaw.bilibili.api import BilibiliAPIClient
-        from openbiliclaw.bilibili.auth import resolve_runtime_cookie
-        from openbiliclaw.discovery.engine import (
+        from obc_discovery.engine import (
             ContentDiscoveryEngine,
             DiscoveryConcurrencyController,
         )
-        from openbiliclaw.discovery.strategies.strategies import (
+        from obc_discovery.strategies.strategies import (
             ExploreStrategy,
             RelatedChainStrategy,
             SearchStrategy,
             TrendingStrategy,
         )
+        from obc_llm.service import LLMService, module_overrides_from_config
+        from obc_llm.usage_recorder import UsageRecorder
+
+        from openbiliclaw.bilibili.api import BilibiliAPIClient
+        from openbiliclaw.bilibili.auth import resolve_runtime_cookie
         from openbiliclaw.llm import build_llm_registry
         from openbiliclaw.llm.registry import build_embedding_service
         from openbiliclaw.recommendation.engine import RecommendationEngine
@@ -674,11 +674,12 @@ class RuntimeContext:
         # optional ``openbiliclaw[x]`` extra is absent) never touch them.
         twitter_cfg = getattr(getattr(new_config, "sources", None), "twitter", None)
         if twitter_cfg is not None and bool(getattr(twitter_cfg, "enabled", False)):
-            from openbiliclaw.discovery.strategies.x import (
+            from obc_discovery.strategies.x import (
                 XCreatorStrategy,
                 XForYouStrategy,
                 XSearchStrategy,
             )
+
             from openbiliclaw.sources.twitter_adapter import XAdapter
             from openbiliclaw.sources.x_auth import resolve_x_cookie
             from openbiliclaw.sources.x_client import XClient
@@ -697,7 +698,7 @@ class RuntimeContext:
             new_discovery_engine.register_adapter(twitter_adapter)
 
         # 8. Continuous refresh controller
-        from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
+        from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
 
         discovery_cfg = getattr(new_config, "discovery", None)
         admission_min_score = float(getattr(discovery_cfg, "admission_min_score", 0.60) or 0.60)

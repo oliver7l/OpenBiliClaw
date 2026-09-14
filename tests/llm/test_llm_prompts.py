@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from obc_discovery.style_keys import VALID_STYLE_KEYS
 from obc_llm.prompts import (
     _AWARENESS_SYSTEM_PROMPT,
     _BATCH_CONTENT_EVALUATION_SYSTEM_PROMPT,
@@ -25,7 +26,6 @@ from obc_llm.prompts import (
     parse_merged_keywords_with_presence,
 )
 
-from openbiliclaw.discovery.style_keys import VALID_STYLE_KEYS
 from openbiliclaw.memory.manager import MemoryManager
 
 

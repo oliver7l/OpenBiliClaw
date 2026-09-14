@@ -945,12 +945,12 @@ class TestBackendAPI:
     ) -> None:
         from types import SimpleNamespace
 
+        import obc_discovery.engine as discovery_engine_module
+        import obc_discovery.strategies.strategies as strategies_module
         import obc_llm.service as llm_service_module
 
         import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
-        import openbiliclaw.discovery.engine as discovery_engine_module
-        import openbiliclaw.discovery.strategies.strategies as strategies_module
         import openbiliclaw.memory.manager as memory_module
         import openbiliclaw.recommendation.engine as recommendation_module
         import openbiliclaw.runtime.account_sync as account_sync_module
@@ -3876,7 +3876,8 @@ class TestBackendAPI:
                 assert limit == 10
                 assert platform is None
                 self.runtime.pool_available_count = 0
-                from openbiliclaw.discovery.engine import DiscoveredContent
+                from obc_discovery.engine import DiscoveredContent
+
                 from openbiliclaw.recommendation.engine import Recommendation
 
                 return [
@@ -3979,7 +3980,8 @@ class TestBackendAPI:
             ) -> list[object]:
                 self.calls.append((profile, excluded_bvids, limit))
                 self.runtime.pool_available_count = 1
-                from openbiliclaw.discovery.engine import DiscoveredContent
+                from obc_discovery.engine import DiscoveredContent
+
                 from openbiliclaw.recommendation.engine import Recommendation
 
                 return [

@@ -10,9 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-from obc_llm.service import LLMProviderExecutionError
-
-from openbiliclaw.discovery.engine import (
+from obc_discovery.engine import (
     ContentDiscoveryEngine,
     DiscoveredContent,
     DiscoveryConcurrencyController,
@@ -20,7 +18,9 @@ from openbiliclaw.discovery.engine import (
     discovery_raw_candidate_mode_enabled,
     llm_eval_candidate_limit,
 )
-from openbiliclaw.discovery.pool_snapshot import PoolDistributionSnapshot
+from obc_discovery.pool_snapshot import PoolDistributionSnapshot
+from obc_llm.service import LLMProviderExecutionError
+
 from openbiliclaw.soul.profile import InterestTag, SoulProfile
 from openbiliclaw.storage.database import Database
 
@@ -360,7 +360,7 @@ def test_discovery_concurrency_controller_survives_multiple_event_loops() -> Non
 
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_registered_search_strategy() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     engine = ContentDiscoveryEngine()
     strategy = SearchStrategy(
@@ -643,7 +643,7 @@ async def test_multimodal_evaluation_falls_back_to_text_batch_when_vision_unavai
 
 @pytest.mark.asyncio
 async def test_multimodal_evaluation_sends_prepared_cover_images(monkeypatch) -> None:
-    from openbiliclaw.discovery.multimodal import PreparedCoverImage
+    from obc_discovery.multimodal import PreparedCoverImage
 
     async def fake_prepare_cover_image_inputs(*_args: object, **_kwargs: object) -> list[object]:
         return [
@@ -880,7 +880,7 @@ def test_cache_results_skips_recently_viewed_non_bilibili_items() -> None:
 
 @pytest.mark.asyncio
 async def test_discovery_engine_handles_empty_strategy_results() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     engine = ContentDiscoveryEngine()
     engine.register_strategy(
@@ -898,8 +898,8 @@ async def test_discovery_engine_handles_empty_strategy_results() -> None:
 
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_registered_trending_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.engine import ContentDiscoveryEngine
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     engine = ContentDiscoveryEngine(
         llm_service=FakeTrendingLLMService(
@@ -931,8 +931,8 @@ async def test_discovery_engine_runs_registered_trending_strategy() -> None:
 
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_related_chain_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.engine import ContentDiscoveryEngine
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     engine = ContentDiscoveryEngine(
         llm_service=FakeRelatedLLMService(['{"score": 0.84, "reason": "延续了近期观看兴趣。"}'])
@@ -964,8 +964,8 @@ async def test_discovery_engine_runs_related_chain_strategy() -> None:
 
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_explore_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.engine import ContentDiscoveryEngine
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     engine = ContentDiscoveryEngine(
         llm_service=FakeExploreLLMService(

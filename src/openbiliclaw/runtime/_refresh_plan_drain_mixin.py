@@ -10,9 +10,10 @@ import asyncio
 import logging
 from typing import Any, cast
 
-from openbiliclaw.discovery.pool_snapshot import (
+from obc_discovery.pool_snapshot import (
     build_pool_distribution_snapshot,
 )
+
 from openbiliclaw.runtime._refresh_shared import (
     _PLATFORM_SOURCE_ORDER,
     RefreshControllerAttrs,

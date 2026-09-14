@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.sources.bilibili_adapter import BilibiliAdapter
 from openbiliclaw.sources.protocol import SourceAdapter, SourceRecipe
 from openbiliclaw.sources.registry import AdapterRegistry

@@ -272,7 +272,8 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch) -> object:
 
 
 def test_persist_items_source_type(monkeypatch: pytest.MonkeyPatch) -> None:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from obc_discovery.engine import DiscoveredContent
+
     from openbiliclaw.sources.douban_feed_tasks import _persist_items
 
     db = _fake_db(monkeypatch)

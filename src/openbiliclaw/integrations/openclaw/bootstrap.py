@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
+from obc_discovery.engine import ContentDiscoveryEngine
+from obc_discovery.strategies.strategies import (
+    ExploreStrategy,
+    RelatedChainStrategy,
+    SearchStrategy,
+    TrendingStrategy,
+)
 from obc_llm.service import LLMService, module_overrides_from_config
 from obc_llm.usage_recorder import UsageRecorder
 
@@ -13,13 +20,6 @@ from openbiliclaw.bilibili.api import BilibiliAPIClient
 from openbiliclaw.bilibili.auth import resolve_runtime_cookie
 from openbiliclaw.config import Config, load_config
 from openbiliclaw.config import llm_concurrency_from_config as _llm_concurrency_from_config
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-from openbiliclaw.discovery.strategies.strategies import (
-    ExploreStrategy,
-    RelatedChainStrategy,
-    SearchStrategy,
-    TrendingStrategy,
-)
 from openbiliclaw.llm import build_llm_registry
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.recommendation.engine import RecommendationEngine
@@ -155,7 +155,7 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         )
     )
 
-    from openbiliclaw.discovery.engine import DiscoveryConcurrencyController
+    from obc_discovery.engine import DiscoveryConcurrencyController
 
     concurrency = DiscoveryConcurrencyController(
         bilibili_request_concurrency=4,

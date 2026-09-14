@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-
-from openbiliclaw.discovery.douyin import (
+from obc_discovery.douyin import (
     DouyinDiscoveryOptions,
     DouyinDiscoveryService,
     split_csv_values,
 )
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 

@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 from obc_llm.base import LLMResponse
 from obc_llm.service import LLMProviderExecutionError
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.engine import (
     RecommendationEngine,
     _PerLoopLock,

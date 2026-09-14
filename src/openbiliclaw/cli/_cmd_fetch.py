@@ -211,8 +211,9 @@ def search_douyin(
 ) -> None:
     """通过浏览器插件执行抖音搜索 discovery smoke."""
 
+    from obc_discovery.douyin import split_csv_values
+
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.discovery.douyin import split_csv_values
 
     selected_keywords = split_csv_values(keywords)
     _print_page_title("抖音搜索发现", "浏览器插件任务 → dy_tasks 结果")
@@ -512,8 +513,9 @@ def discover_zhihu(
 ) -> None:
     """通过浏览器插件触发一次知乎搜索 discovery。"""
 
+    from obc_discovery.douyin import split_csv_values
+
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.discovery.douyin import split_csv_values
 
     selected_keywords = split_csv_values(keywords)
     _print_page_title("知乎内容发现", "插件搜索 → discovery_candidates")
@@ -678,7 +680,7 @@ def discover_zhihu_creator(
     no_enqueue: bool = typer.Option(False, "--no-enqueue", help="只预览插件结果，不写入 discovery_candidates。"),
 ) -> None:
     """通过浏览器插件触发一次知乎作者 discovery。"""
-    from openbiliclaw.discovery.douyin import split_csv_values
+    from obc_discovery.douyin import split_csv_values
 
     selected = split_csv_values(creator_urls)
     _run_zhihu_discovery_smoke(
@@ -700,7 +702,7 @@ def discover_zhihu_related(
     no_enqueue: bool = typer.Option(False, "--no-enqueue", help="只预览插件结果，不写入 discovery_candidates。"),
 ) -> None:
     """通过浏览器插件触发一次知乎相关内容 discovery。"""
-    from openbiliclaw.discovery.douyin import split_csv_values
+    from obc_discovery.douyin import split_csv_values
 
     selected = split_csv_values(related_urls)
     _run_zhihu_discovery_smoke(
@@ -875,7 +877,7 @@ def _run_xhs_discovery(*, force: bool) -> None:
 
 
 def _comma_separated_env_values(name: str) -> tuple[str, ...]:
-    from openbiliclaw.discovery.douyin import split_csv_values
+    from obc_discovery.douyin import split_csv_values
 
     return split_csv_values([os.environ.get(name, "")])
 
@@ -925,13 +927,14 @@ def _run_douyin_discovery(
 ) -> None:
     """Run one direct-cookie Douyin discovery cycle."""
 
-    import openbiliclaw.config as config_module
-    from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.discovery.douyin import (
+    from obc_discovery.douyin import (
         DouyinDiscoveryOptions,
         DouyinDiscoveryResult,
         DouyinDiscoveryService,
     )
+
+    import openbiliclaw.config as config_module
+    from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.soul.engine import SoulProfileNotInitializedError
     from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
     from openbiliclaw.sources.douyin_direct import DouyinDirectAuthError, DouyinDirectClient
@@ -1064,7 +1067,7 @@ def _build_discovery_candidate_pipeline(
     discovery_engine: Any,
 ) -> Any:
     """Build the shared raw-candidate evaluator for manual producer runs."""
-    from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
+    from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
 
     discovery_cfg = getattr(config, "discovery", None)
     admission_min_score = float(getattr(discovery_cfg, "admission_min_score", 0.60) or 0.60)
@@ -1219,8 +1222,9 @@ def discover_douyin(
     ),
 ) -> None:
     """单独调试抖音 direct-cookie 内容 discovery."""
+    from obc_discovery.douyin import split_csv_values
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.discovery.douyin import split_csv_values
 
     selected_sources = _normalize_douyin_discovery_sources(split_csv_values(sources) or ("search", "hot", "feed"))
     _cli._run_douyin_discovery(

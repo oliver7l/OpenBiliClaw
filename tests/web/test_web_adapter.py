@@ -119,7 +119,7 @@ class TestWebSourceAdapterURLBackfill:
     async def test_backfills_content_url_from_anchors(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from obc_discovery.engine import DiscoveredContent
 
         _RecordingBrowser.next_snapshot = PageSnapshot(
             text="some page text",
@@ -165,7 +165,7 @@ class TestWebSourceAdapterURLBackfill:
     async def test_keeps_existing_url_if_extractor_already_populated(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from openbiliclaw.discovery.engine import DiscoveredContent
+        from obc_discovery.engine import DiscoveredContent
 
         _RecordingBrowser.next_snapshot = PageSnapshot(
             text="x",

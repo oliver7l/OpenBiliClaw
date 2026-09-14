@@ -18,7 +18,6 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from openbiliclaw.api.oss_research_routes import DEFAULT_DB_PATH, insert_project  # noqa: E402
 
-
 PROJECTS = [
     {
         "name": "TraeWorkAssistant-mac",
@@ -77,6 +76,36 @@ PROJECTS = [
         "caveats": "macOS 原生 App，AX/OCR/SQLCipher/Metal 构建链平台绑定；Chrome 扩展无法做桌面采集。与知乎卡片化扩展的视觉形态无关。",
         "report_path": "Brosis-借鉴分析.md",
         "tags": ["macos", "desktop", "mcp", "local-first", "privacy", "reference", "sqlite-vec", "agentic"],
+    },
+    {
+        "name": "exercise-helper",
+        "owner": "touchren",
+        "url": "https://github.com/touchren/exercise-helper",
+        "one_liner": "「闻鼓而动」：久坐办公族晨练/晚练 PWA，纯 Vanilla JS 零构建零后端，预生成语音引导，闭眼跟练",
+        "purpose": "把「坚持锻炼」的反人性设计（看屏幕对节奏、数次数、记顺序）全部卸给语音与状态机：隔天抗阻+每日拉伸自动排休息日，打开→按开始，18 分钟语音带完。数据全 localStorage，无账号无追踪。",
+        "tech_stack": ["Vanilla HTML/CSS/JS", "PWA (Service Worker)", "Web Audio API", "localStorage", "预生成 TTS mp3 (Azure 晓晓)"],
+        "structure_notes": "morning/ 与 evening/ 两套自包含子应用（各含 app/engine/audio/storage/settings/records/sw）+ 根级选择页 + 多个 SEO 静态页 + tts/ 预生成语音库 + llms.txt；零依赖零构建，AGPL-3.0。",
+        "key_features": ["全程语音引导(动作名/次数/要点/节拍计数)", "隔天抗阻自动判定休息日", "训练状态机(事件表+预排程双轨定时)", "三通道语音降级(mp3→AudioContext→原生TTS→静默)", "SW 分层缓存(HTML/CSS/JS 网络优先)", "环境音程序合成+ducking", "微信 WebView 适配(viewport/DPR/缓存踩坑)"],
+        "relevance_summary": "与 WikiTok 同属纯前端+本地存储路线，但多了语音引导、离线 SW、引导式会话状态机、微信 WebView 适配四块，对 OpenBiliClaw Web UI（同为本地 serve 的 SPA）与扩展均有直接可抄的健壮性原语。",
+        "reusable_techniques": ["事件表+预排程双轨定时：tick 兜底推进，节奏敏感 token(倒计时/蜂鸣)独立 setTimeout 预排，恢复按已过秒数跳过——setInterval catch-up 压缩节奏问题的标准解 (engine.js:181-237)", "语音三通道降级+token 防串音：预生成mp3(exact→前缀兜底)→<audio>→AudioContext解码→原生TTS→静默推进；lastSpeechToken 单调递增，onEnd 只认当前 token；_estimateDurationMs 超时兜底绝不挂起 (audio.js:120-354)", "SW 分层缓存+注释带真机根因：HTML/CSS/JS 网络优先(微信 WebView 懒更新会锁死旧版)、sw.js 自身网络优先、静态缓存优先；版本号激活期清旧缓存 (sw.js:39-98)", "mergeSettings：结构以默认为准、数值以存储为准(新增设置自动有默认值)；读取一律 clone 不外泄内部引用；dayType 归一化兼容旧记录 (storage.js:37-57)", "环境音 Web Audio 程序合成(雨声/心跳/和弦)零文件体积，语音播报 duckDown 0.2x 播完 duckUp (audio.js:443-632)", "llms.txt——给 LLM 看的项目说明书，AGENTS.md 思路的 Web 标准版"],
+        "caveats": "morning/evening 两目录同构代码各复制一份——是零构建部署形态的取舍，勿照搬到有模块系统的项目；68 条 TTS_MAP 硬编码靠 tts/gen-*.js 生成脚本保证与播报文本逐字一致，手写必漂移；微信小程序版不开源，PWA 版才是完整实现",
+        "report_path": "ExerciseHelper-借鉴分析.md",
+        "tags": ["pwa", "vanilla-js", "voice-guidance", "web-ui", "local-first", "reference"],
+    },
+    {
+        "name": "red",
+        "owner": "exoticknight",
+        "url": "https://github.com/exoticknight/red",
+        "one_liner": "RED：给 AI 辅助工程的项目知识建立状态机——Research(未决)/Evolve(推进中)/Document(已接受) 三态 + 授权检查点",
+        "purpose": "解决 AI 协作四大痛点：记不住项目根基、混淆讨论与决定、难以检查 AI 据以行动的理解、对话无法收口。根因是给了 AI 内容却没给内容的「知识状态」。RED 把 先查一下/按方向试/这个定了 三种行动级别显式写进项目结构。",
+        "tech_stack": ["Markdown + TOML front matter", "JSON Schema (config/artifact/output)", "Node CLI (733行, npm)", "Python CLI (810行, PyPI)", "Codex Skill", "GitHub Actions CI"],
+        "structure_notes": "方法论长文(194行中文+英文+公众号版+SVG状态图) + spec/协议规范与三套 JSON Schema + cli/ 双实现共享 conformance fixtures + plugins/red Skill(路由化 references) + 自举(本仓库用 RED 维护, CI 跑 red check --json)。",
+        "key_features": ["R/E/D 三态知识分类(状态≠可信度,两独立维度)", "R→E→D 双检查点需显式人类授权(宽泛早期请求不构成授权)", "D 不要求新目录=现有文档由 red.toml document.paths 声明", "文档与实现证据冲突→显式记入 Research 待裁决", "CLI 确定性操作(JSON输出+固定退出码), 只记录权威不创造权威", "双实现+共享 conformance cases.json(args+exitCode 序列)", "Skill 路由化按需加载(references 是查找目标非递归阅读清单)", "受管理指令区块(install 只管理自己的块保留其余)"],
+        "relevance_summary": "与用户既有工作流同构：docs/plans/≈E、docs/modules+AGENTS.md≈D、借鉴分析≈R、MEMORY.md≈D、工作日志≈R(append-only)。项目已自发实践 RED,缺的只是 E 态显式承载与「冲突必须记录」纪律。与 brosis 互补：brosis 管 AI 看得到什么数据,RED 管 AI 如何理解数据的状态。",
+        "reusable_techniques": ["知识状态显式化：把 R/E/D 三态词汇写进 AGENTS.md,让 Agent 自动分清待查/推进中/已定 (spec/protocol.md)", "检查点授权语义原句：得到可行方案≠获得实施授权；宽泛早期请求不构成后面的转换授权——正是用户「先方案确认再开发」的协议化 (protocol.md Transitions)", "冲突显式化：发现文档与实现不符必须记录(如 changelog/drift_reports)而非默默绕过——补 AGENTS.md 文档强制同步规则的最大漏洞", "Skill 路由化按需加载：主文件极短+分路由 references,操作需要时才读 (SKILL.md:20-34)——写任何 SKILL 的范本", "双实现一致性：cases.json 就是 args+exitCode 序列,Node/Python 跑同一组用例 (cli/conformance/)", "机器可读契约三件套：config/artifact/output 各配 JSON Schema+独立 exit-codes 文档 (spec/)", "TOML front matter Markdown 工件(+++ 分隔,id/state/status/title/created 必填)：人可读+机器可校验", "policy 开关(document_requires_approval 等)：协议留开关项目自选严格度 (red.toml:12-14)"],
+        "caveats": "对单人+单 Agent 项目,完整 CLI+red.toml 偏重——取其神(三态区分+检查点纪律+冲突显式化)舍其形(双CLI/conformance/自举CI)；方法论长文若要挂载给 Agent 读,摘核心十几行即可,不必整篇；Research/Evolve 记录是否入 Git 由项目自定,协议不强制",
+        "report_path": "RED-借鉴分析.md",
+        "tags": ["methodology", "ai-collaboration", "docs-as-state", "cli", "reference", "workflow"],
     },
 ]
 

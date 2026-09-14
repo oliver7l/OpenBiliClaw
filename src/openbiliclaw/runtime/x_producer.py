@@ -37,11 +37,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
+from obc_discovery.candidate_pool import discovered_content_to_candidate_write
+
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_TWITTER as _PLATFORM_TWITTER
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from obc_discovery.engine import DiscoveredContent
+
     from openbiliclaw.sources.x_tasks import XCreatorStore
     from openbiliclaw.storage.x_health import XSourceHealthStore
 
@@ -353,11 +355,12 @@ def build_x_discovery_producer(
         return None
 
     # Lazy imports — only reached on the enabled path.
-    from openbiliclaw.discovery.strategies.x import (
+    from obc_discovery.strategies.x import (
         XCreatorStrategy,
         XForYouStrategy,
         XSearchStrategy,
     )
+
     from openbiliclaw.sources.twitter_adapter import XAdapter
     from openbiliclaw.sources.x_auth import resolve_x_cookie
     from openbiliclaw.sources.x_client import XClient

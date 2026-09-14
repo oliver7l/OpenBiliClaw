@@ -13,6 +13,8 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from obc_discovery.engine import DiscoveredContent
+
 from openbiliclaw.config import (
     Config,
     RecommendationScoringConfig,
@@ -20,7 +22,6 @@ from openbiliclaw.config import (
     load_config,
     save_config,
 )
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.bandit import (
     ArmStats,
     SlidingWindowThompsonSampler,

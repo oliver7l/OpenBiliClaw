@@ -219,7 +219,8 @@ async def main() -> None:
             # Use the recommendation engine's diversification logic
             import tempfile
 
-            from openbiliclaw.discovery.engine import DiscoveredContent
+            from obc_discovery.engine import DiscoveredContent
+
             from openbiliclaw.recommendation.engine import RecommendationEngine
 
             # Build DiscoveredContent objects from pool

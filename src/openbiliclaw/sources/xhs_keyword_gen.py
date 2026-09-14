@@ -40,7 +40,7 @@ def _build_user_prompt(profile: SoulProfile | OnionProfile, count: int) -> str:
     # (B站 / YouTube / X query-gen, all-platform evaluation) — no divergent
     # representation. Lazy import keeps sources/ off discovery/ at module load.
     # Deterministic dump keeps the prompt-cache prefix stable.
-    from openbiliclaw.discovery.strategies._utils import build_profile_summary
+    from obc_discovery.strategies._utils import build_profile_summary
 
     # build_profile_summary is annotated for SoulProfile but supports OnionProfile
     # too (back-compat properties); the producer hands us either.

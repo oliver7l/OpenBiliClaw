@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.eval.discovery_evaluator import (
     DISCOVERY_FIELD_TO_PARAM,
     DiscoveryEvalReport,

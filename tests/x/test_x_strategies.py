@@ -16,13 +16,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from obc_llm.base import LLMResponse
-
-from openbiliclaw.discovery.strategies.x import (
+from obc_discovery.strategies.x import (
     XCreatorStrategy,
     XForYouStrategy,
     XSearchStrategy,
 )
+from obc_llm.base import LLMResponse
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 

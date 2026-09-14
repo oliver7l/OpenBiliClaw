@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from obc_discovery.engine import DiscoveryConcurrencyController
 
-from openbiliclaw.discovery.engine import DiscoveryConcurrencyController
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
@@ -160,7 +160,7 @@ class FakeRelatedClient:
 
 
 def test_related_chain_map_related_item_maps_stat_metrics() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     strategy = RelatedChainStrategy(
         bilibili_client=FakeRelatedClient({}),
@@ -216,7 +216,7 @@ def _event(bvid: str, *, event_type: str = "view", title: str = "seed") -> dict[
 
 @pytest.mark.asyncio
 async def test_related_chain_uses_event_seeds_first() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(
         events=[
@@ -261,7 +261,7 @@ async def test_related_chain_uses_event_seeds_first() -> None:
 
 @pytest.mark.asyncio
 async def test_related_chain_prioritizes_positive_event_seeds_over_plain_views() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(
         events=[
@@ -285,8 +285,8 @@ async def test_related_chain_prioritizes_positive_event_seeds_over_plain_views()
 
 @pytest.mark.asyncio
 async def test_related_chain_falls_back_to_seed_strategies() -> None:
-    from openbiliclaw.discovery.engine import DiscoveredContent
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.engine import DiscoveredContent
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(events=[])
     client = FakeRelatedClient(
@@ -327,7 +327,7 @@ async def test_related_chain_falls_back_to_seed_strategies() -> None:
 
 @pytest.mark.asyncio
 async def test_related_chain_fetches_and_dedupes_related_videos() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(events=[_event("BV1SEED")])
     client = FakeRelatedClient(
@@ -356,7 +356,7 @@ async def test_related_chain_fetches_and_dedupes_related_videos() -> None:
 
 @pytest.mark.asyncio
 async def test_related_chain_filters_by_score_and_tolerates_failures() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(
         events=[
@@ -390,7 +390,7 @@ async def test_related_chain_filters_by_score_and_tolerates_failures() -> None:
 
 
 def test_related_chain_backfill_does_not_drop_below_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     strategy = RelatedChainStrategy(
         bilibili_client=FakeRelatedClient({}),
@@ -406,7 +406,7 @@ def test_related_chain_backfill_does_not_drop_below_normal_admission_floor() -> 
 
 
 def test_related_chain_default_score_threshold_is_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     strategy = RelatedChainStrategy(
         bilibili_client=FakeRelatedClient({}),
@@ -419,7 +419,7 @@ def test_related_chain_default_score_threshold_is_normal_admission_floor() -> No
 
 @pytest.mark.asyncio
 async def test_related_chain_can_expand_to_second_level() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(events=[_event("BV1SEED")])
     client = FakeRelatedClient(
@@ -449,7 +449,7 @@ async def test_related_chain_can_expand_to_second_level() -> None:
 
 @pytest.mark.asyncio
 async def test_related_chain_uses_bounded_evaluation_concurrency_within_batch() -> None:
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
+    from obc_discovery.strategies.strategies import RelatedChainStrategy
 
     memory = FakeMemoryManager(events=[_event("BV1SEED")])
     client = FakeRelatedClient(

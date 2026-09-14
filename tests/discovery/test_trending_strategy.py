@@ -6,12 +6,12 @@ import asyncio
 from dataclasses import dataclass, field
 
 import pytest
-
-from openbiliclaw.discovery.engine import (
+from obc_discovery.engine import (
     ContentDiscoveryEngine,
     DiscoveredContent,
     DiscoveryConcurrencyController,
 )
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
@@ -99,7 +99,7 @@ class FakeRankingClient:
 
 
 def test_trending_strategy_map_ranking_item_maps_stat_metrics() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     strategy = TrendingStrategy(
         bilibili_client=FakeRankingClient({}),
@@ -166,7 +166,7 @@ class _SlowScoringLLMService(FakeLLMService):
 
 @pytest.mark.asyncio
 async def test_trending_strategy_fetches_global_and_related_rankings() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     llm_service = FakeLLMService(
         [
@@ -198,7 +198,7 @@ async def test_trending_strategy_fetches_global_and_related_rankings() -> None:
 
 @pytest.mark.asyncio
 async def test_trending_strategy_filters_by_score_threshold() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     llm_service = FakeLLMService(
         [
@@ -227,7 +227,7 @@ async def test_trending_strategy_filters_by_score_threshold() -> None:
 
 
 def test_trending_backfill_does_not_drop_below_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     strategy = TrendingStrategy(
         bilibili_client=FakeRankingClient({}),
@@ -242,7 +242,7 @@ def test_trending_backfill_does_not_drop_below_normal_admission_floor() -> None:
 
 
 def test_trending_default_score_threshold_is_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     strategy = TrendingStrategy(
         bilibili_client=FakeRankingClient({}),
@@ -254,7 +254,7 @@ def test_trending_default_score_threshold_is_normal_admission_floor() -> None:
 
 @pytest.mark.asyncio
 async def test_trending_strategy_continues_when_one_ranking_fails() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     llm_service = FakeLLMService(
         [
@@ -304,7 +304,7 @@ async def test_evaluate_content_sets_score_and_reason() -> None:
 
 @pytest.mark.asyncio
 async def test_trending_strategy_uses_bounded_evaluation_concurrency() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     llm_service = _SlowScoringLLMService(
         [
@@ -346,7 +346,7 @@ async def test_trending_strategy_interleaves_rids_for_eval_fairness() -> None:
     be round-robin interleaved before eval so the downstream 30-item cap
     can't starve smaller rids of evaluation slots.
     """
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     # Pre-stage 50 score responses. v0.3.51+ added an intra-batch
     # style cap (=8 items / style) to ``_evaluate_batch``, so we
@@ -403,7 +403,7 @@ async def test_trending_strategy_interleaves_rids_for_eval_fairness() -> None:
 
 @pytest.mark.asyncio
 async def test_trending_strategy_caps_llm_eval_candidates_for_small_limit() -> None:
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
+    from obc_discovery.strategies.strategies import TrendingStrategy
 
     llm_service = FakeLLMService(
         [

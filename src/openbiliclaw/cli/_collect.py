@@ -361,8 +361,9 @@ def _collect_zhihu_discovery_results(
 def _enqueue_zhihu_discovery_candidates(items: list[dict[str, Any]]) -> tuple[int, list[Any]]:
     """Convert Zhihu search result rows and enqueue them into discovery_candidates."""
 
+    from obc_discovery.candidate_pool import discovered_content_to_candidate_write
+
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.discovery.candidate_pool import discovered_content_to_candidate_write
     from openbiliclaw.sources.zhihu_tasks import zhihu_discovery_items_to_contents
 
     contents = zhihu_discovery_items_to_contents(items)

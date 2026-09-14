@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.runtime.x_producer import XDiscoveryProducer
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.sources.x_tasks import XCreatorStore

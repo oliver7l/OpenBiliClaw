@@ -1,6 +1,6 @@
 """Tests for closed style_key viewing-mode taxonomy."""
 
-from openbiliclaw.discovery.style_keys import (
+from obc_discovery.style_keys import (
     LEGACY_STYLE_KEY_MAP,
     VALID_STYLE_KEYS,
     normalize_style_key,

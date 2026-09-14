@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from openbiliclaw.discovery.candidate_pool import DiscoveryCandidateWrite
+from obc_discovery.candidate_pool import DiscoveryCandidateWrite
+
 from openbiliclaw.storage.database import Database
 
 

@@ -1,8 +1,9 @@
-from openbiliclaw.discovery.pool_snapshot import (
+from obc_discovery.pool_snapshot import (
     PoolDistributionSnapshot,
     build_cold_start_pool_snapshot,
     build_pool_distribution_snapshot,
 )
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 

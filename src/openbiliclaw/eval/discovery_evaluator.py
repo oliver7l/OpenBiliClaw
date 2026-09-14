@@ -16,7 +16,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from obc_discovery.engine import DiscoveredContent
+
     from openbiliclaw.soul.profile import OnionProfile
 
 logger = logging.getLogger(__name__)

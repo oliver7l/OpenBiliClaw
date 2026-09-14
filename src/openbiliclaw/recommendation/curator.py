@@ -17,9 +17,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from obc_discovery.engine import DiscoveredContent
     from obc_llm.embedding import SupportsEmbeddingService
 
-    from openbiliclaw.discovery.engine import DiscoveredContent
     from openbiliclaw.recommendation.bandit import (
         ArmStats,
         SlidingWindowThompsonSampler,

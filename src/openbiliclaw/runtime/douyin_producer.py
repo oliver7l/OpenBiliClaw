@@ -50,7 +50,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from openbiliclaw.discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
+from obc_discovery.douyin import DouyinDiscoveryOptions, DouyinDiscoveryResult
+
 from openbiliclaw.runtime._db import connect_inbox
 from openbiliclaw.runtime.keyword_fetch import PLATFORM_DOUYIN as _PLATFORM_DOUYIN
 
@@ -339,7 +340,8 @@ def build_douyin_discovery_producer(
         return None
 
     async def _discover(profile: Any, options: DouyinDiscoveryOptions) -> DouyinDiscoveryResult:
-        from openbiliclaw.discovery.douyin import DouyinDiscoveryService
+        from obc_discovery.douyin import DouyinDiscoveryService
+
         from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
         from openbiliclaw.sources.douyin_direct import DouyinDirectClient
         from openbiliclaw.sources.douyin_plugin_search import DouyinPluginSearchClient

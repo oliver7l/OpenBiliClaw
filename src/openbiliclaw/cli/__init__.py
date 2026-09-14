@@ -624,7 +624,7 @@ async def _run_init_discovery_backfill_async(
     label_suffix: str = "",
 ) -> int:
     """Backfill the initial discovery pool in stages until the target is reached."""
-    from openbiliclaw.discovery.pool_snapshot import build_cold_start_pool_snapshot
+    from obc_discovery.pool_snapshot import build_cold_start_pool_snapshot
 
     database = _get_runtime_database()
     discovery_engine = _build_discovery_engine()

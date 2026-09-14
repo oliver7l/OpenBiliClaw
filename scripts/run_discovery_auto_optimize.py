@@ -34,16 +34,17 @@ async def run_discovery_pipeline(
 
     Returns (strategy_results, intermediates).
     """
-    from openbiliclaw.discovery.engine import (
+    from obc_discovery.engine import (
         ContentDiscoveryEngine,
         DiscoveryConcurrencyController,
     )
-    from openbiliclaw.discovery.strategies.strategies import (
+    from obc_discovery.strategies.strategies import (
         ExploreStrategy,
         RelatedChainStrategy,
         SearchStrategy,
         TrendingStrategy,
     )
+
     from openbiliclaw.eval.discovery_scenario import MockBilibiliClient, MockMemoryManager
 
     mock_client = MockBilibiliClient(scenario)

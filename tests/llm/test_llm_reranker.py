@@ -14,8 +14,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.llm_reranker import (
     LLMReranker,
     _build_rerank_profile_summary,

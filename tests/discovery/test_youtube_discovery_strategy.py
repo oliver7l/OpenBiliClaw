@@ -7,14 +7,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from obc_llm.base import LLMResponse
-
-from openbiliclaw.discovery.engine import DiscoveredContent
-from openbiliclaw.discovery.strategies.youtube import (
+from obc_discovery.engine import DiscoveredContent
+from obc_discovery.strategies.youtube import (
     YoutubeChannelStrategy,
     YoutubeSearchStrategy,
     YoutubeTrendingStrategy,
 )
+from obc_llm.base import LLMResponse
+
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 from openbiliclaw.youtube.client import (

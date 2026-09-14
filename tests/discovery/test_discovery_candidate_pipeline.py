@@ -5,14 +5,14 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
-
-from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-from openbiliclaw.discovery.candidate_pool import (
+from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+from obc_discovery.candidate_pool import (
     REJECTED_FRANCHISE_QUOTA,
     REJECTED_LOW_SCORE,
     DiscoveryCandidateWrite,
 )
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine, DiscoveredContent
+from obc_discovery.engine import ContentDiscoveryEngine, DiscoveredContent
+
 from openbiliclaw.storage.database import Database
 
 from .test_search_strategy import _build_profile

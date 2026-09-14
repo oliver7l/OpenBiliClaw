@@ -67,7 +67,7 @@ class UnitResult:
 
 def _to_discovered_content(item: CandidateItem, content_id: str | None = None) -> Any:
     """Build a DiscoveredContent for the engine's ranking core."""
-    from openbiliclaw.discovery.engine import DiscoveredContent
+    from obc_discovery.engine import DiscoveredContent
 
     cid = content_id or item.content_key.split(":", 1)[-1]
     return DiscoveredContent(

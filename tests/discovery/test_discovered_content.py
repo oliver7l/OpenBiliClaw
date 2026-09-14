@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from openbiliclaw.discovery.engine import DiscoveredContent
+from obc_discovery.engine import DiscoveredContent
 
 
 class TestDiscoveredContentMultisourceFields:

@@ -23,15 +23,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
-from tests.discovery.test_search_strategy import _build_profile
-
-from openbiliclaw.discovery.candidate_pipeline import DiscoveryCandidatePipeline
-from openbiliclaw.discovery.candidate_pool import (
+from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
+from obc_discovery.candidate_pool import (
     discovered_content_to_candidate_write,
     row_to_discovered_content,
 )
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine, DiscoveredContent
+from obc_discovery.engine import ContentDiscoveryEngine, DiscoveredContent
+from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
+from tests.discovery.test_search_strategy import _build_profile
+
 from openbiliclaw.storage.database import Database
 
 if TYPE_CHECKING:
@@ -423,7 +423,7 @@ class _FakeXClient:
 
 @pytest.mark.asyncio
 async def test_x_search_stamps_source_keyword_id() -> None:
-    from openbiliclaw.discovery.strategies.x import XSearchStrategy
+    from obc_discovery.strategies.x import XSearchStrategy
 
     strategy = XSearchStrategy(client=_FakeXClient())
     results = await strategy.discover(
@@ -439,7 +439,7 @@ async def test_x_search_stamps_source_keyword_id() -> None:
 
 @pytest.mark.asyncio
 async def test_x_search_without_map_leaves_id_none() -> None:
-    from openbiliclaw.discovery.strategies.x import XSearchStrategy
+    from obc_discovery.strategies.x import XSearchStrategy
 
     strategy = XSearchStrategy(client=_FakeXClient())
     results = await strategy.discover(_build_profile(), limit=10, queries=["alpha"])
@@ -460,7 +460,7 @@ class _FakeYtClient:
 
 @pytest.mark.asyncio
 async def test_youtube_search_stamps_source_keyword_id() -> None:
-    from openbiliclaw.discovery.strategies.youtube import YoutubeSearchStrategy
+    from obc_discovery.strategies.youtube import YoutubeSearchStrategy
 
     strategy = YoutubeSearchStrategy(
         client=_FakeYtClient(),  # type: ignore[arg-type]
@@ -496,7 +496,7 @@ class _FakeDouyinClient:
 
 @pytest.mark.asyncio
 async def test_douyin_search_stamps_source_keyword_id() -> None:
-    from openbiliclaw.discovery.strategies.douyin_direct import DouyinDirectStrategy
+    from obc_discovery.strategies.douyin_direct import DouyinDirectStrategy
 
     strategy = DouyinDirectStrategy(
         client=_FakeDouyinClient(),
@@ -513,7 +513,7 @@ async def test_douyin_search_stamps_source_keyword_id() -> None:
 
 @pytest.mark.asyncio
 async def test_douyin_search_without_map_leaves_id_none() -> None:
-    from openbiliclaw.discovery.strategies.douyin_direct import DouyinDirectStrategy
+    from obc_discovery.strategies.douyin_direct import DouyinDirectStrategy
 
     strategy = DouyinDirectStrategy(
         client=_FakeDouyinClient(),

@@ -6,8 +6,8 @@ import asyncio
 from dataclasses import dataclass, field
 
 import pytest
+from obc_discovery.engine import DiscoveryConcurrencyController
 
-from openbiliclaw.discovery.engine import DiscoveryConcurrencyController
 from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
@@ -110,7 +110,7 @@ class _SlowScoringLLMService(FakeLLMService):
 
 @pytest.mark.asyncio
 async def test_explore_strategy_generates_and_filters_domains() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -158,7 +158,7 @@ async def test_explore_strategy_generates_and_filters_domains() -> None:
 
 @pytest.mark.asyncio
 async def test_explore_strategy_prioritizes_interest_anchored_domains() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -222,7 +222,7 @@ async def test_explore_strategy_prioritizes_interest_anchored_domains() -> None:
 
 @pytest.mark.asyncio
 async def test_explore_strategy_applies_exploration_bonus() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -260,7 +260,7 @@ async def test_explore_strategy_applies_exploration_bonus() -> None:
 
 @pytest.mark.asyncio
 async def test_explore_strategy_uses_gentle_floor_not_large_threshold_discount() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -304,7 +304,7 @@ async def test_explore_strategy_uses_gentle_floor_not_large_threshold_discount()
 
 @pytest.mark.asyncio
 async def test_explore_strategy_tolerates_partial_failures() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -346,7 +346,7 @@ async def test_explore_strategy_tolerates_partial_failures() -> None:
 
 @pytest.mark.asyncio
 async def test_explore_strategy_uses_bounded_evaluation_concurrency() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = _SlowScoringLLMService(
         [
@@ -403,7 +403,7 @@ async def test_explore_strategy_interleaves_domains_for_eval_fairness() -> None:
     novelty (and therefore the exploration bonus) matches across domains;
     otherwise _sort_results re-ranks by score.
     """
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     llm_service = FakeLLMService(
         [
@@ -463,7 +463,7 @@ async def test_explore_strategy_interleaves_domains_for_eval_fairness() -> None:
 @pytest.mark.asyncio
 async def test_explore_strategy_reuses_cached_domains_within_refresh_window() -> None:
     """Second discover within the refresh window must not re-call the LLM."""
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     domains_json = """
     {
@@ -500,7 +500,7 @@ async def test_explore_strategy_reuses_cached_domains_within_refresh_window() ->
 
 @pytest.mark.asyncio
 async def test_explore_strategy_regenerates_domains_after_cache_expiry() -> None:
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
+    from obc_discovery.strategies.strategies import ExploreStrategy
 
     domains_json = """
     {

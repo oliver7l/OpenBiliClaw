@@ -7,10 +7,10 @@ import json
 from dataclasses import dataclass, field
 
 import pytest
+from obc_discovery.engine import DiscoveryConcurrencyController
+from obc_discovery.pool_snapshot import PoolDistributionSnapshot
+from obc_discovery.strategies._utils import build_profile_summary
 
-from openbiliclaw.discovery.engine import DiscoveryConcurrencyController
-from openbiliclaw.discovery.pool_snapshot import PoolDistributionSnapshot
-from openbiliclaw.discovery.strategies._utils import build_profile_summary
 from openbiliclaw.soul.profile import (
     MBTI,
     AwarenessNote,
@@ -203,7 +203,7 @@ class FakeBilibiliClient:
 
 
 def test_search_strategy_map_search_result_maps_available_metrics() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     strategy = SearchStrategy(
         llm_service=FakeLLMService("{}"),
@@ -262,7 +262,7 @@ class _SlowSearchClient:
 
 @pytest.mark.asyncio
 async def test_search_strategy_uses_llm_queries_and_searches_each_query() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片 原理", "摄影 构图"]}')
     bilibili_client = FakeBilibiliClient(
@@ -306,7 +306,7 @@ async def test_search_strategy_uses_llm_queries_and_searches_each_query() -> Non
 
 @pytest.mark.asyncio
 async def test_search_strategy_skips_llm_query_generation_during_search_cooldown() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     class CoolingSearchClient(FakeBilibiliClient):
         def search_cooldown_remaining(self) -> float:
@@ -329,7 +329,7 @@ async def test_search_strategy_skips_llm_query_generation_during_search_cooldown
 
 @pytest.mark.asyncio
 async def test_search_strategy_passes_style_preferences_to_query_prompt() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["摄影 vlog"]}')
     profile = _build_profile()
@@ -357,7 +357,7 @@ async def test_search_strategy_passes_style_preferences_to_query_prompt() -> Non
 
 @pytest.mark.asyncio
 async def test_search_strategy_passes_disliked_topics_to_query_prompt() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["摄影 vlog"]}')
     profile = _build_profile()
@@ -378,7 +378,7 @@ async def test_search_strategy_passes_disliked_topics_to_query_prompt() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_passes_pool_snapshot_to_query_prompt() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["人物纪录 审美体验"]}')
     snapshot = PoolDistributionSnapshot(
@@ -405,7 +405,7 @@ async def test_search_strategy_passes_pool_snapshot_to_query_prompt() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_drops_bad_pool_hints_and_uses_llm_queries() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     class BadPoolSnapshot:
         def to_prompt_hints(self) -> dict[str, object]:
@@ -428,7 +428,7 @@ async def test_search_strategy_drops_bad_pool_hints_and_uses_llm_queries() -> No
 
 @pytest.mark.asyncio
 async def test_search_strategy_drops_unserializable_pool_hints_and_uses_llm_queries() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     class UnserializablePoolSnapshot:
         def to_prompt_hints(self) -> dict[str, object]:
@@ -454,8 +454,9 @@ async def test_search_strategy_drops_unserializable_pool_hints_and_uses_llm_quer
 
 @pytest.mark.asyncio
 async def test_search_strategy_dedicated_client_preserves_auth_cookie() -> None:
+    from obc_discovery.strategies.strategies import SearchStrategy
+
     from openbiliclaw.bilibili.api import BilibiliAPIClient
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
 
     shared_client = BilibiliAPIClient(cookie="SESSDATA=test-cookie")
     strategy = SearchStrategy(
@@ -478,7 +479,7 @@ async def test_search_strategy_dedicated_client_preserves_auth_cookie() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_deduplicates_results_by_bvid() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片", "深度讲解"]}')
     bilibili_client = FakeBilibiliClient(
@@ -506,7 +507,7 @@ async def test_search_strategy_deduplicates_results_by_bvid() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_boosts_high_weight_interest_matches() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片 原理", "陌生 主题"]}')
     bilibili_client = FakeBilibiliClient(
@@ -546,7 +547,7 @@ async def test_search_strategy_boosts_high_weight_interest_matches() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_falls_back_when_llm_returns_invalid_json() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService("not-json")
     bilibili_client = FakeBilibiliClient(
@@ -569,7 +570,7 @@ async def test_search_strategy_falls_back_when_llm_returns_invalid_json() -> Non
 
 @pytest.mark.asyncio
 async def test_search_strategy_continues_when_single_query_fails() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片", "摄影"]}')
     bilibili_client = FakeBilibiliClient(
@@ -592,7 +593,7 @@ async def test_search_strategy_continues_when_single_query_fails() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_uses_bounded_request_concurrency_and_keeps_limit() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片", "摄影", "构图"]}')
     bilibili_client = _SlowSearchClient(
@@ -621,7 +622,7 @@ async def test_search_strategy_uses_bounded_request_concurrency_and_keeps_limit(
 
 @pytest.mark.asyncio
 async def test_search_strategy_caps_llm_eval_candidates_for_small_limit() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     class BatchRecordingLLM:
         def __init__(self) -> None:
@@ -677,7 +678,7 @@ async def test_search_strategy_caps_llm_eval_candidates_for_small_limit() -> Non
 
 
 def test_search_backfill_does_not_drop_below_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     strategy = SearchStrategy(
         llm_service=FakeLLMService([]),
@@ -692,7 +693,7 @@ def test_search_backfill_does_not_drop_below_normal_admission_floor() -> None:
 
 
 def test_search_default_score_threshold_is_normal_admission_floor() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     strategy = SearchStrategy(
         llm_service=FakeLLMService([]),
@@ -780,7 +781,7 @@ def test_extract_interest_tags_fills_specifics_by_global_weight(
 
 @pytest.mark.asyncio
 async def test_search_strategy_injected_queries_skip_llm_generation() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["不应被使用"]}')
     bilibili_client = FakeBilibiliClient(
@@ -813,7 +814,7 @@ async def test_search_strategy_injected_queries_skip_llm_generation() -> None:
 
 @pytest.mark.asyncio
 async def test_search_strategy_injected_queries_are_deduped() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["x"]}')
     bilibili_client = FakeBilibiliClient({})
@@ -836,7 +837,7 @@ async def test_search_strategy_injected_queries_are_deduped() -> None:
 @pytest.mark.asyncio
 async def test_search_strategy_without_injection_still_generates() -> None:
     # Flag-off / no-injection regression: queries=None → legacy LLM gen runs.
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
+    from obc_discovery.strategies.strategies import SearchStrategy
 
     llm_service = FakeLLMService('{"queries": ["纪录片 原理"]}')
     bilibili_client = FakeBilibiliClient(
@@ -968,8 +969,9 @@ async def test_e2e_single_v_voucher_keyword_does_not_abort_search_round(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One challenged keyword is dropped; the rest of the round still searches."""
+    from obc_discovery.strategies.strategies import SearchStrategy
+
     from openbiliclaw.bilibili.api import BilibiliAPIClient
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
 
     async def no_sleep(_delay: float) -> None:
         return None
@@ -1009,8 +1011,9 @@ async def test_e2e_v_voucher_storm_trips_cooldown_and_aborts_round(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Consecutive challenged keywords past the threshold still back off."""
+    from obc_discovery.strategies.strategies import SearchStrategy
+
     from openbiliclaw.bilibili.api import BilibiliAPIClient
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
 
     async def no_sleep(_delay: float) -> None:
         return None
@@ -1051,8 +1054,9 @@ async def test_e2e_explore_skips_while_search_cooldown_active(
     """Explore shares the same process-wide cooldown and skips when it's hot."""
     import time
 
+    from obc_discovery.strategies.strategies import ExploreStrategy
+
     from openbiliclaw.bilibili.api import BilibiliAPIClient
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
 
     # Trip the shared cooldown directly (as a real storm would have).
     monkeypatch.setattr(BilibiliAPIClient, "_search_cooldown_until", time.monotonic() + 120.0)

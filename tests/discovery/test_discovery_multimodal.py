@@ -7,9 +7,8 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
+from obc_discovery.multimodal import prepare_cover_image_input
 from PIL import Image
-
-from openbiliclaw.discovery.multimodal import prepare_cover_image_input
 
 
 @pytest.mark.asyncio

@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.delight import (
     DelightScorer,
     DelightSignals,

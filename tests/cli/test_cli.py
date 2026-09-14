@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 import typer
+from obc_discovery.engine import DiscoveredContent
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -18,7 +19,6 @@ from openbiliclaw import config as config_module
 from openbiliclaw.bilibili.auth import AuthStatus
 from openbiliclaw.bilibili.browser import BrowserCommandError
 from openbiliclaw.cli import app
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.recommendation.engine import Recommendation
 from openbiliclaw.soul.profile import (
     CoreLayer,
@@ -1133,10 +1133,10 @@ def test_db_repair_reports_successful_rebuild(
 def test_runtime_builders_share_database_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
+    import obc_discovery.engine as discovery_module
+    import obc_discovery.strategies.strategies as strategy_module
     import obc_llm.service as llm_service_module
 
-    import openbiliclaw.discovery.engine as discovery_module
-    import openbiliclaw.discovery.strategies.strategies as strategy_module
     import openbiliclaw.memory.manager as memory_module
     import openbiliclaw.recommendation.engine as recommendation_module
     import openbiliclaw.storage.database as database_module

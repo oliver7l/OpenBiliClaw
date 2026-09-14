@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from obc_discovery.engine import DiscoveredContent
 
-from openbiliclaw.discovery.engine import DiscoveredContent
 from openbiliclaw.runtime.youtube_producer import (
     YoutubeDiscoveryProducer,
     YoutubeStrategyRunResult,
