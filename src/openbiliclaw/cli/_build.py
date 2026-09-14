@@ -67,10 +67,10 @@ def _build_soul_engine() -> Any:
     """Build the configured soul engine with initialized memory storage."""
 
     from obc_llm.service import module_overrides_from_config
+    from obc_soul.engine import SoulEngine
 
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
-    from openbiliclaw.soul.engine import SoulEngine
 
     class _UnavailableLLM:
         default_provider = ""
@@ -168,8 +168,9 @@ def _build_recommendation_engine() -> Any:
 def _build_dialogue(soul_engine: Any) -> Any:
     """Build the Socratic dialogue helper for interactive chat."""
 
+    from obc_soul.dialogue import SocraticDialogue
+
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.soul.dialogue import SocraticDialogue
 
     return SocraticDialogue(llm=_cli._build_registry(), soul_engine=soul_engine, session="cli")
 

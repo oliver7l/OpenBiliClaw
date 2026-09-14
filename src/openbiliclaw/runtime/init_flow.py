@@ -22,9 +22,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import typer
+from obc_soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 from rich.console import Console
-
-from openbiliclaw.soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 
 # ── 从 cli/__init__.py 迁入（K6）──────────────────────────────
 
@@ -188,7 +187,7 @@ def _build_draft_profile_for_discover(memory: Any) -> Any:
     preference-only draft while the real profile builds in the
     background overlaps two phases that previously serialised.
     """
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     preference_layer = memory.get_layer("preference").data
     draft = OnionProfile()

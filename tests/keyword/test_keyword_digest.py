@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from obc_discovery.keyword_digest import profile_kw_digest
-
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 def _profile(**overrides: Any) -> SoulProfile:

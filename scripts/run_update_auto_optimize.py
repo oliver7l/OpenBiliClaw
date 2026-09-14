@@ -35,12 +35,13 @@ async def run_update_pipeline(
     update_events: list[dict[str, Any]],
 ) -> Any:
     """Run init + incremental update in an isolated temp environment."""
+    from obc_soul.engine import SoulEngine
+    from obc_soul.pipeline import signals_from_events
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.engine import SoulEngine
-    from openbiliclaw.soul.pipeline import signals_from_events
-    from openbiliclaw.soul.profile import OnionProfile
 
     cfg = load_config()
 
@@ -90,6 +91,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     from claude_agent_sdk import ClaudeAgentOptions
+    from obc_soul.profile import OnionProfile
 
     from openbiliclaw.eval.agents import (
         ONION_PROFILE_SCHEMA,
@@ -102,7 +104,6 @@ async def main() -> None:
     from openbiliclaw.eval.persona_pool import PersonaPool
     from openbiliclaw.eval.report import render_training_summary
     from openbiliclaw.eval.run_logger import RunLogger, RunStep
-    from openbiliclaw.soul.profile import OnionProfile
 
     rl = RunLogger(task="auto_update", data_dir=Path("data"))
     rl.setup_file_logging()

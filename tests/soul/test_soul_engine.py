@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING
 import pytest
 from obc_llm.base import LLMResponse
 from obc_llm.service import ModuleOverride
-
-from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.engine import SoulEngine
-from openbiliclaw.soul.overrides import ProfileOverrides, apply_edit
-from openbiliclaw.soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
-from openbiliclaw.soul.profile import (
+from obc_soul.engine import SoulEngine
+from obc_soul.overrides import ProfileOverrides, apply_edit
+from obc_soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
+from obc_soul.profile import (
     CoreLayer,
     InterestDomain,
     InterestLayer,
     InterestSpecific,
     OnionProfile,
 )
+
+from openbiliclaw.memory.manager import MemoryManager
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -212,7 +212,7 @@ async def test_get_profile_loads_saved_soul_profile(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_get_profile_raises_when_soul_not_initialized(tmp_path: Path) -> None:
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -696,7 +696,7 @@ async def test_feedback_signal_strength_reaches_profile_update_prompt_and_profil
         awareness_notes: list[dict[str, object]],
         active_insights: list[dict[str, object]],
     ) -> object:
-        from openbiliclaw.soul.profile import SoulProfile
+        from obc_soul.profile import SoulProfile
 
         assert history == []
         assert preference["interests"][0]["name"] == "城市建筑深度内容"
@@ -742,7 +742,7 @@ async def test_feedback_signal_strength_reaches_profile_update_prompt_and_profil
 async def test_process_feedback_batch_new_dislikes_trigger_pool_purge(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import openbiliclaw.soul.dislike_writeback as dislike_writeback
+    import obc_soul.dislike_writeback as dislike_writeback
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -1167,7 +1167,7 @@ async def test_learn_from_dialogue_rebuilds_profile_after_candidate_reaches_thre
         awareness_notes: list[dict[str, object]],
         active_insights: list[dict[str, object]],
     ) -> object:
-        from openbiliclaw.soul.profile import SoulProfile
+        from obc_soul.profile import SoulProfile
 
         return SoulProfile.from_dict(
             {
@@ -1263,7 +1263,7 @@ async def test_process_feedback_batch_rebuilds_profile_when_preference_changes_s
         awareness_notes: list[dict[str, object]],
         active_insights: list[dict[str, object]],
     ) -> object:
-        from openbiliclaw.soul.profile import SoulProfile
+        from obc_soul.profile import SoulProfile
 
         assert history == []
         assert preference["interests"][0]["name"] == "纪录片"
@@ -1464,7 +1464,7 @@ async def test_apply_user_edit_persists_override_and_records_cognition(tmp_path:
 async def test_apply_user_edit_dislike_add_triggers_purge_with_diff(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import openbiliclaw.soul.dislike_writeback as dislike_writeback
+    import obc_soul.dislike_writeback as dislike_writeback
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -1489,7 +1489,7 @@ async def test_apply_user_edit_dislike_add_triggers_purge_with_diff(
 async def test_apply_user_edit_duplicate_dislike_does_not_purge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import openbiliclaw.soul.dislike_writeback as dislike_writeback
+    import obc_soul.dislike_writeback as dislike_writeback
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -1517,7 +1517,7 @@ async def test_apply_user_edit_dislike_add_does_not_block_on_purge(
     detached. Regression: the purge used to be awaited inline, blocking the edit
     response for tens of seconds so the UI looked like the add never saved.
     """
-    import openbiliclaw.soul.dislike_writeback as dislike_writeback
+    import obc_soul.dislike_writeback as dislike_writeback
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -1583,7 +1583,7 @@ async def test_apply_user_edit_syncs_both_speculators(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_apply_user_edit_invalid_target_raises(tmp_path: Path) -> None:
-    from openbiliclaw.soul.overrides import ProfileEditError
+    from obc_soul.overrides import ProfileEditError
 
     memory = MemoryManager(tmp_path)
     memory.initialize()

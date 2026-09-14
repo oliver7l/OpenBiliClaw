@@ -37,7 +37,7 @@ class _PausingAvoidanceLLM:
 
 
 def test_avoidance_state_round_trips(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceCooldownEntry,
         AvoidanceState,
         SpeculativeAvoidance,
@@ -91,7 +91,7 @@ def test_avoidance_state_round_trips(tmp_path):
 
 
 def test_promote_ready_avoidances_handles_confirmed_and_threshold(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceState,
         SpeculativeAvoidance,
         promote_ready_avoidances,
@@ -118,7 +118,7 @@ def test_promote_ready_avoidances_handles_confirmed_and_threshold(tmp_path):
 
 
 def test_user_confirm_avoidance_returns_none_for_missing_domain(tmp_path) -> None:
-    from openbiliclaw.soul.avoidance_speculator import AvoidanceSpeculator
+    from obc_soul.avoidance_speculator import AvoidanceSpeculator
 
     speculator = AvoidanceSpeculator(llm_service=None, data_dir=tmp_path)
 
@@ -126,7 +126,7 @@ def test_user_confirm_avoidance_returns_none_for_missing_domain(tmp_path) -> Non
 
 
 def test_user_reject_avoidance_returns_false_for_missing_domain(tmp_path) -> None:
-    from openbiliclaw.soul.avoidance_speculator import AvoidanceSpeculator
+    from obc_soul.avoidance_speculator import AvoidanceSpeculator
 
     speculator = AvoidanceSpeculator(llm_service=None, data_dir=tmp_path)
 
@@ -134,14 +134,14 @@ def test_user_reject_avoidance_returns_false_for_missing_domain(tmp_path) -> Non
 
 
 async def test_force_tick_does_not_restore_user_confirmed_avoidance(tmp_path) -> None:
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
         load_avoidance_state,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_avoidance_state(
         tmp_path,
@@ -161,14 +161,14 @@ async def test_force_tick_does_not_restore_user_confirmed_avoidance(tmp_path) ->
 
 
 async def test_force_tick_does_not_restore_user_rejected_avoidance(tmp_path) -> None:
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
         load_avoidance_state,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_avoidance_state(
         tmp_path,
@@ -191,13 +191,13 @@ async def test_force_tick_does_not_restore_user_rejected_avoidance(tmp_path) -> 
 async def test_force_tick_avoidance_loader_blocks_duplicate_after_confirmed_item_promoted(
     tmp_path,
 ) -> None:
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         load_avoidance_state,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_avoidance_state(tmp_path, AvoidanceState(active=[]))
     llm = _PausingAvoidanceLLM(domain="浅层热点复读")
@@ -224,7 +224,7 @@ async def test_force_tick_avoidance_loader_blocks_duplicate_after_confirmed_item
 
 
 def test_expire_stale_avoidances_creates_cooldown():
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceState,
         SpeculativeAvoidance,
         expire_stale_avoidances,
@@ -253,7 +253,7 @@ def test_expire_stale_avoidances_creates_cooldown():
 
 
 def test_avoidance_observe_counts_only_explicit_negative_events(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
@@ -300,13 +300,13 @@ def test_avoidance_observe_counts_only_explicit_negative_events(tmp_path):
 
 @pytest.mark.asyncio
 async def test_avoidance_speculator_tick_promotes_without_io_writeback(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     state = AvoidanceState(
         active=[
@@ -334,11 +334,11 @@ async def test_avoidance_speculator_tick_promotes_without_io_writeback(tmp_path)
 
 
 def test_avoidance_novelty_guard_blocks_positive_like_domain():
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceNoveltyGuard,
         AvoidanceState,
     )
-    from openbiliclaw.soul.profile import (
+    from obc_soul.profile import (
         InterestDomain,
         InterestLayer,
         InterestSpecific,
@@ -364,7 +364,7 @@ def test_avoidance_novelty_guard_blocks_positive_like_domain():
 
 
 def test_avoidance_novelty_guard_blocks_same_source_topic_boundary():
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceNoveltyGuard,
         AvoidanceState,
         SpeculativeAvoidance,
@@ -408,7 +408,7 @@ def test_avoidance_novelty_guard_blocks_same_source_topic_boundary():
 
 
 def test_choose_next_avoidance_probe_skips_denied_feedback_domain():
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         SpeculativeAvoidance,
         choose_next_avoidance_candidate,
     )
@@ -446,7 +446,7 @@ def test_choose_next_avoidance_probe_skips_denied_feedback_domain():
 
 
 def test_choose_next_avoidance_probe_prefers_fresh_axis():
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         SpeculativeAvoidance,
         choose_next_avoidance_candidate,
     )
@@ -479,8 +479,8 @@ def test_choose_next_avoidance_probe_prefers_fresh_axis():
 
 @pytest.mark.asyncio
 async def test_avoidance_speculator_force_tick_generates_candidates(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import AvoidanceSpeculator
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.avoidance_speculator import AvoidanceSpeculator
+    from obc_soul.profile import OnionProfile
 
     class FakeLLMService:
         async def complete_structured_task(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -522,14 +522,14 @@ async def test_avoidance_speculator_force_tick_generates_candidates(tmp_path):
 
 @pytest.mark.asyncio
 async def test_avoidance_speculator_force_tick_compacts_redundant_active_boundaries(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
         SpeculativeAvoidanceSpecific,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     state = AvoidanceState(
         active=[
@@ -592,7 +592,7 @@ async def test_avoidance_speculator_force_tick_compacts_redundant_active_boundar
 
 @pytest.mark.asyncio
 async def test_avoidance_compaction_persists_before_generation_call(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
@@ -600,7 +600,7 @@ async def test_avoidance_compaction_persists_before_generation_call(tmp_path):
         load_avoidance_state,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_avoidance_state(
         tmp_path,
@@ -655,14 +655,14 @@ async def test_avoidance_compaction_persists_before_generation_call(tmp_path):
 
 @pytest.mark.asyncio
 async def test_avoidance_speculator_generation_skips_existing_source_topic(tmp_path):
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul.avoidance_speculator import (
         AvoidanceSpeculator,
         AvoidanceState,
         SpeculativeAvoidance,
         SpeculativeAvoidanceSpecific,
         save_avoidance_state,
     )
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_avoidance_state(
         tmp_path,

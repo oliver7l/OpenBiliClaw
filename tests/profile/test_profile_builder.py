@@ -97,7 +97,7 @@ _VALID_PROFILE_PAYLOAD = json.dumps(
 
 @pytest.mark.asyncio
 async def test_profile_builder_creates_soul_profile_from_json() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     service = FakeStructuredService(
         json.dumps(
@@ -150,7 +150,7 @@ async def test_profile_builder_creates_soul_profile_from_json() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_retries_with_compact_history_after_invalid_json() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     service = SequenceStructuredService(
         [
@@ -173,7 +173,7 @@ async def test_profile_builder_retries_with_compact_history_after_invalid_json()
 
 @pytest.mark.asyncio
 async def test_profile_builder_raises_on_invalid_json() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder, SoulProfileBuildError
+    from obc_soul.profile_builder import ProfileBuilder, SoulProfileBuildError
 
     with pytest.raises(SoulProfileBuildError, match="invalid JSON"):
         await ProfileBuilder(FakeStructuredService("not-json")).build(
@@ -186,7 +186,7 @@ async def test_profile_builder_raises_on_invalid_json() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_raises_on_empty_response() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder, SoulProfileBuildError
+    from obc_soul.profile_builder import ProfileBuilder, SoulProfileBuildError
 
     with pytest.raises(SoulProfileBuildError, match="empty soul profile"):
         await ProfileBuilder(FakeStructuredService("")).build(
@@ -199,7 +199,7 @@ async def test_profile_builder_raises_on_empty_response() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_raises_when_portrait_is_too_short() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder, SoulProfileBuildError
+    from obc_soul.profile_builder import ProfileBuilder, SoulProfileBuildError
 
     service = FakeStructuredService(
         json.dumps(
@@ -228,7 +228,7 @@ async def test_profile_builder_raises_when_portrait_is_too_short() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_accepts_slightly_long_real_model_portrait() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     portrait = (
         "你这人不是那种被内容推着走的人，心里一直有一套自己的筛子。"
@@ -273,7 +273,7 @@ async def test_profile_builder_accepts_slightly_long_real_model_portrait() -> No
 
 @pytest.mark.asyncio
 async def test_profile_builder_defaults_missing_auxiliary_list_fields() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     payload = json.loads(_VALID_PROFILE_PAYLOAD)
     payload.pop("motivational_drivers")
@@ -292,7 +292,7 @@ async def test_profile_builder_defaults_missing_auxiliary_list_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_allows_missing_preference_data() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     service = FakeStructuredService(
         json.dumps(
@@ -322,7 +322,7 @@ async def test_profile_builder_allows_missing_preference_data() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_can_use_unified_service() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     service = FakeStructuredService(
         json.dumps(
@@ -368,7 +368,7 @@ async def test_profile_builder_can_use_unified_service() -> None:
 
 @pytest.mark.asyncio
 async def test_profile_builder_injects_old_friend_tone_in_prompt() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     service = FakeStructuredService(
         json.dumps(
@@ -427,7 +427,7 @@ async def test_profile_builder_injects_old_friend_tone_in_prompt() -> None:
 
 
 def test_summarize_history_includes_favorites_and_following() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
         {"title": f"视频{i}", "author_name": f"UP主{i % 3}"} for i in range(10)
@@ -460,7 +460,7 @@ def test_summarize_history_includes_favorites_and_following() -> None:
 
 
 def test_summarize_history_works_without_enriched_items() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
         {"title": f"视频{i}", "author_name": "某UP"} for i in range(5)
@@ -479,7 +479,7 @@ def test_summarize_history_synthesises_context_for_raw_bilibili_items() -> None:
     format_event_context so the LLM sees a uniform stream of
     natural-language descriptions across sources.
     """
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
         {"title": "讲透历史叙事", "author_name": "历史实验室"},
@@ -502,7 +502,7 @@ def test_summarize_history_preserves_xhs_native_context() -> None:
     via _xhs_events_to_history_items) should pass through verbatim,
     not be overwritten by the synthesised fallback.
     """
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
         {
@@ -532,7 +532,7 @@ def test_summarize_history_recent_contexts_split_matches_recent_titles() -> None
     cutoff used by recent_titles / older_titles, so a downstream
     consumer can assume they're index-aligned.
     """
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     history: list[dict[str, object]] = [
         {"title": f"视频{i}", "author_name": f"UP{i}"} for i in range(20)
@@ -557,7 +557,7 @@ async def test_e2e_init_favorites_following_reach_llm_prompt() -> None:
     ProfileBuilder._summarize_history extracts them, and they appear in the
     user_input sent to the LLM.
     """
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     # 1. Simulate what cli.py init builds as combined_history
     history: list[dict[str, object]] = [
@@ -630,7 +630,7 @@ async def test_e2e_init_favorites_following_reach_llm_prompt() -> None:
 
 
 def test_profile_builder_requires_core_memory_task_service() -> None:
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
 
     with pytest.raises(TypeError, match="complete_structured_task"):
         ProfileBuilder(FakeRegistry("{}"))

@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from obc_llm.base import LLMResponse
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.sources.xhs_keyword_gen import generate_xhs_keywords
 
 

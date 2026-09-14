@@ -8,8 +8,7 @@ from types import SimpleNamespace
 import pytest
 from obc_llm.base import LLMResponse
 from obc_llm.service import LLMServiceError, ModuleOverride
-
-from openbiliclaw.soul.dialogue import DialogueTurn, SocraticDialogue
+from obc_soul.dialogue import DialogueTurn, SocraticDialogue
 
 
 class FakeSoulEngine:

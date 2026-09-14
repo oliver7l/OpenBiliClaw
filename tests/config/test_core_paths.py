@@ -242,7 +242,7 @@ def test_random_shuffle_empty_library_returns_empty(tmp_db: db_mod.Database) -> 
 # Cognition backlog: high-signal priority
 # ---------------------------------------------------------------------------
 
-from openbiliclaw.soul.cognition_cycle import (  # noqa: E402
+from obc_soul.cognition_cycle import (  # noqa: E402
     _AWARENESS_BACKLOG_CAP,
     _AWARENESS_LOW_SIGNAL_TYPES,
     CognitionCycle,

@@ -1,7 +1,7 @@
 """Tests for adaptive bilibili tone profile building."""
 
-from openbiliclaw.soul.profile import PreferenceLayer, SoulProfile, StylePreference
-from openbiliclaw.soul.tone import build_tone_profile
+from obc_soul.profile import PreferenceLayer, SoulProfile, StylePreference
+from obc_soul.tone import build_tone_profile
 
 
 def test_build_tone_profile_prefers_dense_for_high_information_profile() -> None:

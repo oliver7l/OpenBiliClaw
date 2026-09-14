@@ -3,8 +3,8 @@ from obc_discovery.pool_snapshot import (
     build_cold_start_pool_snapshot,
     build_pool_distribution_snapshot,
 )
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 
 

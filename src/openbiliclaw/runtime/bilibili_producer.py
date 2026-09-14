@@ -33,8 +33,8 @@ from openbiliclaw.runtime.keyword_fetch import PLATFORM_BILIBILI as _PLATFORM_BI
 
 if TYPE_CHECKING:
     from obc_llm.service import LLMService
+    from obc_soul.profile import SoulProfile
 
-    from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.sources.bili_tasks import BiliTaskQueue
 
 logger = logging.getLogger(__name__)

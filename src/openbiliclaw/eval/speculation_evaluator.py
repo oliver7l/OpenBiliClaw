@@ -17,9 +17,10 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from obc_soul.profile import OnionProfile
+    from obc_soul.speculator import SpeculativeInterest
+
     from openbiliclaw.eval.persona_judge import PersonaJudgment
-    from openbiliclaw.soul.profile import OnionProfile
-    from openbiliclaw.soul.speculator import SpeculativeInterest
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ def _no_hallucination_score(
         if domain_lower in confirmed_lower or confirmed_lower in domain_lower:
             return 0.0
     # Token overlap check
-    from openbiliclaw.soul.speculator import _tokenize
+    from obc_soul.speculator import _tokenize
 
     domain_tokens = _tokenize(domain)
     for confirmed in confirmed_domains:

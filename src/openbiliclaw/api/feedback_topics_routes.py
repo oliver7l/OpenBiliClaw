@@ -176,7 +176,7 @@ def register_feedback_topics_routes(
         so the payload reaches the pipeline even when the extension sends
         only a bare BV id.
         """
-        from openbiliclaw.soul.pipeline import signal_from_recommendation_click
+        from obc_soul.pipeline import signal_from_recommendation_click
 
         recommendation: dict[str, object] | None = None
         if payload.recommendation_id is not None:

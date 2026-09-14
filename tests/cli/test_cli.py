@@ -9,6 +9,15 @@ from typing import Any, cast
 import pytest
 import typer
 from obc_discovery.engine import DiscoveredContent
+from obc_soul.profile import (
+    CoreLayer,
+    InterestTag,
+    OnionProfile,
+    PreferenceLayer,
+    RoleLayer,
+    SoulProfile,
+    ValuesLayer,
+)
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -20,15 +29,6 @@ from openbiliclaw.bilibili.auth import AuthStatus
 from openbiliclaw.bilibili.browser import BrowserCommandError
 from openbiliclaw.cli import app
 from openbiliclaw.recommendation.engine import Recommendation
-from openbiliclaw.soul.profile import (
-    CoreLayer,
-    InterestTag,
-    OnionProfile,
-    PreferenceLayer,
-    RoleLayer,
-    SoulProfile,
-    ValuesLayer,
-)
 
 
 class _FakeMemoryLayer:
@@ -58,7 +58,7 @@ def test_build_soul_engine_forwards_scheduler_speculation_config(monkeypatch) ->
     monkeypatch.setattr(config_module, "load_config", lambda: cfg)
     monkeypatch.setattr(cli_module, "_build_memory_manager", lambda: object())
     monkeypatch.setattr(cli_module, "_build_registry", lambda: object())
-    monkeypatch.setattr("openbiliclaw.soul.engine.SoulEngine", FakeSoulEngine)
+    monkeypatch.setattr("obc_soul.engine.SoulEngine", FakeSoulEngine)
 
     cli_module._build_soul_engine()
 
@@ -1322,7 +1322,7 @@ def test_serve_api_warns_when_pause_on_disconnect_requires_extension_presence(
 def test_discover_prints_init_guidance_when_profile_missing(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner
 ) -> None:
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     class FakeSoulEngine:
         async def get_profile(self) -> SoulProfile:
@@ -1980,7 +1980,7 @@ def test_discover_douyin_feed_uses_plugin_client(
 def test_chat_prints_init_guidance_when_profile_missing(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner
 ) -> None:
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     class FakeSoulEngine:
         async def get_profile(self) -> SoulProfile:
@@ -2094,7 +2094,7 @@ def test_profile_command_shows_saved_profile(
 def test_profile_command_prints_init_guidance_when_missing_profile(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner
 ) -> None:
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     class FakeSoulEngine:
         async def get_profile(self) -> SoulProfile:

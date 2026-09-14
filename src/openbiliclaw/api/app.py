@@ -1079,7 +1079,7 @@ def create_app(
             auto_update_service=auto_update_service,
         )
         if ctx.dialogue is None:
-            from openbiliclaw.soul.dialogue import SocraticDialogue
+            from obc_soul.dialogue import SocraticDialogue
 
             ctx.dialogue = SocraticDialogue(llm=None, soul_engine=soul_engine, session="popup")
         if ctx.auto_update_service is None:
@@ -1469,7 +1469,7 @@ def create_app(
         if pipeline is None:
             return 0
 
-        from openbiliclaw.soul.pipeline import signals_from_events
+        from obc_soul.pipeline import signals_from_events
 
         signals = signals_from_events(events)
         if not signals:
@@ -2712,6 +2712,9 @@ def create_app(
                 return []
             return [str(d.get("domain", "")) for d in domains if isinstance(d, dict)]
 
+        from obc_soul.avoidance_speculator import load_avoidance_state
+        from obc_soul.speculator import load_speculative_state
+
         from openbiliclaw.api.models import (
             AwarenessNoteOut,
             ContextModeOut,
@@ -2725,8 +2728,6 @@ def create_app(
             SpeculativeSpecificOut,
             StylePreferenceOut,
         )
-        from openbiliclaw.soul.avoidance_speculator import load_avoidance_state
-        from openbiliclaw.soul.speculator import load_speculative_state
 
         prefs = profile.preferences
 
@@ -2980,7 +2981,7 @@ def create_app(
         latter truncates lists for display, so it cannot reach e.g. the 13th
         interest or 9th UP.
         """
-        from openbiliclaw.soul.overrides import build_edit_state
+        from obc_soul.overrides import build_edit_state
 
         try:
             raw = await ctx.soul_engine.get_raw_profile()
@@ -2997,7 +2998,7 @@ def create_app(
         a second round-trip. Embedding / LLM services for the dislike pool
         purge are resolved inside ``apply_user_edit`` from the soul engine.
         """
-        from openbiliclaw.soul.overrides import ProfileEditError, build_edit_state
+        from obc_soul.overrides import ProfileEditError, build_edit_state
 
         try:
             await ctx.soul_engine.apply_user_edit(
@@ -3406,8 +3407,8 @@ def create_app(
     ) -> None:
         if not promoted:
             return
-        from openbiliclaw.soul.interest_writeback import merge_confirmed_interest
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.interest_writeback import merge_confirmed_interest
+        from obc_soul.profile import OnionProfile
 
         memory_manager = getattr(ctx, "memory_manager", None)
         get_layer = getattr(memory_manager, "get_layer", None)
@@ -3463,7 +3464,7 @@ def create_app(
     ) -> None:
         from datetime import UTC
 
-        from openbiliclaw.soul.exploration_buffer import (
+        from obc_soul.exploration_buffer import (
             pop_promotable_buffer_entries,
             record_buffer_event,
         )
@@ -3551,7 +3552,7 @@ def create_app(
         so the payload reaches the pipeline even when the extension sends
         only a bare BV id.
         """
-        from openbiliclaw.soul.pipeline import signal_from_recommendation_click
+        from obc_soul.pipeline import signal_from_recommendation_click
 
         recommendation: dict[str, object] | None = None
         if payload.recommendation_id is not None:

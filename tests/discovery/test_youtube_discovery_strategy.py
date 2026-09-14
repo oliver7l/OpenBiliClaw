@@ -14,8 +14,8 @@ from obc_discovery.strategies.youtube import (
     YoutubeTrendingStrategy,
 )
 from obc_llm.base import LLMResponse
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 from openbiliclaw.youtube.client import (
     _channel_uploads_url,

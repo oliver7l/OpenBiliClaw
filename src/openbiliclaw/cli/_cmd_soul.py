@@ -27,6 +27,7 @@ from typing import Any
 
 import click
 import typer
+from obc_soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 from rich.panel import Panel
 
 from openbiliclaw.cli._render import (
@@ -39,7 +40,6 @@ from openbiliclaw.runtime.init_flow import (
     _print_section_title,
     console,
 )
-from openbiliclaw.soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 
 
 def register(app: typer.Typer) -> None:
@@ -212,11 +212,11 @@ def profile_consolidate(
     import asyncio as _asyncio
 
     from obc_llm.service import LLMService, module_overrides_from_config
+    from obc_soul.consolidator import ProfileConsolidator
 
     from openbiliclaw import cli as _cli
     from openbiliclaw.config import load_config
     from openbiliclaw.llm._compat_registry import build_embedding_service
-    from openbiliclaw.soul.consolidator import ProfileConsolidator
 
     _print_page_title("画像整理", "profile-consolidate")
 
@@ -284,7 +284,7 @@ def profile_consolidate(
         return
 
     if migrate_categories:
-        from openbiliclaw.soul.category_migration import CategoryMigrator
+        from obc_soul.category_migration import CategoryMigrator
 
         migrator = CategoryMigrator(memory=memory, llm_service=llm_service)
         migration_report = _asyncio.run(migrator.run(dry_run=not apply))
@@ -441,8 +441,9 @@ def import_youtube(
 
 def recommend() -> None:
     """查看推荐内容."""
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     _cli._require_runtime_config()
     soul_engine = _cli._build_soul_engine()
@@ -553,8 +554,9 @@ def feedback(
 
 def profile() -> None:
     """查看用户画像."""
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     engine = _cli._build_soul_engine()
     try:
@@ -648,8 +650,9 @@ def profile() -> None:
 
 def chat() -> None:
     """与 Agent 对话（苏格拉底式深度交流）."""
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     _cli._require_runtime_config()
     soul_engine = _cli._build_soul_engine()
@@ -686,9 +689,10 @@ def chat() -> None:
 
 def delight() -> None:
     """手动触发一次惊喜推荐检查."""
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli
     from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     _cli._require_runtime_config()
     soul_engine = _cli._build_soul_engine()
@@ -751,8 +755,9 @@ def delight() -> None:
 
 def probe() -> None:
     """手动触发一次兴趣探针，确认或拒绝猜测方向."""
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     _cli._require_runtime_config()
     soul_engine = _cli._build_soul_engine()

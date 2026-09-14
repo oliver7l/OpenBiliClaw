@@ -602,11 +602,11 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from obc_llm.base import LLMResponse
+        from obc_soul.profile import PreferenceLayer, SoulProfile
 
         from openbiliclaw.api.runtime_context import RuntimeContext
         from openbiliclaw.config import Config
         from openbiliclaw.recommendation.engine import RecommendationEngine
-        from openbiliclaw.soul.profile import PreferenceLayer, SoulProfile
         from openbiliclaw.storage.database import Database
 
         async def no_sleep(_delay: float) -> None:
@@ -948,6 +948,8 @@ class TestBackendAPI:
         import obc_discovery.engine as discovery_engine_module
         import obc_discovery.strategies.strategies as strategies_module
         import obc_llm.service as llm_service_module
+        import obc_soul.dialogue as dialogue_module
+        import obc_soul.engine as soul_engine_module
 
         import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
@@ -957,8 +959,6 @@ class TestBackendAPI:
         import openbiliclaw.runtime.bilibili_producer as bilibili_producer_module
         import openbiliclaw.runtime.events as runtime_events_module
         import openbiliclaw.runtime.refresh as refresh_module
-        import openbiliclaw.soul.dialogue as dialogue_module
-        import openbiliclaw.soul.engine as soul_engine_module
         import openbiliclaw.sources.bili_tasks as bili_tasks_module
         import openbiliclaw.sources.dy_tasks as dy_tasks_module
         import openbiliclaw.sources.x_tasks as x_tasks_module
@@ -2352,8 +2352,7 @@ class TestBackendAPI:
         self,
     ) -> None:
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.soul.pipeline import SignalType
+        from obc_soul.pipeline import SignalType
 
         calls: list[str] = []
 
@@ -5026,14 +5025,13 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceState,
             SpeculativeAvoidance,
             SpeculativeAvoidanceSpecific,
             save_avoidance_state,
         )
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         save_avoidance_state(
             tmp_path,
@@ -5087,9 +5085,8 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.soul.profile import OnionProfile
-        from openbiliclaw.soul.speculator import (
+        from obc_soul.profile import OnionProfile
+        from obc_soul.speculator import (
             SpeculativeInterest,
             SpeculativeSpecific,
             SpeculativeState,
@@ -5139,8 +5136,7 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.soul.speculator import (
+        from obc_soul.speculator import (
             SpeculativeInterest,
             SpeculativeState,
             save_speculative_state,
@@ -5192,16 +5188,16 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.profile import OnionProfile
-        from openbiliclaw.soul.speculator import (
+        from obc_soul.profile import OnionProfile
+        from obc_soul.speculator import (
             InterestSpeculator,
             SpeculativeInterest,
             SpeculativeState,
             load_speculative_state,
             save_speculative_state,
         )
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         memory = MemoryManager(tmp_path)
         memory.initialize()
@@ -6043,8 +6039,7 @@ class TestBackendAPI:
 
     def test_avoidance_probe_pending_returns_active_items(self, tmp_path: Path) -> None:
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceState,
             SpeculativeAvoidance,
             SpeculativeAvoidanceSpecific,
@@ -6089,16 +6084,16 @@ class TestBackendAPI:
         from types import SimpleNamespace
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceSpeculator,
             AvoidanceState,
             SpeculativeAvoidance,
             SpeculativeAvoidanceSpecific,
             save_avoidance_state,
         )
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         async def fake_apply_new_dislikes(**_kwargs: object) -> list[str]:
             return []
@@ -6169,16 +6164,16 @@ class TestBackendAPI:
         tmp_path: Path,
     ) -> None:
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceSpeculator,
             AvoidanceState,
             SpeculativeAvoidance,
             SpeculativeAvoidanceSpecific,
             save_avoidance_state,
         )
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         memory = MemoryManager(tmp_path)
         memory.initialize()
@@ -6243,14 +6238,14 @@ class TestBackendAPI:
         tmp_path: Path,
     ) -> None:
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceSpeculator,
             AvoidanceState,
             SpeculativeAvoidance,
             save_avoidance_state,
         )
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         memory = MemoryManager(tmp_path)
         memory.initialize()
@@ -6353,15 +6348,15 @@ class TestBackendAPI:
         import time
 
         from fastapi.testclient import TestClient
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.avoidance_speculator import (
+        from obc_soul.avoidance_speculator import (
             AvoidanceSpeculator,
             AvoidanceState,
             SpeculativeAvoidance,
             SpeculativeAvoidanceSpecific,
             save_avoidance_state,
         )
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         memory = MemoryManager(tmp_path)
         memory.initialize()
@@ -6704,7 +6699,7 @@ class TestBackendAPI:
             async def ingest(self, signal: object) -> object:
                 self.ingested.append(signal)
 
-                from openbiliclaw.soul.pipeline import (
+                from obc_soul.pipeline import (
                     IngestResult,
                     LayerUpdateResult,
                     OnionLayer,
@@ -6760,7 +6755,7 @@ class TestBackendAPI:
 
         assert len(soul_engine.pipeline.ingested) == 1
         ingested_signal = soul_engine.pipeline.ingested[0]
-        from openbiliclaw.soul.pipeline import SignalType
+        from obc_soul.pipeline import SignalType
 
         assert ingested_signal.signal_type == SignalType.RECOMMENDATION_CLICK
         assert ingested_signal.payload["bvid"] == "BV1REC99"
@@ -6804,7 +6799,7 @@ class TestBackendAPI:
 
             async def ingest(self, signal: object) -> object:
                 self.ingested.append(signal)
-                from openbiliclaw.soul.pipeline import IngestResult
+                from obc_soul.pipeline import IngestResult
 
                 return IngestResult(signals_accepted=1)
 
@@ -6865,7 +6860,7 @@ class TestBackendAPI:
 
             async def ingest(self, signal: object) -> object:
                 self.ingested.append(signal)
-                from openbiliclaw.soul.pipeline import IngestResult
+                from obc_soul.pipeline import IngestResult
 
                 return IngestResult(signals_accepted=1)
 
@@ -6924,7 +6919,7 @@ class TestBackendAPI:
 
         class StubPipeline:
             async def ingest(self, signal: object) -> object:
-                from openbiliclaw.soul.pipeline import IngestResult
+                from obc_soul.pipeline import IngestResult
 
                 return IngestResult(signals_accepted=1, layers_buffered=[], layers_updated=[])
 
@@ -6981,7 +6976,7 @@ class TestBackendAPI:
 
         class StubPipeline:
             async def ingest(self, signal: object) -> object:
-                from openbiliclaw.soul.pipeline import IngestResult
+                from obc_soul.pipeline import IngestResult
 
                 return IngestResult(signals_accepted=1, layers_buffered=[], layers_updated=[])
 
@@ -7032,7 +7027,7 @@ class TestBackendAPI:
 
             async def ingest(self, signal: object) -> object:
                 self.ingested.append(signal)
-                from openbiliclaw.soul.pipeline import IngestResult
+                from obc_soul.pipeline import IngestResult
 
                 return IngestResult(signals_accepted=1)
 
@@ -9063,15 +9058,15 @@ class TestProfileEditEndpoints:
     def _client(self, tmp_path: Path) -> object:
         from fastapi.testclient import TestClient
         from obc_llm.base import LLMResponse
-
-        from openbiliclaw.memory.manager import MemoryManager
-        from openbiliclaw.soul.engine import SoulEngine
-        from openbiliclaw.soul.profile import (
+        from obc_soul.engine import SoulEngine
+        from obc_soul.profile import (
             CoreLayer,
             InterestDomain,
             InterestLayer,
             OnionProfile,
         )
+
+        from openbiliclaw.memory.manager import MemoryManager
 
         class _Reg:
             async def complete(

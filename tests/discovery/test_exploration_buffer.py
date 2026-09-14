@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from openbiliclaw.soul.exploration_buffer import (
+from obc_soul.exploration_buffer import (
     make_buffer_entry,
     pop_promotable_buffer_entries,
     record_buffer_event,

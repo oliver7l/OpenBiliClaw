@@ -22,8 +22,7 @@ from obc_discovery.strategies.x import (
     XSearchStrategy,
 )
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 def _profile() -> SoulProfile:

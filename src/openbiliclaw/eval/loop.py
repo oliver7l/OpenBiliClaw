@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.eval.evaluator import EvalReport, ProfileEvaluator
     from openbiliclaw.eval.event_simulator import EventSimulator
     from openbiliclaw.eval.optimizer import PromptOptimizer
     from openbiliclaw.eval.persona_generator import PersonaGenerator
-    from openbiliclaw.soul.profile import OnionProfile
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ class OptimizationLoop:
         personas: list[OnionProfile],
     ) -> list[EvalReport]:
         """Evaluate a batch of personas: simulate events → pipeline → score."""
-        from openbiliclaw.soul.pipeline import signals_from_events
+        from obc_soul.pipeline import signals_from_events
 
         reports: list[EvalReport] = []
         for persona in personas:

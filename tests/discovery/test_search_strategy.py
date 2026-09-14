@@ -10,8 +10,7 @@ import pytest
 from obc_discovery.engine import DiscoveryConcurrencyController
 from obc_discovery.pool_snapshot import PoolDistributionSnapshot
 from obc_discovery.strategies._utils import build_profile_summary
-
-from openbiliclaw.soul.profile import (
+from obc_soul.profile import (
     MBTI,
     AwarenessNote,
     ContextMode,

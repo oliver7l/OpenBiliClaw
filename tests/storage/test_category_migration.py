@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from openbiliclaw.soul.consolidator import ProfileConsolidator
-from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
+from obc_soul.consolidator import ProfileConsolidator
+from obc_soul.taxonomy import CATEGORY_VOCAB
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -86,7 +86,7 @@ def _memory(tmp_path: Path, *, soul: dict[str, Any] | None = None) -> _FakeMemor
 
 
 async def test_dry_run_prints_full_mapping_and_writes_nothing(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
     llm = _StubLLM({"mapping": {"泛娱乐": "娱乐", "宠物": "萌宠", "科技": "科技"}})
@@ -101,7 +101,7 @@ async def test_dry_run_prints_full_mapping_and_writes_nothing(tmp_path: Path) ->
 
 
 async def test_validation_gap_aborts_with_zero_writes(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
     missing = _StubLLM({"mapping": {"泛娱乐": "娱乐", "科技": "科技"}})
@@ -125,7 +125,7 @@ async def test_validation_gap_aborts_with_zero_writes(tmp_path: Path) -> None:
 
 
 async def test_apply_rewrites_categories_and_records_run(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
     llm = _StubLLM({"mapping": {"泛娱乐": "娱乐", "宠物": "萌宠", "科技": "科技"}})
@@ -146,7 +146,7 @@ async def test_apply_rewrites_categories_and_records_run(tmp_path: Path) -> None
 
 
 async def test_revert_restores_interests_byte_identical(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
     before = [dict(item) for item in memory.get_layer("preference").data["interests"]]
@@ -161,7 +161,7 @@ async def test_revert_restores_interests_byte_identical(tmp_path: Path) -> None:
 
 
 async def test_in_vocab_categories_forced_identity(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
     llm = _StubLLM({"mapping": {"泛娱乐": "娱乐", "宠物": "萌宠", "科技": "生活"}})
@@ -175,7 +175,7 @@ async def test_in_vocab_categories_forced_identity(tmp_path: Path) -> None:
 
 
 async def test_in_vocab_categories_do_not_require_llm(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _FakeMemory(
         {
@@ -198,7 +198,7 @@ async def test_in_vocab_categories_do_not_require_llm(tmp_path: Path) -> None:
 
 
 async def test_llm_unavailable_degrades_to_preview(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
 
@@ -212,7 +212,7 @@ async def test_llm_unavailable_degrades_to_preview(tmp_path: Path) -> None:
 
 
 async def test_llm_call_failure_degrades_to_preview(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _memory(tmp_path)
 
@@ -227,7 +227,7 @@ async def test_llm_call_failure_degrades_to_preview(tmp_path: Path) -> None:
 
 
 async def test_empty_category_assigned_fallback(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
+    from obc_soul.category_migration import CategoryMigrator
 
     memory = _FakeMemory(
         {"interests": [_interest("空域", ""), _interest("AI", "科技")], "disliked_topics": []},
@@ -242,8 +242,8 @@ async def test_empty_category_assigned_fallback(tmp_path: Path) -> None:
 
 
 async def test_apply_rebuilds_onion_tree_first_level_within_vocab(tmp_path: Path) -> None:
-    from openbiliclaw.soul.category_migration import CategoryMigrator
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.category_migration import CategoryMigrator
+    from obc_soul.profile import OnionProfile
 
     soul = OnionProfile().to_dict()
     memory = _memory(tmp_path, soul=soul)

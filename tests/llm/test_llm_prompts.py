@@ -845,8 +845,7 @@ def test_profile_consolidation_prompt_requires_representative_item_names() -> No
 
 def test_category_mapping_prompt_user_message_carries_vocab_and_histogram() -> None:
     from obc_llm.prompts import build_category_mapping_prompt
-
-    from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
+    from obc_soul.taxonomy import CATEGORY_VOCAB
 
     messages = build_category_mapping_prompt(categories=[{"category": "泛娱乐", "tag_count": 12}])
     system = messages[0]["content"]
@@ -861,8 +860,7 @@ def test_category_mapping_prompt_user_message_carries_vocab_and_histogram() -> N
 
 def test_preference_analysis_system_prompt_contains_full_vocab() -> None:
     from obc_llm.prompts import build_preference_analysis_prompt
-
-    from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
+    from obc_soul.taxonomy import CATEGORY_VOCAB
 
     messages = build_preference_analysis_prompt(events=[], existing_preference={})
     system = messages[0]["content"]

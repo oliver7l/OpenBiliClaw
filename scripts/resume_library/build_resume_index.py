@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""扫描 求职知识库 内全部简历相关文件，重建 data/resume.db 索引。
+"""扫描 简历库/ 与 求职知识库 内全部简历相关文件，重建 data/resume.db 索引。
 
 用途：简历资产统一台账——任何投递前先查这里，避免改错散落副本。
 运行：.venv/bin/python scripts/resume_library/build_resume_index.py
@@ -18,7 +18,13 @@ DB = os.path.join(ROOT, "data", "resume.db")
 
 SKIP_DIRS = {"awesome-material-master", ".workbuddy", "node_modules", ".venv", ".git"}
 RESUME_PAT = re.compile(r"简历|resume|童力", re.IGNORECASE)
-LIB = "03_岗位弹药库/简历库"
+LIB = "简历库"  # 2026-09-14 上移至项目根
+
+# (扫描根, rel_path 基准)：简历库文件 rel 相对项目根，库外文件 rel 相对 求职知识库
+SCAN_ROOTS = [
+    (os.path.join(ROOT, LIB), ROOT),
+    (KB, KB),
+]
 
 CATEGORIES = [
     (f"{LIB}/00_事实源/", "事实源", "现役"),
@@ -67,30 +73,31 @@ def parse_name(fn):
 
 def main():
     rows = []
-    for root, dirs, files in os.walk(KB):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for fn in files:
-            if not RESUME_PAT.search(fn):
-                continue
-            full = os.path.join(root, fn)
-            rel = os.path.relpath(full, KB)
-            try:
-                st = os.stat(full)
-                digest = sha256_of(full)
-            except OSError as e:
-                print(f"[SKIP] {rel}: {e}", file=sys.stderr)
-                continue
-            cat, status = categorize(rel)
-            company = position = vdate = ""
-            if cat in ("母版", "公司定制版", "投递留存", "原始档案", "污染备份"):
-                company, position, vdate = parse_name(fn)
-            if cat == "公司定制版":
-                company = rel.split("/")[3]  # 20_公司定制版/<公司>/文件
-            note = ""
-            if cat == "岗位材料副本":
-                note = "岗位文件夹自包含副本，勿单独修改；正文以简历库为准"
-            rows.append((rel, cat, company, position, vdate, fn.rsplit(".", 1)[-1],
-                         st.st_size, digest, status, note))
+    for scan_root, rel_base in SCAN_ROOTS:
+        for root, dirs, files in os.walk(scan_root):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for fn in files:
+                if not RESUME_PAT.search(fn):
+                    continue
+                full = os.path.join(root, fn)
+                rel = os.path.relpath(full, rel_base)
+                try:
+                    st = os.stat(full)
+                    digest = sha256_of(full)
+                except OSError as e:
+                    print(f"[SKIP] {rel}: {e}", file=sys.stderr)
+                    continue
+                cat, status = categorize(rel)
+                company = position = vdate = ""
+                if cat in ("母版", "公司定制版", "投递留存", "原始档案", "污染备份"):
+                    company, position, vdate = parse_name(fn)
+                if cat == "公司定制版":
+                    company = rel.split("/")[2]  # 简历库/20_公司定制版/<公司>/文件
+                note = ""
+                if cat == "岗位材料副本":
+                    note = "岗位文件夹自包含副本，勿单独修改；正文以简历库为准"
+                rows.append((rel, cat, company, position, vdate, fn.rsplit(".", 1)[-1],
+                             st.st_size, digest, status, note))
 
     # 去重标注：副本 sha 与库内文件相同时记录
     in_lib = {}

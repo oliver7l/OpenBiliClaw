@@ -13,9 +13,10 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from obc_soul.engine import SoulEngine
+
     from openbiliclaw.config import Config
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.engine import SoulEngine
 
     from .skill import Skill
 

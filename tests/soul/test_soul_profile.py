@@ -1,6 +1,6 @@
 """Tests for the Soul profile models."""
 
-from openbiliclaw.soul.profile import (
+from obc_soul.profile import (
     AwarenessNote,
     InsightHypothesis,
     InterestTag,

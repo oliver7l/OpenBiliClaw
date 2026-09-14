@@ -83,7 +83,7 @@ async def run_discovery_pipeline(
     elif hasattr(persona, "preferences"):
         profile = persona
     else:
-        from openbiliclaw.soul.profile import SoulProfile
+        from obc_soul.profile import SoulProfile
         profile = SoulProfile()
 
     strategy_results: dict[str, list[Any]] = {}
@@ -163,7 +163,7 @@ async def main(args: argparse.Namespace) -> None:
             logger.info("[Epoch %d] Persona %d/%d", epoch, persona_idx + 1, args.batch)
 
             # 1. Generate or load persona
-            from openbiliclaw.soul.profile import OnionProfile, SoulProfile
+            from obc_soul.profile import OnionProfile, SoulProfile
 
             persona: OnionProfile | None = None
             persona_data = persona_pool.load_any("discovery")

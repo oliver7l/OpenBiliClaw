@@ -6,14 +6,14 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
-
-from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
-from openbiliclaw.soul.profile import (
+from obc_soul.profile import (
     InterestDomain,
     InterestLayer,
     InterestSpecific,
     OnionProfile,
 )
+
+from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
 from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 from openbiliclaw.storage.database import Database
 

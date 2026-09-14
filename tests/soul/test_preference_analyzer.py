@@ -8,8 +8,7 @@ import pytest
 from obc_llm.base import LLMProviderError, LLMResponse
 from obc_llm.prompts import build_preference_analysis_prompt
 from obc_llm.service import LLMServiceError
-
-from openbiliclaw.soul.preference_analyzer import (
+from obc_soul.preference_analyzer import (
     DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE,
     MAX_CONCURRENT_PREFERENCE_CHUNKS,
     PreferenceAnalyzer,
@@ -217,7 +216,7 @@ class StubEmbedding:
 
 @pytest.fixture(autouse=True)
 def _clear_vocab_vector_cache() -> None:
-    from openbiliclaw.soul import taxonomy
+    from obc_soul import taxonomy
 
     taxonomy._vocab_vectors.clear()
 
@@ -307,7 +306,7 @@ class ConcurrentChunkStructuredService:
 
 @pytest.mark.asyncio
 async def test_analyze_events_parses_structured_preference_output() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -346,7 +345,7 @@ async def test_analyze_events_parses_structured_preference_output() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_json_response_raises_preference_analysis_error() -> None:
-    from openbiliclaw.soul.preference_analyzer import (
+    from obc_soul.preference_analyzer import (
         PreferenceAnalysisError,
         PreferenceAnalyzer,
     )
@@ -363,7 +362,7 @@ async def test_invalid_json_response_raises_preference_analysis_error() -> None:
 
 
 def test_merge_preferences_applies_decay_and_deduplicates_tags() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     analyzer = PreferenceAnalyzer(FakeStructuredService())
     merged = analyzer.merge_preferences(
@@ -484,7 +483,7 @@ def test_merge_preferences_matches_active_interest_alias() -> None:
 
 @pytest.mark.asyncio
 async def test_provider_error_is_wrapped() -> None:
-    from openbiliclaw.soul.preference_analyzer import (
+    from obc_soul.preference_analyzer import (
         PreferenceAnalysisError,
         PreferenceAnalyzer,
     )
@@ -500,7 +499,7 @@ async def test_provider_error_is_wrapped() -> None:
 
 @pytest.mark.asyncio
 async def test_preference_analyzer_can_use_unified_service() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -520,8 +519,8 @@ async def test_preference_analyzer_can_use_unified_service() -> None:
 
 @pytest.mark.asyncio
 async def test_off_vocab_category_clamped_via_embedding_nn() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
-    from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.taxonomy import CATEGORY_VOCAB
 
     service = FakeStructuredService(
         LLMResponse(
@@ -545,7 +544,7 @@ async def test_off_vocab_category_clamped_via_embedding_nn() -> None:
 
 @pytest.mark.asyncio
 async def test_off_vocab_category_without_embedding_falls_to_other() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -567,7 +566,7 @@ async def test_off_vocab_category_without_embedding_falls_to_other() -> None:
 
 @pytest.mark.asyncio
 async def test_in_vocab_category_passthrough_unchanged() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -589,7 +588,7 @@ async def test_in_vocab_category_passthrough_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_clamp_collapses_variants_onto_same_merge_key() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -626,7 +625,7 @@ async def test_clamp_collapses_variants_onto_same_merge_key() -> None:
 
 @pytest.mark.asyncio
 async def test_speculative_interests_clamped_too() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -651,14 +650,14 @@ async def test_speculative_interests_clamped_too() -> None:
 
 
 def test_preference_analyzer_requires_core_memory_task_service() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     with pytest.raises(TypeError, match="complete_structured_task"):
         PreferenceAnalyzer(FakeRegistry())
 
 
 def test_compute_source_platform_mix_counts_events_per_source() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     analyzer = PreferenceAnalyzer(FakeStructuredService())
     mix = analyzer.compute_source_platform_mix(
@@ -675,14 +674,14 @@ def test_compute_source_platform_mix_counts_events_per_source() -> None:
 
 
 def test_compute_source_platform_mix_returns_empty_when_no_events() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     analyzer = PreferenceAnalyzer(FakeStructuredService())
     assert analyzer.compute_source_platform_mix([]) == {}
 
 
 def test_merge_source_mix_ema_blends_prior_and_batch() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     analyzer = PreferenceAnalyzer(FakeStructuredService())
     blended = analyzer._merge_source_mix(
@@ -694,7 +693,7 @@ def test_merge_source_mix_ema_blends_prior_and_batch() -> None:
 
 
 def test_merge_source_mix_keeps_prior_when_batch_empty() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     analyzer = PreferenceAnalyzer(FakeStructuredService())
     assert analyzer._merge_source_mix(
@@ -705,7 +704,7 @@ def test_merge_source_mix_keeps_prior_when_batch_empty() -> None:
 
 @pytest.mark.asyncio
 async def test_analyze_events_populates_source_platform_mix() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(
         LLMResponse(
@@ -725,7 +724,7 @@ async def test_analyze_events_populates_source_platform_mix() -> None:
 
 @pytest.mark.asyncio
 async def test_chunked_analysis_splits_and_skips_rejected_single_event() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = RejectingChunkStructuredService()
     preference = await PreferenceAnalyzer(service).analyze_events(
@@ -756,8 +755,8 @@ async def test_chunked_analysis_splits_and_skips_rejected_single_event() -> None
 async def test_analyze_events_count_chunking_avoids_whole_batch_prompt_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from openbiliclaw.soul import preference_analyzer as analyzer_module
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul import preference_analyzer as analyzer_module
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     original_build_prompt = analyzer_module.build_preference_analysis_prompt
 
@@ -816,8 +815,7 @@ async def test_chunked_analysis_batches_initial_chunk_fanout() -> None:
 @pytest.mark.asyncio
 async def test_chunked_analysis_splits_by_prompt_budget_before_llm_call() -> None:
     from obc_llm.prompts import build_preference_analysis_prompt
-
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
     budget = len(base_messages[0]["content"]) + 1800
@@ -851,8 +849,7 @@ async def test_chunked_analysis_splits_by_prompt_budget_before_llm_call() -> Non
 @pytest.mark.asyncio
 async def test_analyze_events_splits_by_prompt_budget_without_explicit_chunk_size() -> None:
     from obc_llm.prompts import build_preference_analysis_prompt
-
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
     budget = len(base_messages[0]["content"]) + 1800
@@ -881,8 +878,7 @@ async def test_analyze_events_splits_by_prompt_budget_without_explicit_chunk_siz
 @pytest.mark.asyncio
 async def test_single_oversized_preference_event_is_compacted_before_llm_call() -> None:
     from obc_llm.prompts import build_preference_analysis_prompt
-
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     base_messages = build_preference_analysis_prompt(events=[], existing_preference={})
     budget = len(base_messages[0]["content"]) + 2200
@@ -923,9 +919,8 @@ async def test_single_event_is_skipped_when_compact_prompt_still_exceeds_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from obc_llm.prompts import build_preference_analysis_prompt
-
-    from openbiliclaw.soul import preference_analyzer as analyzer_module
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul import preference_analyzer as analyzer_module
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     compact_prompt_events: list[dict[str, object]] = []
     original_build_prompt = analyzer_module.build_preference_analysis_prompt
@@ -972,7 +967,7 @@ async def test_single_event_is_skipped_when_compact_prompt_still_exceeds_budget(
 
 @pytest.mark.asyncio
 async def test_provider_context_overflow_splits_chunk_and_retries() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = ContextOverflowOnceStructuredService()
     analyzer = PreferenceAnalyzer(service, max_prompt_chars=0)
@@ -992,7 +987,7 @@ async def test_provider_context_overflow_splits_chunk_and_retries() -> None:
 
 @pytest.mark.asyncio
 async def test_service_context_overflow_splits_chunk_and_retries() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = ServiceContextOverflowOnceStructuredService()
     analyzer = PreferenceAnalyzer(service, max_prompt_chars=0)
@@ -1012,7 +1007,7 @@ async def test_service_context_overflow_splits_chunk_and_retries() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_json_single_event_retries_with_safe_compact_prompt() -> None:
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = RejectingContextStructuredService()
     analyzer = PreferenceAnalyzer(service, max_prompt_chars=0)
@@ -1044,7 +1039,7 @@ async def test_invalid_json_single_event_retries_with_safe_compact_prompt() -> N
 
 @pytest.mark.asyncio
 async def test_non_context_provider_error_still_aborts_chunked_analysis() -> None:
-    from openbiliclaw.soul.preference_analyzer import (
+    from obc_soul.preference_analyzer import (
         PreferenceAnalysisError,
         PreferenceAnalyzer,
     )
@@ -1068,7 +1063,7 @@ async def test_non_context_provider_error_still_aborts_chunked_analysis() -> Non
 
 @pytest.mark.asyncio
 async def test_non_context_service_error_still_aborts_chunked_analysis() -> None:
-    from openbiliclaw.soul.preference_analyzer import (
+    from obc_soul.preference_analyzer import (
         PreferenceAnalysisError,
         PreferenceAnalyzer,
     )
@@ -1095,7 +1090,7 @@ async def test_analyze_events_passes_unfiltered_when_satisfaction_flag_off() -> 
     """Default behavior (flag off): every event the caller passes shows up
     verbatim in the LLM user prompt, including quick-exit / negative rows.
     """
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(LLMResponse(content="{}", provider="openai"))
     analyzer = PreferenceAnalyzer(service, satisfaction_filter_enabled=False)
@@ -1116,7 +1111,7 @@ async def test_analyze_events_default_drops_quick_exit_but_keeps_explicit_dislik
     Explicit dislike feedback is negative evidence, not positive interest
     evidence. It must remain available so the LLM can update disliked_topics.
     """
-    from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
+    from obc_soul.preference_analyzer import PreferenceAnalyzer
 
     service = FakeStructuredService(LLMResponse(content="{}", provider="openai"))
     analyzer = PreferenceAnalyzer(service)

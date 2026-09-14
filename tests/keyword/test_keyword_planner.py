@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from obc_discovery.keyword_digest import profile_kw_digest
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.config import DiscoveryConfig
 from openbiliclaw.runtime.keyword_planner import KeywordPlanner
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 
 if TYPE_CHECKING:

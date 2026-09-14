@@ -21,10 +21,10 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from obc_soul.awareness_analyzer import AwarenessGenerationError
+from obc_soul.cognition_cycle import CognitionCycle
 
 from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.awareness_analyzer import AwarenessGenerationError
-from openbiliclaw.soul.cognition_cycle import CognitionCycle
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -49,7 +49,7 @@ class _FlakyAwarenessAnalyzer:
         self.call_count += 1
         if self.call_count <= self._fail_first_n:
             raise AwarenessGenerationError("simulated transient failure")
-        from openbiliclaw.soul.profile import awareness_note_from_dict
+        from obc_soul.profile import awareness_note_from_dict
 
         return [awareness_note_from_dict(item) for item in self._succeed_payload]
 
@@ -157,7 +157,7 @@ async def test_awareness_double_failure_preserves_schedule(
     )
 
     now = datetime(2026, 5, 16, 12, 0, 0)
-    with caplog.at_level(logging.WARNING, logger="openbiliclaw.soul.cognition_cycle"):
+    with caplog.at_level(logging.WARNING, logger="obc_soul.cognition_cycle"):
         result = await cycle.run_if_due(now=now)
 
     assert result.ran is True
@@ -242,7 +242,7 @@ class _RecordingAwarenessAnalyzer:
         if self._fail_after_success is not None and self._success_count >= self._fail_after_success:
             raise AwarenessGenerationError("simulated failure after N successes")
         self._success_count += 1
-        from openbiliclaw.soul.profile import AwarenessNote
+        from obc_soul.profile import AwarenessNote
 
         return [
             AwarenessNote(
@@ -280,7 +280,7 @@ class _RecordingInsightAnalyzer:
             }
         )
         self.max_tokens_seen.append(max_tokens)
-        from openbiliclaw.soul.profile import InsightHypothesis
+        from obc_soul.profile import InsightHypothesis
 
         return [
             InsightHypothesis(hypothesis=f"hyp-{len(self.calls)}", evidence=["e"], confidence=0.5)
@@ -306,7 +306,7 @@ async def test_awareness_cursor_covers_backlog_and_batches(tmp_path: Path) -> No
     """
     import math
 
-    from openbiliclaw.soul.cognition_cycle import (
+    from obc_soul.cognition_cycle import (
         _AWARENESS_EVENT_BATCH_SIZE,
         _COGNITION_MAX_TOKENS,
     )
@@ -348,7 +348,7 @@ async def test_awareness_single_call_for_normal_window(tmp_path: Path) -> None:
     Locks in the "don't force batching" intent: 60 events used to split 50+10;
     with the large batch size it must be a single call.
     """
-    from openbiliclaw.soul.cognition_cycle import _AWARENESS_EVENT_BATCH_SIZE
+    from obc_soul.cognition_cycle import _AWARENESS_EVENT_BATCH_SIZE
 
     memory = _seed_memory(tmp_path, event_count=0)
     _add_events(memory, 60)
@@ -421,7 +421,7 @@ async def test_awareness_skips_when_no_new_events(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_awareness_partial_progress_survives_midbatch_failure(tmp_path: Path) -> None:
     """First batch's watermark persists even when a later batch fails twice."""
-    from openbiliclaw.soul.cognition_cycle import _AWARENESS_EVENT_BATCH_SIZE
+    from obc_soul.cognition_cycle import _AWARENESS_EVENT_BATCH_SIZE
 
     batch = _AWARENESS_EVENT_BATCH_SIZE
     memory = _seed_memory(tmp_path, event_count=0)
@@ -491,7 +491,7 @@ async def test_insight_cursor_processes_only_new_notes_with_existing_context(
     assert rec.calls[0]["notes"] == ["觉察0", "觉察1", "觉察2"]
     assert rec.calls[0]["existing"] == ["已有假设"]
     assert state["last_insight_awareness_index"] == 3
-    from openbiliclaw.soul.cognition_cycle import _COGNITION_MAX_TOKENS
+    from obc_soul.cognition_cycle import _COGNITION_MAX_TOKENS
 
     assert rec.max_tokens_seen == [_COGNITION_MAX_TOKENS]
 

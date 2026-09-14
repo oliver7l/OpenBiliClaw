@@ -52,13 +52,14 @@ async def main() -> None:
     parser.add_argument("--events", type=int, default=50, help="最近 N 条事件用于增量更新")
     args = parser.parse_args()
 
+    from obc_soul.engine import SoulEngine
+    from obc_soul.pipeline import signals_from_events
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.run_logger import RunLogger
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.engine import SoulEngine
-    from openbiliclaw.soul.pipeline import signals_from_events
-    from openbiliclaw.soul.profile import OnionProfile
 
     cfg = load_config()
     data_dir = cfg.data_path

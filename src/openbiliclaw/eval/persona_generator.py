@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from obc_llm.base import LLMResponse
 
-from openbiliclaw.soul.profile import OnionProfile
+from obc_soul.profile import OnionProfile
 
 logger = logging.getLogger(__name__)
 

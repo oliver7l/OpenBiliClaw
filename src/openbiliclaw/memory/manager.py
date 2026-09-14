@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
-    from openbiliclaw.soul.overrides import ProfileOverrides
+    from obc_soul.overrides import ProfileOverrides
 
 logger = logging.getLogger(__name__)
 _EVENT_TYPES = {
@@ -208,9 +208,9 @@ class MemoryManager:
         manual edits even right after a regeneration — without this, the
         mirror would show the raw AI profile and silently drop user edits.
         """
-        from openbiliclaw.soul.overrides import apply_overrides
-        from openbiliclaw.soul.profile import OnionProfile
-        from openbiliclaw.soul.profile_renderer import sync_profile_files
+        from obc_soul.overrides import apply_overrides
+        from obc_soul.profile import OnionProfile
+        from obc_soul.profile_renderer import sync_profile_files
 
         onion: OnionProfile | None = None
         if isinstance(profile, OnionProfile):
@@ -228,7 +228,7 @@ class MemoryManager:
 
     def append_changelog(self, entry: str) -> None:
         """Append a changelog entry to soul_changelog.md."""
-        from openbiliclaw.soul.profile_renderer import append_changelog
+        from obc_soul.profile_renderer import append_changelog
 
         append_changelog(entry, self._data_dir)
 
@@ -554,7 +554,7 @@ class MemoryManager:
         unreadable, so the effective profile equals the AI profile until the
         user makes their first edit (backward-compatible).
         """
-        from openbiliclaw.soul.overrides import ProfileOverrides
+        from obc_soul.overrides import ProfileOverrides
 
         if not self._profile_overrides_path.exists():
             return ProfileOverrides()

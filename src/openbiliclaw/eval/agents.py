@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
 logger = logging.getLogger(__name__)
 
@@ -526,8 +526,7 @@ async def run_persona_agent(
 ) -> OnionProfile:
     """Generate a ground truth persona using Claude Agent SDK."""
     from claude_agent_sdk import ClaudeAgentOptions
-
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     schema_text = json.dumps(ONION_PROFILE_SCHEMA, ensure_ascii=False, indent=2)
     prompt = (

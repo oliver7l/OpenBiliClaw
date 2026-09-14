@@ -4,8 +4,7 @@ import json
 
 import pytest
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.soul.profile import AwarenessNote, InsightHypothesis
+from obc_soul.profile import AwarenessNote, InsightHypothesis
 
 
 class FakeRegistry:
@@ -46,7 +45,7 @@ class FakeStructuredService:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_builds_hypotheses_from_awareness() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     service = FakeStructuredService(
         json.dumps(
@@ -82,7 +81,7 @@ async def test_insight_analyzer_builds_hypotheses_from_awareness() -> None:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_raises_on_invalid_json() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer, InsightGenerationError
+    from obc_soul.insight_analyzer import InsightAnalyzer, InsightGenerationError
 
     analyzer = InsightAnalyzer(FakeStructuredService("not-json"))
     with pytest.raises(InsightGenerationError, match="invalid JSON"):
@@ -94,7 +93,7 @@ async def test_insight_analyzer_raises_on_invalid_json() -> None:
 
 
 def test_merge_insights_combines_matching_hypotheses() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     analyzer = InsightAnalyzer(FakeStructuredService("[]"))
     existing = [
@@ -126,7 +125,7 @@ def test_merge_insights_combines_matching_hypotheses() -> None:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_can_use_unified_service() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     service = FakeStructuredService(
         json.dumps(
@@ -153,7 +152,7 @@ async def test_insight_analyzer_can_use_unified_service() -> None:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_accepts_results_wrapper() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     raw = json.dumps(
         {
@@ -181,7 +180,7 @@ async def test_insight_analyzer_accepts_results_wrapper() -> None:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_accepts_jsonl_hypotheses() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     raw = "\n".join(
         [
@@ -218,7 +217,7 @@ async def test_insight_analyzer_accepts_jsonl_hypotheses() -> None:
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_ignores_echoed_schema_before_final_fenced_array() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     raw = (
         '{"type":"object","properties":{"hypothesis":{"type":"string"}}}\n'
@@ -240,7 +239,7 @@ async def test_insight_analyzer_ignores_echoed_schema_before_final_fenced_array(
 
 @pytest.mark.asyncio
 async def test_insight_analyzer_accepts_malformed_mimo_array_root() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     raw = """
 {
@@ -265,7 +264,7 @@ async def test_insight_analyzer_accepts_malformed_mimo_array_root() -> None:
 
 
 def test_insight_analyzer_requires_core_memory_task_service() -> None:
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     with pytest.raises(TypeError, match="complete_structured_task"):
         InsightAnalyzer(FakeRegistry("[]"))

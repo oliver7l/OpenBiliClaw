@@ -19,13 +19,14 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
 async def main() -> None:
+    from obc_soul.engine import SoulEngine
+
     from openbiliclaw.bilibili.api import BilibiliAPIClient
     from openbiliclaw.bilibili.auth import resolve_runtime_cookie
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.run_logger import RunLogger
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.engine import SoulEngine
 
     cfg = load_config()
     data_dir = cfg.data_path
@@ -165,8 +166,7 @@ async def main() -> None:
 
     # Log the profile generation prompt
     from obc_llm.prompts import build_soul_profile_prompt
-
-    from openbiliclaw.soul.profile_builder import ProfileBuilder
+    from obc_soul.profile_builder import ProfileBuilder
     profile_prompt_msgs = build_soul_profile_prompt(
         history_summary=ProfileBuilder._summarize_history(combined_history),
         preference_summary=pref_result,

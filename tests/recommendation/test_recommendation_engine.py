@@ -13,13 +13,13 @@ import pytest
 from obc_discovery.engine import DiscoveredContent
 from obc_llm.base import LLMResponse
 from obc_llm.service import LLMProviderExecutionError
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.recommendation.engine import (
     RecommendationEngine,
     _PerLoopLock,
     _recommendation_profile_summary,
 )
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 
 

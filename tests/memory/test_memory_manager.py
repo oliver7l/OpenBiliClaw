@@ -22,7 +22,7 @@ def test_initialize_sets_up_database(tmp_path: Path) -> None:
 
 
 def test_profile_overrides_roundtrip(tmp_path: Path) -> None:
-    from openbiliclaw.soul.overrides import ListEdit, ProfileOverrides
+    from obc_soul.overrides import ListEdit, ProfileOverrides
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -42,8 +42,8 @@ def test_load_profile_overrides_missing_returns_empty(tmp_path: Path) -> None:
 
 
 def test_sync_profile_files_renders_effective_profile(tmp_path: Path) -> None:
-    from openbiliclaw.soul.overrides import ProfileOverrides, apply_edit
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.overrides import ProfileOverrides, apply_edit
+    from obc_soul.profile import OnionProfile
 
     memory = MemoryManager(tmp_path)
     memory.initialize()
@@ -62,8 +62,8 @@ def test_sync_profile_files_renders_effective_profile(tmp_path: Path) -> None:
 
 
 def test_sync_profile_files_applies_overlay_on_dict_input(tmp_path: Path) -> None:
-    from openbiliclaw.soul.overrides import ProfileOverrides, apply_edit
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.overrides import ProfileOverrides, apply_edit
+    from obc_soul.profile import OnionProfile
 
     memory = MemoryManager(tmp_path)
     memory.initialize()

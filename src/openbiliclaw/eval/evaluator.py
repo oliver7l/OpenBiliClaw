@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
 logger = logging.getLogger(__name__)
 
@@ -585,7 +585,7 @@ class ProfileEvaluator:
         )
 
         # mbti.dimensions — numeric (no LLM needed)
-        from openbiliclaw.soul.profile import _mbti_to_dict
+        from obc_soul.profile import _mbti_to_dict
 
         exp_dims_raw = _mbti_to_dict(exp.core.mbti).get("dimensions", {})
         pred_dims_raw = _mbti_to_dict(pred.core.mbti).get("dimensions", {})
@@ -643,7 +643,7 @@ class ProfileEvaluator:
     def _eval_interest(self, exp: OnionProfile, pred: OnionProfile) -> list[FieldScore]:
         fields: list[FieldScore] = []
 
-        from openbiliclaw.soul.profile import _interest_layer_to_dict
+        from obc_soul.profile import _interest_layer_to_dict
 
         exp_dict = _interest_layer_to_dict(exp.interest)
         pred_dict = _interest_layer_to_dict(pred.interest)

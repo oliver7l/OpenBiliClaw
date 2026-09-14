@@ -49,6 +49,7 @@ from obc_discovery.strategies.douyin_direct import DouyinDirectStrategy
 from obc_discovery.strategies.search import SearchStrategy
 from obc_discovery.strategies.x import XSearchStrategy
 from obc_discovery.strategies.youtube import YoutubeSearchStrategy
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from tests.discovery.test_discovery_candidate_pipeline import _ScoringLLM
 
 from openbiliclaw.config import DiscoveryConfig
@@ -64,7 +65,6 @@ from openbiliclaw.runtime.keyword_fetch import (
     source_keyword_id_from_xhs_task,
 )
 from openbiliclaw.runtime.keyword_planner import KeywordPlanner
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 
 if TYPE_CHECKING:

@@ -791,11 +791,11 @@ def _run_xhs_discovery(*, force: bool) -> None:
     """Trigger one Soul-driven xhs keyword production cycle."""
 
     from obc_llm.service import LLMService, module_overrides_from_config
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
     from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
     from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 
     _cli._require_runtime_config()
@@ -932,10 +932,10 @@ def _run_douyin_discovery(
         DouyinDiscoveryResult,
         DouyinDiscoveryService,
     )
+    from obc_soul.engine import SoulProfileNotInitializedError
 
     import openbiliclaw.config as config_module
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
     from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
     from openbiliclaw.sources.douyin_direct import DouyinDirectAuthError, DouyinDirectClient
     from openbiliclaw.sources.douyin_plugin_search import DouyinPluginSearchClient
@@ -1086,11 +1086,12 @@ def _build_discovery_candidate_pipeline(
 def _run_zhihu_discovery(*, limit: int) -> None:
     """Run one formal Zhihu discovery cycle through the runtime producer."""
 
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli  # noqa: E402
     from openbiliclaw.config import load_config
     from openbiliclaw.runtime.keyword_fetch import KeywordFetchCoordinator
     from openbiliclaw.runtime.zhihu_producer import build_zhihu_discovery_producer
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     _cli._require_runtime_config()
     config = load_config()
@@ -1255,8 +1256,9 @@ def discover(
 ) -> None:
     """手动触发内容发现（按来源选择渠道）."""
 
+    from obc_soul.engine import SoulProfileNotInitializedError
+
     from openbiliclaw import cli as _cli  # noqa: E402
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     source_normalized = source.strip().lower()
     if source_normalized == "xiaohongshu":

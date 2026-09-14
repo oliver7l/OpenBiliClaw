@@ -246,7 +246,7 @@ async def test_evaluator_propagates_llm_franchise_key_through_to_db(
     # Minimum-shape profile that the prompt builder accepts. We're not
     # exercising the prompt template here — only verifying the
     # franchise_key plumbing — so an empty SoulProfile is enough.
-    from openbiliclaw.soul.profile import SoulProfile
+    from obc_soul.profile import SoulProfile
 
     profile = SoulProfile()
 
@@ -339,7 +339,7 @@ async def test_evaluate_content_batch_default_size_45_uses_single_llm_call(
     engine._concurrency = None
     engine._eval_cache = {}
 
-    from openbiliclaw.soul.profile import SoulProfile
+    from obc_soul.profile import SoulProfile
 
     profile = SoulProfile()
     contents = [DiscoveredContent(bvid=f"BV{i}", title=f"item {i}") for i in range(44)]

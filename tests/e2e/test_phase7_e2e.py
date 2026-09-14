@@ -23,11 +23,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from obc_llm.base import LLMResponse
+from obc_soul.preference_analyzer import PreferenceAnalyzer
+from obc_soul.profile import OnionProfile, preference_layer_from_dict
 
 from openbiliclaw.api.models import BehaviorEventBatchIn
 from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
-from openbiliclaw.soul.profile import OnionProfile, preference_layer_from_dict
 from openbiliclaw.storage.database import Database
 
 

@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from openbiliclaw.soul.avoidance_speculator import choose_next_avoidance_candidate
-from openbiliclaw.soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
-from openbiliclaw.soul.speculator import (
+from obc_soul.avoidance_speculator import choose_next_avoidance_candidate
+from obc_soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
+from obc_soul.speculator import (
     _normalize_probe_mode,
     build_probe_axis,
     choose_next_probe_candidate,
@@ -283,7 +283,7 @@ class OpenClawAdapter:
         answer becomes signal the next time the profile is rebuilt.
         """
         try:
-            from openbiliclaw.soul.dialogue import SocraticDialogue
+            from obc_soul.dialogue import SocraticDialogue
 
             soul_engine = self.services.soul_engine
             llm_service = getattr(self.services, "llm_service", None)

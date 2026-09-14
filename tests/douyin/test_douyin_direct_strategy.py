@@ -7,8 +7,7 @@ from dataclasses import dataclass, field
 import pytest
 from obc_discovery.strategies.douyin_direct import DouyinDirectStrategy
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 @dataclass

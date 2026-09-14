@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.soul.profile import AwarenessNote
+from obc_soul.profile import AwarenessNote
 
 
 class FakeRegistry:
@@ -47,7 +46,7 @@ class FakeStructuredService:
 
 @pytest.mark.asyncio
 async def test_awareness_analyzer_builds_notes_from_recent_events() -> None:
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     service = FakeStructuredService(
         json.dumps(
@@ -76,7 +75,7 @@ async def test_awareness_analyzer_builds_notes_from_recent_events() -> None:
 
 @pytest.mark.asyncio
 async def test_awareness_analyzer_accepts_object_wrapped_notes() -> None:
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     service = FakeStructuredService(
         json.dumps(
@@ -112,7 +111,7 @@ async def test_awareness_analyzer_accepts_object_wrapped_notes() -> None:
 
 @pytest.mark.asyncio
 async def test_awareness_analyzer_raises_on_invalid_json() -> None:
-    from openbiliclaw.soul.awareness_analyzer import (
+    from obc_soul.awareness_analyzer import (
         AwarenessAnalyzer,
         AwarenessGenerationError,
     )
@@ -127,7 +126,7 @@ async def test_awareness_analyzer_raises_on_invalid_json() -> None:
 
 
 def test_merge_awareness_notes_deduplicates_same_day_observation() -> None:
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     analyzer = AwarenessAnalyzer(FakeStructuredService("[]"))
     existing = [
@@ -154,7 +153,7 @@ def test_merge_awareness_notes_deduplicates_same_day_observation() -> None:
 
 @pytest.mark.asyncio
 async def test_awareness_analyzer_can_use_unified_service() -> None:
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     service = FakeStructuredService(
         json.dumps(
@@ -181,7 +180,7 @@ async def test_awareness_analyzer_can_use_unified_service() -> None:
 
 
 def test_awareness_analyzer_requires_core_memory_task_service() -> None:
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     with pytest.raises(TypeError, match="complete_structured_task"):
         AwarenessAnalyzer(FakeRegistry("[]"))
@@ -192,7 +191,7 @@ def test_awareness_analyzer_requires_core_memory_task_service() -> None:
 
 def test_coerce_note_list_wraps_singular_note_dict() -> None:
     """A bare single-note dict (MiMo reasoning-model shape) is wrapped into a list."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     payload = {
         "date": "2026-03-08",
@@ -205,7 +204,7 @@ def test_coerce_note_list_wraps_singular_note_dict() -> None:
 
 def test_coerce_note_list_singular_note_requires_observation() -> None:
     """A dict that lacks the load-bearing `observation` field is NOT a single note."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     # Has date/trend/emotion_guess but no observation — worthless, reject.
     payload = {"date": "2026-03-08", "trend": "x", "emotion_guess": "y"}
@@ -218,7 +217,7 @@ def test_coerce_note_list_singular_note_requires_observation() -> None:
 )
 def test_coerce_note_list_accepts_new_wrapper_keys(wrapper_key: str) -> None:
     """Expanded wrapper-key vocabulary covers shapes MiMo / reasoning models emit."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     inner = [
         {
@@ -233,7 +232,7 @@ def test_coerce_note_list_accepts_new_wrapper_keys(wrapper_key: str) -> None:
 
 def test_coerce_note_list_accepts_dict_wrapped_singular_under_known_key() -> None:
     """A known wrapper key whose value is itself a single note dict is recovered."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     inner = {
         "date": "2026-03-08",
@@ -257,7 +256,7 @@ def test_coerce_note_list_accepts_dict_wrapped_singular_under_known_key() -> Non
 )
 def test_coerce_note_list_rejects_garbage_shapes(garbage: object) -> None:
     """Genuinely unrecoverable shapes still return None — no silent fabrication."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     assert AwarenessAnalyzer._coerce_note_list(garbage) is None
 
@@ -265,7 +264,7 @@ def test_coerce_note_list_rejects_garbage_shapes(garbage: object) -> None:
 @pytest.mark.asyncio
 async def test_awareness_analyzer_consumes_singular_note_fixture() -> None:
     """End-to-end: a real-shape MiMo singular-note JSON is parsed into one AwarenessNote."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     fixture_path = Path(__file__).parent / "fixtures" / "awareness_singular_note.json"
     raw = fixture_path.read_text(encoding="utf-8")
@@ -284,7 +283,7 @@ async def test_awareness_analyzer_consumes_singular_note_fixture() -> None:
 @pytest.mark.asyncio
 async def test_awareness_analyzer_consumes_wrapped_notes_after_shared_parser_migration() -> None:
     """Regression guard: wrapper parsing survives the shared-helper migration."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
 
     raw = json.dumps(
         {

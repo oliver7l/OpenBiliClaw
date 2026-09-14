@@ -9,8 +9,7 @@ from obc_discovery.douyin import (
     split_csv_values,
 )
 from obc_discovery.engine import DiscoveredContent
-
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 class _FakeClient:

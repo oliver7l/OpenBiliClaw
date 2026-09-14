@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from obc_discovery.engine import DiscoveredContent
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.integrations.openclaw.bootstrap import (
     OpenClawAdapterServices,
@@ -35,7 +36,6 @@ from openbiliclaw.integrations.openclaw.schemas import (
     SyncAccountResponse,
 )
 from openbiliclaw.recommendation.engine import Recommendation
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 def test_profile_response_serializes_only_public_fields() -> None:

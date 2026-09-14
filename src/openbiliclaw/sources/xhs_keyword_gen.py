@@ -15,8 +15,7 @@ from obc_llm.json_utils import parse_llm_json_tolerant
 
 if TYPE_CHECKING:
     from obc_llm.service import LLMService
-
-    from openbiliclaw.soul.profile import OnionProfile, SoulProfile
+    from obc_soul.profile import OnionProfile, SoulProfile
 
 logger = logging.getLogger(__name__)
 

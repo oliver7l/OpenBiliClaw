@@ -15,8 +15,9 @@ from openbiliclaw.sources.browser import BrowserManager
 from openbiliclaw.sources.llm_extractor import extract_content_from_page
 
 if TYPE_CHECKING:
+    from obc_soul.profile import SoulProfile
+
     from openbiliclaw.core.contracts import DiscoveredContent
-    from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)

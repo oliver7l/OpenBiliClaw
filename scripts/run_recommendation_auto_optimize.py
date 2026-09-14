@@ -114,6 +114,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     from obc_llm.service import LLMService
+    from obc_soul.profile import OnionProfile
 
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.agents import (
@@ -128,7 +129,6 @@ async def main() -> None:
     from openbiliclaw.eval.run_logger import RunLogger
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.profile import OnionProfile
 
     logging.basicConfig(
         level=logging.INFO,
@@ -268,7 +268,7 @@ async def main() -> None:
 
                 soul_profile = persona.to_soul_profile() if hasattr(persona, "to_soul_profile") else None
                 if soul_profile is None:
-                    from openbiliclaw.soul.profile import SoulProfile
+                    from obc_soul.profile import SoulProfile
                     soul_profile = SoulProfile(
                         personality_portrait=persona.personality_portrait,
                         core_traits=persona.core.core_traits,

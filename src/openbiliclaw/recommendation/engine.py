@@ -22,8 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
 from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
 from obc_llm.service import is_llm_rate_limit_error
-
-from openbiliclaw.soul.tone import ToneProfile, build_tone_profile
+from obc_soul.tone import ToneProfile, build_tone_profile
 
 
 class _PerLoopLock:
@@ -78,10 +77,10 @@ if TYPE_CHECKING:
 
     from obc_discovery.engine import DiscoveredContent
     from obc_llm.base import LLMResponse
+    from obc_soul.profile import InterestTag, SoulProfile
 
     from openbiliclaw.recommendation.curator import PoolCurator
     from openbiliclaw.runtime.task_registry import BackgroundTaskRegistry
-    from openbiliclaw.soul.profile import InterestTag, SoulProfile
     from openbiliclaw.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -1305,7 +1304,7 @@ class RecommendationEngine:
         # applies equally to non-bilibili pool items (e.g. xiaohongshu).
         negative_examples: list[dict[str, object]] | None = None
         try:
-            from openbiliclaw.soul.negative_exemplars import recent_negative_exemplars
+            from obc_soul.negative_exemplars import recent_negative_exemplars
 
             negative_examples = recent_negative_exemplars(self._database) or None
         except Exception:

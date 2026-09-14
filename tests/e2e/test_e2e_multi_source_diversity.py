@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 from obc_llm.base import LLMResponse
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.recommendation.engine import RecommendationEngine
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.storage.database import Database
 
 # ── Test fixtures ──────────────────────────────────────────────────

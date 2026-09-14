@@ -26,9 +26,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from obc_discovery.engine import DiscoveredContent
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.runtime.x_producer import XDiscoveryProducer
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 from openbiliclaw.sources.x_tasks import XCreatorStore
 from openbiliclaw.storage.database import Database
 from openbiliclaw.storage.x_health import XSourceHealthStore

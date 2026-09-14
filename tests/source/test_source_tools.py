@@ -130,7 +130,7 @@ class TestDialogueToolCalling:
 
     def test_dialogue_init_with_tools(self) -> None:
         """Dialogue can be constructed with tools and dispatcher."""
-        from openbiliclaw.soul.dialogue import SocraticDialogue
+        from obc_soul.dialogue import SocraticDialogue
 
         class FakeSoulEngine:
             pass
@@ -146,7 +146,7 @@ class TestDialogueToolCalling:
 
     def test_dialogue_init_without_tools(self) -> None:
         """Dialogue works without tools (backward compatible)."""
-        from openbiliclaw.soul.dialogue import SocraticDialogue
+        from obc_soul.dialogue import SocraticDialogue
 
         class FakeSoulEngine:
             pass

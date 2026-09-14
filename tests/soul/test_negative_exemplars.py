@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from openbiliclaw.soul.negative_exemplars import recent_negative_exemplars
+from obc_soul.negative_exemplars import recent_negative_exemplars
 
 
 class _StubEventStore:

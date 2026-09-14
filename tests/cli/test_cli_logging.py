@@ -1,11 +1,11 @@
 """CLI logging integration tests."""
 
 import pytest
+from obc_soul.profile import CoreLayer, OnionProfile, RoleLayer, ValuesLayer
 from typer.testing import CliRunner
 
 from openbiliclaw import cli as cli_module
 from openbiliclaw.cli import app
-from openbiliclaw.soul.profile import CoreLayer, OnionProfile, RoleLayer, ValuesLayer
 
 
 @pytest.fixture

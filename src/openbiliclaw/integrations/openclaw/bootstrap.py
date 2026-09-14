@@ -14,6 +14,7 @@ from obc_discovery.strategies.strategies import (
 )
 from obc_llm.service import LLMService, module_overrides_from_config
 from obc_llm.usage_recorder import UsageRecorder
+from obc_soul.engine import SoulEngine
 
 from openbiliclaw.api.runtime_context import build_youtube_discovery_producer
 from openbiliclaw.bilibili.api import BilibiliAPIClient
@@ -27,7 +28,6 @@ from openbiliclaw.runtime.account_sync import AccountSyncService
 from openbiliclaw.runtime.presence import PresenceTracker
 from openbiliclaw.runtime.refresh import ContinuousRefreshController
 from openbiliclaw.runtime.source_policy import effective_pool_source_shares
-from openbiliclaw.soul.engine import SoulEngine
 from openbiliclaw.storage.database import Database
 
 from .operations import OpenClawAdapter

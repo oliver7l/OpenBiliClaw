@@ -57,8 +57,9 @@ from obc_llm.prompts import (
 )
 
 if TYPE_CHECKING:
+    from obc_soul.profile import SoulProfile
+
     from openbiliclaw.config import Config, DiscoveryConfig
-    from openbiliclaw.soul.profile import SoulProfile
 
 logger = logging.getLogger(__name__)
 

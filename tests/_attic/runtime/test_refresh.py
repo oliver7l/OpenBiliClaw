@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.runtime.refresh import ContinuousRefreshController
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 class _FakeDisc:

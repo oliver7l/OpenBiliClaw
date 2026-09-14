@@ -10,8 +10,7 @@ legacy events can be opt-in retained.
 from __future__ import annotations
 
 import pytest
-
-from openbiliclaw.soul.event_filters import filter_events_by_satisfaction
+from obc_soul.event_filters import filter_events_by_satisfaction
 
 
 def _row(idx: int, satisfaction: str | None) -> dict[str, object]:

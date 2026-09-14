@@ -53,9 +53,10 @@ async def run_with_mock(
     strategies_to_eval: list[str],
 ) -> tuple[dict[str, list[Any]], dict[str, dict[str, object]], Any]:
     """Run discovery against a mock scenario."""
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.eval.discovery_scenario import ScenarioGenerator, ScenarioPool
     from openbiliclaw.eval.persona_pool import PersonaPool
-    from openbiliclaw.soul.profile import OnionProfile
 
     persona_pool = PersonaPool(PROJECT_ROOT / "data" / "eval" / "persona_pool" / "discovery")
     scenario_pool = ScenarioPool(PROJECT_ROOT / "data" / "eval" / "scenario_pool")

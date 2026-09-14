@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from obc_soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
 
 from openbiliclaw.api.models import (
     ChatIn,
@@ -18,7 +19,6 @@ from openbiliclaw.api.models import (
     ChatTurnOut,
     RecommendationOut,
 )
-from openbiliclaw.soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -300,7 +300,7 @@ def register_chat_probe_routes(
         include_source_mode: bool = False,
     ) -> dict[str, object]:
         """Read active probe metadata before confirm/reject mutates state."""
-        from openbiliclaw.soul.speculator import build_probe_axis
+        from obc_soul.speculator import build_probe_axis
 
         if not callable(get_active):
             return {"domain": domain}
@@ -379,7 +379,7 @@ def register_chat_probe_routes(
         metadata: dict[str, object] | None = None,
     ) -> None:
         """Persist explicit user feedback for future probe novelty checks."""
-        from openbiliclaw.soul.speculator import append_probe_feedback_history
+        from obc_soul.speculator import append_probe_feedback_history
 
         memory_manager = getattr(ctx, "memory_manager", None)
         if memory_manager is None:
@@ -557,8 +557,8 @@ def register_chat_probe_routes(
     ) -> None:
         if not promoted:
             return
-        from openbiliclaw.soul.interest_writeback import merge_confirmed_interest
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.interest_writeback import merge_confirmed_interest
+        from obc_soul.profile import OnionProfile
 
         memory_manager = getattr(ctx, "memory_manager", None)
         get_layer = getattr(memory_manager, "get_layer", None)
@@ -614,7 +614,7 @@ def register_chat_probe_routes(
     ) -> None:
         from datetime import UTC, datetime
 
-        from openbiliclaw.soul.exploration_buffer import (
+        from obc_soul.exploration_buffer import (
             pop_promotable_buffer_entries,
             record_buffer_event,
         )
@@ -936,7 +936,7 @@ def register_chat_probe_routes(
         survive page refreshes (unlike WebSocket-only delivery).
         """
         try:
-            from openbiliclaw.soul.speculator import load_speculative_state
+            from obc_soul.speculator import load_speculative_state
 
             spec_state = load_speculative_state(ctx.config.data_path)
             active = [item for item in spec_state.active if item.status == "active"]
@@ -1206,7 +1206,7 @@ def register_chat_probe_routes(
     async def pending_avoidance_probes() -> dict[str, Any]:
         """Return active speculative avoidances awaiting user response."""
         try:
-            from openbiliclaw.soul.avoidance_speculator import load_avoidance_state
+            from obc_soul.avoidance_speculator import load_avoidance_state
 
             runtime_config = getattr(ctx, "config", None)
             avoidance_state = load_avoidance_state(runtime_config.data_path)

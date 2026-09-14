@@ -134,7 +134,7 @@ def test_build_soul_engine_honors_cli_namespace_patch(monkeypatch: pytest.Monkey
     fake_registry = object()
     fake_recorder = object()
 
-    monkeypatch.setattr("openbiliclaw.soul.engine.SoulEngine", FakeSoulEngine)
+    monkeypatch.setattr("obc_soul.engine.SoulEngine", FakeSoulEngine)
     monkeypatch.setattr(
         "openbiliclaw.config.load_config",
         lambda: SimpleNamespace(

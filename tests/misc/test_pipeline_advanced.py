@@ -17,10 +17,8 @@ from typing import Any
 
 import pytest
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.layer_updaters import _update_surface
-from openbiliclaw.soul.pipeline import (
+from obc_soul.layer_updaters import _update_surface
+from obc_soul.pipeline import (
     _BUFFERED_LAYERS,
     DEFAULT_THRESHOLDS,
     LayerBuffer,
@@ -36,9 +34,11 @@ from openbiliclaw.soul.pipeline import (
     signals_from_dialogue,
     signals_from_events,
 )
-from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
-from openbiliclaw.soul.profile import OnionProfile
-from openbiliclaw.soul.profile_builder import ProfileBuilder
+from obc_soul.preference_analyzer import PreferenceAnalyzer
+from obc_soul.profile import OnionProfile
+from obc_soul.profile_builder import ProfileBuilder
+
+from openbiliclaw.memory.manager import MemoryManager
 
 # ---------------------------------------------------------------------------
 # Mock LLM service — returns rich responses for every layer
@@ -525,7 +525,7 @@ async def test_update_layer_exception_restores_signals(tmp_path: Path) -> None:
     # but role/values use the broken profile_builder which DOES raise.
     # However the role updater also wraps in try/except. Let's force the
     # outer _update_layer error path by patching update_layer directly.
-    from openbiliclaw.soul import layer_updaters as lu_mod
+    from obc_soul import layer_updaters as lu_mod
 
     original_update_layer = lu_mod.update_layer
 
@@ -557,7 +557,7 @@ async def test_regenerate_portrait_exception_does_not_break_pipeline(tmp_path: P
     pipeline, svc, memory = _make_low_threshold_pipeline(tmp_path)
 
     # Patch regenerate_portrait to raise
-    from openbiliclaw.soul import layer_updaters as lu_mod
+    from obc_soul import layer_updaters as lu_mod
 
     original = lu_mod.regenerate_portrait
 
@@ -883,8 +883,8 @@ async def test_pipeline_auto_promoted_avoidance_uses_apply_new_dislikes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Observe-driven avoidance promotion must use the shared dislike writeback."""
-    from openbiliclaw.soul import pipeline as pipeline_mod
-    from openbiliclaw.soul.avoidance_speculator import (
+    from obc_soul import pipeline as pipeline_mod
+    from obc_soul.avoidance_speculator import (
         SpeculativeAvoidance,
         SpeculativeAvoidanceSpecific,
     )
@@ -979,7 +979,7 @@ async def test_dialogue_insight_unknown_kind_routes_to_interest(tmp_path: Path) 
 @pytest.mark.asyncio
 async def test_update_layer_dispatch_unknown_layer_returns_unchanged(tmp_path: Path) -> None:
     """update_layer with PORTRAIT (not in dispatch table) returns changed=False."""
-    from openbiliclaw.soul.layer_updaters import update_layer
+    from obc_soul.layer_updaters import update_layer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1002,7 +1002,7 @@ async def test_update_layer_dispatch_unknown_layer_returns_unchanged(tmp_path: P
 @pytest.mark.asyncio
 async def test_update_interest_with_empty_signals_returns_unchanged(tmp_path: Path) -> None:
     """_update_interest with no extractable events should return early."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1024,7 +1024,7 @@ async def test_update_interest_with_empty_signals_returns_unchanged(tmp_path: Pa
 @pytest.mark.asyncio
 async def test_update_interest_handles_analyzer_exception(tmp_path: Path) -> None:
     """_update_interest should swallow PreferenceAnalyzer exceptions."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1044,7 +1044,7 @@ async def test_update_interest_handles_analyzer_exception(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_update_role_with_empty_evidence_returns_unchanged(tmp_path: Path) -> None:
     """_update_role with no title/content should return early without LLM call."""
-    from openbiliclaw.soul.layer_updaters import _update_role
+    from obc_soul.layer_updaters import _update_role
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1067,7 +1067,7 @@ async def test_update_role_with_empty_evidence_returns_unchanged(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_update_role_handles_llm_exception(tmp_path: Path) -> None:
     """_update_role should catch LLM exceptions and return changed=False."""
-    from openbiliclaw.soul.layer_updaters import _update_role
+    from obc_soul.layer_updaters import _update_role
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1088,7 +1088,7 @@ async def test_update_role_handles_llm_exception(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_values_with_empty_evidence_returns_unchanged(tmp_path: Path) -> None:
     """_update_values with no extractable evidence should return early."""
-    from openbiliclaw.soul.layer_updaters import _update_values
+    from obc_soul.layer_updaters import _update_values
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1109,7 +1109,7 @@ async def test_update_values_with_empty_evidence_returns_unchanged(tmp_path: Pat
 @pytest.mark.asyncio
 async def test_update_values_handles_llm_exception(tmp_path: Path) -> None:
     """_update_values should catch LLM exceptions."""
-    from openbiliclaw.soul.layer_updaters import _update_values
+    from obc_soul.layer_updaters import _update_values
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1129,8 +1129,8 @@ async def test_update_values_handles_llm_exception(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_values_injects_user_context_from_profile(tmp_path: Path) -> None:
     """_update_values should prepend a 【用户背景】 line when profile has role/interests."""
-    from openbiliclaw.soul.layer_updaters import _update_values
-    from openbiliclaw.soul.profile import InterestDomain
+    from obc_soul.layer_updaters import _update_values
+    from obc_soul.profile import InterestDomain
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1175,7 +1175,7 @@ async def test_update_values_injects_user_context_from_profile(tmp_path: Path) -
 @pytest.mark.asyncio
 async def test_update_core_with_empty_evidence_returns_unchanged(tmp_path: Path) -> None:
     """_update_core with no extractable evidence should return early."""
-    from openbiliclaw.soul.layer_updaters import _update_core
+    from obc_soul.layer_updaters import _update_core
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1196,7 +1196,7 @@ async def test_update_core_with_empty_evidence_returns_unchanged(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_update_core_handles_llm_exception(tmp_path: Path) -> None:
     """_update_core should catch LLM exceptions."""
-    from openbiliclaw.soul.layer_updaters import _update_core
+    from obc_soul.layer_updaters import _update_core
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1216,8 +1216,8 @@ async def test_update_core_handles_llm_exception(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_core_includes_existing_mbti_in_prompt(tmp_path: Path) -> None:
     """When profile has MBTI, _update_core should serialize it into the prompt."""
-    from openbiliclaw.soul.layer_updaters import _update_core
-    from openbiliclaw.soul.profile import MBTI, MBTIDimension
+    from obc_soul.layer_updaters import _update_core
+    from obc_soul.profile import MBTI, MBTIDimension
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1261,7 +1261,7 @@ async def test_update_core_includes_existing_mbti_in_prompt(tmp_path: Path) -> N
 @pytest.mark.asyncio
 async def test_update_interest_syncs_cognitive_style(tmp_path: Path) -> None:
     """cognitive_style from PreferenceAnalyzer should write directly to surface."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1282,8 +1282,8 @@ async def test_update_interest_syncs_cognitive_style(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_interest_ingests_speculative_seeds(tmp_path: Path) -> None:
     """speculative_interests from analyzer should be fed to InterestSpeculator."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
-    from openbiliclaw.soul.speculator import load_speculative_state
+    from obc_soul.layer_updaters import _update_interest
+    from obc_soul.speculator import load_speculative_state
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1322,9 +1322,9 @@ async def test_update_interest_dedupes_speculative_seeds_against_profile(
     tmp_path: Path,
 ) -> None:
     """PreferenceAnalyzer seeds should not restate existing profile specifics."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
-    from openbiliclaw.soul.profile import InterestDomain, InterestLayer, InterestSpecific
-    from openbiliclaw.soul.speculator import load_speculative_state
+    from obc_soul.layer_updaters import _update_interest
+    from obc_soul.profile import InterestDomain, InterestLayer, InterestSpecific
+    from obc_soul.speculator import load_speculative_state
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1367,7 +1367,7 @@ async def test_update_interest_dedupes_speculative_seeds_against_profile(
 @pytest.mark.asyncio
 async def test_update_interest_detects_dislike_changes(tmp_path: Path) -> None:
     """New disliked_topics from analyzer should produce '新增讨厌' changes."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1393,7 +1393,7 @@ async def test_update_interest_detects_dislike_changes(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_apply_new_dislikes_persists_preference_and_soul_profile(tmp_path: Path) -> None:
-    from openbiliclaw.soul.dislike_writeback import apply_new_dislikes
+    from obc_soul.dislike_writeback import apply_new_dislikes
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1420,7 +1420,7 @@ async def test_apply_new_dislikes_persists_preference_and_soul_profile(tmp_path:
 async def test_purge_pool_for_new_dislikes_invokes_existing_pool_purge_paths(
     tmp_path: Path,
 ) -> None:
-    from openbiliclaw.soul.dislike_writeback import purge_pool_for_new_dislikes
+    from obc_soul.dislike_writeback import purge_pool_for_new_dislikes
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1451,8 +1451,8 @@ async def test_layer_updater_uses_purge_helper_without_rewriting_preference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import openbiliclaw.soul.layer_updaters as lu_mod
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    import obc_soul.layer_updaters as lu_mod
+    from obc_soul.layer_updaters import _update_interest
 
     calls: list[dict[str, object]] = []
 
@@ -1494,7 +1494,7 @@ async def test_new_dislike_purges_matching_pool_candidates(tmp_path: Path) -> No
     """End-to-end: when a new dislike is learned, matching pool items must
     be moved to pool_status='purged_by_dislike' and a change line recorded.
     """
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1559,7 +1559,7 @@ async def test_new_dislike_purges_matching_pool_candidates(tmp_path: Path) -> No
 @pytest.mark.asyncio
 async def test_unchanged_dislikes_do_not_trigger_purge(tmp_path: Path) -> None:
     """If disliked_topics list is identical to before, no purge should run."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1610,7 +1610,7 @@ async def test_purge_failure_does_not_break_interest_update(
     tmp_path: Path,
 ) -> None:
     """If purge raises, the interest update must still complete successfully."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1690,7 +1690,7 @@ async def test_semantic_purge_catches_semantically_close_candidates(
     tmp_path: Path,
 ) -> None:
     """Semantic purge should catch candidates the string-match missed."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1760,7 +1760,7 @@ async def test_semantic_purge_catches_semantically_close_candidates(
 @pytest.mark.asyncio
 async def test_semantic_purge_respects_threshold(tmp_path: Path) -> None:
     """Candidates below the similarity threshold should not be purged."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1813,7 +1813,7 @@ async def test_semantic_purge_skipped_without_embedding_service(
     tmp_path: Path,
 ) -> None:
     """Without an embedding_service, only string-match purge runs."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1857,7 +1857,7 @@ async def test_semantic_purge_failure_does_not_break_update(
     tmp_path: Path,
 ) -> None:
     """If the embedding service raises, interest update must still succeed."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -1893,10 +1893,11 @@ async def test_semantic_purge_failure_does_not_break_update(
 @pytest.mark.asyncio
 async def test_semantic_purge_module_directly(tmp_path: Path) -> None:
     """Test the semantic_purge_pool_by_disliked_topics function in isolation."""
-    from openbiliclaw.soul.pool_purge import (
+    from obc_soul.pool_purge import (
         DEFAULT_SEMANTIC_PURGE_THRESHOLD,
         semantic_purge_pool_by_disliked_topics,
     )
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -1930,7 +1931,8 @@ async def test_semantic_purge_module_directly(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_semantic_purge_empty_topics_is_noop(tmp_path: Path) -> None:
     """Empty topic list should short-circuit without calling the embedding service."""
-    from openbiliclaw.soul.pool_purge import semantic_purge_pool_by_disliked_topics
+    from obc_soul.pool_purge import semantic_purge_pool_by_disliked_topics
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -1951,7 +1953,8 @@ async def test_semantic_purge_all_topic_embeddings_fail_returns_zero(
     tmp_path: Path,
 ) -> None:
     """If every dislike embedding call raises, purge returns 0 without error."""
-    from openbiliclaw.soul.pool_purge import semantic_purge_pool_by_disliked_topics
+    from obc_soul.pool_purge import semantic_purge_pool_by_disliked_topics
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -1978,7 +1981,8 @@ async def test_semantic_purge_candidate_embed_failure_is_skipped(
     tmp_path: Path,
 ) -> None:
     """If embedding a specific candidate fails, only that candidate is skipped."""
-    from openbiliclaw.soul.pool_purge import semantic_purge_pool_by_disliked_topics
+    from obc_soul.pool_purge import semantic_purge_pool_by_disliked_topics
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -2013,7 +2017,8 @@ async def test_semantic_purge_candidate_with_empty_embedding_is_skipped(
     tmp_path: Path,
 ) -> None:
     """A candidate whose embed() returns [] should be skipped gracefully."""
-    from openbiliclaw.soul.pool_purge import semantic_purge_pool_by_disliked_topics
+    from obc_soul.pool_purge import semantic_purge_pool_by_disliked_topics
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -2042,7 +2047,8 @@ async def test_semantic_purge_candidate_with_all_empty_fields_is_skipped(
     tmp_path: Path,
 ) -> None:
     """Candidates with no title/topic text should be skipped without embedding."""
-    from openbiliclaw.soul.pool_purge import semantic_purge_pool_by_disliked_topics
+    from obc_soul.pool_purge import semantic_purge_pool_by_disliked_topics
+
     from openbiliclaw.storage.database import Database
 
     db = Database(Path(tmp_path) / "test.db")
@@ -2085,8 +2091,8 @@ async def test_update_interest_semantic_purge_module_failure_is_swallowed(
     tmp_path: Path,
 ) -> None:
     """If the pool_purge module itself raises (not just embed), don't break."""
-    import openbiliclaw.soul.pool_purge as pool_purge_mod
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    import obc_soul.pool_purge as pool_purge_mod
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2206,9 +2212,9 @@ def _seed_cognition_events(
 
 def _make_cognition_cycle(tmp_path: Path, *, min_interval_seconds: int = 43200):
     """Build a CognitionCycle with fake analyzers wired to the fake service."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     svc = _CognitionFakeService()
     memory = MemoryManager(Path(tmp_path))
@@ -2304,9 +2310,9 @@ async def test_cognition_cycle_state_persists_across_instances(
     tmp_path: Path,
 ) -> None:
     """State file should survive recreation of the CognitionCycle object."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     svc = _CognitionFakeService()
     memory = MemoryManager(Path(tmp_path))
@@ -2340,9 +2346,9 @@ async def test_cognition_cycle_awareness_failure_does_not_block_insight(
     tmp_path: Path,
 ) -> None:
     """If awareness analyzer raises, insight should still attempt to run."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2411,7 +2417,7 @@ async def test_cognition_cycle_skips_profile_sync_when_soul_layer_empty(
 @pytest.mark.asyncio
 async def test_pipeline_tick_invokes_cognition_cycle(tmp_path: Path) -> None:
     """ProfileUpdatePipeline.tick() should call cognition_cycle.run_if_due()."""
-    from openbiliclaw.soul.pipeline import (
+    from obc_soul.pipeline import (
         _BUFFERED_LAYERS,
         LayerThreshold,
         ProfileUpdatePipeline,
@@ -2424,7 +2430,7 @@ async def test_pipeline_tick_invokes_cognition_cycle(tmp_path: Path) -> None:
         async def run_if_due(self) -> Any:
             self.calls += 1
 
-            from openbiliclaw.soul.cognition_cycle import CognitionCycleResult
+            from obc_soul.cognition_cycle import CognitionCycleResult
 
             return CognitionCycleResult(
                 ran=True,
@@ -2470,10 +2476,10 @@ async def test_pipeline_tick_drives_real_cognition_cursor(tmp_path: Path) -> Non
     cursor watermark, awareness notes, and insight hypotheses all land through
     the production tick path.
     """
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
-    from openbiliclaw.soul.pipeline import (
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.pipeline import (
         _BUFFERED_LAYERS,
         LayerThreshold,
         ProfileUpdatePipeline,
@@ -2523,7 +2529,7 @@ async def test_pipeline_tick_cognition_throttled_does_not_produce_update(
     tmp_path: Path,
 ) -> None:
     """When cognition cycle is throttled (ran=False), no layer update is appended."""
-    from openbiliclaw.soul.pipeline import (
+    from obc_soul.pipeline import (
         _BUFFERED_LAYERS,
         LayerThreshold,
         ProfileUpdatePipeline,
@@ -2531,7 +2537,7 @@ async def test_pipeline_tick_cognition_throttled_does_not_produce_update(
 
     class _ThrottledCycle:
         async def run_if_due(self) -> Any:
-            from openbiliclaw.soul.cognition_cycle import CognitionCycleResult
+            from obc_soul.cognition_cycle import CognitionCycleResult
 
             return CognitionCycleResult(ran=False, throttled=True)
 
@@ -2559,7 +2565,7 @@ async def test_pipeline_tick_cognition_exception_is_swallowed(
     tmp_path: Path,
 ) -> None:
     """A broken cognition cycle must not break pipeline.tick()."""
-    from openbiliclaw.soul.pipeline import (
+    from obc_soul.pipeline import (
         _BUFFERED_LAYERS,
         LayerThreshold,
         ProfileUpdatePipeline,
@@ -2591,7 +2597,7 @@ async def test_pipeline_tick_cognition_exception_is_swallowed(
 @pytest.mark.asyncio
 async def test_cognition_cycle_default_interval_is_12_hours() -> None:
     """Confirm the default throttle is 12 hours (user-specified requirement)."""
-    from openbiliclaw.soul.cognition_cycle import DEFAULT_MIN_INTERVAL_SECONDS
+    from obc_soul.cognition_cycle import DEFAULT_MIN_INTERVAL_SECONDS
 
     assert DEFAULT_MIN_INTERVAL_SECONDS == 12 * 60 * 60
 
@@ -2638,9 +2644,9 @@ async def test_cognition_cycle_insight_failure_is_recorded(
     tmp_path: Path,
 ) -> None:
     """If insight analyzer raises, cycle records error but awareness is kept."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2704,9 +2710,9 @@ async def test_cognition_cycle_empty_insight_response_returns_zero(
     tmp_path: Path,
 ) -> None:
     """If insight analyzer returns [], _run_insight should short-circuit to 0."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2755,9 +2761,9 @@ async def test_cognition_cycle_without_data_dir_still_runs(
     tmp_path: Path,
 ) -> None:
     """A memory manager with no _data_dir should not crash state load/save."""
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2778,7 +2784,7 @@ async def test_cognition_cycle_without_data_dir_still_runs(
 
 def test_pipeline_set_cognition_cycle_setter(tmp_path: Path) -> None:
     """The set_cognition_cycle setter should attach a new cycle reference."""
-    from openbiliclaw.soul.pipeline import ProfileUpdatePipeline
+    from obc_soul.pipeline import ProfileUpdatePipeline
 
     svc = _RichFakeService()
     memory = MemoryManager(Path(tmp_path))
@@ -2813,9 +2819,9 @@ async def test_cognition_cycle_insight_runs_without_awareness_notes(
             # Awareness returns [] → no notes; insight should therefore skip
             return LLMResponse(content="[]", provider="fake")
 
-    from openbiliclaw.soul.awareness_analyzer import AwarenessAnalyzer
-    from openbiliclaw.soul.cognition_cycle import CognitionCycle
-    from openbiliclaw.soul.insight_analyzer import InsightAnalyzer
+    from obc_soul.awareness_analyzer import AwarenessAnalyzer
+    from obc_soul.cognition_cycle import CognitionCycle
+    from obc_soul.insight_analyzer import InsightAnalyzer
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2876,7 +2882,7 @@ def test_layer_buffer_is_ready_handles_invalid_last_updated_at() -> None:
 @pytest.mark.asyncio
 async def test_ingest_skips_non_buffered_target_layer(tmp_path: Path) -> None:
     """If a signal targets PORTRAIT (not in _BUFFERED_LAYERS), it should be skipped."""
-    from openbiliclaw.soul.pipeline import ProfileSignal
+    from obc_soul.pipeline import ProfileSignal
 
     pipeline, _, _ = _make_low_threshold_pipeline(tmp_path)
     rogue_signal = ProfileSignal(
@@ -2896,7 +2902,7 @@ async def test_ingest_skips_non_buffered_target_layer(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_ingest_skips_layer_with_missing_buffer(tmp_path: Path) -> None:
     """If self._buffers is missing a layer, ingest should not crash."""
-    from openbiliclaw.soul.pipeline import ProfileSignal
+    from obc_soul.pipeline import ProfileSignal
 
     pipeline, _, _ = _make_low_threshold_pipeline(tmp_path)
     # Surgically remove the INTEREST buffer
@@ -2937,7 +2943,7 @@ async def test_portrait_regen_success_writes_new_portrait(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_update_interest_detects_weight_changes(tmp_path: Path) -> None:
     """Weight changes > 0.15 on existing interests should appear as a change line."""
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -2967,7 +2973,7 @@ async def test_update_interest_detects_weight_changes(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_values_records_removed_values_and_drivers(tmp_path: Path) -> None:
     """When new values/drivers REPLACE old ones, removal lines must be recorded."""
-    from openbiliclaw.soul.layer_updaters import _update_values
+    from obc_soul.layer_updaters import _update_values
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()
@@ -3010,8 +3016,8 @@ async def test_update_values_records_removed_values_and_drivers(tmp_path: Path) 
 @pytest.mark.asyncio
 async def test_speculator_seed_ingestion_exception_is_swallowed(tmp_path: Path) -> None:
     """If speculator seed ingestion raises, _update_interest must continue gracefully."""
-    from openbiliclaw.soul import speculator as spec_mod
-    from openbiliclaw.soul.layer_updaters import _update_interest
+    from obc_soul import speculator as spec_mod
+    from obc_soul.layer_updaters import _update_interest
 
     memory = MemoryManager(Path(tmp_path))
     memory.initialize()

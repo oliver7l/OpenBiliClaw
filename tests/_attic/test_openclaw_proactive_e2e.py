@@ -14,12 +14,12 @@ from typing import Any
 import httpx
 import pytest
 import uvicorn
+from obc_soul.speculator import SpeculativeInterest, SpeculativeSpecific
 
 from openbiliclaw.api.app import create_app
 from openbiliclaw.integrations.openclaw import cli as openclaw_cli
 from openbiliclaw.runtime.events import RuntimeEventHub
 from openbiliclaw.runtime.refresh import ContinuousRefreshController
-from openbiliclaw.soul.speculator import SpeculativeInterest, SpeculativeSpecific
 
 
 def _unused_tcp_port() -> int:

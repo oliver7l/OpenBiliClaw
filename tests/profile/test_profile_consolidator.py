@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
-from openbiliclaw.soul.consolidator import ProfileConsolidator
+from obc_soul.consolidator import ProfileConsolidator
 
 
 class _FakeLayer:
@@ -1271,7 +1271,7 @@ async def test_run_if_due_throttles_and_skips_clean_input(tmp_path: Path) -> Non
 
 
 async def test_apply_rebuilds_onion_tree(tmp_path: Path) -> None:
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     profile = OnionProfile()
     profile.populate_from_flat_preference(
@@ -1323,8 +1323,8 @@ async def test_apply_rebuilds_onion_tree(tmp_path: Path) -> None:
 
 
 async def test_pipeline_tick_runs_consolidator_and_records_cognition(tmp_path: Path) -> None:
-    from openbiliclaw.soul.consolidator import ConsolidationReport
-    from openbiliclaw.soul.pipeline import ProfileUpdatePipeline
+    from obc_soul.consolidator import ConsolidationReport
+    from obc_soul.pipeline import ProfileUpdatePipeline
 
     class _StubConsolidator:
         def __init__(self) -> None:
@@ -1371,8 +1371,8 @@ async def test_pipeline_tick_runs_consolidator_and_records_cognition(tmp_path: P
 
 
 async def test_pipeline_tick_quiet_when_consolidator_throttled(tmp_path: Path) -> None:
-    from openbiliclaw.soul.consolidator import ConsolidationReport
-    from openbiliclaw.soul.pipeline import ProfileUpdatePipeline
+    from obc_soul.consolidator import ConsolidationReport
+    from obc_soul.pipeline import ProfileUpdatePipeline
 
     class _ThrottledConsolidator:
         async def run_if_due(self, **_: Any) -> ConsolidationReport:
@@ -1444,7 +1444,7 @@ class _OverridesMemory(_FakeMemory):
         self._overrides_raw = overrides_raw
 
     def load_profile_overrides(self) -> Any:
-        from openbiliclaw.soul.overrides import ProfileOverrides
+        from obc_soul.overrides import ProfileOverrides
 
         return ProfileOverrides.from_dict(self._overrides_raw)
 

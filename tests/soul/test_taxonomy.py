@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import pytest
-
-from openbiliclaw.soul.taxonomy import CATEGORY_VOCAB, FALLBACK_CATEGORY, resolve_category
+from obc_soul.taxonomy import CATEGORY_VOCAB, FALLBACK_CATEGORY, resolve_category
 
 
 class _StubEmbed:
@@ -25,7 +24,7 @@ class _StubEmbed:
 
 @pytest.fixture(autouse=True)
 def _clear_vocab_vector_cache() -> None:
-    from openbiliclaw.soul import taxonomy
+    from obc_soul import taxonomy
 
     taxonomy._vocab_vectors.clear()
 

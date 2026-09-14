@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from obc_discovery.engine import DiscoveredContent
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 from openbiliclaw.eval.discovery_evaluator import (
     DISCOVERY_FIELD_TO_PARAM,
@@ -15,7 +16,6 @@ from openbiliclaw.eval.discovery_evaluator import (
     _score_no_echo_chamber,
     _score_novelty,
 )
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 def _build_profile() -> SoulProfile:

@@ -16,9 +16,7 @@ import json
 
 import pytest
 from obc_llm.base import LLMResponse
-
-from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.pipeline import (
+from obc_soul.pipeline import (
     _BUFFERED_LAYERS,
     _STRONG_SIGNAL_TYPES,
     LayerThreshold,
@@ -32,8 +30,10 @@ from openbiliclaw.soul.pipeline import (
     signals_from_dialogue,
     signals_from_events,
 )
-from openbiliclaw.soul.preference_analyzer import PreferenceAnalyzer
-from openbiliclaw.soul.profile_builder import ProfileBuilder
+from obc_soul.preference_analyzer import PreferenceAnalyzer
+from obc_soul.profile_builder import ProfileBuilder
+
+from openbiliclaw.memory.manager import MemoryManager
 
 # ---------------------------------------------------------------------------
 # SmartFakeService — routes LLM calls by system_instruction content

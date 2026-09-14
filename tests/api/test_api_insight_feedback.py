@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING
 import pytest
 from fastapi.testclient import TestClient
 from obc_llm.base import LLMResponse
+from obc_soul.engine import SoulEngine
 
 from openbiliclaw.api.app import create_app
 from openbiliclaw.memory.manager import MemoryManager
-from openbiliclaw.soul.engine import SoulEngine
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,7 +54,7 @@ _HYP = "用户可能通过深度内容获得掌控感。"
 
 
 def _build_client(tmp_path: Path) -> tuple[TestClient, MemoryManager]:
-    from openbiliclaw.soul.profile import InsightHypothesis, OnionProfile
+    from obc_soul.profile import InsightHypothesis, OnionProfile
 
     memory = MemoryManager(tmp_path / "data")
     memory.initialize()

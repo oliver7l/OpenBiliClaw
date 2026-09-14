@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from openbiliclaw.soul import speculator as speculator_module
-from openbiliclaw.soul.speculator import (
+from obc_soul import speculator as speculator_module
+from obc_soul.speculator import (
     CooldownEntry,
     InterestSpeculator,
     SpeculativeInterest,
@@ -75,7 +75,7 @@ def test_tokenize_filters_short():
 
 
 def test_probe_novelty_guard_matches_profile_specifics():
-    from openbiliclaw.soul.profile import (
+    from obc_soul.profile import (
         InterestDomain,
         InterestLayer,
         InterestSpecific,
@@ -283,7 +283,7 @@ def test_select_diverse_candidates_enforces_probe_mode_quota_when_possible():
 
 
 def _profile_with_ai_specifics():
-    from openbiliclaw.soul.profile import (
+    from obc_soul.profile import (
         InterestDomain,
         InterestLayer,
         InterestSpecific,
@@ -540,7 +540,7 @@ async def test_force_tick_unblocked_when_active_full_of_confirmed(monkeypatch, t
     rows out of ``state.active`` and (2) generate fresh speculations
     into the now-empty slots.
     """
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     # Seed the on-disk state with 5 confirmed rows occupying every active slot.
     state_dir = tmp_path / "memory"
@@ -620,7 +620,7 @@ async def test_force_tick_unblocked_when_active_full_of_confirmed(monkeypatch, t
 
 
 async def test_force_tick_fills_challenge_slots_when_near_pool_full(tmp_path):
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     data_dir = tmp_path / "memory"
     data_dir.mkdir()
@@ -1020,7 +1020,7 @@ def test_user_reject_speculation_returns_false_for_missing_domain(tmp_path: Path
 
 
 async def test_force_tick_does_not_restore_user_confirmed_interest(tmp_path: Path) -> None:
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_speculative_state(
         tmp_path,
@@ -1041,7 +1041,7 @@ async def test_force_tick_does_not_restore_user_confirmed_interest(tmp_path: Pat
 
 
 async def test_force_tick_does_not_restore_user_rejected_interest(tmp_path: Path) -> None:
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_speculative_state(
         tmp_path,
@@ -1065,7 +1065,7 @@ async def test_force_tick_does_not_restore_user_rejected_interest(tmp_path: Path
 async def test_force_tick_loader_blocks_duplicate_after_confirmed_item_was_promoted(
     tmp_path: Path,
 ) -> None:
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     save_speculative_state(tmp_path, SpeculativeState(active=[]))
     llm = _PausingSpeculationLLM(domain="建筑美学")
@@ -1113,7 +1113,7 @@ async def test_speculator_tick_promotes():
             generation_interval_minutes=999999,  # don't generate
         )
 
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         result = await speculator.tick(OnionProfile())
         assert len(result.promoted) == 1
@@ -1142,7 +1142,7 @@ async def test_speculator_tick_expires():
             generation_interval_minutes=999999,
         )
 
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         result = await speculator.tick(OnionProfile())
         assert len(result.rejected) == 1
@@ -1170,7 +1170,7 @@ def test_speculator_max_active_limit():
 
 def test_should_generate_respects_primary_cap():
     """Skip generation when active speculations reach the primary cap."""
-    from openbiliclaw.soul.profile import InterestDomain, InterestLayer, OnionProfile
+    from obc_soul.profile import InterestDomain, InterestLayer, OnionProfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         data_dir = Path(tmpdir)
@@ -1200,7 +1200,7 @@ def test_should_generate_respects_primary_cap():
 
 def test_should_generate_respects_secondary_cap():
     """Skip generation when active speculations reach the secondary cap."""
-    from openbiliclaw.soul.profile import (
+    from obc_soul.profile import (
         InterestDomain,
         InterestLayer,
         InterestSpecific,
@@ -1256,7 +1256,7 @@ async def test_force_tick_ignores_interval():
             generation_interval_minutes=9999,
         )
 
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         # force_tick with no LLM service won't generate, but it should run
         result = await speculator.force_tick(OnionProfile())
@@ -1341,7 +1341,7 @@ async def test_speculator_generate_keeps_visible_experience_mix():
             )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         data_dir = Path(tmpdir)
         speculator = InterestSpeculator(
@@ -1395,7 +1395,7 @@ async def test_speculator_generate_prefers_axis_missing_from_active_pool():
             )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        from openbiliclaw.soul.profile import OnionProfile
+        from obc_soul.profile import OnionProfile
 
         data_dir = Path(tmpdir)
         save_speculative_state(

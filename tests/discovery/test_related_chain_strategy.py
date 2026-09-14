@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 from obc_discovery.engine import DiscoveryConcurrencyController
-
-from openbiliclaw.soul.profile import InterestTag, PreferenceLayer, SoulProfile
+from obc_soul.profile import InterestTag, PreferenceLayer, SoulProfile
 
 
 def _build_profile() -> SoulProfile:

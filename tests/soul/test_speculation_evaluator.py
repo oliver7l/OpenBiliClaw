@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from obc_soul.speculator import SpeculativeInterest
 
 from openbiliclaw.eval.persona_judge import (
     PersonaJudgment,
@@ -16,7 +17,6 @@ from openbiliclaw.eval.speculation_evaluator import (
     _no_hallucination_score,
     _score_diversity,
 )
-from openbiliclaw.soul.speculator import SpeculativeInterest
 
 # ---------------------------------------------------------------------------
 # _score_diversity
@@ -157,7 +157,7 @@ async def test_evaluate_includes_persona_resonance(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(speculation_evaluator, "_llm_eval_speculation", _mock_llm_eval)
 
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     profile = OnionProfile(personality_portrait="test user")
 
@@ -198,7 +198,7 @@ async def test_evaluate_without_persona_defaults_to_half(
 
     monkeypatch.setattr(speculation_evaluator, "_llm_eval_speculation", _mock_llm_eval)
 
-    from openbiliclaw.soul.profile import OnionProfile
+    from obc_soul.profile import OnionProfile
 
     profile = OnionProfile(personality_portrait="test user")
     speculations = [

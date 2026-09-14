@@ -18,9 +18,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
 async def main() -> None:
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.config import load_config
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.profile import OnionProfile
 
     print("=" * 60)
     print("画像自迭代 — 第一轮真实评估")

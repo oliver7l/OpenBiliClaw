@@ -21,6 +21,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 async def main() -> None:
     from obc_llm.prompts import build_speculation_generation_prompt
+    from obc_soul.profile import OnionProfile
+    from obc_soul.speculator import SpeculativeInterest
 
     from openbiliclaw.config import load_config
     from openbiliclaw.eval.report import render_speculation_report
@@ -28,8 +30,6 @@ async def main() -> None:
     from openbiliclaw.eval.speculation_evaluator import SpeculationEvaluator
     from openbiliclaw.llm.registry import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.profile import OnionProfile
-    from openbiliclaw.soul.speculator import SpeculativeInterest
 
     cfg = load_config()
     data_dir = cfg.data_path

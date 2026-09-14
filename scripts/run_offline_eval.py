@@ -55,11 +55,11 @@ def _run_eval_with_llm_rerank(
     import asyncio
 
     from obc_llm.service import LLMService, module_overrides_from_config
+    from obc_soul.engine import SoulEngine
 
     from openbiliclaw.config import load_config
     from openbiliclaw.llm import build_llm_registry
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.soul.engine import SoulEngine
 
     cfg = load_config()
     memory = MemoryManager(data_dir=PROJECT_ROOT / "data")

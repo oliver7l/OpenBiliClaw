@@ -17,8 +17,9 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from obc_soul.profile import SoulProfile
+
     from openbiliclaw.core.contracts import DiscoveredContent
-    from openbiliclaw.soul.profile import SoulProfile
     from openbiliclaw.sources.protocol import SourceRecipe
 
 logger = logging.getLogger(__name__)

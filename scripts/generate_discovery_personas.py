@@ -79,8 +79,9 @@ async def generate_scenario(
     scenario_pool: Any,
 ) -> bool:
     """Generate a scenario for a persona."""
+    from obc_soul.profile import OnionProfile
+
     from openbiliclaw.eval.discovery_scenario import ScenarioGenerator, _persona_signature
-    from openbiliclaw.soul.profile import OnionProfile
 
     try:
         persona = OnionProfile.from_dict(persona_data)

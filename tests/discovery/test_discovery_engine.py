@@ -20,8 +20,8 @@ from obc_discovery.engine import (
 )
 from obc_discovery.pool_snapshot import PoolDistributionSnapshot
 from obc_llm.service import LLMProviderExecutionError
+from obc_soul.profile import InterestTag, SoulProfile
 
-from openbiliclaw.soul.profile import InterestTag, SoulProfile
 from openbiliclaw.storage.database import Database
 
 from .test_explore_strategy import (

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import pytest
-
-from openbiliclaw.soul.overrides import (
+from obc_soul.overrides import (
     DomainAdd,
     InterestPolarityEdit,
     ListEdit,
@@ -13,7 +12,7 @@ from openbiliclaw.soul.overrides import (
     apply_edit,
     apply_overrides,
 )
-from openbiliclaw.soul.profile import (
+from obc_soul.profile import (
     CoreLayer,
     InterestDomain,
     InterestLayer,

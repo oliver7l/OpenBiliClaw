@@ -400,6 +400,8 @@ class RuntimeContext:
         )
         from obc_llm.service import LLMService, module_overrides_from_config
         from obc_llm.usage_recorder import UsageRecorder
+        from obc_soul.dialogue import SocraticDialogue
+        from obc_soul.engine import SoulEngine
 
         from openbiliclaw.bilibili.api import BilibiliAPIClient
         from openbiliclaw.bilibili.auth import resolve_runtime_cookie
@@ -409,8 +411,6 @@ class RuntimeContext:
         from openbiliclaw.runtime.account_sync import AccountSyncService
         from openbiliclaw.runtime.refresh import ContinuousRefreshController
         from openbiliclaw.runtime.updater import AutoUpdateService
-        from openbiliclaw.soul.dialogue import SocraticDialogue
-        from openbiliclaw.soul.engine import SoulEngine
 
         # 1. LLM layer (with usage ledger so ``openbiliclaw cost`` has data)
         # 传整个 config 而非 .llm：适配层 to_llm_config 会取 .llm，且对
