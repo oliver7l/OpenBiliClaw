@@ -81,7 +81,11 @@ def test_import_spots_idempotent_clear(tmp_weekend_db: str) -> None:
 def test_list_spots_filter_by_suitable_for(tmp_weekend_db: str) -> None:
     store = WeekendStore(tmp_weekend_db)
     store.import_spots(_load_spots())
-    fam = store.list_spots(suitable_for="带娃")
+    # include_expired=True：种子里唯一带精确「带娃」标签的「香菜节」有
+    # valid_until=2026-09-13，默认过滤会随日期推移把它剔除 → 断言变脆
+    # （2026-09-14 起全量必红）。本测试只验证 LIKE 精确匹配人群标签的能力，
+    # 与有效期无关，故显式放开过期项。
+    fam = store.list_spots(suitable_for="带娃", include_expired=True)
     assert fam
     assert all("带娃" in s.suitable_for for s in fam)
 

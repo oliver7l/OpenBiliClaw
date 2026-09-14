@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Callable
 from contextlib import suppress
 from typing import Any, cast
 
@@ -97,6 +98,41 @@ def register(app: typer.Typer) -> None:
     app.command("fetch-x")(fetch_x)
     app.command("discover-douyin")(discover_douyin)
     app.command()(discover)
+
+
+def _run_single_source_bootstrap(
+    *,
+    source_label: str,
+    enqueue: Callable[[], str | None],
+    collect: Callable[[str | None], tuple[list[dict[str, Any]], dict[str, int], str]],
+    wait_seconds: float,
+    summary_renderer: Callable[[dict[str, int], str, int], None],
+) -> None:
+    """Shared core for ``fetch-douyin`` / ``fetch-xhs`` standalone commands.
+
+    从上帝文件 ``cli/__init__.py`` 迁入本模块（P4 第七刀，2026-09-14）；
+    仍经 ``cli._run_single_source_bootstrap`` re-export 供既有调用点使用。
+
+    Pure pull pipeline — enqueue → kick → wait for completion →
+    render scope_counts. Does NOT touch B站 auth, does NOT propagate
+    events to memory. The daemon's
+    ``/api/sources/{xhs,dy}/task-result`` handler ALREADY propagates
+    incoming events to memory when it receives partials, so a CLI-side
+    propagate would double-write. Init still runs the soul pipeline
+    (preference / awareness / soul) on top — this command is the
+    isolated 'just verify the extension can pull data' rung beneath
+    that, useful for testing one platform at a time.
+    """
+    _print_page_title(f"{source_label} 数据拉取", "扩展任务 → 后端入库")
+    console.print(f"[dim]入队 {source_label} bootstrap 任务,等扩展执行(最多 {wait_seconds:.0f}s)...[/dim]")
+
+    task_id = enqueue()
+    if not task_id:
+        console.print(f"[bold red]无法入队 {source_label} 任务[/bold red] — 看上面的提示(数据库 / 预算 / 任务表问题)。")
+        raise typer.Exit(code=1)
+
+    events, scope_counts, status_label = collect(task_id)
+    summary_renderer(scope_counts, status_label, len(events))
 
 
 def fetch_douyin(

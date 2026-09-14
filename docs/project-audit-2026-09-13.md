@@ -195,7 +195,7 @@
 
 | 项 | 大小 | 性质 | 结论 |
 |----|------|------|------|
-| `data/v2ex-hot-hub/`（连字符） | 28M | 外部仓库 git clone，**8-31 旧版** | ⚠️ **陈旧重复**：脚本用的是 `data/v2ex_hot_hub`（下划线，`scripts/collect_v2ex_archive.py:59` 的 `DEFAULT_REPO_DIR`）→ 连字符版无引用，可清 |
+| `data/v2ex-hot-hub/`（连字符） | 28M | 外部仓库 git clone，**8-31 旧版** | ⚠️ **陈旧重复**：脚本用的是 `data/v2ex_hot_hub`（下划线，`scripts/content_library/collect_v2ex_archive.py:59` 的 `DEFAULT_REPO_DIR`）→ 连字符版无引用，可清 |
 | `data/tax_frames/` | 2.8M | 无代码引用（全仓 grep 零命中） | ⚠️ 疑似孤儿，待用户确认 |
 | `data/tax_frames2/` | 4.6M | 同上 | ⚠️ 同上 |
 | `data/tax_frames2_check/` | 2.3M | 同上 | ⚠️ 同上 |
@@ -301,10 +301,20 @@
    `tests/cli/test_cli_init_module.py`（6 例，含「patch 经 cli 命名空间可命中」
    的行为锁）。六刀累计 **7087 → 4039 行**（-3048，约 -43%）；顶层 42 命令
    worktree 对账零丢失。
+   **第七刀**：soul 画像 / 推荐 / 对话组（9 个平铺命令，~945 行）抽至 `cli/_cmd_soul.py`
+   （`register(app)` 挂载，命令名与形状不变）；12 个外部 patch 敏感符号统一
+   `_cli.X` 动态取；`profile` 因与 cli 内既有形参
+   `_run_init_discovery_backfill_async(profile=...)` 同名、re-export 会触发 ruff F811，
+   **故意不 re-export**（命令本体仍由 `register()` 挂在 app 上）。同刀归位
+   `_run_single_source_bootstrap` → `_cmd_fetch.py`、`_print_recommendation_card`
+   → `_render.py`；顺带修 `tests/weekend` 的日期炸弹用例（`include_expired=True`）。
+   守门 `tests/cli/test_cli_soul_module.py`（9 例，含 recommend / chat 两条行为锁）。
+   七刀累计 **7087 → 3057 行**（-4030，约 -57%）；90 条命令路径 worktree 对账
+   `diff` 为空。
    **obc_runtime 抽取收口维持暂停**（v0.3.235 评审：runtime 44 文件依赖全部模块，
    收益低成本高）。「旧 import」路径 776 处（llm 183 + soul 407 + discovery 186）迁移
-   与上帝文件后续簇（profile 系 / probe / config 显示 / start 等约 40 命令与
-   构建 helper）待续。
+   与上帝文件后续簇（probe 已随第七刀迁出；config 显示 / start / set-password /
+   引导交互 _save_runtime_provider_config 家族与构建 helper 等约 25 命令）待续。
 
    | 项 | 实测规模 | 备注 |
    |----|---------|------|

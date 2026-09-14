@@ -55,3 +55,20 @@ def _print_discovered_content_preview(item: Any, index: int) -> None:
             ("相关性分数", f"{float(item.relevance_score or 0.0):.2f}"),
         ],
     )
+
+
+def _print_recommendation_card(item: Any, index: int) -> None:
+    """Render one recommendation in a card-like format."""
+    rows = [
+        ("标题", item.content.title or "（暂无）"),
+        ("UP 主", item.content.up_name or "（未知）"),
+    ]
+    if item.topic_label:
+        rows.append(("话题标签", item.topic_label))
+    rows.extend(
+        [
+            ("推荐理由", item.expression or "（暂无）"),
+            ("BV号", item.content.bvid or "（暂无）"),
+        ]
+    )
+    _print_key_value_table(f"推荐 {index}", rows)

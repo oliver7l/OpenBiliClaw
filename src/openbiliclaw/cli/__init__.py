@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import sys
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
-import click
 import typer
 from rich.panel import Panel
 from rich.table import Table
@@ -81,7 +79,6 @@ from openbiliclaw.runtime.ollama_supervisor import (
     is_loopback,
     ollama_required,
 )
-from openbiliclaw.soul.preference_analyzer import DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE
 
 
 def _strip_proxy_env() -> None:
@@ -174,6 +171,7 @@ app.add_typer(note_app, name="note")
 from openbiliclaw.cli._cmd_fetch import (  # noqa: E402,F401
     _normalize_douyin_discovery_sources,  # re-export：tests/cli 直引
     _run_douyin_discovery,  # re-export：测试 patch 补丁点
+    _run_single_source_bootstrap,  # re-export：本模块内 fetch-douyin/xhs 调用点
     _run_xhs_discovery,  # re-export：测试 patch 补丁点
     _run_zhihu_discovery,  # re-export：测试 patch cli_module._run_zhihu_discovery 的补丁点
 )
@@ -206,6 +204,28 @@ from openbiliclaw.cli._cmd_init import (  # noqa: E402,F401
 from openbiliclaw.cli._cmd_init import register as _register_init_commands  # noqa: E402
 
 _register_init_commands(app)
+
+# soul 画像 / 推荐 / 对话命令组已抽至 cli/_cmd_soul.py（P4 第七刀）；该模块
+# 顶层不 import 本包，此处顶层注册无循环依赖。re-export 的 8 个命令名：
+# tests/cli 直引 / `openbiliclaw.cli.<cmd>` 外部调用点保持不变。
+# 注：`profile` 命令**不在此 re-export** —— 它与本模块既有形参
+# `_run_init_discovery_backfill_async(profile=...)` 同名，re-export 会触发
+# ruff F811；命令本身已由 register() 挂到 app，`openbiliclaw profile` 与
+# `runner.invoke(app, ["profile"])` 均不受影响。需要 Python 层引用时从
+# `openbiliclaw.cli._cmd_soul` 直接导入。
+from openbiliclaw.cli._cmd_soul import (  # noqa: E402,F401
+    chat,
+    delight,
+    feedback,
+    import_youtube,
+    probe,
+    profile_consolidate,
+    rebuild_profile,
+    recommend,
+)
+from openbiliclaw.cli._cmd_soul import register as _register_soul_commands  # noqa: E402
+
+_register_soul_commands(app)
 
 # Knowledge Forge（知识锻造炉）命令组
 _APP_CONTEXT: dict[str, Any] = {}
@@ -256,10 +276,7 @@ _CODEX_LOGIN_LOGOUT_OPTION = typer.Option(
 
 def _bootstrap_container_runtime() -> None:
     """Bootstrap runtime root and optional proxy env inside Docker-like runtimes."""
-    if not (
-        os.environ.get("OPENBILICLAW_PROJECT_ROOT")
-        or os.environ.get("OPENBILICLAW_CONFIG_TEMPLATE")
-    ):
+    if not (os.environ.get("OPENBILICLAW_PROJECT_ROOT") or os.environ.get("OPENBILICLAW_CONFIG_TEMPLATE")):
         return
 
     from openbiliclaw.docker_runtime import bootstrap_runtime_environment
@@ -293,15 +310,12 @@ _EXTENSION_PRESENCE_REQUIRED_WARNING = (
     "after grace period if no extension client connects"
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-
 # 渲染 helper 已抽至 cli/_render.py（P4 第四/五刀），主文件与其余命令组共用。
 from openbiliclaw.cli._render import (  # noqa: E402,F401
     _print_discovered_content_preview,
     _print_key_value_table,
     _print_page_title,
+    _print_recommendation_card,
     _print_status_panel,
 )
 
@@ -352,8 +366,7 @@ def _preflight_loopback_ollama(cfg: Any) -> None:
         return
     if not _ollama_start_serve_background():
         console.print(
-            "[yellow]Ollama preflight 未能拉起本机服务；后端继续启动，"
-            "后续 LLM/embedding 请求可能降级或失败。[/yellow]"
+            "[yellow]Ollama preflight 未能拉起本机服务；后端继续启动，后续 LLM/embedding 请求可能降级或失败。[/yellow]"
         )
 
 
@@ -390,8 +403,6 @@ def _self_heal_autostart_registration(cfg: Any) -> None:
         console.print(f"[yellow]开机自启动补注册失败：{exc}[/yellow]")
 
 
-
-
 def _print_placeholder(feature: str, next_step: str = "") -> None:
     """Render a consistent placeholder panel for unfinished commands."""
     body = "功能开发中"
@@ -399,25 +410,6 @@ def _print_placeholder(feature: str, next_step: str = "") -> None:
         body = f"{body}\n[dim]下一步：{next_step}[/dim]"
     _print_page_title(feature)
     _print_status_panel("stub", "开发中", body)
-
-
-
-
-def _print_recommendation_card(item: Any, index: int) -> None:
-    """Render one recommendation in a card-like format."""
-    rows = [
-        ("标题", item.content.title or "（暂无）"),
-        ("UP 主", item.content.up_name or "（未知）"),
-    ]
-    if item.topic_label:
-        rows.append(("话题标签", item.topic_label))
-    rows.extend(
-        [
-            ("推荐理由", item.expression or "（暂无）"),
-            ("BV号", item.content.bvid or "（暂无）"),
-        ]
-    )
-    _print_key_value_table(f"推荐 {index}", rows)
 
 
 def _initialize_logging(log_level_override: str | None = None) -> None:
@@ -528,21 +520,15 @@ def _build_soul_engine() -> Any:
         speculation_max_active=cfg.scheduler.speculation_max_active,
         speculation_max_primary_interests=cfg.scheduler.speculation_max_primary_interests,
         speculation_max_secondary_interests=cfg.scheduler.speculation_max_secondary_interests,
-        avoidance_speculation_interval_minutes=(
-            cfg.scheduler.avoidance_speculation_interval_minutes
-        ),
+        avoidance_speculation_interval_minutes=(cfg.scheduler.avoidance_speculation_interval_minutes),
         avoidance_speculation_ttl_days=cfg.scheduler.avoidance_speculation_ttl_days,
         avoidance_speculation_cooldown_days=cfg.scheduler.avoidance_speculation_cooldown_days,
-        avoidance_speculation_confirmation_threshold=(
-            cfg.scheduler.avoidance_speculation_confirmation_threshold
-        ),
+        avoidance_speculation_confirmation_threshold=(cfg.scheduler.avoidance_speculation_confirmation_threshold),
         avoidance_speculation_max_active=cfg.scheduler.avoidance_speculation_max_active,
         speculator_idle_interval_minutes=cfg.scheduler.speculator_idle_interval_minutes,
         profile_consolidation_enabled=cfg.scheduler.profile_consolidation_enabled,
         profile_consolidation_interval_hours=(cfg.scheduler.profile_consolidation_interval_hours),
-        profile_consolidation_like_target_upper=(
-            cfg.scheduler.profile_consolidation_like_target_upper
-        ),
+        profile_consolidation_like_target_upper=(cfg.scheduler.profile_consolidation_like_target_upper),
         profile_consolidation_like_target_soft=cfg.scheduler.profile_consolidation_like_target_soft,
         profile_consolidation_archive_enabled=(cfg.scheduler.profile_consolidation_archive_enabled),
     )
@@ -585,18 +571,10 @@ def _build_recommendation_engine() -> Any:
         xhs_self_info_provider=_xhs_self_info_provider,
         # v0.4.0+: LLM semantic reranker (generative recommendation, step 1)
         # 防御性：测试 fake_config（SimpleNamespace）可能缺 recommendation 段
-        llm_reranker_enabled=bool(
-            getattr(getattr(cfg, "recommendation", None), "llm_reranker_enabled", False)
-        ),
-        llm_reranker_top_k=int(
-            getattr(getattr(cfg, "recommendation", None), "llm_reranker_top_k", 30)
-        ),
-        llm_reranker_weight=float(
-            getattr(getattr(cfg, "recommendation", None), "llm_reranker_weight", 0.3)
-        ),
-        llm_reranker_batch_size=int(
-            getattr(getattr(cfg, "recommendation", None), "llm_reranker_batch_size", 5)
-        ),
+        llm_reranker_enabled=bool(getattr(getattr(cfg, "recommendation", None), "llm_reranker_enabled", False)),
+        llm_reranker_top_k=int(getattr(getattr(cfg, "recommendation", None), "llm_reranker_top_k", 30)),
+        llm_reranker_weight=float(getattr(getattr(cfg, "recommendation", None), "llm_reranker_weight", 0.3)),
+        llm_reranker_batch_size=int(getattr(getattr(cfg, "recommendation", None), "llm_reranker_batch_size", 5)),
     )
 
 
@@ -697,15 +675,11 @@ def _build_discovery_engine() -> Any:
         database=database,
         concurrency=concurrency,
         embedding_service=embedding_service,
-        multimodal_evaluation_enabled=bool(
-            getattr(discovery_cfg, "multimodal_evaluation_enabled", False)
-        ),
+        multimodal_evaluation_enabled=bool(getattr(discovery_cfg, "multimodal_evaluation_enabled", False)),
         multimodal_batch_size=int(getattr(discovery_cfg, "multimodal_batch_size", 8)),
         multimodal_image_max_px=int(getattr(discovery_cfg, "multimodal_image_max_px", 384)),
         multimodal_image_quality=int(getattr(discovery_cfg, "multimodal_image_quality", 72)),
-        multimodal_image_timeout_seconds=int(
-            getattr(discovery_cfg, "multimodal_image_timeout_seconds", 6)
-        ),
+        multimodal_image_timeout_seconds=int(getattr(discovery_cfg, "multimodal_image_timeout_seconds", 6)),
     )
     search_strategy = SearchStrategy(
         llm_service=llm_service,
@@ -741,8 +715,6 @@ def _build_discovery_engine() -> Any:
     engine.register_strategy(related_strategy)
     engine.register_strategy(explore_strategy)
     return engine
-
-
 
 
 def _build_usage_recorder() -> Any:
@@ -806,10 +778,6 @@ def _run_db_repair() -> Any:
     from openbiliclaw.storage.maintenance import repair_database
 
     return repair_database(_runtime_database_path(), backup_dir=_runtime_backup_dir())
-
-
-
-
 
 
 @app.callback()
@@ -904,15 +872,11 @@ def _load_runtime_config_error(*, render: bool = True) -> str | None:
     try:
         validate_runtime_config(config)
     except ConfigError as exc:
-        hints = diagnostics.messages + [
-            f"{issue.field}: {issue.message}" for issue in diagnostics.issues
-        ]
+        hints = diagnostics.messages + [f"{issue.field}: {issue.message}" for issue in diagnostics.issues]
         if render:
             _print_runtime_config_error(str(exc), hints)
         return str(exc)
     return None
-
-
 
 
 def _save_runtime_provider_config(
@@ -1068,8 +1032,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "按你充值的那家给你的模型清单填"
             ),
             "embedding_alt": (
-                "中转站通常也代理 OpenAI text-embedding-3-small,"
-                "Phase 3 高级选项里可以指向同一个 base_url"
+                "中转站通常也代理 OpenAI text-embedding-3-small,Phase 3 高级选项里可以指向同一个 base_url"
             ),
         },
     ),
@@ -1082,8 +1045,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "学术阅读这些场景表现好,日常对话也稳。直接从 Moonshot 官方拿 Key"
             ),
             "signup_url": (
-                "https://platform.moonshot.cn/console/api-keys （国内）/ "
-                "https://platform.moonshot.ai （国际）"
+                "https://platform.moonshot.cn/console/api-keys （国内）/ https://platform.moonshot.ai （国际）"
             ),
             "supports_embedding": "false",
             "base_url": "https://api.moonshot.ai/v1",
@@ -1092,9 +1054,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "kimi-k2.6 (默认 / 最新 / 256K 上下文 / 多模态) / kimi-k2.5。"
                 "旧 moonshot-v1-* 和 K2-series 即将停服(K2 系列 2026-05-25 停)"
             ),
-            "domain_alt": (
-                "国内用户也可改 base_url 为 https://api.moonshot.cn/v1 (域名不同,Key 通用)"
-            ),
+            "domain_alt": ("国内用户也可改 base_url 为 https://api.moonshot.cn/v1 (域名不同,Key 通用)"),
         },
     ),
     (
@@ -1117,9 +1077,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "MiniMax-M2.5 / MiniMax-M2.1。"
                 "旧 abab 系列 (abab6.5*) 已被 M 系列替代"
             ),
-            "domain_alt": (
-                "国内用户改 base_url 为 https://api.minimaxi.com/v1 (旧 .chat 域名将停)"
-            ),
+            "domain_alt": ("国内用户改 base_url 为 https://api.minimaxi.com/v1 (旧 .chat 域名将停)"),
         },
     ),
     (
@@ -1187,10 +1145,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "(issue #193)。token 推理端点已按 OpenAI 协议实测连通"
                 "(deepseek-v4-flash 真实请求验证)"
             ),
-            "signup_url": (
-                "https://console.sensecore.cn （日日新开放平台控制台申请 API Key,"
-                "免费额度以官方页面为准）"
-            ),
+            "signup_url": ("https://console.sensecore.cn （日日新开放平台控制台申请 API Key,免费额度以官方页面为准）"),
             "supports_embedding": "false",
             "base_url": "https://token.sensenova.cn/v1",
             "default_model": "deepseek-v4-flash",
@@ -1198,9 +1153,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "deepseek-v4-flash (默认 / 已实测) / 其它可用模型以控制台模型清单为准。"
                 "免费额度适合试用与轻度使用;重度使用建议充值或换 DeepSeek 官方"
             ),
-            "embedding_alt": (
-                "token 推理端点未验证 /v1/embeddings,Phase 3 默认推荐独立 Ollama bge-m3"
-            ),
+            "embedding_alt": ("token 推理端点未验证 /v1/embeddings,Phase 3 默认推荐独立 Ollama bge-m3"),
         },
     ),
     (
@@ -1212,8 +1165,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "endpoint 都按 Azure 的 deployment 模式走。多用于企业合规场景"
             ),
             "signup_url": (
-                "Azure portal → 创建 OpenAI resource → 创建 deployment → "
-                "Keys & Endpoint 取 KEY 和 ENDPOINT"
+                "Azure portal → 创建 OpenAI resource → 创建 deployment → Keys & Endpoint 取 KEY 和 ENDPOINT"
             ),
             "supports_embedding": "true",
             "base_url": "https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT",
@@ -1223,8 +1175,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "Base URL 把 YOUR-RESOURCE / YOUR-DEPLOYMENT 替换成你自己的"
             ),
             "embedding_alt": (
-                "Azure 上 embedding 模型也是单独 deployment,Phase 3 时再起一个 deployment "
-                "并填那个的 endpoint"
+                "Azure 上 embedding 模型也是单独 deployment,Phase 3 时再起一个 deployment 并填那个的 endpoint"
             ),
         },
     ),
@@ -1246,8 +1197,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
                 "deepseek-ai/DeepSeek-V3"
             ),
             "embedding_alt": (
-                "如果你的 vLLM/LMStudio 也部署了 embedding 模型,Phase 3 高级选项里"
-                "可以指向同一个 base_url"
+                "如果你的 vLLM/LMStudio 也部署了 embedding 模型,Phase 3 高级选项里可以指向同一个 base_url"
             ),
         },
     ),
@@ -1263,10 +1213,7 @@ _OPENAI_COMPAT_PRESETS: tuple[tuple[str, dict[str, str]], ...] = (
             "supports_embedding": "false",  # unknown
             "base_url": "",
             "default_model": "",
-            "hint": (
-                "Base URL 必须以 /v1 (或网关等价路径)结尾。"
-                "模型名得是网关上真实部署 / 提供的那个,写错会 404"
-            ),
+            "hint": ("Base URL 必须以 /v1 (或网关等价路径)结尾。模型名得是网关上真实部署 / 提供的那个,写错会 404"),
         },
     ),
 )
@@ -1349,25 +1296,20 @@ def _ollama_install_if_missing() -> bool:
         "  • Linux: 通过官方 install.sh（curl https://ollama.com/install.sh | sh）"
     )
     if not typer.confirm("是否现在帮你装 Ollama？", default=True):
-        console.print(
-            "[dim]已跳过自动安装。请手动从 https://ollama.com/download 下载，"
-            "然后重新跑一遍本命令。[/dim]"
-        )
+        console.print("[dim]已跳过自动安装。请手动从 https://ollama.com/download 下载，然后重新跑一遍本命令。[/dim]")
         return False
 
     if sys.platform == "darwin":
         if not shutil.which("brew"):
             console.print(
-                "[red]没找到 brew。请从 https://ollama.com/download 下载 Mac 安装包，"
-                "装好后重新运行本命令。[/red]"
+                "[red]没找到 brew。请从 https://ollama.com/download 下载 Mac 安装包，装好后重新运行本命令。[/red]"
             )
             return False
         subprocess.run(["brew", "install", "ollama"], check=False)
     elif os.name == "nt":
         if not shutil.which("winget"):
             console.print(
-                "[red]没找到 winget。请从 https://ollama.com/download 下载 Windows 安装包，"
-                "装好后重新运行本命令。[/red]"
+                "[red]没找到 winget。请从 https://ollama.com/download 下载 Windows 安装包，装好后重新运行本命令。[/red]"
             )
             return False
         subprocess.run(
@@ -1393,9 +1335,7 @@ def _ollama_install_if_missing() -> bool:
     if shutil.which("ollama"):
         console.print("[green]Ollama 安装成功。[/green]")
         return True
-    console.print(
-        "[red]安装似乎没成功。请从 https://ollama.com/download 手动装一下，再重新跑本命令。[/red]"
-    )
+    console.print("[red]安装似乎没成功。请从 https://ollama.com/download 手动装一下，再重新跑本命令。[/red]")
     return False
 
 
@@ -1715,10 +1655,7 @@ def _prompt_provider_triplet(menu_choice: str) -> tuple[str, str, str, str]:
         if not _ollama_has_model(model):
             console.print(f"开始拉取 {model}（首次下载耗时几分钟）…")
             if not _ollama_pull_model(model):
-                console.print(
-                    f"[red]{model} 拉取失败。可以稍后手动跑 `ollama pull {model}` "
-                    "再重启 backend。[/red]"
-                )
+                console.print(f"[red]{model} 拉取失败。可以稍后手动跑 `ollama pull {model}` 再重启 backend。[/red]")
         else:
             console.print(f"[green]模型 {model} 已就绪。[/green]")
         return provider, default_base_url, "", model
@@ -1886,9 +1823,7 @@ def _interactive_embedding_setup(default_provider: str, *, auto_if_ready: bool =
         return
 
     if choice == "4":
-        base_url = typer.prompt(
-            "Embedding Base URL(OpenAI 兼容,例如 http://localhost:8000/v1)"
-        ).strip()
+        base_url = typer.prompt("Embedding Base URL(OpenAI 兼容,例如 http://localhost:8000/v1)").strip()
         api_key = typer.prompt(
             "Embedding API Key(如服务无鉴权可留空)",
             hide_input=True,
@@ -2155,12 +2090,9 @@ async def _run_init_discovery_backfill_async(
             else None
         )
         console.print(
-            f"补货阶段 {index}/{len(_INIT_DISCOVERY_PLAN)}: {_format_strategy_group(strategies)}"
-            f"{label_suffix}"
+            f"补货阶段 {index}/{len(_INIT_DISCOVERY_PLAN)}: {_format_strategy_group(strategies)}{label_suffix}"
         )
-        console.print(
-            f"当前池子 {current_pool_count}/{target_pool_count}，本轮请求上限 {request_limit}"
-        )
+        console.print(f"当前池子 {current_pool_count}/{target_pool_count}，本轮请求上限 {request_limit}")
         discovered = await _run_with_progress(
             discovery_engine.discover(
                 profile,
@@ -2176,28 +2108,10 @@ async def _run_init_discovery_backfill_async(
         )
         discovered_count += len(discovered)
         console.print(
-            "阶段完成: "
-            f"当前池子 {database.count_pool_candidates()}/{target_pool_count}，"
-            f"本轮发现 {len(discovered)} 条"
+            f"阶段完成: 当前池子 {database.count_pool_candidates()}/{target_pool_count}，本轮发现 {len(discovered)} 条"
         )
 
     return discovered_count
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _import_xhs_bootstrap_events() -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -2211,18 +2125,6 @@ def _import_xhs_bootstrap_events() -> tuple[list[dict[str, Any]], dict[str, int]
     task_id = _enqueue_xhs_bootstrap_task()
     events, counts, _status = _collect_xhs_bootstrap_events(task_id)
     return events, counts
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _event_memory_key(event: dict[str, Any]) -> tuple[str, str, str, str, str]:
@@ -2391,9 +2293,7 @@ def _collect_zhihu_search_results(
             result = {}
         debug = result.get("debug", {}) if isinstance(result, dict) else {}
         error = str(result.get("error", "") if isinstance(result, dict) else "")
-        if error == "zhihu_login_required" or (
-            isinstance(debug, dict) and debug.get("login_required") is True
-        ):
+        if error == "zhihu_login_required" or (isinstance(debug, dict) and debug.get("login_required") is True):
             return [], {}, "login_required"
         return [], {}, "failed"
     if task.get("status") != "completed":
@@ -2502,9 +2402,7 @@ def _collect_zhihu_discovery_results(
             result = {}
         debug = result.get("debug", {}) if isinstance(result, dict) else {}
         error = str(result.get("error", "") if isinstance(result, dict) else "")
-        if error == "zhihu_login_required" or (
-            isinstance(debug, dict) and debug.get("login_required") is True
-        ):
+        if error == "zhihu_login_required" or (isinstance(debug, dict) and debug.get("login_required") is True):
             return [], {}, "login_required"
         return [], {}, "failed"
     if task.get("status") != "completed":
@@ -2526,9 +2424,7 @@ def _collect_zhihu_discovery_results(
         return [], {}, "failed"
     items = [v for v in result.get("items", []) if isinstance(v, dict)]
     raw_counts = result.get("scope_counts", {})
-    scope_counts = (
-        {str(k): int(v) for k, v in raw_counts.items()} if isinstance(raw_counts, dict) else {}
-    )
+    scope_counts = {str(k): int(v) for k, v in raw_counts.items()} if isinstance(raw_counts, dict) else {}
     return items, scope_counts, "ok" if items else "empty"
 
 
@@ -2541,10 +2437,7 @@ def _enqueue_zhihu_discovery_candidates(items: list[dict[str, Any]]) -> tuple[in
     if not contents:
         return 0, []
     database = _get_runtime_database()
-    writes = [
-        discovered_content_to_candidate_write(item, source_context=item.source_strategy)
-        for item in contents
-    ]
+    writes = [discovered_content_to_candidate_write(item, source_context=item.source_strategy) for item in contents]
     enqueued = int(database.enqueue_discovery_candidates(writes))
     return enqueued, contents
 
@@ -2652,16 +2545,6 @@ def _collect_dy_search_results(
     return videos, {"dy_search": count}, status_label
 
 
-
-
-
-
-
-
-
-
-
-
 @app.command("setup-embedding")
 def setup_embedding() -> None:
     """配置本地 Ollama 作为 embedding 兜底服务（可选）.
@@ -2678,9 +2561,7 @@ def setup_embedding() -> None:
 @app.command()
 def start(
     host: str = typer.Option("", "--host", help="API 监听地址（默认读 config.toml [api].host）"),
-    port: int = typer.Option(
-        0, "--port", min=0, max=65535, help="API 监听端口（默认读 config.toml [api].port）"
-    ),
+    port: int = typer.Option(0, "--port", min=0, max=65535, help="API 监听端口（默认读 config.toml [api].port）"),
 ) -> None:
     """启动 OpenBiliClaw Agent."""
     from openbiliclaw.config import load_config
@@ -2768,12 +2649,8 @@ def _rebase_auth_fingerprint(cfg: Any) -> None:
 @app.command("set-password")
 def set_password(
     disable: bool = typer.Option(False, "--disable", help="关闭密码门禁"),
-    logout_all: bool = typer.Option(
-        False, "--logout-all", help="使所有设备的登录态立即失效（不改密码/密钥）"
-    ),
-    rotate_secret: bool = typer.Option(
-        False, "--rotate-secret", help="轮换会话签名密钥（最强撤销，需重启后端生效）"
-    ),
+    logout_all: bool = typer.Option(False, "--logout-all", help="使所有设备的登录态立即失效（不改密码/密钥）"),
+    rotate_secret: bool = typer.Option(False, "--rotate-secret", help="轮换会话签名密钥（最强撤销，需重启后端生效）"),
 ) -> None:
     """设置 / 修改局域网访问密码（或关闭门禁 / 登出所有设备）。"""
     import secrets as _secrets
@@ -2789,9 +2666,7 @@ def set_password(
         _print_status_panel(
             "success" if ok else "error",
             "已登出所有设备" if ok else "操作失败",
-            "所有设备需重新登录。"
-            if ok
-            else "无法访问运行库、未能撤销，请确认 data 目录可写后重试。",
+            "所有设备需重新登录。" if ok else "无法访问运行库、未能撤销，请确认 data 目录可写后重试。",
         )
         if not ok:
             raise typer.Exit(code=1)
@@ -2824,9 +2699,7 @@ def set_password(
     # reverts on restart — refuse loudly rather than report a false success (r9).
     from openbiliclaw.config import config_local_auth_keys
 
-    _local_keys = sorted(
-        config_local_auth_keys() & {"password", "password_hash", "enabled", "session_secret"}
-    )
+    _local_keys = sorted(config_local_auth_keys() & {"password", "password_hash", "enabled", "session_secret"})
     if _local_keys:
         _print_status_panel(
             "error",
@@ -2873,9 +2746,7 @@ def set_password(
         )
         raise typer.Exit(code=1)
 
-    password = str(
-        typer.prompt("设置访问密码", hide_input=True, confirmation_prompt=True) or ""
-    ).strip()
+    password = str(typer.prompt("设置访问密码", hide_input=True, confirmation_prompt=True) or "").strip()
     if not password:
         _print_status_panel("error", "密码为空", "未做更改。")
         raise typer.Exit(code=1)
@@ -2937,650 +2808,6 @@ def db_repair() -> None:
         raise typer.Exit(code=1)
 
 
-@app.command("rebuild-profile")
-def rebuild_profile(
-    limit: int = typer.Option(
-        5000,
-        "--limit",
-        help="从数据库加载的最大事件数（默认 5000）。",
-    ),
-    source: str = typer.Option(
-        "",
-        "--source",
-        help="只用指定来源：bilibili / xiaohongshu / douyin / youtube，留空=全部。",
-    ),
-    no_analyze: bool = typer.Option(
-        False,
-        "--no-analyze",
-        help="跳过 analyze_events，直接重跑 build_initial_profile。",
-    ),
-) -> None:
-    """从数据库重新生成灵魂画像（调试用）。
-
-    从已存储的行为事件重跑完整的偏好分析 + 画像生成流程，
-    无需重新从任何平台拉取数据。适合：
-
-    \\b
-      - 调整了 LLM prompt 后验证效果
-      - 新接入平台后补充旧数据重跑
-      - init 中途中断后只补跑画像阶段
-    """
-    import json as _json
-
-    _prepare_init_runtime()
-    memory = _build_memory_manager()
-    soul_engine = _build_soul_engine()
-
-    _print_page_title("重新生成灵魂画像", "rebuild-profile")
-
-    init_start_usage_id: int | None = None
-    with suppress(Exception):
-        init_start_usage_id = _get_runtime_database().max_llm_usage_id()
-
-    # ── 1. 从 DB 加载事件 ────────────────────────────────────────────
-    console.print(f"  [dim]从数据库加载最多 {limit} 条事件...[/dim]")
-    raw_rows = memory.query_events(limit=limit)
-
-    # metadata 在 DB 中以 JSON 文本存储；context 是纯文本（v0.3.23+）。
-    events: list[dict[str, Any]] = []
-    for row in raw_rows:
-        ev = dict(row)
-        meta_raw = ev.get("metadata")
-        if isinstance(meta_raw, str) and meta_raw:
-            try:
-                parsed = _json.loads(meta_raw)
-                ev["metadata"] = parsed if isinstance(parsed, dict) else {}
-            except _json.JSONDecodeError:
-                ev["metadata"] = {}
-        events.append(ev)
-
-    # 来源过滤
-    source = source.strip().lower()
-    if source:
-        events = [
-            e
-            for e in events
-            if str((e.get("metadata") or {}).get("source_platform", "")).lower() == source
-        ]
-
-    if not events:
-        console.print(
-            "[yellow]  没有找到事件。"
-            + (f"来源 '{source}' 不存在，或" if source else "")
-            + "请先运行 [cyan]openbiliclaw init[/cyan] 拉取数据。[/yellow]"
-        )
-        raise typer.Exit(code=1)
-
-    # 按来源平台打印分布
-    from collections import Counter
-
-    platform_counts: Counter[str] = Counter()
-    for ev in events:
-        platform_counts[str((ev.get("metadata") or {}).get("source_platform", "unknown"))] += 1
-    console.print(f"  已加载 [green]{len(events)}[/green] 条事件：")
-    for platform, count in sorted(platform_counts.items(), key=lambda x: -x[1]):
-        console.print(f"    {platform}: [green]{count}[/green] 条")
-
-    # ── 2. 偏好分析 ──────────────────────────────────────────────────
-    if not no_analyze:
-        _print_section_title("1/2 分析偏好")
-        console.print(f"  总信号量: [green]{len(events)}[/green] 条")
-        asyncio.run(
-            _run_with_progress(
-                soul_engine.analyze_events(
-                    events,
-                    event_chunk_size=DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE,
-                ),
-                label="分析偏好（分片并发）",
-                eta_seconds=180,
-            )
-        )
-    else:
-        console.print("  [dim]跳过 analyze_events（--no-analyze）。[/dim]")
-
-    # ── 3. 画像生成 ──────────────────────────────────────────────────
-    section_label = "2/2 生成画像" if not no_analyze else "1/1 生成画像"
-    _print_section_title(section_label)
-    asyncio.run(
-        _run_with_progress(
-            soul_engine.build_initial_profile(events),
-            label="生成灵魂画像（单次 LLM 综合分析）",
-            eta_seconds=70,
-        )
-    )
-
-    _print_status_panel("success", "完成", "灵魂画像已重新生成")
-
-    if init_start_usage_id is not None:
-        _print_init_cost_summary(init_start_usage_id)
-
-    _notify_running_server_init_completed()
-
-
-def _run_single_source_bootstrap(
-    *,
-    source_label: str,
-    enqueue: Callable[[], str | None],
-    collect: Callable[[str | None], tuple[list[dict[str, Any]], dict[str, int], str]],
-    wait_seconds: float,
-    summary_renderer: Callable[[dict[str, int], str, int], None],
-) -> None:
-    """Shared core for ``fetch-douyin`` / ``fetch-xhs`` standalone commands.
-
-    Pure pull pipeline — enqueue → kick → wait for completion →
-    render scope_counts. Does NOT touch B站 auth, does NOT propagate
-    events to memory. The daemon's
-    ``/api/sources/{xhs,dy}/task-result`` handler ALREADY propagates
-    incoming events to memory when it receives partials, so a CLI-side
-    propagate would double-write. Init still runs the soul pipeline
-    (preference / awareness / soul) on top — this command is the
-    isolated 'just verify the extension can pull data' rung beneath
-    that, useful for testing one platform at a time.
-    """
-    _print_page_title(f"{source_label} 数据拉取", "扩展任务 → 后端入库")
-    console.print(
-        f"[dim]入队 {source_label} bootstrap 任务,等扩展执行(最多 {wait_seconds:.0f}s)...[/dim]"
-    )
-
-    task_id = enqueue()
-    if not task_id:
-        console.print(
-            f"[bold red]无法入队 {source_label} 任务[/bold red]"
-            " — 看上面的提示(数据库 / 预算 / 任务表问题)。"
-        )
-        raise typer.Exit(code=1)
-
-    events, scope_counts, status_label = collect(task_id)
-    summary_renderer(scope_counts, status_label, len(events))
-
-
-@app.command("profile-consolidate")
-def profile_consolidate(
-    apply: bool = typer.Option(
-        False,
-        "--apply",
-        help="真正写入合并结果。默认 dry-run：只打印建议，不改任何数据。",
-    ),
-    revert: str = typer.Option(
-        "",
-        "--revert",
-        help="按 run_id 回滚一次已应用的整理（备份在 data/memory/consolidation_runs/）。",
-    ),
-    migrate_categories: bool = typer.Option(
-        False,
-        "--migrate-categories",
-        help="一次性把存量一级分类迁移到固定词表（默认 dry-run，配 --apply 写入）。",
-    ),
-    full: bool = typer.Option(
-        False,
-        "--full",
-        help="把 likes 整理边界从默认 top-512 开到全量标签库（嫌疑簇 32/批送审）。",
-    ),
-) -> None:
-    """用 LLM 整理合并画像里重复的喜欢 / 讨厌主题。
-
-    兴趣标签和避雷主题会不断积累措辞变体（「智能体开发」vs
-    「智能体开发与实现」），把进入 prompt 的兴趣名额挤占掉。
-    本命令按「规则合并 → embedding 聚类 → LLM 裁决 → 校验执行」
-    的流水线做同义合并（likes 看权重 top-512 + 全量避雷主题，
-    LLM 裁决每批 32 簇分批执行）。
-
-    \b
-      - 默认 dry-run，先看建议再决定
-      - --apply 写入,自动备份到 data/memory/consolidation_runs/
-      - --migrate-categories 一次性分类词表迁移（同样 dry-run/--apply/--revert）
-      - --full 一次性全量清理 likes 长尾标签（与 --migrate-categories 互斥）
-      - 审计记录追加到 data/memory/soul_changelog.md
-    """
-    import asyncio as _asyncio
-
-    from openbiliclaw.config import load_config
-    from openbiliclaw.llm._compat_registry import build_embedding_service
-    from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-    from openbiliclaw.soul.consolidator import ProfileConsolidator
-
-    _print_page_title("画像整理", "profile-consolidate")
-
-    cfg = load_config()
-    memory = _build_memory_manager()
-    llm_service = None
-    registry = None
-    try:
-        registry = _build_registry()
-        llm_service = LLMService(
-            registry=registry,
-            memory=memory,
-            usage_recorder=_build_usage_recorder(),
-            module_overrides=module_overrides_from_config(cfg),
-            concurrency=cfg.llm.concurrency,
-        )
-    except Exception as exc:
-        console.print(f"[yellow]  LLM 不可用（{exc}）— 只做规则合并与聚类预览。[/yellow]")
-    embedding_service = None
-    if registry is not None:
-        try:
-            embedding_service = build_embedding_service(cfg, registry)
-        except Exception:
-            embedding_service = None
-    if embedding_service is None:
-        console.print("[dim]  embedding 服务不可用，退回子串聚类。[/dim]")
-
-    if full and migrate_categories:
-        console.print("[bold red]  --full 与 --migrate-categories 不能同时使用。[/bold red]")
-        console.print("[dim]  推荐顺序：先 --migrate-categories --apply，再 --full --apply。[/dim]")
-        raise typer.Exit(code=1)
-
-    if full:
-        raw_interests = memory.get_layer("preference").data.get("interests", [])
-        interest_count = len([item for item in raw_interests if isinstance(item, dict)])
-        likes_boundary = max(interest_count, 128)
-        console.print(f"  [cyan]--full：likes 边界开到全量（{likes_boundary} 条）。[/cyan]")
-        consolidator = ProfileConsolidator(
-            memory=memory,
-            llm_service=llm_service,
-            embedding_service=embedding_service,
-            likes_boundary=likes_boundary,
-            like_target_upper=cfg.scheduler.profile_consolidation_like_target_upper,
-            like_target_soft=cfg.scheduler.profile_consolidation_like_target_soft,
-            archive_enabled=cfg.scheduler.profile_consolidation_archive_enabled,
-        )
-    else:
-        consolidator = ProfileConsolidator(
-            memory=memory,
-            llm_service=llm_service,
-            embedding_service=embedding_service,
-            like_target_upper=cfg.scheduler.profile_consolidation_like_target_upper,
-            like_target_soft=cfg.scheduler.profile_consolidation_like_target_soft,
-            archive_enabled=cfg.scheduler.profile_consolidation_archive_enabled,
-        )
-
-    if revert.strip():
-        ok = consolidator.revert(revert.strip())
-        if ok:
-            console.print(f"  [green]已回滚 run {revert.strip()}，画像与覆盖层均已恢复。[/green]")
-            console.print("  [dim]被回滚的合并已记入 no-merge 记忆，下轮整理不会重做。[/dim]")
-        else:
-            console.print(f"[bold red]  回滚失败：找不到 run 记录 {revert.strip()}。[/bold red]")
-            raise typer.Exit(code=1)
-        return
-
-    if migrate_categories:
-        from openbiliclaw.soul.category_migration import CategoryMigrator
-
-        migrator = CategoryMigrator(memory=memory, llm_service=llm_service)
-        migration_report = _asyncio.run(migrator.run(dry_run=not apply))
-        for err in migration_report.errors:
-            console.print(f"[yellow]  ⚠ {err}[/yellow]")
-        console.print(
-            f"  现存分类: {len(migration_report.histogram)} 个，"
-            f"标签 {sum(migration_report.histogram.values())} 条"
-        )
-        for old, new in sorted(
-            migration_report.mapping.items(),
-            key=lambda item: -migration_report.histogram.get(item[0], 0),
-        ):
-            console.print(f"  {old}({migration_report.histogram.get(old, 0)}) → [bold]{new}[/bold]")
-        if migration_report.mapping:
-            suffix = "  [yellow]⚠ 超过 10%[/yellow]" if migration_report.other_ratio > 0.10 else ""
-            console.print(f"\n  「其他」占比: {migration_report.other_ratio:.1%}{suffix}")
-        if not apply and migration_report.mapping:
-            console.print("\n  [dim]满意的话用 --apply 真正写入。[/dim]")
-        if migration_report.applied:
-            console.print(
-                "\n  [dim]已备份，"
-                f"run_id={migration_report.run_id}（--revert {migration_report.run_id} 可回滚）"
-                "[/dim]"
-            )
-        # 只有「LLM 服务不可用」是降级只读预览（打印 histogram 即成功，code=0）；
-        # LLM 调用异常 / 映射校验失败必须非零退出，脚本化调用才能区分失败与预览。
-        degraded = migration_report.errors == ["llm: service unavailable"]
-        if migration_report.errors and not migration_report.mapping and not degraded:
-            raise typer.Exit(code=1)
-        return
-
-    mode_label = "[bold]apply[/bold]" if apply else "dry-run（加 --apply 才会写入）"
-    console.print(f"  模式: {mode_label}")
-    report = _asyncio.run(consolidator.run(dry_run=not apply))
-
-    if report.errors:
-        for err in report.errors:
-            console.print(f"[yellow]  ⚠ {err}[/yellow]")
-    if report.likes_before > report.likes_target_upper:
-        console.print(
-            f"  [cyan]likes 动态聚类阈值:[/cyan] cosine ≥ {report.like_similarity_threshold:.2f}"
-        )
-    console.print(f"  嫌疑簇送审: {report.clusters_sent} 个")
-    for rule_merge in report.rule_merges:
-        console.print(f"  [cyan][规则][/cyan] {rule_merge}")
-    for merge in report.merges:
-        raw_members = merge.get("members", [])
-        member_items = raw_members if isinstance(raw_members, list) else []
-        members = " / ".join(str(m) for m in member_items)
-        scope = "兴趣" if merge.get("scope") == "likes" else "避雷"
-        console.print(
-            f"  [green][{scope}][/green] {members} → [bold]{merge.get('canonical')}[/bold]"
-        )
-    for rejected in report.rejected_clusters:
-        console.print(f"  [dim][放弃簇] {rejected}[/dim]")
-    console.print(
-        f"\n  兴趣: {report.likes_before} → {report.likes_after}"
-        f"    避雷: {report.dislikes_before} → {report.dislikes_after}"
-    )
-    if report.archived_interests:
-        console.print(
-            f"  [cyan]归档低权重兴趣:[/cyan] {len(report.archived_interests)} 个"
-            f"（目标 ≤ {report.likes_target_upper}，整理水位 {report.likes_target_soft}）"
-        )
-    if report.inventory_reason:
-        console.print(f"  [yellow]库存说明:[/yellow] {report.inventory_reason}")
-    if not apply and (report.merges or report.rule_merges):
-        console.print("\n  [dim]满意的话用 --apply 真正写入。[/dim]")
-    if apply and (report.merges or report.rule_merges or report.archived_interests):
-        console.print(f"\n  [dim]已备份，run_id={report.run_id}[/dim]")
-
-
-@app.command("import-youtube")
-def import_youtube(
-    path: str = typer.Argument(
-        ...,
-        help="Google Takeout 导出路径：.zip 文件或解压后的目录。",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="只解析打印统计，不写入数据库 / 不更新画像。",
-    ),
-) -> None:
-    """从 Google Takeout 导入 YouTube 观看历史、订阅和点赞数据。
-
-    使用步骤：
-
-    \b
-    1. 访问 https://takeout.google.com
-    2. 仅选择 "YouTube and YouTube Music"
-    3. 格式选 JSON（默认 HTML 也支持，但 JSON 更精确）
-    4. 下载后将 .zip 路径传给本命令，或先解压再传目录。
-    """
-    from openbiliclaw.youtube.takeout import parse_takeout
-
-    _print_page_title("导入 YouTube Takeout", "冷启动画像补充")
-
-    takeout_path = Path(path)
-    if not takeout_path.exists():
-        console.print(f"[red]路径不存在: {takeout_path}[/red]")
-        raise typer.Exit(code=1)
-
-    console.print(f"  解析 [cyan]{takeout_path}[/cyan] …")
-    result = parse_takeout(takeout_path)
-
-    for warning in result.warnings:
-        console.print(f"  [yellow]⚠ {warning}[/yellow]")
-
-    stats = result.stats
-    console.print(
-        f"\n  解析完成：\n"
-        f"    观看历史  [green]{stats.watch_history}[/green] 条\n"
-        f"    订阅频道  [green]{stats.subscriptions}[/green] 个\n"
-        f"    点赞视频  [green]{stats.liked_videos}[/green] 个\n"
-        f"    合计      [green]{stats.total}[/green] 条事件"
-    )
-
-    if stats.total == 0:
-        console.print("[yellow]未找到任何 YouTube 信号，请检查 Takeout 目录结构。[/yellow]")
-        raise typer.Exit(code=0)
-
-    if dry_run:
-        console.print("\n[dim]--dry-run 模式，不写入数据库，结束。[/dim]")
-        raise typer.Exit(code=0)
-
-    _require_runtime_config()
-    memory = _build_memory_manager()
-    soul_engine = _build_soul_engine()
-
-    _print_section_title("1/2 写入记忆层")
-    console.print(f"  将 {stats.total} 条事件传播到记忆层 …")
-
-    async def _propagate() -> None:
-        for event in result.events:
-            await memory.propagate_event(event)
-
-    asyncio.run(_propagate())
-    console.print("  [green]✓ 记忆层写入完成[/green]")
-
-    _print_section_title("2/2 更新偏好画像")
-    console.print(
-        f"  分析 {stats.total} 条 YouTube 信号（分片 {DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE} 条）…"
-    )
-    asyncio.run(
-        _run_with_progress(
-            soul_engine.analyze_events(
-                result.events,
-                event_chunk_size=DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE,
-            ),
-            label="分析偏好（YouTube 信号）",
-            eta_seconds=90,
-        )
-    )
-    console.print("  [green]✓ 偏好画像已更新[/green]")
-
-    console.print(
-        "\n[bold green]✓ YouTube Takeout 导入完成。[/bold green]\n"
-        "  运行 [cyan]openbiliclaw profile[/cyan] 查看更新后的用户画像。"
-    )
-
-
-@app.command()
-def recommend() -> None:
-    """查看推荐内容."""
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-
-    _require_runtime_config()
-    soul_engine = _build_soul_engine()
-    recommendation_engine = _build_recommendation_engine()
-
-    try:
-        profile_data = asyncio.run(soul_engine.get_profile())
-    except SoulProfileNotInitializedError as exc:
-        console.print("[bold yellow]尚未初始化用户画像[/bold yellow]")
-        console.print("请先执行 `openbiliclaw init` 拉取历史并生成初始画像。")
-        raise typer.Exit(code=1) from exc
-
-    recommendations = asyncio.run(
-        recommendation_engine.generate_recommendations(
-            discovered=None,
-            profile=profile_data,
-            limit=5,
-        )
-    )
-
-    _print_page_title("本轮推荐", "朋友式推荐列表")
-    if not recommendations:
-        _print_status_panel(
-            "info",
-            "暂无可推荐内容",
-            "请先执行 `openbiliclaw discover`。",
-        )
-        return
-
-    presented_ids: list[int] = []
-    for index, item in enumerate(recommendations, start=1):
-        _print_recommendation_card(item, index)
-        presented_ids.append(item.recommendation_id)
-
-    recommendation_engine.mark_presented(presented_ids)
-
-
-@app.command()
-def feedback(
-    recommendation_id: int,
-    signal: str,
-    note: str = typer.Option("", "--note", help="补充反馈备注"),
-) -> None:
-    """对一条推荐记录提交反馈."""
-    _require_runtime_config()
-    normalized_signal = signal.strip().lower()
-    if normalized_signal not in {"like", "dislike", "comment", "dismiss"}:
-        _print_status_panel("error", "反馈类型无效", "仅支持: like, dislike, comment, dismiss")
-        raise typer.Exit(code=1)
-    if normalized_signal == "comment" and not note.strip():
-        _print_status_panel("error", "comment 需要备注", "请通过 `--note` 补充一句你的想法。")
-        raise typer.Exit(code=1)
-
-    recommendation_engine = _build_recommendation_engine()
-    memory = _build_memory_manager()
-    recommendation = recommendation_engine.get_recommendation(recommendation_id)
-    if recommendation is None:
-        _print_status_panel("error", "推荐不存在", f"recommendation_id={recommendation_id}")
-        raise typer.Exit(code=1)
-    soul_engine = _build_soul_engine()
-
-    asyncio.run(
-        recommendation_engine.record_feedback(
-            recommendation_id,
-            feedback_type=normalized_signal,
-            note=note.strip(),
-        )
-    )
-    asyncio.run(
-        memory.propagate_event(
-            {
-                "event_type": "feedback",
-                "title": str(recommendation.get("title", "")),
-                "metadata": {
-                    "recommendation_id": recommendation_id,
-                    "bvid": recommendation.get("bvid", ""),
-                    "feedback_type": normalized_signal,
-                    "feedback_note": note.strip(),
-                },
-            }
-        )
-    )
-    record_immediate_feedback_cognition = getattr(
-        soul_engine,
-        "record_immediate_feedback_cognition",
-        None,
-    )
-    if callable(record_immediate_feedback_cognition):
-        with suppress(Exception):
-            record_immediate_feedback_cognition(
-                feedback_type=normalized_signal,
-                title=str(recommendation.get("title", "")),
-                note=note.strip(),
-            )
-    with suppress(Exception):
-        asyncio.run(soul_engine.process_feedback_batch_if_needed())
-
-    _print_status_panel("success", "反馈已记录", f"推荐ID {recommendation_id} 已更新。")
-    rows = [
-        ("推荐ID", str(recommendation_id)),
-        ("反馈", normalized_signal),
-    ]
-    if note:
-        rows.append(("备注", note.strip()))
-    _print_key_value_table("反馈详情", rows)
-
-
-@app.command()
-def profile() -> None:
-    """查看用户画像."""
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-
-    engine = _build_soul_engine()
-    try:
-        profile_data = asyncio.run(engine.get_profile())
-    except SoulProfileNotInitializedError as exc:
-        console.print("[bold yellow]尚未初始化用户画像[/bold yellow]")
-        console.print("请先执行 `openbiliclaw init` 拉取历史并生成初始画像。")
-        raise typer.Exit(code=1) from exc
-
-    _print_page_title("用户画像概览", "当前稳定画像")
-
-    # -- 人格描述 ------------------------------------------------------------
-    # Split by Chinese sentence terminators so Rich wraps at sentence boundaries
-    # instead of mid-word CJK cell breaks. Each sentence starts on its own line.
-    portrait_raw = profile_data.personality_portrait or "（暂无）"
-    sentences = [s.strip() for s in re.split(r"(?<=[。！？])", portrait_raw) if s.strip()]
-    portrait_body = "\n".join(sentences) if sentences else portrait_raw
-    console.print(
-        Panel(
-            portrait_body,
-            title="[bold cyan]人格描述[/bold cyan]",
-            border_style="cyan",
-            padding=(1, 2),
-        )
-    )
-
-    # -- 核心层 Core ---------------------------------------------------------
-    core = profile_data.core
-    _print_section_title("核心层 Core")
-    core_traits = "、".join(core.core_traits) if core.core_traits else "（暂无）"
-    deep_needs = "、".join(core.deep_needs) if core.deep_needs else "（暂无）"
-    console.print(f"  [bold]人格特质[/bold]：{core_traits}")
-    console.print(f"  [bold]深层需求[/bold]：{deep_needs}")
-    mbti = core.mbti
-    if mbti.type:
-        dim_parts = [
-            f"{key}={dim.pole}({dim.strength:.2f})" for key, dim in mbti.dimensions.items()
-        ]
-        dims_text = "  ".join(dim_parts) if dim_parts else ""
-        console.print(
-            f"  [bold]MBTI[/bold]：{mbti.type}  置信度 {mbti.confidence:.0%}"
-            + (f"  [dim]{dims_text}[/dim]" if dims_text else "")
-        )
-
-    # -- 价值层 Values -------------------------------------------------------
-    values_layer = profile_data.values_layer
-    _print_section_title("价值层 Values")
-    values_text = "、".join(values_layer.values) if values_layer.values else "（暂无）"
-    drivers_text = (
-        "、".join(values_layer.motivational_drivers)
-        if values_layer.motivational_drivers
-        else "（暂无）"
-    )
-    console.print(f"  [bold]价值观[/bold]：{values_text}")
-    console.print(f"  [bold]动机驱动[/bold]：{drivers_text}")
-
-    # -- 角色层 Role ---------------------------------------------------------
-    role = profile_data.role
-    _print_section_title("角色层 Role")
-    console.print(f"  [bold]生活阶段[/bold]：{role.life_stage or '（暂无）'}")
-    console.print(f"  [bold]当前阶段[/bold]：{role.current_phase or '（暂无）'}")
-
-    # -- 兴趣层 Interest -----------------------------------------------------
-    interest = profile_data.interest
-    _print_section_title("兴趣层 Interest")
-    if interest.likes:
-        sorted_likes = sorted(interest.likes, key=lambda d: d.weight, reverse=True)
-        for dom in sorted_likes[:10]:
-            spec_names = [s.name for s in dom.specifics[:5]]
-            spec_text = "、".join(spec_names)
-            suffix = f"  [dim]{spec_text}[/dim]" if spec_text else ""
-            console.print(f"  ▸ [bold]{dom.domain}[/bold] [dim]({dom.weight:.2f})[/dim]{suffix}")
-    else:
-        console.print("  （暂无兴趣领域）")
-    if interest.dislikes:
-        dislike_text = "、".join(d.domain for d in interest.dislikes[:8])
-        console.print(f"  [dim]讨厌领域：{dislike_text}[/dim]")
-    if interest.favorite_up_users:
-        up_total = len(interest.favorite_up_users)
-        preview = "、".join(interest.favorite_up_users[:6])
-        suffix = f"（共{up_total}位）" if up_total > 6 else ""
-        console.print(f"  [bold]常看UP主[/bold]：{preview}{suffix}")
-
-    # -- 表层 Surface --------------------------------------------------------
-    surface = profile_data.surface
-    _print_section_title("表层 Surface")
-    if surface.cognitive_style:
-        for idx, item in enumerate(surface.cognitive_style, start=1):
-            console.print(f"  {idx}. {item}")
-    else:
-        console.print("  认知风格：（暂无）")
-    console.print(
-        f"  [bold]深度偏好[/bold]：{surface.style.depth_preference:.2f}"
-        f"   [bold]探索开放度[/bold]：{surface.exploration_openness:.2f}"
-    )
-
-
 _BILIBILI_STRATEGY_NAMES = ("search", "trending", "explore", "related_chain")
 
 
@@ -3606,212 +2833,6 @@ def _normalize_strategy_names(raw: list[str] | None) -> list[str]:
             seen.add(name)
             deduped.append(name)
     return deduped
-
-
-@app.command()
-def chat() -> None:
-    """与 Agent 对话（苏格拉底式深度交流）."""
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-
-    _require_runtime_config()
-    soul_engine = _build_soul_engine()
-    try:
-        asyncio.run(soul_engine.get_profile())
-    except SoulProfileNotInitializedError as exc:
-        _print_status_panel(
-            "warning",
-            "尚未初始化用户画像",
-            "请先执行 `openbiliclaw init` 拉取历史并生成初始画像。",
-        )
-        raise typer.Exit(code=1) from exc
-
-    dialogue = _build_dialogue(soul_engine)
-    _print_page_title("苏格拉底式对话", "输入 exit / quit / 空行结束")
-
-    try:
-        while True:
-            try:
-                user_message = typer.prompt("你", prompt_suffix="： ").strip()
-            except (click.Abort, EOFError, KeyboardInterrupt):
-                console.print("阿花：对话结束。")
-                return
-
-            if user_message.lower() in {"", "exit", "quit"}:
-                console.print("阿花：对话结束。")
-                return
-
-            reply = asyncio.run(dialogue.respond(user_message))
-            console.print(f"阿花：{reply}")
-    except KeyboardInterrupt:
-        console.print("阿花：对话结束。")
-
-
-@app.command()
-def delight() -> None:
-    """手动触发一次惊喜推荐检查."""
-    from openbiliclaw.recommendation.delight import DEFAULT_DELIGHT_THRESHOLD
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-
-    _require_runtime_config()
-    soul_engine = _build_soul_engine()
-    try:
-        profile = asyncio.run(soul_engine.get_profile())
-    except SoulProfileNotInitializedError as exc:
-        _print_status_panel(
-            "warning",
-            "尚未初始化用户画像",
-            "请先执行 `openbiliclaw init` 拉取历史并生成初始画像。",
-        )
-        raise typer.Exit(code=1) from exc
-
-    database = _get_runtime_database()
-    recommendation_engine = _build_recommendation_engine()
-
-    # Score un-scored items first
-    asyncio.run(
-        recommendation_engine.precompute_delight_scores(
-            profile=profile,
-            limit=30,
-        )
-    )
-
-    candidate = database.get_delight_candidate(min_delight_score=DEFAULT_DELIGHT_THRESHOLD)
-
-    _print_page_title("惊喜推荐", "从池中寻找你可能意外喜欢的内容")
-    if candidate is None:
-        _print_status_panel(
-            "info",
-            "暂时没有惊喜候选",
-            "池中还没有文案已就绪的高分惊喜内容，多刷一阵会有的。",
-        )
-        return
-
-    bvid = str(candidate.get("bvid", ""))
-    title = str(candidate.get("title", ""))
-    score = float(candidate.get("delight_score", 0.0))
-    hook = str(candidate.get("delight_hook", ""))
-    reason = str(candidate.get("delight_reason", ""))
-    platform = str(candidate.get("source_platform", "") or "bilibili")
-    url = str(candidate.get("content_url", ""))
-
-    hook_label = f"【{hook}】" if hook else ""
-    _print_key_value_table(
-        f"{hook_label}阿B 觉得这条你会意外喜欢",
-        [
-            ("标题", title),
-            ("惊喜分", f"{score:.2f}"),
-            ("理由", reason or "—"),
-            ("来源", platform),
-            ("链接", url or f"https://www.bilibili.com/video/{bvid}"),
-        ],
-    )
-
-    # Mark as notified so it won't be pushed again
-    database.mark_delight_notified(bvid)
-    console.print(f"  [dim]已标记 {bvid} 为已通知，不会重复推送。[/dim]")
-
-
-@app.command()
-def probe() -> None:
-    """手动触发一次兴趣探针，确认或拒绝猜测方向."""
-    from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-
-    _require_runtime_config()
-    soul_engine = _build_soul_engine()
-    try:
-        asyncio.run(soul_engine.get_profile())
-    except SoulProfileNotInitializedError as exc:
-        _print_status_panel(
-            "warning",
-            "尚未初始化用户画像",
-            "请先执行 `openbiliclaw init` 拉取历史并生成初始画像。",
-        )
-        raise typer.Exit(code=1) from exc
-
-    speculator = getattr(soul_engine, "_speculator", None)
-    if speculator is None:
-        _print_status_panel("info", "猜测引擎未就绪", "Speculator 未初始化。")
-        raise typer.Exit(code=1)
-
-    specs = speculator.get_active_speculations()
-    _print_page_title("兴趣探针", "确认或拒绝阿B 正在试探的方向")
-
-    if not specs:
-        _print_status_panel("info", "暂时没有活跃的猜测", "过一阵阿B 会生成新的猜测方向。")
-        return
-
-    for i, spec in enumerate(specs, 1):
-        specifics = [
-            str(getattr(s, "name", "")).strip()
-            for s in getattr(spec, "specifics", [])
-            if str(getattr(s, "name", "")).strip()
-        ][:3]
-        hint = f"（{', '.join(specifics)}）" if specifics else ""
-        progress = f"{spec.confirmation_count}/{spec.confirmation_threshold}"
-
-        console.print(f"\n  [bold]{i}. {spec.domain}[/bold] {hint}")
-        console.print(f"     理由：{spec.reason or '—'}")
-        console.print(f"     确认进度：{progress}  置信度：{spec.confidence:.0%}")
-
-    console.print()
-    try:
-        choice = typer.prompt(
-            "输入序号确认（是），序号+n 拒绝（如 1n），或 q 退出",
-            prompt_suffix="： ",
-        ).strip()
-    except (click.Abort, EOFError, KeyboardInterrupt):
-        return
-
-    if choice.lower() in {"q", "quit", "exit", ""}:
-        return
-
-    reject = choice.endswith("n") or choice.endswith("N")
-    index_str = choice.rstrip("nN").strip()
-    try:
-        index = int(index_str) - 1
-    except ValueError:
-        console.print("[red]无效输入[/red]")
-        raise typer.Exit(code=1) from None
-
-    if index < 0 or index >= len(specs):
-        console.print("[red]序号超出范围[/red]")
-        raise typer.Exit(code=1)
-
-    target = specs[index]
-    domain = target.domain
-
-    if reject:
-        ok = speculator.user_reject_speculation(domain)
-        if ok:
-            console.print(f"  好，「{domain}」先不看了，30 天内不再猜测这个方向。")
-        else:
-            console.print(f"  [yellow]未找到活跃的「{domain}」猜测。[/yellow]")
-    else:
-        ok = speculator.user_confirm_speculation(domain)
-        if ok:
-            # Trigger promotion
-            memory = getattr(soul_engine, "_memory", None)
-            load_runtime_state = getattr(memory, "load_discovery_runtime_state", None)
-
-            def _load_feedback_history() -> object:
-                if not callable(load_runtime_state):
-                    return []
-                runtime_state = load_runtime_state()
-                if not isinstance(runtime_state, dict):
-                    return []
-                return runtime_state.get("probe_feedback_history", [])
-
-            profile = asyncio.run(soul_engine.get_profile())
-            asyncio.run(
-                speculator.force_tick(
-                    profile,
-                    feedback_history=_load_feedback_history(),
-                    feedback_history_loader=_load_feedback_history,
-                )
-            )
-            console.print(f"  好，「{domain}」记住了，已转入正式兴趣。")
-        else:
-            console.print(f"  [yellow]未找到活跃的「{domain}」猜测。[/yellow]")
 
 
 @app.command()
@@ -3863,9 +2884,7 @@ def config_show() -> None:
             ],
         )
 
-    hints = diagnostics.messages + [
-        f"{issue.field}: {issue.message}" for issue in diagnostics.issues
-    ]
+    hints = diagnostics.messages + [f"{issue.field}: {issue.message}" for issue in diagnostics.issues]
     _print_config_guidance(hints)
 
 
@@ -3932,8 +2951,7 @@ def login_codex(
             _print_status_panel(
                 "warning",
                 "Codex OAuth",
-                "未登录。请运行 `openbiliclaw login codex` "
-                "或 `openbiliclaw login codex --import`。",
+                "未登录。请运行 `openbiliclaw login codex` 或 `openbiliclaw login codex --import`。",
             )
             return
         _print_codex_credentials(credentials)

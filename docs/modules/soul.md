@@ -720,6 +720,12 @@ system prompt 的核心约束是：
 
 ## 公开 API
 
+> **CLI 入口位置（P4 第七刀，2026-09-14）**：本模块的 9 个 CLI 命令
+> （`rebuild-profile` / `profile-consolidate` / `import-youtube` / `recommend` /
+> `feedback` / `profile` / `chat` / `delight` / `probe`）实现已从上帝文件
+> `cli/__init__.py` 抽至 `src/openbiliclaw/cli/_cmd_soul.py`（`register(app)` 挂载）。
+> 命令名、选项与输出不变；本文示例中的 `openbiliclaw <cmd>` 调用方式不受影响。
+
 ### SoulEngine
 
 ```python
