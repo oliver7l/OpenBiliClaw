@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Sync content_cache (recommendation pool) into the reading library (articles).
 
 The recommendation pool (content_cache) holds ~9k cross-platform items:
@@ -16,12 +15,12 @@ Behaviour:
 - Idempotent: re-running only adds new urls / fills empty metadata. Use
   --new-only to skip urls already present in articles.
 """
-import os
-import sys
-import sqlite3
-import json
-import email.utils
 import datetime
+import email.utils
+import json
+import os
+import sqlite3
+import sys
 
 # 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -35,7 +34,7 @@ def _norm_pub(s):
         dt = email.utils.parsedate_to_datetime(s)
         if dt is not None:
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=datetime.timezone.utc)
+                dt = dt.replace(tzinfo=datetime.UTC)
             return dt.astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         pass
@@ -46,9 +45,9 @@ def _norm_pub(s):
         except Exception:
             pass
     return None
-import argparse
+import argparse  # noqa: E402
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(PROJECT_ROOT, "data", "openbiliclaw.db")
 
 PLATFORM_MAP = {
@@ -89,14 +88,14 @@ def main():
         sys.exit(1)
 
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
 
     conn.row_factory = sqlite3.Row
 

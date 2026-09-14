@@ -2,8 +2,8 @@
 """把某个话题/剧集/关键词相关的多平台内容收进阅读库(articles)。
 
 用法:
-  python3 scripts/collect_topic_to_library.py "去有风的地方" --limit 15
-  python3 scripts/collect_topic_to_library.py "某关键词" --sources bili,zhihu
+  python3 scripts/content_library/collect_topic_to_library.py "去有风的地方" --limit 15
+  python3 scripts/content_library/collect_topic_to_library.py "某关键词" --sources bili,zhihu
 
 行为:
   - 用 bili search(--type video) 抓 B站视频, zhihu search(--type content) 抓知乎图文
@@ -19,14 +19,12 @@ import datetime
 
 # 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
-import email.utils
-import json
-import os
-import sqlite3
-import subprocess
-import sys
+import json  # noqa: E402
+import os  # noqa: E402
+import sqlite3  # noqa: E402
+import subprocess  # noqa: E402
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
 
 BILI_PLATFORM = "bilibili"
@@ -52,7 +50,7 @@ def _fetch_bili(keyword, limit):
         return []
     if isinstance(data, dict):
         if not data.get("ok"):
-            print(f"  ! B站搜索未返回结果 (可能未登录或限流)")
+            print("  ! B站搜索未返回结果 (可能未登录或限流)")
             return []
         items = data.get("data", [])
     else:
@@ -123,14 +121,14 @@ def main():
     now_iso = datetime.datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     tag_json = json.dumps([args.keyword], ensure_ascii=False)
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
 
     cur = conn.cursor()
     inserted = skipped = 0

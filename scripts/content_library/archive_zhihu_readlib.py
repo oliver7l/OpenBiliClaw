@@ -2,9 +2,9 @@
 """归档知乎回答/专栏/问题到 notes/已读库 文件存档(四件套)。
 
 用法(在项目根目录执行):
-  python3 scripts/archive_zhihu_readlib.py "<知乎链接或id>" --folder "主题文件夹名" --theme "标签A / 标签B"
-  python3 scripts/archive_zhihu_readlib.py https://www.zhihu.com/question/xxx/answer/yyy --folder "把话说开" --theme "人际沟通 / 齐泽克哲学"
-  python3 scripts/archive_zhihu_readlib.py https://zhuanlan.zhihu.com/p/693029773 --folder "香港电影记忆" --theme "怀旧 / 港片"
+  python3 scripts/content_library/archive_zhihu_readlib.py "<知乎链接或id>" --folder "主题文件夹名" --theme "标签A / 标签B"
+  python3 scripts/content_library/archive_zhihu_readlib.py https://www.zhihu.com/question/xxx/answer/yyy --folder "把话说开" --theme "人际沟通 / 齐泽克哲学"
+  python3 scripts/content_library/archive_zhihu_readlib.py https://zhuanlan.zhihu.com/p/693029773 --folder "香港电影记忆" --theme "怀旧 / 港片"
 
 约定:
   - 走本机 zhihu CLI(已登录, 凭证在 ~/.zhihu-cli/config.json):
@@ -33,7 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parents[2]
 READLIB = BASE / "notes" / "已读库"
 
 # 真实命令是 `zhihu`(pyzhihu-cli), 不是文档旧写的 `zhihu-cli`

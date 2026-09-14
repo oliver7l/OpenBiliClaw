@@ -7,13 +7,13 @@
 (项目里只有 V2EXSourceConfig 配置桩, 无真实适配器实现)。
 
 用法:
-  python3 scripts/collect_v2ex_archive.py                 # 全量灌库(增量去重) + 桥接推荐池
-  python3 scripts/collect_v2ex_archive.py --limit-days 7  # 只收最近 7 天
-  python3 scripts/collect_v2ex_archive.py --dry-run       # 只数数不写库
-  python3 scripts/collect_v2ex_archive.py --repo /path    # 指定本地仓库
-  python3 scripts/collect_v2ex_archive.py --no-pool       # 只灌阅读库, 不碰推荐池
-  python3 scripts/collect_v2ex_archive.py --recent 14     # 只最近14天进推荐池(默认30)
-  python3 scripts/collect_v2ex_archive.py --loop --interval 24  # 常驻循环(pm2 用)
+  python3 scripts/content_library/collect_v2ex_archive.py                 # 全量灌库(增量去重) + 桥接推荐池
+  python3 scripts/content_library/collect_v2ex_archive.py --limit-days 7  # 只收最近 7 天
+  python3 scripts/content_library/collect_v2ex_archive.py --dry-run       # 只数数不写库
+  python3 scripts/content_library/collect_v2ex_archive.py --repo /path    # 指定本地仓库
+  python3 scripts/content_library/collect_v2ex_archive.py --no-pool       # 只灌阅读库, 不碰推荐池
+  python3 scripts/content_library/collect_v2ex_archive.py --recent 14     # 只最近14天进推荐池(默认30)
+  python3 scripts/content_library/collect_v2ex_archive.py --loop --interval 24  # 常驻循环(pm2 用)
 
 行为:
   - git clone/pull 归档到 data/v2ex_hot_hub (首次 clone, 之后 pull 增量)
@@ -44,16 +44,15 @@ import datetime as dt
 
 # 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
 CN_TZ = dt.timezone(dt.timedelta(hours=8))
-import json
-import logging
-import os
-import shutil
-import sqlite3
-import subprocess
-import sys
-import time
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sqlite3  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
 REPO_URL = "https://github.com/cxyfreedom/v2ex-hot-hub.git"
 DEFAULT_REPO_DIR = os.path.join(BASE, "data", "v2ex_hot_hub")
@@ -119,7 +118,7 @@ def _iter_topics(repo_dir: str, limit_days: int | None):
         fpath = os.path.join(raw_dir, fname)
         date_str = fname[:-len(".json")]
         try:
-            with open(fpath, "r", encoding="utf-8") as fh:
+            with open(fpath, encoding="utf-8") as fh:
                 data = json.load(fh)
         except Exception:  # noqa: BLE001
             continue
@@ -221,7 +220,7 @@ def collect(repo_dir: str, *, limit_days: int | None, dry_run: bool,
     # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
     try:
         from pathlib import Path as _Path
-        _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+        _content_db = _Path(__file__).parent.parent.parent / "data" / "content.db"
         if _content_db.exists():
             conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
     except Exception:

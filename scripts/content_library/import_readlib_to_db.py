@@ -2,7 +2,7 @@
 """把 notes/已读库 的文件存档导入数据库 read_archive 表。
 
 用法:
-  python3 scripts/import_readlib_to_db.py            # 导入/补全
+  python3 scripts/content_library/import_readlib_to_db.py            # 导入/补全
 
 行为:
   - 24 个普通文件夹 + 轱天乐总结合集的 10 个子篇 = 34 条
@@ -24,7 +24,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parents[2]
 READLIB = BASE / "notes" / "已读库"
 DB_PATH = BASE / "data" / "openbiliclaw.db"
 

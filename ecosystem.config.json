@@ -131,7 +131,7 @@
     {
       "name": "openbiliclaw-v2ex-archive",
       "cwd": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw",
-      "script": "./scripts/collect_v2ex_archive.py",
+      "script": "./scripts/content_library/collect_v2ex_archive.py",
       "args": "--loop --interval 24",
       "interpreter": "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/.venv/bin/python3",
       "interpreter_args": "-u",

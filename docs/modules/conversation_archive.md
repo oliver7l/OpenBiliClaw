@@ -11,7 +11,7 @@
 模块刻意做轻：**单表 + FTS5 全文索引**，不做 pydantic 模型、不依赖 LLM、不参与推荐流。
 
 > **⚠️ 内容库 v2 后的定位（2026-09-13 起）**：阅读收藏库的 md 文件（`notes/阅读收藏库/`）是
-> **内容的单一数据源**，本模块的 DB 表降位为**派生镜像**——由 `scripts/sync_library_to_db.py`
+> **内容的单一数据源**，本模块的 DB 表降位为**派生镜像**——由 `scripts/content_library/sync_library_to_db.py`
 > 从 md 单向同步，服务于前端的浏览/全文检索/状态互通。**不要直接往 DB 手写条目**（会被下次
 > 同步覆盖语义），新内容一律先进 md。详见下文「与阅读收藏库的三件套闭环」。
 
@@ -21,8 +21,8 @@
 | API | 6 个端点（列表 / 详情 / 统计 / 原始 md / 写入 / 批量导入） | `src/openbiliclaw/api/conversation_archive_routes.py` |
 | 前端（移动） | `/m` 的「对话归档」tab | `src/openbiliclaw/web/js/views/conversation.js` |
 | 前端（桌面） | `/web/conversation-archive` 页面（类型筛选 + 状态互通） | `src/openbiliclaw/web/desktop/`（index.html + assets/js/app.js） |
-| 同步脚本 | **md → DB** 单向派生镜像（幂等，按 md 文件名匹配既有行） | `scripts/sync_library_to_db.py` |
-| 导入脚本 | 早期一次性搬迁脚本（剥离原文 HTML 注释） | `scripts/import_conversation_archive.py` |
+| 同步脚本 | **md → DB** 单向派生镜像（幂等，按 md 文件名匹配既有行） | `scripts/content_library/sync_library_to_db.py` |
+| 导入脚本 | 早期一次性搬迁脚本（剥离原文 HTML 注释） | `scripts/content_library/legacy/import_conversation_archive.py` |
 
 > **与其他模块的关系**：表与主库共存（`ctx.database`），**不新建独立 db 文件**；
 > 与 `chat_analysis`（微信聊天分析）定位不同 —— 后者分析聊天关系与人格，本模块只做内容归档与检索。
@@ -49,7 +49,7 @@
 
 ```
 notes/阅读收藏库/*.md              内容真源（人可读、可 git、看板直接解析）
-        │  scripts/sync_library_to_db.py   （单向、幂等）
+        │  scripts/content_library/sync_library_to_db.py   （单向、幂等）
         ▼
 data/openbiliclaw.db · conversation_archive     派生镜像（前端数据源 + FTS5 检索）
         │  /api/conversation-archive...
@@ -176,10 +176,10 @@ CREATE TABLE IF NOT EXISTS conversation_archive (
 ## 已知问题
 
 - **`tags` 反序列化容错**：JSON 解析失败时静默降级为空列表，脏数据不会报错但也不会暴露。
-- **早期导入脚本内含数据**：`scripts/import_conversation_archive.py` 的 `RECORDS` 直接写死了最初的
+- **早期导入脚本内含数据**：`scripts/content_library/legacy/import_conversation_archive.py` 的 `RECORDS` 直接写死了最初的
   1–13 条元数据与原文路径，属于**一次性搬迁脚本**（v2 后已不再使用）；新增条目一律走
   「写 md → 跑 sync」，不要再往 DB 直写。
-- **v2 派生字段依赖 sync**：若只改了 md 没跑 `scripts/sync_library_to_db.py`，前端页看到的仍是上一次
+- **v2 派生字段依赖 sync**：若只改了 md 没跑 `scripts/content_library/sync_library_to_db.py`，前端页看到的仍是上一次
   同步的快照（md 侧始终是最新）。归档流程的最后一步固定为跑 sync。
 - **`seq` 与 `entry_num` 在 1–13 号不相等**：历史对话归档行的 `seq` 是旧序号，`entry_num` 才是收藏库
   编号；前端一律用 `entry_num` 展示与对齐状态，`seq` 仅作稳定排序键。

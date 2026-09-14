@@ -11,7 +11,7 @@
 分析文本为本会话复盘后重新撰写的结构化评析（原文口径逐字保留，分析为当次思路的忠实还原）。
 
 用法:
-  python3 scripts/import_conversation_archive.py
+  python3 scripts/content_library/legacy/import_conversation_archive.py
 """
 
 import json
@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parents[3]
 DB_PATH = BASE / "data" / "openbiliclaw.db"
 sys.path.insert(0, str(BASE / "src"))
 

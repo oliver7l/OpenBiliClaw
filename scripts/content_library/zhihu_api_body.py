@@ -3,7 +3,7 @@
 
 必须在 zhihu-toolkit 的虚拟环境里运行（那里才有 zhihu_cli 包与登录 session）:
     /Users/imac/.local/share/uv/tools/zhihu-toolkit/bin/python3 \
-        scripts/zhihu_api_body.py answer 2033887544610387219
+        scripts/content_library/zhihu_api_body.py answer 2033887544610387219
 
 用法:
     zhihu_api_body.py answer <answer_id>
@@ -26,7 +26,7 @@ if "sitecustomize" in _pp or "shim" in _pp:
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 from zhihu_cli.content.handlers.requests import session  # noqa: E402
-from zhihu_cli.content.utils.html2markdown import converter
+from zhihu_cli.content.utils.html2markdown import converter  # noqa: E402
 
 API = {
     "answer": "https://api.zhihu.com/answers/{id}?include=content,excerpt,created_time,voteup_count,comment_count",

@@ -4,12 +4,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from openbiliclaw.interview.questions.models import Priority, QuestionCategory, QuestionCreate
 from openbiliclaw.interview.questions.store import InterviewQuestionStore
 
-DB = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/interview_questions.db"
+DB = str(Path(__file__).resolve().parents[3] / "data" / "interview_questions.db")
 SOURCE = "MiniOneRec生成式推荐(小红书)"
 URL = "https://www.xiaohongshu.com/explore/6aa10ed0000000002502e203"
 TAGS = "生成式推荐,MiniOneRec,SID,RQ-VAE,GRPO,推荐系统"

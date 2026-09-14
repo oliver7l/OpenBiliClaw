@@ -19,20 +19,20 @@
 - 绝不覆盖已有正文；写入截断 20000 字符；只 UPDATE 不删行。
 
 用法:
-    python3 scripts/refill_library_bodies_v2.py [limit] [--source=zhihu]
+    python3 scripts/content_library/refill_library_bodies_v2.py [limit] [--source=zhihu]
 """
 import json
 import os
 import re
 import shutil
 import sqlite3
-from pathlib import Path
 import subprocess
 import sys
 import time
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB = os.path.join(BASE, "data", "openbiliclaw.db")
 AUTOCLI = shutil.which("autocli") or "/Users/imac/bin/autocli"
 BILI_CLI = shutil.which("bili") or "/Users/imac/.local/bin/bili"
@@ -121,7 +121,7 @@ def fetch_zhihu_body(url: str) -> tuple[str, bool]:
     """知乎正文：answer / article / question 标题。
 
     v2.1: zhihu CLI 已移除 `answer`/`article` 子命令（现在只有 download/browse），
-    改为调用 scripts/zhihu_api_body.py —— 复用 CLI 登录态直连 api.zhihu.com，
+    改为调用 scripts/content_library/zhihu_api_body.py —— 复用 CLI 登录态直连 api.zhihu.com，
     直接拿 content 并转 Markdown，比 CLI 更快也更稳。
     """
     m = ZH_ANSWER_RE.search(url or "")
@@ -258,7 +258,7 @@ def main() -> None:
 
     db = sqlite3.connect(DB)
     # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-    _content_db = Path(__file__).resolve().parent.parent / "data" / "content.db"
+    _content_db = Path(__file__).resolve().parents[2] / "data" / "content.db"
     if _content_db.exists():
         db.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
 

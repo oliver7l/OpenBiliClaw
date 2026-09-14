@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """内容库 v2 同步：阅读收藏库 md（单一数据源）→ conversation_archive（前端派生镜像）。
 
-用法：python3 scripts/sync_library_to_db.py [--dry-run]
+用法：python3 scripts/content_library/sync_library_to_db.py [--dry-run]
 - 解析 notes/阅读收藏库/阅读收藏库.md 索引 + 各条目 md
 - 按 md 源文件名（md_file）幂等匹配既有行，其余新增
 - FTS 由表触发器自动维护；幂等可重跑
@@ -12,9 +12,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
-BASE = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/notes/阅读收藏库"
-IDX = os.path.join(BASE, "阅读收藏库.md")
-DB = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/data/openbiliclaw.db"
+_ROOT = Path(__file__).resolve().parents[2]
+BASE = str(_ROOT / "notes" / "阅读收藏库")
+IDX = str(_ROOT / "notes" / "阅读收藏库" / "阅读收藏库.md")
+DB = str(_ROOT / "data" / "openbiliclaw.db")
 
 TYPE2KIND = {"链接原文": "link_article", "摘要": "summary", "对话解读": "dialogue"}
 

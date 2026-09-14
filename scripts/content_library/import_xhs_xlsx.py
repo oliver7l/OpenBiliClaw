@@ -11,7 +11,7 @@ xlsx 列(20 列):
   笔记封面链接, 笔记图片链接, 笔记视频时长, 笔记视频链接
 
 用法:
-  python3 scripts/import_xhs_xlsx.py <xlsx文件|目录> [选项]
+  python3 scripts/content_library/import_xhs_xlsx.py <xlsx文件|目录> [选项]
 
 选项:
   --media-root <dir>   本地媒体根目录(默认=首个 xlsx 所在目录), 结构 <作者>/<笔记ID>/<文件>
@@ -34,20 +34,20 @@ import datetime
 
 # 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
-import glob
-import json
-import os
-import re
-import shutil
-import sqlite3
-import sys
+import glob  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import sqlite3  # noqa: E402
+import sys  # noqa: E402
 
 try:
     import openpyxl
 except ImportError:
     sys.exit("需要先安装 openpyxl: pip install openpyxl")
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
 IMG_ROOT = os.path.join(BASE, "images", "xhs")
 NOTE_RE = re.compile(r"^[0-9a-f]{24}$")
@@ -112,7 +112,9 @@ def _iter_rows(paths: list[str]):
         for row in rows[1:]:
             if not row or not row[0]:
                 continue
-            get = lambda k: (row[idx[k]] if idx.get(k, -1) >= 0 and idx[k] < len(row) else None)
+            def get(k, _row=row, _idx=idx):
+                i = _idx.get(k, -1)
+                return _row[i] if 0 <= i < len(_row) else None
             yield {
                 "note_id": str(row[0]).strip(),
                 "url": get("笔记链接") or "",
@@ -156,14 +158,14 @@ def main() -> None:
     print(f"=== 本地媒体映射: {len(media_map)} 个笔记ID")
 
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
 
     cur = conn.cursor()
     stats = {"insert": 0, "update": 0, "skip": 0, "media_copied": 0}

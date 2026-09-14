@@ -6,7 +6,7 @@
   想直接入库而**不再联网重抓**(避开小红书验证码风控红线)。
 
 用法:
-  python3 scripts/import_md_to_library.py <md目录> [选项]
+  python3 scripts/content_library/import_md_to_library.py <md目录> [选项]
 
 选项:
   --attach "<note_id>=<文件名.md>"   把该 md 作为「延伸研究」附录合并进对应笔记(可多次)
@@ -34,13 +34,13 @@ import datetime
 
 # 中国本地时间(UTC+8)。articles 表所有时间字段统一存北京时间字符串。
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
-import json
-import os
-import re
-import sqlite3
-import sys
+import json  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
+import sqlite3  # noqa: E402
+import sys  # noqa: E402
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
 IMG_ROOT = os.path.join(BASE, "images", "xhs")
 
@@ -140,14 +140,14 @@ def main() -> None:
 
     by_file = {d["file"]: d for d in docs}
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
-    if _content_db.exists():
-        conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    try:
+        from pathlib import Path as _Path
+        _content_db = _Path(__file__).parent.parent.parent / "data" / "content.db"
+        if _content_db.exists():
+            conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
+    except Exception:
+        pass
 
     cur = conn.cursor()
     stats = {"insert": 0, "update": 0, "skip": 0}
