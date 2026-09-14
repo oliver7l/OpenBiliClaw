@@ -6,7 +6,9 @@ OwnHealthRecord (petrk94/ownhealthrecord) 的数据模型与功能设计，
 检查记录、过敏史、生命体征、疫苗接种、医生信息、文档附件、
 AI健康洞察、健康时间线等完整健康管理功能。
 
-数据存储于项目主 SQLite 数据库，表名使用 health_ 前缀。
+数据存储于**独立子库 data/health.db**（db sharding P7，与主库锁域隔离；
+可经 ``config.storage.health_db_path`` 覆盖），表名使用 ``health_`` 前缀。
+⚠️ 注意区分：精确路径 ``GET /api/health`` 是系统探针，与本模块无关。
 """
 
 from __future__ import annotations

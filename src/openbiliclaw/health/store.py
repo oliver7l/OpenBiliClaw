@@ -1702,15 +1702,26 @@ class HealthStore:
         limit: int = 100,
         offset: int = 0,
     ) -> list[TimelineEvent]:
-        """获取患者的健康时间线，聚合所有类型的健康事件。"""
+        """获取患者的健康时间线，聚合所有类型的健康事件。
+
+        分页语义（2026-09-15 修复）：``offset`` / ``limit`` 作用于**合并排序后的
+        全局事件序列**。
+
+        修复前每个来源表各自 ``LIMIT ? OFFSET ?``，再把结果合并排序后
+        ``events[:limit]`` 截断——两处都错：
+        ① ``offset`` 被逐表应用，等于每个来源各自跳过 offset 条，并非全局分页；
+        ② 末尾截断会**静默丢掉**排序后靠后的事件，且页与页之间会重复/漏项。
+        现在：各来源取全量（``WHERE patient_id = ?`` 已足够选择性，个人健康档案
+        单患者的事件量级很小），合并排序后再统一切片。
+        """
         events: list[TimelineEvent] = []
 
         # 就诊记录
         rows = self.conn.execute(
             """SELECT id, encounter_date as date, hospital, department, diagnosis, chief_complaint, encounter_type
                FROM health_encounters WHERE patient_id = ?
-               ORDER BY encounter_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY encounter_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1730,8 +1741,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, procedure_date as date, procedure_name, conclusion, abnormal_summary, procedure_type, needs_follow_up
                FROM health_procedures WHERE patient_id = ?
-               ORDER BY procedure_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY procedure_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1751,8 +1762,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, completed_date as date, test_name, overall_interpretation, facility
                FROM health_lab_results WHERE patient_id = ? AND completed_date IS NOT NULL
-               ORDER BY completed_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY completed_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             # 检查是否有异常项
@@ -1778,8 +1789,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, start_date as date, medication_name, dosage, frequency, status, indication
                FROM health_medications WHERE patient_id = ? AND start_date IS NOT NULL
-               ORDER BY start_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY start_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1799,8 +1810,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, onset_date as date, condition_name, diagnosis, status, severity
                FROM health_conditions WHERE patient_id = ? AND onset_date IS NOT NULL
-               ORDER BY onset_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY onset_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1820,8 +1831,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, document_date as date, title, hospital, document_type
                FROM health_documents WHERE patient_id = ? AND document_date IS NOT NULL
-               ORDER BY document_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY document_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1841,8 +1852,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, date_administered as date, vaccine_name, dose_number, facility
                FROM health_immunizations WHERE patient_id = ?
-               ORDER BY date_administered DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY date_administered DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1862,8 +1873,8 @@ class HealthStore:
         rows = self.conn.execute(
             """SELECT id, scheduled_date as date, title, hospital, department, status, appointment_type
                FROM health_appointments WHERE patient_id = ?
-               ORDER BY scheduled_date DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
+               ORDER BY scheduled_date DESC""",
+            (patient_id,),
         ).fetchall()
         for r in rows:
             events.append(
@@ -1879,9 +1890,9 @@ class HealthStore:
                 )
             )
 
-        # 按日期排序
+        # 按日期排序后统一切片 —— offset / limit 作用于合并后的全局序列
         events.sort(key=lambda e: e.date or "", reverse=True)
-        return events[:limit]
+        return events[offset : offset + limit]
 
     # ── 预约 / 复诊 ────────────────────────────────────────────
 

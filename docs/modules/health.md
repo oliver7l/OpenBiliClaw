@@ -9,12 +9,17 @@
 | 组件 | 职责 | 核心文件 |
 |------|------|----------|
 | 数据模型 | 13 类医疗实体的 Pydantic 模型与枚举 | `models.py` |
-| 存储层 | 13 张 SQLite 表管理、CRUD、检索、统计、时间线 | `store.py` |
+| 存储层 | 15 张 SQLite 表管理、CRUD、检索、统计、时间线 | `store.py` |
 | 业务层 | HealthService 封装存储，提供患者摘要、化验趋势、AI解读 | `service.py` |
-| API 层 | 68 条 RESTful 接口，**单一来源** `register_health_routes(app, ctx)` | `api/health_routes.py` |
+| API 层 | 35 条路径 / 68 个操作（RESTful），**单一来源** `register_health_routes(app, ctx)` | `api/health_routes.py` |
 | 周期记录 | 独立的经期/周期事件记录（`cycle_records` 表，存 `data/cycle.db`） | `cycle/store.py` |
 | 前端页面 | 桌面内嵌健康档案管理页面（12 个标签页，`healthPage` 视图） | `web/desktop/assets/js/health-app.js` |
-| 数据导入 | 用户真实看病资料批量导入脚本 | `scripts/import_health_data.py` |
+| 挂号监控 | ⚠️ `scripts/health/91160_check_slots.py` 是**挂号号源监控**，与本模块**无代码关系**，仅同名 | `scripts/health/` |
+
+> ⚠️ **命名澄清**：精确路径 `GET /api/health` 是**系统探针**（`app.py` 内联，判断服务存活），
+> 与本模块的前缀 `/api/health/*`（医疗档案）**不是同一回事**——两者只是共用前缀。
+> 另：曾经文档提到的 `scripts/import_health_data.py` 批量导入脚本**从未入库**（全仓不存在），
+> 不要再按该说明操作。
 
 > **API 单一来源说明（2026-09-11 修正）**：健康 API **只在 `api/health_routes.py` 中定义**，由 `api/_route_registry.py` 统一注册。历史上 `api/app.py` 曾内联 13 条只读列表路由作为临时兜底，且因构造 `HealthService(database=...)` 读的是主库中已拆空的 `health_` 空壳表（0 行），页面一直显示空数据 —— 该内联段已于 2026-09-11 删除。
 
@@ -49,10 +54,13 @@
 
 | 数据库 | 内容 | 连接方式 |
 |--------|------|----------|
-| `data/health.db` | 15 张 `health_*` 表（13 类实体 + 化验明细 + 时间线辅助） | `HealthService(db_path=...)`，独立连接 + PRAGMA（WAL / busy_timeout / synchronous） |
+| `data/health.db` | 15 张 `health_*` 表（13 类实体 + 化验明细 `lab_components` + 用药日志 `medication_logs`） | `HealthService(db_path=...)`，独立连接 + PRAGMA（WAL / busy_timeout / synchronous） |
 | `data/cycle.db` | `cycle_records`（周期事件） | `CycleStore(db_path=...)`，与 health.db 同目录，隔离锁域 |
 
-> 主库 `data/openbiliclaw.db` 中**不再保留**可用的 `health_*` 表（P7/P9 拆分时已迁出，残留空壳表已清理）。路径解析优先级：`config.storage.health_db_path` > 主库同目录 `health.db` > `data/health.db`。
+> 主库 `data/openbiliclaw.db` 中**不再保留**任何 `health_*` 表（P7/P9 拆分时已迁出；
+> **残留的 15 张空壳表已于 2026-09-15 经 `scripts/migrate_health_db.py drop` 清除**，
+> drop 前的全库备份在 `data/backups/openbiliclaw_pre_p7_health_drop_*.db`）。
+> 路径解析优先级：`config.storage.health_db_path` > 主库同目录 `health.db` > `data/health.db`。
 
 ### 核心实体关系
 
@@ -269,10 +277,6 @@ cycle_records (周期记录) — 独立表，不与 health_patients 关联
 
 ## 数据导入
 
-使用 `scripts/import_health_data.py` 可批量导入用户真实看病资料：
-
-```bash
-.venv/bin/python scripts/import_health_data.py
-```
-
-脚本会创建患者档案、就诊记录、检查记录、化验结果（含明细）、健康问题、用药记录。
+> ⚠️ **本节曾被本文误导**：早先版本教用户运行 `scripts/import_health_data.py`，
+> 但该脚本**从未存在于仓库中**（2026-09-15 全仓核实）。如需批量导入真实看病资料，
+> 直接调用 `HealthService` 的各 `create_*` 方法（见 `store.py`），或另写一次性脚本。

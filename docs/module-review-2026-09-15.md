@@ -233,7 +233,7 @@
 
 两件事共用一个「health」命名，本身就值得在文档里点明。
 
-### 🔴 H1. 时间线分页**静默丢数据**（已亲自复核）
+### 🔴 H1. 时间线分页**静默丢数据** → **✅ 已修复（2026-09-15）**
 
 `health/store.py:1699-1884 get_timeline()`：对**每一个**来源表各自执行 `LIMIT ? OFFSET ?`（`:1712` 等 8 处），把结果全部 append 进同一个 list，最后 `events.sort(...)` 后 `return events[:limit]`（`:1884`）。
 
@@ -243,7 +243,12 @@
 
 零测试覆盖，所以从没被发现。今天数据量小（`health_encounters` 2 行）还不显形。
 
-### 🔴 H2. 主库里 15 张空壳表，而文档说「已清理」（已亲自复核）
+> **修复记录**：改为各来源取全量（`WHERE patient_id=?` 已足够选择性）、合并排序后
+> 统一 `events[offset:offset+limit]` 切片。回归＝`tests/health/test_timeline_pagination.py`
+> 3 条（跨来源全局有序且不重不漏 / 大 limit 取全 / offset 越界返空）；
+> worktree 修复前 **1 failed / 2 passed**，修复后 3 passed；线上冒烟正常。
+
+### 🔴 H2. 主库里 15 张空壳表，而文档说「已清理」→ **✅ 已清除（2026-09-15）**
 
 ```
 data/openbiliclaw.db  → 15 张 health_* 表，全部 0 行
@@ -253,6 +258,13 @@ data/health.db        → 同名 15 张表，有真实数据（health_patients=1
 `docs/modules/health.md:55` 写「残留空壳表已清理」——**与事实相反**；`scripts/migrate_health_db.py:126-134` 的 `drop` 步骤从未执行。
 
 风险点：`health/store.py:440` 的 `HealthStore(database=...)` 仍可直接写主库，误用即**双写**。
+
+> **处理记录（2026-09-15）**：确认无任何代码路径再使用主库 `health_*` 表
+> （`health_routes.py:50-68` 走 `db_path` 建独立连接）后，执行
+> `scripts/migrate_health_db.py drop`（脚本自带全库备份
+> `data/backups/openbiliclaw_pre_p7_health_drop_*.db`）。
+> 结果：主库 `health_*` 表 **15 → 0**（总表 84 → 69），`health.db` 完好（16 表 / patients=17）。
+> `health.md` 的描述已改为与事实一致（含 drop 日期与备份位置）。
 
 ### 🟡 H3. `store.py` 该拆
 
@@ -266,12 +278,12 @@ data/health.db        → 同名 15 张表，有真实数据（health_patients=1
 
 `/api/health`（系统探针，`app.py:1774`，`app.py:1317` 还拿它做运维判定）与 `/api/health/*`（医疗档案，35 条）同名；前端 `health-app.js:6` 又用 `/api/health` 当医疗基址。运行时不冲突，但语义长期混淆。
 
-### 🟡 H6. 文档漂移（已亲自复核）
+### 🟡 H6. 文档漂移 → **✅ 已更正（2026-09-15）**
 
-- `health.md:17,272-275` 教你跑 `scripts/import_health_data.py` —— **该脚本不存在**
-- `health/__init__.py:9` 仍写「存储于主 SQLite 数据库」，与 `health.md:7` 自相矛盾（实为 `health.db`）
-- `health.md:14` 的「68 条」是装饰器数，唯一路径实为 **35**
-- `health.md:12`「13 张表」实为 **15**（漏 `appointments`、`medication_logs`；「时间线辅助表」不存在）
+- `health.md:17,272-275` 教你跑 `scripts/import_health_data.py` —— **该脚本不存在** → 已改为警示说明（脚本从未入库）
+- `health/__init__.py:9` 仍写「存储于主 SQLite 数据库」，与 `health.md:7` 自相矛盾（实为 `health.db`）→ 已改
+- `health.md:14` 的「68 条」实为 **68 个操作 / 35 条唯一路径** → 已消歧
+- `health.md:12`「13 张表」实为 **15**（漏 `appointments`、`medication_logs`；「时间线辅助表」不存在）→ 已改
 
 **未发现问题**：表前缀隔离与 `health.db` 落库正确（`config.py:643` + `health_routes.py:57-68` 优先级链完整）；`app.py` 已无内联健康路由。
 
@@ -293,7 +305,7 @@ data/health.db        → 同名 15 张表，有真实数据（health_patients=1
 | 批次 | 内容 | 风险 | 为什么排这里 |
 |---|---|---|---|
 | **③** | **质量门禁**：mypy 55 → 0、ruff 3 → 0 | 低 | 上一次盘点已定；纯机械，且是 AGENTS.md 要求 |
-| **④** | **健康模块三修**：H1 时间线分页（真 bug）+ H2 空壳表清理 + H6 文档更正 | 低 | H1 是会静默丢数据的真缺陷，H2 只是删表，两者都不动业务逻辑 |
+| **④** | ~~**健康模块三修**：H1 时间线分页（真 bug）+ H2 空壳表清理 + H6 文档更正~~ → **✅ 已完成（2026-09-15）** | — | 见 §6 H1/H2/H6 修复记录 |
 | **⑤** | **路径统一**：六模块的 CWD 相对路径全部改走 `config._project_root()` / `load_config()` | 低-中 | 一次消灭 20+ 处同类隐患；建议配一条「禁 `parents[N]` / 禁 `Path("data/...")`」的回归测试 |
 | **⑥** | **旅游模块补齐**：T1 定 md↔db 真值源（并写一个 md→db 生成器）+ T3 模块文档 + 基础测试 | 中 | 需要你先拍板「谁是真值源」 |
 | **⑦** | **阅读库术语与真值源定案**：R1 三套并存写清边界 + R2 稍后读定一真值源 + R3 saved_sync 决定「补 adapter」还是「标死删除」 | 中 | 涉及数据迁移，必须先定语义 |
