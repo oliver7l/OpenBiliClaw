@@ -4,6 +4,68 @@
 
 ---
 
+## 内容链路脚本收尾修复：脚本失效、语法错误、参数误触（2026-09-14）
+
+- **修 `scripts/collect_mindback_caches.py` 的「掏空 main」缺陷（真 bug）**：`ATTACH content.db`
+  的 `try` 块被误置到**模块级**（缩进 0），导致 `def main()` 在 `sqlite3.connect()` 处提前结束，
+  而后续 270–307 行的全部导入逻辑被吞进 `except` 体——运行必抛
+  `NameError: name 'conn' is not defined`，脚本**从未成功执行过**。修后 `--dry-run` 实测
+  可解析 bilibili 2430 / xhs 51961 / youtube 682683 / xiaoyuzhou 793 / zhihu 3869 条快照。
+  （同款缺陷在 2026-09-13 已修 4 个 content_library 脚本，此为该批遗漏的根目录脚本；AST 全仓
+  复扫确认无其它同款。）
+- **修 `scripts/optimize_diary_html_v2.py` 语法错误**：f-string 表达式内含反斜杠
+  （`{"\n".join(tabs_lines)}`）在 Python < 3.12 直接 `SyntaxError`（项目 venv 为 3.11）；
+  改为先算 `tabs_html` 再插值。同时把硬编码的 `/Volumes/.../index.html` 换成 `Path(__file__)`
+  推导，并加 `--help` 守卫（该脚本会覆盖 `desktop/index.html`，此前 `--help` 会直接开跑）。
+- **CLI 参数安全化（消除「误触即开跑」）**：`refill_library_bodies_v2.py`、
+  `refill_article_bodies.py`、`collect_mindback_caches.py`、`sync_library_to_db.py` 由手写
+  `for arg in sys.argv` 改为 `argparse`——此前未知参数被**静默忽略**：给 refill 脚本传
+  `--help` 会按默认 limit=100 直接开始抓取。同时统一新增 `--dry-run`（只列待处理行）。
+- **旧路径引用清零（12 处）**：脚本迁入 `scripts/content_library/` 后，`docs/body-refill-2026-09-11.md`、
+  `docs/changelog.md`、`docs/cleanup-manifest-2026-09-13.md`、`docs/project-audit-2026-09-13.md`、
+  `desktop/assets/js/app.js` 注释、`notes/已读库/{README.md,已读库归档操作指南.md}` 仍指向
+  `scripts/` 根；全盘复扫已无残留（仅历史 memory 日志保留原样）。
+- **验证**：`tests/conversation_archive` + `tests/test_import_readlib_feed.py` **24 passed**；
+  `ruff` 改动文件全绿；`node --check app.js` 通过；四脚本 `--help` / `--dry-run` / 未知参数报错
+  冒烟通过；`sync_library_to_db.py --dry-run` 仍幂等（`updated 0 / inserted 0`，总 116 行）。
+- 遗留（非本仓可改）：平台侧自动化「内容库同步进阅读库（增量）」的命令路径仍写
+  `scripts/sync_content_cache_to_library.py`，须在自动化界面改为 `scripts/content_library/` 前缀。
+
+---
+
+## 重构：soul 画像 / 推荐 / 对话组抽离 _cmd_soul（P4 第七刀，2026-09-14）
+
+- **抽离规模**：`rebuild-profile` / `profile-consolidate` / `import-youtube` /
+  `recommend` / `feedback` / `profile` / `chat` / `delight` / `probe` 共 **9 个平铺命令**，
+  合计 **~945 行** → `cli/_cmd_soul.py`（851 行）；经 `register(app)` 挂回主 app
+  （命令名与形状不变）。`cli/__init__.py` **4039 → 3057 行**
+  （七刀累计 7087 → 3057，**-4030 行 / 约 -57%**）。
+- **附带归位**：`_run_single_source_bootstrap`（fetch-douyin / fetch-xhs 共享核心，37 行）
+  迁至语义所在的 `cli/_cmd_fetch.py`；cli 仍 re-export，既有 3 处 `_cli.X` 调用点零改动。
+  `_print_recommendation_card`（渲染 helper）迁 `cli/_render.py`，cli re-export 保名。
+- **patch 语义**：12 个外部共享符号（`_build_soul_engine` / `_build_recommendation_engine` /
+  `_build_memory_manager` / `_build_dialogue` / `_build_registry` / `_build_usage_recorder` /
+  `_require_runtime_config` / `_get_runtime_database` / `_prepare_init_runtime` /
+  `_run_with_progress` / `_print_init_cost_summary` /
+  `_notify_running_server_init_completed`）全部**函数体内** `from openbiliclaw import cli as _cli`
+  + `_cli.X` 动态取；`DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE` / `console` /
+  `_print_section_title` 属模块加载期求值，直接 `from openbiliclaw.runtime.init_flow import`。
+- **cli 命名空间 re-export 8 个命令名**；`profile` **故意不 re-export**——它与本模块既有
+  形参 `_run_init_discovery_backfill_async(profile=...)` 同名，re-export 会触发 ruff F811。
+  命令本身已由 `register()` 挂在 app 上，`openbiliclaw profile` 与
+  `runner.invoke(app, ["profile"])` 不受影响；需要 Python 层引用时从
+  `openbiliclaw.cli._cmd_soul` 导入。顺带清掉 4 个只服务被迁代码的顶层 import
+  （`re` / `click` / `DEFAULT_PREFERENCE_EVENT_CHUNK_SIZE` / `TYPE_CHECKING.Callable`）。
+- **顺带修既有缺陷（非本刀引入）**：`tests/weekend/test_weekend_module.py::
+  test_list_spots_filter_by_suitable_for` 是**日期炸弹**——种子数据里唯一带精确
+  「带娃」标签的「香菜节」`valid_until=2026-09-13`，09-14 起被默认有效期过滤剔除
+  → 断言恒空。修法：该用例只验 LIKE 精确匹配人群标签的能力，显式
+  `include_expired=True`，与当前日期解耦。
+- **验证**：`tests/cli` **191 passed**（含新增守门 9 例）；顶层 42 命令 + 全部
+  **90 条命令路径** worktree 对账 `diff` 为空；`ruff check` / `mypy` 全绿。
+
+---
+
 ## 重构：init 引导组抽离 _cmd_init（P4 第六刀，2026-09-14）
 
 - **抽离规模**：`init` 命令（372 行，含全部 typer 选项）+ 11 个问询 / 落盘 helper
@@ -53,7 +115,7 @@
   「对话摘录」节（从 DB 回填当时的用户提问）。
 - **DB 表加 5 个 v2 派生列**：`entry_num` / `group_name` / `dialog_excerpt` / `annotations` /
   `md_file`；`store.py` 增加幂等补列 `_ensure_columns`（旧库首次访问自动 ALTER，无需手工迁移）。
-- **新脚本 `scripts/sync_library_to_db.py`**：md → DB 单向同步。幂等键是 **`md_file`** 而非 `seq`——
+- **新脚本 `scripts/content_library/sync_library_to_db.py`**：md → DB 单向同步。幂等键是 **`md_file`** 而非 `seq`——
   历史行 seq 与收藏库编号不一致（原对话归档 seq 1 对应收藏库 84 号），按 seq 匹配曾导致
   97 → 181 行的重复插入；改用文件名后重复跑只更新不新增（`updated 116 / inserted 0`）。
 - **API 新增** `GET /api/conversation-archive/{id}/raw-md`：`FileResponse` 回吐收藏库源 md，
@@ -326,7 +388,7 @@
   search）、详情、stats、新增、批量 import。
 - **双前端**：桌面 `/web/conversation-archive` 页面 + 移动端 `/m`「对话归档」tab（卡片 +
   details 展开原文/分析，搜索 250ms 防抖）。
-- **导入脚本**：`scripts/import_conversation_archive.py`（首批 13 条知乎问答原文与分析入库）。
+- **导入脚本**：`scripts/content_library/legacy/import_conversation_archive.py`（首批 13 条知乎问答原文与分析入库）。
 - ⚠️ **待补**：模块当时尚无单元测试（AGENTS.md 要求新增功能默认同时补充单元测试）。
 
 ---
@@ -414,7 +476,7 @@
 - 修复 `scripts/refill_article_bodies.py` / `refill_library_bodies_v2.py`：v0.4.0 拆库时
   补的 ATTACH 代码块缩进错（顶格 `try:`），导致 `db` 未定义、两个脚本**完全跑不起来**，
   拆库后正文补抓实际一直是停摆状态。
-- 知乎通道改用直连接口：新增 `scripts/zhihu_api_body.py`（复用 zhihu CLI 登录态打
+- 知乎通道改用直连接口：新增 `scripts/content_library/zhihu_api_body.py`（复用 zhihu CLI 登录态打
   `api.zhihu.com/answers|articles/{id}`，html2markdown 转正文）——新版 zhihu CLI 已移除
   `answer` / `article` 子命令，旧调用 100% 失败。
 - 小红书语义修正：风控（CAPTCHA / noteDetailMap 为空）不再判成"确认无正文"，
@@ -2065,7 +2127,7 @@ I001 import 排序 91、F401 未用导入 22、UP045 pep604 可选注解 20、W2
 - **池子排序探索轴（滑动窗口 Thompson 采样）**：新增 `recommendation/bandit.py`。此前五维 `rec_score` 全是确定性项，`topic_fatigue` 只压热门、不抬冷门，用户从未点过的兴趣会永久沉底。探索轴按 `(source_strategy, topic_group)` 分臂，在最近 `ts_window_days`（默认 30）天的曝光上维护 Bernoulli Beta 后验（Jeffreys 先验），奖励口径与 `get_dwell_scores` 一致（显式 `like/save/favorite`，或单次停留 ≥ `ts_deep_dwell_seconds`）；评分追加 `ts_exploration_weight × (θ − posterior_mean)` 的**零均值**项，只在后验不确定的臂上注入方差，因此不会系统性重排池子。`Database.get_bandit_impressions()` 单条 SQL 出臂级聚合，`ScoringContext.arm_stats` 承载快照，`score_candidates()` 与 `score_candidates_async()` 两条路径共用；由新配置段 `[recommendation].thompson_sampling_enabled` 控制，**默认 `false`**（关闭时分数逐字不变），`view_history` 缺失 / 查询异常时降级为空臂集合继续服务。`api/runtime_context.py`（含热重载）与 `integrations/openclaw/bootstrap.py` 均经 `sampler_from_scoring_config()` 接线。新增 `tests/test_thompson_sampling.py`（29 例，覆盖臂后验数学、窗口 SQL、禁用即字节等价、配置解析与往返）。
 - **阅读库「屏蔽 / 不再出现」**：内容卡片右上角新增 `⊘` 屏蔽按钮，点击后该文章进入 `hidden` 终态、永不再出现。`Database.ARTICLE_STATUSES` 增 `hidden`，`get_recent_articles` / `count_articles` / `search_articles` 在未显式指定 `status` 时统一排除 `hidden`（显式 `status='hidden'` 仍可查，留作日后「已屏蔽」管理视图）；`/api/articles/facets` 来源分布同步排除。`upsert_article` 的 `ON CONFLICT` 不触碰 `status`，故同一 URL 重新抓取不会复活已屏蔽文章。`PATCH /api/articles/{id}` 放行 `hidden` 并镜像 `article_finished` 插入一条 `article_dismissed` 事件回流画像；`event_format` 新增 `_EXPLICIT_NEGATIVE_EVENT_TYPES` 与 `("negative","explicit_aversion")` 分类分支（含中文动作词「屏蔽了」与 0.8 信号强度）。前端 `reading-library/index.html` 加 `.rl-block` 样式与 `blockArticle()`（PATCH→淡出移除卡片→总数减一→toast，失败回滚提示）。工具栏新增「已屏蔽」切换按钮进入管理视图：确定性加载 `status=hidden` 列表、卡片改显「↩ 恢复」（PATCH 回 `unread` 放回阅读库）、空态与换一批行为相应适配。屏蔽同时**同步清洗候选池**：同一 `content_url` 的 fresh 候选立即置为 `suppressed`（新增 `Database.suppress_pool_rows_by_url` / `revive_suppressed_pool_rows_by_url`；选 `suppressed` 而非 `purged_by_dislike`，因其会在重新发现/评分时自动复活为 fresh，与「恢复」操作配对；shown/feedbacked 历史行不连坐），`PATCH` 响应新增 `purged_pool_count` / `revived_pool_count` 供前端 toast 提示。故意**不做**按 tags 的同步清洗——read_archive/导入脚本的标签含平台名与「已读库」等泛化词，会造成过度清洗，话题级回避仍由 soul 管道消费 `article_dismissed` 事件异步学习。新增 5 例测试覆盖排除、防复活、负向分类与池清洗双向行为。
 - **画像透明化：洞察证据条目化**：桌面画像页（`/web` → 画像）的每条活跃洞察，证据来源从单行拼接字符串改为可展开列表——「证据 · N 条」徽章（details/summary），展开后逐条显示 supporting observations，便于核对 agent 的判断依据。`app.js insightsHtml` + `app.css .profile-insight-evidence`。
-- **已读库喂画像**：`scripts/import_readlib_to_db.py` 在导入 / 补全 / 存量跳过的每条 read_archive 条目上，幂等地补发一条 `article_finished` 正向事件到 `events` 表（按 URL 去重；`inferred_satisfaction`/`satisfaction_reason` 与 `insert_event` 的单一分类口径一致，即 `(positive, explicit_engagement)`；context 复用 `format_event_context` 与阅读库「标记读完」分支同措辞；metadata 带 `source_type=read-archive`、tags、`signal_strength=0.8`）。跑一次脚本即完成全部存量条目回填，`article_finished` 已在 `_PROFILE_UPDATE_BACKFILL_EVENT_TYPES` 消费清单内，soul 管道会异步把「读过这类内容」学进画像。新增 `tests/test_import_readlib_feed.py`（3 例：事件入库与分类口径一致、同 URL 幂等、不同 URL 不去重）。
+- **已读库喂画像**：`scripts/content_library/import_readlib_to_db.py` 在导入 / 补全 / 存量跳过的每条 read_archive 条目上，幂等地补发一条 `article_finished` 正向事件到 `events` 表（按 URL 去重；`inferred_satisfaction`/`satisfaction_reason` 与 `insert_event` 的单一分类口径一致，即 `(positive, explicit_engagement)`；context 复用 `format_event_context` 与阅读库「标记读完」分支同措辞；metadata 带 `source_type=read-archive`、tags、`signal_strength=0.8`）。跑一次脚本即完成全部存量条目回填，`article_finished` 已在 `_PROFILE_UPDATE_BACKFILL_EVENT_TYPES` 消费清单内，soul 管道会异步把「读过这类内容」学进画像。新增 `tests/test_import_readlib_feed.py`（3 例：事件入库与分类口径一致、同 URL 幂等、不同 URL 不去重）。
 - **阅读库每日简报**：阅读库页（`/library/*`）顶部新增可折叠简报卡片，默认收起只占一行摘要（「今天读完 N 篇 · 画像学了 M 件新事」），点开展开三个板块——**今日阅读回顾**（当天标记 finished 的文章数、来源分布、主题标签，新增 `Database.get_daily_reading_summary` 按 `date(updated_at)` 统计）、**画像今天学到什么**（今天的认知更新含手动纠偏，与画像页共用 `memory_manager.load_cognition_updates`，soul 未初始化时降级为空）、**明日值得看**（未读文章按兴趣契合度 top 5，点击直接打开阅读器）。数据来自新端点 `GET /api/reading/daily-brief`，纯确定性聚合、零 LLM 成本；「今日建议」的打分逻辑抽成 `api.app._rank_unread_by_interest` 供两处共用。简报加载失败静默不阻塞列表。新增 3 例测试（当天/非天/状态过滤 + 端点端到端三板块口径）。
 - **补齐测试**：新增 `test_recommendation_rankagent.py` / `test_view_history_dwell.py` / `test_api_view_feedback.py`，覆盖此前 0 测试的排序内核、dwell 存储与 view-* 路由（27 例）。
 - **阅读库自动打标 / 找相似 / 周·时间线统计**：新增 `reading/tags.py` 确定性（零 LLM）标签与相似度内核——`generate_tags` 复用 soul 画像加权兴趣词（title 命中 > 正文命中、按权重排序，含 `#话题` 抽取、大小写去重、幂等、冷画像不臆造），`similarity` 用 tag-Jaccard + 标题 CJK 二元组 Jaccard。新端点 `POST /api/reading/auto-tag`（把命中的兴趣标签 merge 进现有 `tags`、保留来源标签；`iter_articles_for_tagging` 默认只扫欠标注条目做存量回填）与 `GET /api/reading/similar?id&k`（库内找相似，排除自身与 hidden）。`get_article_reading_stats` 增 `by_week`（近 14 周 finished 数）与 `timeline`（近 60 天每日 finished 数），并入既有 stats 响应。均作用于阅读主表 `articles`（与独立的 `read_archive` 屏蔽归档保持分离）。新增 `test_reading_tags.py` / `test_api_reading_tagging.py`。

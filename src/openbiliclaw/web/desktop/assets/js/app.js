@@ -1811,7 +1811,7 @@
 
     // ── Read archive (已读库) ──────────────────────────────────────
     // 已读库 = articles 表里 source_type=read-archive 的条目，由
-    // scripts/import_readlib_to_db.py 从 notes/已读库 文件存档导入。
+    // scripts/content_library/import_readlib_to_db.py 从 notes/已读库 文件存档导入。
     let _readArchivePlatform = "all";
     let _readArchiveQuery = "";
     let _readArchiveCounts = null;

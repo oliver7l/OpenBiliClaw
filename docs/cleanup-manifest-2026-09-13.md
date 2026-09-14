@@ -12,7 +12,7 @@
 
 | # | 目标 | 大小 | 依据 | 判定 |
 |---|------|------|------|------|
-| A1 | `data/v2ex-hot-hub/`（连字符版） | 28M | 外部仓库 git clone 旧版（8-31）；活跃脚本用的是 `data/v2ex_hot_hub`（下划线），见 `scripts/collect_v2ex_archive.py:59` 的 `DEFAULT_REPO_DIR` | ✅ 陈旧重复，无引用 · **已移入废纸篓（09-13）** |
+| A1 | `data/v2ex-hot-hub/`（连字符版） | 28M | 外部仓库 git clone 旧版（8-31）；活跃脚本用的是 `data/v2ex_hot_hub`（下划线），见 `scripts/content_library/collect_v2ex_archive.py:59` 的 `DEFAULT_REPO_DIR` | ✅ 陈旧重复，无引用 · **已移入废纸篓（09-13）** |
 
 ## B. 待用户确认（疑似孤儿，全仓零代码引用）
 

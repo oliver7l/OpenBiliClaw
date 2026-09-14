@@ -3,15 +3,24 @@
 安全地重组日记页面 HTML - 使用行号定界，避免正则陷阱
 """
 import re
+import shutil
+import sys
+from pathlib import Path
 
-SRC = "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/src/openbiliclaw/web/desktop/index.html"
+if "-h" in sys.argv or "--help" in sys.argv:
+    print(__doc__.strip())
+    print("\n用法: python3 scripts/optimize_diary_html_v2.py")
+    print("  一次性脚本：从 /tmp/original_index.html 恢复后重组 desktop/index.html（会覆盖该文件）。")
+    sys.exit(0)
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = str(ROOT / "src" / "openbiliclaw" / "web" / "desktop" / "index.html")
 ORIG = "/tmp/original_index.html"
 
 # 从 git 恢复原始文件
-import shutil
 shutil.copy2(ORIG, SRC)
 
-with open(SRC, "r", encoding="utf-8") as f:
+with open(SRC, encoding="utf-8") as f:
     html = f.read()
     lines = html.split("\n")
 
@@ -180,7 +189,7 @@ for vid in views_order:
             end_pos += 7  # len('</div>') + possible newline
     else:
         end_pos = next_section
-    
+
     view_positions[vid] = (div_start, end_pos)
     print(f"  OK: {vid} 位于 {div_start}-{end_pos}")
 
@@ -235,16 +244,17 @@ for gk, ginfo in groups.items():
     for i, (vid, label) in enumerate(ginfo["views"]):
         cls = ' class="diary-inner-tab active"' if i == 0 else ' class="diary-inner-tab"'
         tabs_lines.append(f'            <button{cls} data-inner-view="{vid}" type="button">{label}</button>')
-    
+
     views_content = ""
     for vid, _ in ginfo["views"]:
         if vid in view_html_map:
             views_content += view_html_map[vid] + "\n"
-    
+
+    tabs_html = "\n".join(tabs_lines)
     group_html = f'''\
         <div class="diary-group-view" id="diary{gk.capitalize()}GroupView" hidden>
           <div class="diary-inner-tabs">
-            {"\n".join(tabs_lines)}
+            {tabs_html}
           </div>
           {views_content}        </div>
 '''
@@ -281,7 +291,7 @@ for pattern, replacement in intro_patterns:
     new_html = re.sub(pattern, replacement, html, count=1, flags=re.DOTALL)
     if new_html != html:
         html = new_html
-        print(f"  OK: 替换 intro")
+        print("  OK: 替换 intro")
 
 # 写入
 with open(SRC, "w", encoding="utf-8") as f:

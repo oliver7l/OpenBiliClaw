@@ -6,10 +6,10 @@
 - 按 md 源文件名（md_file）幂等匹配既有行，其余新增
 - FTS 由表触发器自动维护；幂等可重跑
 """
+import argparse
 import os
 import re
 import sqlite3
-import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -183,5 +183,13 @@ def main(dry=False):
     print(f"完成: {stats} | 总行数={total} | by_kind={by_kind}")
 
 
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(
+        description="阅读收藏库 md（单一数据源）→ conversation_archive（前端派生镜像）"
+    )
+    ap.add_argument("--dry-run", action="store_true", help="只预览将产生的变更，不写库")
+    return ap
+
+
 if __name__ == "__main__":
-    main(dry="--dry-run" in sys.argv)
+    main(dry=build_parser().parse_args().dry_run)

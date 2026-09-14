@@ -19,15 +19,15 @@
 - 绝不覆盖已有正文；写入截断 20000 字符；只 UPDATE 不删行。
 
 用法:
-    python3 scripts/content_library/refill_library_bodies_v2.py [limit] [--source=zhihu]
+    python3 scripts/content_library/refill_library_bodies_v2.py [limit] [--source=zhihu] [--dry-run]
 """
+import argparse
 import json
 import os
 import re
 import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -248,13 +248,19 @@ def fetch_youtube_body(url: str) -> tuple[str, bool]:
     return "", False  # 抓取失败/无字幕 → 重试
 
 
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(
+        description="阅读库正文统一补抓（zhihu / 小红书 / youtube / bilibili / 其他）"
+    )
+    ap.add_argument("limit", nargs="?", type=int, default=100, help="本批最多补多少条（默认 100）")
+    ap.add_argument("--source", help="只补指定来源（zhihu / xiaohongshu / youtube / bilibili），默认全部")
+    ap.add_argument("--dry-run", action="store_true", help="只列出待补行，不抓取、不写库")
+    return ap
+
+
 def main() -> None:
-    limit, source = 100, None
-    for arg in sys.argv[1:]:
-        if arg.startswith("--source="):
-            source = arg.split("=", 1)[1].strip()
-        elif arg.isdigit():
-            limit = int(arg)
+    args = build_parser().parse_args()
+    limit, source, dry_run = args.limit, args.source, args.dry_run
 
     db = sqlite3.connect(DB)
     # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
@@ -274,6 +280,12 @@ def main() -> None:
     sql += " ORDER BY id LIMIT ?"
     params.append(limit)
     rows = db.execute(sql, params).fetchall()
+
+    if dry_run:
+        for aid, url, src in rows:
+            print(f"[dry] id={aid} {(src or '').strip().lower()} {url[:100]}")
+        print(f"[dry] 待处理 {len(rows)} 条（未抓取、未写库）" + (f" source={source}" if source else ""))
+        return
 
     ok = fail = skipped = no_token = 0
     for idx, (aid, url, src) in enumerate(rows, 1):

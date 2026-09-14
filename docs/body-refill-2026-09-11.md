@@ -27,7 +27,7 @@
 ## 3. 修复
 
 1. 两个脚本的 ATTACH 缩进 + `from pathlib import Path`（CLI 路径改 `shutil.which` 兜底）。
-2. 新增 `scripts/zhihu_api_body.py`：复用 zhihu CLI 登录态直连 `api.zhihu.com`，
+2. 新增 `scripts/content_library/zhihu_api_body.py`：复用 zhihu CLI 登录态直连 `api.zhihu.com`，
    拿 `content` 转 Markdown（需在 zhihu-toolkit 虚拟环境 python 下运行）。
 3. 小红书语义：风控/报错 → 保留重试；裸链无 `xsec_token` → 跳过且**不计重试次数**。
 4. YouTube：新增 `_yt_bot_blocked()`，命中即熔断停止、不消耗重试次数；

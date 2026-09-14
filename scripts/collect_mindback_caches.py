@@ -17,18 +17,24 @@
 
 用法:
   python3 scripts/collect_mindback_caches.py [--dry-run] [--source bilibili|xhs|youtube|xiaoyuzhou|zhihu]
+
+源数据目录可用环境变量 MINDBACK_DATA 覆盖(默认指向备份盘上的 mindback_data)。
 """
+import argparse
 import datetime
 import glob
 import json
 import os
 import re
 import sqlite3
-import sys
+from pathlib import Path
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE, "data", "openbiliclaw.db")
-MIND = "/Volumes/未命名/未命名文件夹/2026年04月27日-备份项目/2026年05月09日-SQLiteDB/mindback_data"
+MIND = os.environ.get(
+    "MINDBACK_DATA",
+    "/Volumes/未命名/未命名文件夹/2026年04月27日-备份项目/2026年05月09日-SQLiteDB/mindback_data",
+)
 
 URL_RE = re.compile(r"https?://[^\s|]+")
 ZHIHU_API_RE = re.compile(r"api\.zhihu\.com/(answers|articles|pins)/(\d+)")
@@ -64,7 +70,8 @@ def _norm_xhs(url):
 def parse_bilibili():
     out = []
     for fp in sorted(glob.glob(os.path.join(MIND, "bilibili-recommend", "*.json"))):
-        d = json.load(open(fp, encoding="utf-8", errors="replace"))
+        with open(fp, encoding="utf-8", errors="replace") as f:
+            d = json.load(f)
         items = d.get("data", {})
         items = items.get("item", []) if isinstance(items, dict) else (items if isinstance(items, list) else [])
         for it in items:
@@ -89,7 +96,8 @@ def parse_xhs_data():
     out = []
     for fp in sorted(glob.glob(os.path.join(MIND, "xhs_data", "*.json"))):
         try:
-            d = json.load(open(fp, encoding="utf-8", errors="replace"))
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                d = json.load(f)
         except Exception:
             continue
         data = d.get("data", {})
@@ -116,7 +124,8 @@ def parse_xhs_feed():
     out = []
     for fp in sorted(glob.glob(os.path.join(MIND, "xiaohongshu-scheduler-feed-2026", "*.json"))):
         try:
-            d = json.load(open(fp, encoding="utf-8", errors="replace"))
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                d = json.load(f)
         except Exception:
             continue
         items = d.get("items", []) if isinstance(d, dict) else []
@@ -147,7 +156,9 @@ def parse_youtube():
     for fp in sorted(glob.glob(os.path.join(MIND, "youtube-fetcher", "*.txt"))):
         mdate = PUBDATE_RE.search(os.path.basename(fp))
         fdate = mdate.group(1)[:4] + "-" + mdate.group(1)[4:6] + "-" + mdate.group(1)[6:8] if mdate else None
-        for line in open(fp, encoding="utf-8", errors="replace").read().splitlines():
+        with open(fp, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+        for line in lines:
             line = line.strip()
             if not line:
                 continue
@@ -171,7 +182,8 @@ def parse_xiaoyuzhou():
     fp = os.path.join(MIND, "xiaoyuzhou-fetch", "data", "xiaoyuzhou-articles.json")
     if not os.path.exists(fp):
         return []
-    arr = json.load(open(fp, encoding="utf-8", errors="replace"))
+    with open(fp, encoding="utf-8", errors="replace") as f:
+        arr = json.load(f)
     out = []
     for it in arr:
         link = it.get("link") or ""
@@ -200,7 +212,8 @@ def parse_zhihu():
     out = []
     for fp in sorted(glob.glob(os.path.join(MIND, "zhihu", "recommend-cache", "*.json"))):
         try:
-            d = json.load(open(fp, encoding="utf-8", errors="replace"))
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                d = json.load(f)
         except Exception:
             continue
         data = d.get("data", {})
@@ -250,22 +263,22 @@ def collect(source):
     return SOURCES[source]()
 
 
-def main():
-    dry = "--dry-run" in sys.argv
-    only = None
-    for a in sys.argv[1:]:
-        if a.startswith("--source="):
-            only = a.split("=", 1)[1]
-    srcs = [only] if only else list(SOURCES.keys())
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description="把 mindback2 的调度缓存并入阅读库(articles)")
+    ap.add_argument("--source", choices=sorted(SOURCES), help="只导入指定来源(默认全部)")
+    ap.add_argument("--dry-run", action="store_true", help="只统计不写库")
+    return ap
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    dry = args.dry_run
+    srcs = [args.source] if args.source else list(SOURCES.keys())
     conn = sqlite3.connect(DB_PATH)
-# v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
-try:
-    from pathlib import Path as _Path
-    _content_db = _Path(__file__).parent.parent / "data" / "content.db"
+    # v0.4.0+: articles 表迁移到 content.db，ATTACH 以便跨库查询
+    _content_db = Path(__file__).resolve().parent.parent / "data" / "content.db"
     if _content_db.exists():
         conn.execute("ATTACH DATABASE ? AS content", (str(_content_db),))
-except Exception:
-    pass
 
     cur = conn.cursor()
     # 已存在 url 集合(按源), xhs 归一化去 query
