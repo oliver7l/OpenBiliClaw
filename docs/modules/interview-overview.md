@@ -79,6 +79,24 @@ src/openbiliclaw/interview/
 
 ---
 
+## §D 前端（桌面端 `/web`）
+
+面试页的 10 个子标签按三子系统分为三段（**期 4 前端分组**，纯视觉，不改行为）：
+
+| 段 | 子标签 | 子系统 / API 前缀 |
+|---|---|---|
+| **备战** | 面试安排 · 待办 · 公司岗位 | A `/api/interview/job` |
+| **研习** | 今日待读 · 待看队列 · 全部题目 · 弹药库 · 反问话术 · 学习统计 | B `/api/interview/study` |
+| **复盘** | 复盘 | C `/api/interview/review` |
+
+- 涉及文件：`web/desktop/index.html`（`#interviewSubtabbar` 内三个 `.page-subtab-group`）、
+  `web/desktop/assets/css/app.css`（`.page-subtab-group` / `.page-subtab-group-label`）、
+  `web/desktop/assets/js/interview.js`（切换逻辑，未改）。
+- 主 web SPA（`web/js/views/interview.js`，8 个标签）是 A 域工作台的细分，不涉及三子系统混装，未参与分组。
+- 调试入口：`http://127.0.0.1:8420/web`（静态资源按请求读盘，改前端无需重启服务）。
+
+---
+
 ## 相关文档
 
 - 岗位备战明细：[`interview.md`](./interview.md)

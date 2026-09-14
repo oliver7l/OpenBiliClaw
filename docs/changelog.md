@@ -4,6 +4,25 @@
 
 ---
 
+## 重构：面试模块期 4 前端分组（2026-09-14）
+
+按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 4（前端分组）**：桌面端面试页（`/web`）的
+10 个子标签原本平铺一长条、看不出子系统归属，现按 A/B/C 分为**备战 / 研习 / 复盘**三段。
+
+- `web/desktop/index.html`：`#interviewSubtabbar` 内 10 个按钮包进 3 个 `.page-subtab-group`，
+  顺序由 `A,A,A,B,B,B,B,C,B,B` 重排为 A→B→C；每组前加 `.page-subtab-group-label` 弱化小标题。
+- `web/desktop/assets/css/app.css`：新增 `.page-subtab-group`（flex / `flex-shrink:0`）、
+  组间 `border-left` 竖线与 `.page-subtab-group-label`（11px / 次级色 / 弱化）样式；
+  复用既有主题变量，未引入新变量。
+- **零行为变化**：按钮 class 与 `data-subtab` 全部未改，JS 绑定走全局 `.page-subtab-btn` 选择器
+  （不依赖 DOM 层级）；已核 CSS 无 `>` 直接子选择器、无 `+` 相邻兄弟选择器依赖原结构。
+  `interview.js` 的 `switchSubtab` / `renderSubtab` 逻辑一行未动。
+
+验证：线上 `GET /web` 200，页内含 3 个分组标签与 10 个 `data-subtab`（顺序 A→B→C）、
+默认 `is-active` 仍在 `schedule`；`/web/assets/css/app.css` 已含新样式（静态按请求读盘，无需重启）。
+
+---
+
 ## 重构：面试模块期 2 API URL 分区（2026-09-14）
 
 按 `docs/plans/面试模块梳理与整合方案.md` 完成**期 2（API 分区）**：把三个子系统挤在同一命名空间

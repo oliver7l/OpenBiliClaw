@@ -1399,16 +1399,26 @@
       <section class="main-col" id="interviewPage" aria-label="面试" data-od-id="interview-tracker" hidden>
         <div class="page-subtabbar">
           <div class="page-subtabbar-inner" id="interviewSubtabbar">
-            <button class="page-subtab-btn is-active" data-subtab="schedule" type="button">📅 面试安排</button>
-            <button class="page-subtab-btn" data-subtab="todos" type="button">✅ 待办</button>
-            <button class="page-subtab-btn" data-subtab="companies" type="button">🏢 公司岗位</button>
-            <button class="page-subtab-btn" data-subtab="ammo" type="button">🧨 弹药库</button>
-            <button class="page-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>
-            <button class="page-subtab-btn" data-subtab="queue" type="button">📋 待看队列</button>
-            <button class="page-subtab-btn" data-subtab="all" type="button">📚 全部题目</button>
-            <button class="page-subtab-btn" data-subtab="reviews" type="button">📝 复盘</button>
-            <button class="page-subtab-btn" data-subtab="rebuttals" type="button">❓ 反问话术</button>
-            <button class="page-subtab-btn" data-subtab="stats" type="button">📊 学习统计</button>
+            <!-- 期 4：10 个子标签按 A/B/C 三子系统分为 备战 / 研习 / 复盘 三段（纯视觉分组，data-subtab 不变） -->
+            <div class="page-subtab-group">
+              <span class="page-subtab-group-label">备战</span>
+              <button class="page-subtab-btn is-active" data-subtab="schedule" type="button">📅 面试安排</button>
+              <button class="page-subtab-btn" data-subtab="todos" type="button">✅ 待办</button>
+              <button class="page-subtab-btn" data-subtab="companies" type="button">🏢 公司岗位</button>
+            </div>
+            <div class="page-subtab-group">
+              <span class="page-subtab-group-label">研习</span>
+              <button class="page-subtab-btn" data-subtab="today" type="button">📖 今日待读</button>
+              <button class="page-subtab-btn" data-subtab="queue" type="button">📋 待看队列</button>
+              <button class="page-subtab-btn" data-subtab="all" type="button">📚 全部题目</button>
+              <button class="page-subtab-btn" data-subtab="ammo" type="button">🧨 弹药库</button>
+              <button class="page-subtab-btn" data-subtab="rebuttals" type="button">❓ 反问话术</button>
+              <button class="page-subtab-btn" data-subtab="stats" type="button">📊 学习统计</button>
+            </div>
+            <div class="page-subtab-group">
+              <span class="page-subtab-group-label">复盘</span>
+              <button class="page-subtab-btn" data-subtab="reviews" type="button">📝 复盘</button>
+            </div>
           </div>
         </div>
         <div class="page-body" id="interviewContentArea">
