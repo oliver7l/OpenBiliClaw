@@ -210,7 +210,7 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **路径统一**（34 处） | ✅ **已清零（2026-09-15，`bc933c16`）**：26 处 CWD + 7 处 parents[N] + weekend 字符串路径 5 处；棘轮基线已清空，`tests/test_architecture_contracts.py` 守住新增 |
 | ~~**`sources` + `storage` 模块文档**~~ | ✅ **已完成（2026-09-15）**：`docs/modules/sources.md` 新建、`storage.md` 增补摸底（含原生保存 12 个缺失方法清单） |
 | **`self_evolution` 零测试补课** | 🔶 首批 6 条已落地（`cf9ba22c`，State/ContentFilter/空转跳过），其余待续 | 同上 |
-| **质量门禁 mypy 55 → 0** | 未开始 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
+| **质量门禁 mypy 55 → 0** | ✅ 基本完成（`1aeed497`，2026-09-15）：实测 70 → **16**，剩余全部为 `saved_sync/service.py` 原生保存死代码族（14 个 Database 方法全树无定义，删或补待拍板）；ruff 3 条（既有 N806）。⚠️ mypy 2.3.1 冷缓存全量会撞 pydantic INTERNAL ERROR、TypedDict 结构兼容显著收紧（连 Mapping 都拒）——按文件核对才可靠 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
 
 **每批次的固定动作**（本轮已验证有效，照做即可）：
 
