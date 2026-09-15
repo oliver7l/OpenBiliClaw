@@ -209,7 +209,7 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **健康模块三修**（时间线分页 / 空壳表 / 文档） | 未开始，**风险低** | 同上 §6 H1/H2/H6 |
 | **路径统一**（34 处） | ✅ **已清零（2026-09-15，`bc933c16`）**：26 处 CWD + 7 处 parents[N] + weekend 字符串路径 5 处；棘轮基线已清空，`tests/test_architecture_contracts.py` 守住新增 |
 | ~~**`sources` + `storage` 模块文档**~~ | ✅ **已完成（2026-09-15）**：`docs/modules/sources.md` 新建、`storage.md` 增补摸底（含原生保存 12 个缺失方法清单） |
-| **`self_evolution` 零测试补课** | 未开始（9,284 行零测试） | 同上 |
+| **`self_evolution` 零测试补课** | 🔶 首批 6 条已落地（`cf9ba22c`，State/ContentFilter/空转跳过），其余待续 | 同上 |
 | **质量门禁 mypy 55 → 0** | 未开始 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
 
 **每批次的固定动作**（本轮已验证有效，照做即可）：
