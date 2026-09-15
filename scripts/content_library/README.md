@@ -71,6 +71,9 @@ bilibili=[cli(PGC ep 自解析)→agentlimb]、generic=[webfetch→agentlimb]。
 |------|------|----------|
 | `archive_zhihu_readlib.py` | 知乎回答/专栏归档为已读库四件套 | 手动 |
 | `import_readlib_to_db.py` | 已读库文件存档 → `read_archive` 表 | 手动；`tests/test_import_readlib_feed.py` 覆盖 |
+| `migrate_readlib_to_articles.py` | **阅读库归一**：`read_archive` + `notes` → `content.db.articles`（幂等键 `url`，默认 dry-run，`--apply` 才写） | 手动；设计见 `docs/modules/reading-library.md`，测试 `tests/content_library/`（19 例） |
+
+> ⚠️ 跑 `migrate_readlib_to_articles.py --apply` 前先 `cp data/content.db data/backups/content.db.bak`。
 
 ### legacy/（历史一次性脚本，仅存档）
 `import_conversation_archive.py`（首批 13 条搬迁，已完成）、`import_xhs37_mini_onerec.py`（提炼面试题）。
