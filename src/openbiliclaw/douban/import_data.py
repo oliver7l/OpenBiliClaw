@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.douban.store import DoubanStore
 
 # 分类名 -> category
@@ -22,8 +23,8 @@ CATEGORY_MAP = {"影视": "movie", "书": "book", "音乐": "music"}
 # 动作名 -> status
 STATUS_MAP = {"collect": "collect", "wish": "wish", "do": "do"}
 
-DEFAULT_JSON = Path("data/douban/douban_all.json")
-DEFAULT_DB = Path("data/douban.db")
+DEFAULT_JSON = (_project_root() / "data" / "douban/douban_all.json")
+DEFAULT_DB = (_project_root() / "data" / "douban.db")
 
 
 def _items_from_json(data: dict) -> list[dict]:

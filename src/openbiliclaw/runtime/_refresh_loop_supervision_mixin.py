@@ -800,7 +800,15 @@ class LoopSupervisionMixin(RefreshControllerAttrs):
                     await asyncio.sleep(interval)
                     continue
                 store = WeekendStore(getattr(wk, "db_path", "") or None)
-                engine = WeekendEngine(store, diary_db="data/diary.db", douban_db="data/douban.db")
+                # 2026-09-15 修复：diary_db/douban_db 原是 CWD 相对字符串，
+                # 非仓库根启动会读到空库 → 静默产出假「为什么适合你」。
+                from openbiliclaw.config import _project_root as _root
+
+                engine = WeekendEngine(
+                    store,
+                    diary_db=str(_root() / "data" / "diary.db"),
+                    douban_db=str(_root() / "data" / "douban.db"),
+                )
                 plan = engine.generate_for_friday(now=_dt.now())
                 if plan is not None:
                     payload = plan.to_dict()

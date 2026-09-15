@@ -39,7 +39,7 @@
 | 历史计划 | ✅ | 列表 / 按周六日期查询 / 是否已存在本周计划 |
 | 确认 / 跳过 | ✅ | `decide_plan(week, status)` 把计划置为 `confirmed` / `skipped` |
 | 事后打卡复盘 | ✅ | `CheckIn`（方案序号 + 1~5 评分 + 备注），可多次打卡 |
-| 周五主动推送 | ✅ | 运行时循环 `_loop_weekend_plan` 每 600s 轮询，仅在周五 18:00–23:00 且本周未生成时触发，发布 `weekend.plan` 事件 |
+| 周五主动推送 | ✅ | 运行时循环 `_loop_weekend_plan` 每 600s 轮询，仅在周五 20:00–23:00（默认 hour=20，连续 3 小时）且本周未生成时触发，发布 `weekend.plan` 事件 |
 | LLM 润色（可选） | ✅（默认关） | `use_llm=true` 时润色 title/why/actions，异常回退规则结果 |
 | 单元测试 | ✅ | 10 个用例覆盖模型、存储、生成、周五门控、`saturday_of_week` 边界 |
 
@@ -84,7 +84,7 @@ store = WeekendStore()                       # 默认 data/weekend.db
 engine = WeekendEngine(store)
 
 engine.recent_mood(days=14)                  # 情绪基线 dict（avg / count / tone）
-engine.douban_wish(limit_per=6)              # {"books": [...], "movies": [...]}
+engine.douban_wish(limit_per=6)              # {"book": [...], "movie": [...]}
 engine.soul_weekend_patterns()              # 灵魂画像周末模式描述（可为 None）
 
 plan = engine.generate(mode="auto")          # WeekendPlan（默认本周六，3 个方案）
@@ -146,5 +146,5 @@ online_providers = []
 3. **auto 永远给「混合」方案**：情绪基线只调整文案语气与精力标注（high/low），不改变方向；`mode='auto'` 固定产出「出门 + 宅家×2」的混合 3 方案，保证无论天气/心情都有可选项，符合 MVP「3 个带理由的方案 + 可执行卡片」目标。
 4. **评分驱动出门候选**：出门活动按「优先区域（宝安/南山/福田）+2、带娃/家庭 +2、免费 +1、独处/休息 +1」打分并分组（亲子 / 独处 / 文化），每组生成一个带「为什么适合你」理由与交通/时间卡片的方案。
 5. **以周六为周键**：`saturday_of_week()` 以周一为一周起点，周一~周六映射所在周周六，周日回退到刚过去的周六，作为计划的 `week_of` 主键，保证一周只生成一份计划、可幂等覆盖。
-6. **周五推送是「守门员」而非生成器**：运行时每 600s 轮询，仅当处于周五 18:00–23:00 且本周 `weekend_plans` 尚无记录时才生成并发布 `weekend.plan` 事件；其余时间静默，避免重复打扰。手动 `generate` 不受窗口限制。
+6. **周五推送是「守门员」而非生成器**：运行时每 600s 轮询，仅当处于周五 20:00–23:00（`is_friday_push_window` 默认 hour=20 起 3 小时）且本周 `weekend_plans` 尚无记录时才生成并发布 `weekend.plan` 事件；其余时间静默，避免重复打扰。手动 `generate` 不受窗口限制。
 7. **与现有挂载链一致**：沿用 `interview` 模块的「CLI `register` + 路由注册表 + `Config` 数据类 + 运行时 loop」四件套，全部用 `try/except` 包裹，模块缺失/异常不影响主程序启动。

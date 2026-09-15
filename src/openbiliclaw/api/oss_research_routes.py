@@ -29,10 +29,12 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+from openbiliclaw.config import _project_root
+
 logger = logging.getLogger(__name__)
 
 # src/openbiliclaw/api/oss_research_routes.py -> parents[3] == 项目根
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "oss_research.db"
+DEFAULT_DB_PATH = _project_root() / "data" / "oss_research.db"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS oss_projects (

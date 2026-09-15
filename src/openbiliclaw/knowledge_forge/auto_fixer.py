@@ -27,6 +27,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.knowledge_forge.config import KnowledgeForgeConfig, load_kf_config
 from openbiliclaw.knowledge_forge.models import now_cn
 from openbiliclaw.knowledge_forge.prompts import TAG_SUPPLEMENT_PROMPT, parse_json_array
@@ -70,7 +71,7 @@ def _default_db_path() -> Path:
             return Path(str(p.db_path)).with_name("knowledge_audit.db")
     except Exception:  # noqa: BLE001
         pass
-    return Path("data/knowledge_audit.db")
+    return (_project_root() / "data" / "knowledge_audit.db")
 
 
 class IssueFixer:

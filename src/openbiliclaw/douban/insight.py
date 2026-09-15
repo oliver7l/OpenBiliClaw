@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.douban.analytics import DoubanAnalytics
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE = Path("data/douban/profile_report.json")
+DEFAULT_CACHE = (_project_root() / "data" / "douban/profile_report.json")
 
 
 def build_profile_prompt(stats: dict) -> str:

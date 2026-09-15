@@ -13,11 +13,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.storage.database import open_db_conn
 
 from .models import CheckIn, WeekendPlan, WeekendSpot
 
 DEFAULT_DB_PATH = "data/weekend.db"
+
+
+def resolve_weekend_path(p: str | Path) -> Path:
+    """把 weekend 相关路径锚定到项目根（CWD 无关）。
+
+    2026-09-15 修复：原先 ``DEFAULT_DB_PATH`` 等是 CWD 相对字符串，非仓库根
+    启动时会静默读写到别处（表现为 spots 为 0 却仍照常输出「为什么适合你」）。
+    """
+    path = Path(p)
+    return path if path.is_absolute() else _project_root() / path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS weekend_spots (
@@ -76,8 +87,10 @@ CREATE INDEX IF NOT EXISTS idx_checkin_plan ON weekend_checkins(plan_id);
 class WeekendStore:
     """周末玩法数据访问层。"""
 
-    def __init__(self, db_path: str | Path = DEFAULT_DB_PATH) -> None:
-        self.db_path = str(db_path)
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        # 默认路径在**构造时**解析（而非 import 时），测试里先设
+        # OPENBILICLAW_PROJECT_ROOT 再构造也能生效。
+        self.db_path = str(resolve_weekend_path(db_path or DEFAULT_DB_PATH))
         self.conn = open_db_conn(self.db_path)
         self.conn.executescript(SCHEMA)
         self.conn.commit()

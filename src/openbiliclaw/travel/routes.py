@@ -19,6 +19,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from openbiliclaw.config import _project_root
+
 logger = logging.getLogger(__name__)
 
 # Airport code → Chinese label
@@ -255,7 +257,7 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/itinerary")
     def get_itinerary() -> dict[str, Any]:
         """Return trip itinerary, members, and checklist from travel.db."""
-        db_path = Path("data/travel.db")
+        db_path = (_project_root() / "data" / "travel.db")
         if not db_path.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
@@ -310,7 +312,7 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/expenses")
     def get_expenses() -> dict[str, Any]:
         """Return trip expenses from trip_expenses table."""
-        db_path = Path("data/travel.db")
+        db_path = (_project_root() / "data" / "travel.db")
         if not db_path.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
@@ -366,7 +368,7 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/flights-detail")
     def get_flights_detail() -> dict[str, Any]:
         """Return detailed flight information from trip_flights table."""
-        db_path = Path("data/travel.db")
+        db_path = (_project_root() / "data" / "travel.db")
         if not db_path.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
@@ -418,7 +420,7 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/hotels")
     def get_hotels() -> dict[str, Any]:
         """Return hotel information from trip_hotels table."""
-        db_path = Path("data/travel.db")
+        db_path = (_project_root() / "data" / "travel.db")
         if not db_path.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 

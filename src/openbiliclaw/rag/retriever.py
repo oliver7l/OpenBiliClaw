@@ -50,13 +50,15 @@ import logging
 
 import httpx
 
+from openbiliclaw.config import _project_root
+
 logger = logging.getLogger("openbiliclaw.rag.retriever")
 
 # bge-m3 expects this prefix on the *query* side only (passages are indexed
 # bare). Without it retrieval recall drops noticeably.
 _BGE_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = _project_root()
 _CONFIG_PATH = _PROJECT_ROOT / "config.toml"
 _RAG_DB_PATH = _PROJECT_ROOT / "data" / "article_rag.db"
 

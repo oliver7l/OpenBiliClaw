@@ -8,8 +8,9 @@ import json
 import sys
 from contextlib import suppress
 from dataclasses import asdict
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from openbiliclaw.config import _project_root
 
 from .bootstrap import build_openclaw_adapter
 from .errors import AdapterOperationError, AdapterValidationError
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 _SKILL_PACK_PATH = (
-    Path(__file__).resolve().parents[4] / "skills" / "openbiliclaw-adapter" / "SKILL.md"
+    _project_root() / "skills" / "openbiliclaw-adapter" / "SKILL.md"
 )
 
 _RUNTIME_STREAM_URL = "ws://127.0.0.1:8420/api/runtime-stream"

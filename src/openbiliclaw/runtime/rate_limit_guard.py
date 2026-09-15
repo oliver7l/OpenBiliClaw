@@ -12,7 +12,7 @@ Usage::
 
     from openbiliclaw.runtime.rate_limit_guard import RateLimitGuard
 
-    guard = RateLimitGuard("xhs-favorites", state_dir=Path("data/rate_limit"))
+    guard = RateLimitGuard("xhs-favorites", state_dir=(_project_root() / "data" / "rate_limit"))
     if guard.should_skip():
         logger.info("skipped due to rate-limit cooldown until %s", guard.cooldown_until)
 

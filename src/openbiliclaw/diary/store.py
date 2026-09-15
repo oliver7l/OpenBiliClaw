@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.storage.database import open_db_conn
 
 from .models import (
@@ -216,9 +217,9 @@ class DiaryStore:
             if main_path is not None:
                 self._db_path = Path(str(main_path)).with_name('diary.db')
             else:
-                self._db_path = Path('data/diary.db')
+                self._db_path = (_project_root() / "data" / "diary.db")
         else:
-            self._db_path = Path('data/diary.db')
+            self._db_path = (_project_root() / "data" / "diary.db")
         self._thread_local = threading.local()
         self._initialized = False
 

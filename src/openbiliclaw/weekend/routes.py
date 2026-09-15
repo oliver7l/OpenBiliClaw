@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from .engine import WeekendEngine
 from .models import PlanMode, PlanStatus
-from .store import WeekendStore
+from .store import WeekendStore, resolve_weekend_path
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +45,24 @@ class CheckInIn(BaseModel):
 def build_weekend_router(
     *,
     store: WeekendStore | None = None,
-    diary_db: str = "data/diary.db",
-    douban_db: str = "data/douban.db",
+    diary_db: str | None = None,
+    douban_db: str | None = None,
     use_llm: bool = False,
 ) -> APIRouter:
-    """创建 weekend 路由。store 为空时按默认路径新建。"""
+    """创建 weekend 路由。store 为空时按默认路径新建。
+
+    2026-09-15 修复：``diary_db`` / ``douban_db`` 原默认是 CWD 相对字符串，
+    非仓库根启动会读空库 → 静默产出假计划。现在默认经 ``resolve_weekend_path``
+    锚定到项目根（显式传入的绝对路径不受影响）。
+    """
     router = APIRouter(prefix="/api/weekend", tags=["weekend"])
     _store = store or WeekendStore()
-    engine = WeekendEngine(_store, diary_db=diary_db, douban_db=douban_db, use_llm=use_llm)
+    engine = WeekendEngine(
+        _store,
+        diary_db=str(resolve_weekend_path(diary_db or "data/diary.db")),
+        douban_db=str(resolve_weekend_path(douban_db or "data/douban.db")),
+        use_llm=use_llm,
+    )
 
     @router.get("/status")
     def status() -> dict[str, Any]:

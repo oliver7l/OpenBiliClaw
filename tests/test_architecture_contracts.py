@@ -39,39 +39,12 @@ _ALLOWED_BY_DESIGN = {
 }
 
 # ── 基线：2026-09-15 盘点时的现状（只允许减少）───────────────────
-_BASELINE_PARENTS: dict[str, int] = {
-    "src/openbiliclaw/api/conversation_archive_routes.py": 1,
-    "src/openbiliclaw/api/oss_research_routes.py": 1,
-    "src/openbiliclaw/diary/sources/_browser.py": 1,
-    "src/openbiliclaw/integrations/openclaw/cli.py": 1,
-    "src/openbiliclaw/interview/study/cli.py": 1,
-    "src/openbiliclaw/interview/study/seed_iq_questions.py": 1,
-    "src/openbiliclaw/rag/retriever.py": 1,
-}
+# 2026-09-15 晚：CWD 相对路径 26 处与 parents[N] 7 处已全部清零（见
+# ``docs/module-review-2026-09-15.md`` §7 / 批次⑤），基线随之清空。
+# 基线为空 ⇒ 任何新增违规立即红灯。
+_BASELINE_PARENTS: dict[str, int] = {}
 
-_BASELINE_CWD_DATA: dict[str, int] = {
-    "src/openbiliclaw/diary/store.py": 2,
-    "src/openbiliclaw/douban/import_data.py": 2,
-    "src/openbiliclaw/douban/insight.py": 1,
-    "src/openbiliclaw/eval/persona_pool.py": 1,
-    "src/openbiliclaw/knowledge_forge/auto_fixer.py": 1,
-    "src/openbiliclaw/knowledge_forge/batch_processor.py": 1,
-    "src/openbiliclaw/knowledge_forge/contradiction_detector.py": 1,
-    "src/openbiliclaw/knowledge_forge/dead_link_checker.py": 1,
-    "src/openbiliclaw/knowledge_forge/entity_description_updater.py": 1,
-    "src/openbiliclaw/knowledge_forge/entity_extractor.py": 1,
-    "src/openbiliclaw/knowledge_forge/entity_relation_builder.py": 1,
-    "src/openbiliclaw/knowledge_forge/gap_analyst.py": 1,
-    "src/openbiliclaw/knowledge_forge/gap_filler.py": 1,
-    "src/openbiliclaw/knowledge_forge/low_quality_detector.py": 1,
-    "src/openbiliclaw/knowledge_forge/quality_auditor.py": 1,
-    "src/openbiliclaw/knowledge_forge/schedule.py": 1,
-    "src/openbiliclaw/knowledge_forge/summary_engine.py": 1,
-    "src/openbiliclaw/knowledge_forge/wiki_builder.py": 1,
-    "src/openbiliclaw/runtime/rate_limit_guard.py": 1,
-    "src/openbiliclaw/self_evolution/loop_engine.py": 1,
-    "src/openbiliclaw/travel/routes.py": 4,
-}
+_BASELINE_CWD_DATA: dict[str, int] = {}
 
 # 基线里已经修完的文件可以留空，但**不许**出现不存在的文件（防止基线腐烂成噪音）。
 _BASELINE_FILES = set(_BASELINE_PARENTS) | set(_BASELINE_CWD_DATA) | _ALLOWED_BY_DESIGN

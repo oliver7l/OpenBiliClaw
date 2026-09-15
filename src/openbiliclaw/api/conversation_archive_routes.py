@@ -6,16 +6,16 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.conversation_archive.store import ConversationArchiveStore
 
 # 收藏库原始文件目录（单一数据源）
-LIBRARY_DIR = Path(__file__).resolve().parents[3] / "notes" / "阅读收藏库"
+LIBRARY_DIR = _project_root() / "notes" / "阅读收藏库"
 
 if TYPE_CHECKING:
     from fastapi import FastAPI

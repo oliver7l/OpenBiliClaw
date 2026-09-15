@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -24,7 +23,12 @@ _SEED_DEFAULT = "data/weekend_seed_activities.json"
 
 
 def _store() -> WeekendStore:
-    return WeekendStore()
+    # 2026-09-15：此前 CLI 完全忽略 config 的 weekend.db_path / seed_path，
+    # 与 API 可能读写不同的库。现在 db 走配置（未配置时回退到锚定默认值）。
+    from openbiliclaw.config import load_config
+
+    cfg = getattr(load_config(), "weekend", None)
+    return WeekendStore(getattr(cfg, "db_path", None) or None)
 
 
 @weekend_app.command("generate")
@@ -120,7 +124,15 @@ def seed_cmd(
     clear: bool = typer.Option(False, "--clear", help="先清空再导入"),
 ) -> None:
     """把本地活动种子 JSON 导入 weekend.db。"""
-    p = Path(path)
+    from openbiliclaw.config import load_config
+
+    from .store import resolve_weekend_path
+
+    if path == _SEED_DEFAULT:
+        # 未显式传 --path 时优先用配置里的 seed_path（同样锚定项目根）
+        cfg = getattr(load_config(), "weekend", None)
+        path = getattr(cfg, "seed_path", None) or path
+    p = resolve_weekend_path(path)
     if not p.exists():
         console.print(f"[red]种子文件不存在：{path}[/red]")
         raise typer.Exit(code=1)

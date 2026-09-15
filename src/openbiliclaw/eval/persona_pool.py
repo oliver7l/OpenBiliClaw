@@ -22,6 +22,8 @@ import random
 from pathlib import Path
 from typing import Any
 
+from openbiliclaw.config import _project_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ class PersonaPool:
     """Cache of generated personas, keyed by constraint signature."""
 
     def __init__(self, pool_dir: Path | None = None) -> None:
-        self._dir = pool_dir or Path("data/eval/persona_pool")
+        self._dir = pool_dir or (_project_root() / "data" / "eval/persona_pool")
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def _task_dir(self, task: str) -> Path:

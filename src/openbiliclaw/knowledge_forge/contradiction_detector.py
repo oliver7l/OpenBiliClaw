@@ -24,6 +24,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from openbiliclaw.config import _project_root
 from openbiliclaw.storage.database import open_db_conn
 
 from .config import ContradictionConfig, KnowledgeForgeConfig, load_kf_config
@@ -48,7 +49,7 @@ def _default_db_path() -> Path:
             return Path(str(p.db_path)).with_name("knowledge_audit.db")
     except Exception:  # noqa: BLE001
         pass
-    return Path("data/knowledge_audit.db")
+    return (_project_root() / "data" / "knowledge_audit.db")
 
 
 def _parse_tags(raw: str | None) -> list[str]:
