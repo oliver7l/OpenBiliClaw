@@ -340,6 +340,14 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
+    def queue_count(self) -> int:
+        """待看队列剩余条数（给「今日待读」展示队列余量用）。"""
+        conn = self._conn()
+        try:
+            return conn.execute("SELECT COUNT(*) FROM iq_queue").fetchone()[0]
+        finally:
+            conn.close()
+
     def remove_from_queue(self, qid: int) -> bool:
         conn = self._conn()
         try:
@@ -386,10 +394,48 @@ class InterviewQuestionStore:
                 conn.commit()
                 rid = cur.lastrowid
             self.remove_from_queue(qid)
+            self._bump_daily(conn, mastery)
             row = conn.execute("SELECT * FROM iq_records WHERE id = ?", (rid,)).fetchone()
             return _row_to_record(row)
         finally:
             conn.close()
+
+    def _bump_daily(self, conn: sqlite3.Connection, mastery: MasteryLevel) -> None:
+        """打卡即记账：把这次阅读累加到活跃计划的当日进度（``iq_daily``）。
+
+        ⚠️ 历史 bug（2026-09-15 修）：旧链路里 ``iq_daily`` **没有任何写入
+        方**，``/progress`` 恒返回空数组 —— 用户打卡后看不到今日进度，
+        反馈链断裂是学习追踪空转的第二个原因。
+
+        复用调用方已开启的连接（避免嵌套连接撞 SQLite 写锁）；无活跃计划
+        时静默跳过。
+        """
+        plan_row = conn.execute(
+            "SELECT id, daily_target FROM iq_plans WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if plan_row is None:
+            return
+        today = date.today().isoformat()
+        mastered = 1 if mastery == MasteryLevel.MASTERED else 0
+        conn.execute(
+            """INSERT INTO iq_daily (
+                   plan_id, progress_date, questions_read, questions_mastered,
+                   target, notes, created_at
+               )
+               VALUES (?, ?, 1, ?, ?, '', ?)
+               ON CONFLICT(plan_id, progress_date) DO UPDATE SET
+                 questions_read = questions_read + 1,
+                 questions_mastered = questions_mastered + ?""",
+            (
+                plan_row["id"],
+                today,
+                mastered,
+                int(plan_row["daily_target"] or 0),
+                datetime.now().isoformat(),
+                mastered,
+            ),
+        )
+        conn.commit()
 
     def get_records(self, *, qid: int | None = None, limit: int = 50) -> list[ReadingRecord]:
         sql = "SELECT * FROM iq_records"
@@ -454,15 +500,50 @@ class InterviewQuestionStore:
         finally:
             conn.close()
 
-    def get_today_queue(self, plan: ReadingPlan) -> list[Question]:
-        """获取今日待读题目（按计划筛选，优先未开始和需要复习的）。"""
+    def _queue_pick(self, limit: int) -> list[Question]:
+        """从待看队列取题（队列优先的「今日待读」来源）。
+
+        排序：优先级 high→medium→low；``planned_date`` 为 NULL（随时可读）
+        排在有排期的前面，有排期的按日期升序（到期的先出）。
+        未到期的（planned_date > 今天）不参与，避免提前消耗。
+        """
+        if limit <= 0:
+            return []
+        today = date.today().isoformat()
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                """SELECT q.* FROM iq_queue qq
+                   JOIN iq_questions q ON q.id = qq.question_id
+                   WHERE qq.planned_date IS NULL OR qq.planned_date <= ?
+                   ORDER BY CASE qq.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                            qq.planned_date IS NOT NULL, qq.planned_date, qq.added_at
+                   LIMIT ?""",
+                (today, limit),
+            ).fetchall()
+            return [_row_to_question(r) for r in rows]
+        finally:
+            conn.close()
+
+    def _catalog_pick(self, plan: ReadingPlan, limit: int) -> list[Question]:
+        """队列不足时从全表补齐（按计划筛选，优先未开始和需要复习的）。
+
+        排除**已排队但未到期**的题：它们归队列调度，不该被补齐逻辑提前
+        捞出来（否则 planned_date 形同虚设）。
+        """
+        if limit <= 0:
+            return []
+        today = date.today().isoformat()
         cats = [c.strip() for c in plan.categories.split(",") if c.strip()] if plan.categories else []
         conn = self._conn()
         try:
             sql = """SELECT q.* FROM iq_questions q
                      LEFT JOIN iq_records r ON r.question_id = q.id
-                     WHERE q.difficulty BETWEEN ? AND ?"""
-            params: list[Any] = [plan.min_difficulty, plan.max_difficulty]
+                     WHERE q.difficulty BETWEEN ? AND ?
+                       AND q.id NOT IN (
+                         SELECT question_id FROM iq_queue WHERE planned_date > ?
+                       )"""
+            params: list[Any] = [plan.min_difficulty, plan.max_difficulty, today]
             if cats:
                 placeholders = ", ".join("?" for _ in cats)
                 sql += f" AND q.category IN ({placeholders})"
@@ -478,11 +559,36 @@ class InterviewQuestionStore:
                          END,
                          q.difficulty DESC
                        LIMIT ?"""
-            params.append(plan.daily_target)
+            params.append(limit)
             rows = conn.execute(sql, params).fetchall()
             return [_row_to_question(r) for r in rows]
         finally:
             conn.close()
+
+    def get_today_queue(self, plan: ReadingPlan) -> list[Question]:
+        """获取今日待读题目。
+
+        ⚠️ 历史 bug（2026-09-15 修）：旧实现只用 ``_catalog_pick`` 从
+        ``iq_questions`` 全表挑 ``daily_target`` 条，**完全不消费
+        ``iq_queue``** —— 队列里 48 条题目永远不会被推给用户，学习追踪
+        因此空转（iq_records 长期只有 2 条、iq_daily 0 行）。
+
+        现语义：**队列优先**。先从 ``iq_queue`` 取已到期/无排期的题，
+        不足 ``daily_target`` 再从全表按掌握度补齐，队列题不重复。
+        """
+        target = max(1, int(plan.daily_target))
+        picked = self._queue_pick(target)
+        seen = {q.id for q in picked}
+        if len(picked) < target:
+            # 多取一些候选，去掉已在队列里的题后再截断
+            for q in self._catalog_pick(plan, target + len(seen)):
+                if q.id in seen:
+                    continue
+                picked.append(q)
+                seen.add(q.id)
+                if len(picked) >= target:
+                    break
+        return picked[:target]
 
     def record_daily(
         self,
@@ -515,6 +621,28 @@ class InterviewQuestionStore:
                 (plan_id, progress_date.isoformat()),
             ).fetchone()
             return _row_to_daily(row)
+        finally:
+            conn.close()
+
+    def today_read_count(self, plan_id: int | None = None) -> int:
+        """今日已打卡题数（读 ``iq_daily``；无记录返回 0）。
+
+        ``plan_id`` 为空时取活跃计划。
+        """
+        conn = self._conn()
+        try:
+            if plan_id is None:
+                row = conn.execute(
+                    "SELECT id FROM iq_plans WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                if row is None:
+                    return 0
+                plan_id = row["id"]
+            row = conn.execute(
+                "SELECT questions_read FROM iq_daily WHERE plan_id = ? AND progress_date = ?",
+                (plan_id, date.today().isoformat()),
+            ).fetchone()
+            return int(row["questions_read"]) if row else 0
         finally:
             conn.close()
 

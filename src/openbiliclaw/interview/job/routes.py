@@ -249,26 +249,56 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     def interview_scripts(
         script_type: str | None = None,
         company: str | None = None,
+        include_common: bool = True,
         limit: int = 100,
     ) -> dict[str, Any]:
-        """话术库列表，支持按类型/公司筛选。"""
+        """话术库列表，支持按类型/公司筛选。
+
+        ⚠️ 两个历史坑（2026-09-15 修）：
+
+        1. 传 ``company`` 时**默认会一并带上 company='通用' 的话术**（刻意设计，
+           因为通用话术任何公司都用得上），但此前无法关闭，调用方拿不到
+           "某公司专属话术"的纯净列表。现可用 ``include_common=false`` 关闭。
+        2. 旧版返回 ``total=len(rows)``，即 **LIMIT 之后**的条数——被截断时
+           total 恰好等于 limit，看起来"正常"却与库内实际命中数不符
+           （拼多多 55 + 通用 56 = 111，limit=100 时 total 显示 100，
+           极易误判为"已同步完整"）。现额外返回 ``matched_total``（真实命中数）
+           与 ``truncated`` 标记；``total`` 保留原语义以兼容旧调用方。
+        """
         conn = sqlite3.connect(_scripts_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        sql = "SELECT id, type, company, position, title, key_points, priority, tags, used_count, created_at, updated_at FROM interview_scripts WHERE 1=1"
+        where = " WHERE 1=1"
         params: list[Any] = []
         if script_type:
-            sql += " AND type=?"
+            where += " AND type=?"
             params.append(script_type)
         if company:
-            sql += " AND (company=? OR company='通用')"
-            params.append(company)
-        sql += " ORDER BY priority='高' DESC, priority='中' DESC, updated_at DESC LIMIT ?"
-        params.append(limit)
-        c.execute(sql, params)
+            if include_common:
+                where += " AND (company=? OR company='通用')"
+                params.append(company)
+            else:
+                where += " AND company=?"
+                params.append(company)
+        # 真实命中数（不受 LIMIT 影响）
+        matched_total = c.execute(
+            "SELECT COUNT(*) FROM interview_scripts" + where, params
+        ).fetchone()[0]
+        sql = (
+            "SELECT id, type, company, position, title, key_points, priority,"
+            " tags, used_count, created_at, updated_at FROM interview_scripts"
+            + where
+            + " ORDER BY priority='高' DESC, priority='中' DESC, updated_at DESC LIMIT ?"
+        )
+        c.execute(sql, (*params, limit))
         rows = [dict(r) for r in c.fetchall()]
         conn.close()
-        return {"total": len(rows), "items": rows}
+        return {
+            "total": len(rows),
+            "matched_total": matched_total,
+            "truncated": matched_total > len(rows),
+            "items": rows,
+        }
 
     @router.get("/scripts/types")
     def interview_script_types() -> dict[str, Any]:
@@ -483,6 +513,13 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
                 done_at TEXT DEFAULT ''
             )
         """)
+        # kind: 'interview' = 面试时间类待办（due_date 由 applications.interview_start_at
+        # 派生，改期时自动同步）；'followup' = 跟进类待办（自己的截止日，不随改期动）。
+        # 该列是 2026-09-15 解的「面试时间双写」迁移，老库缺列时补上。
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(todo)")}
+        if "kind" not in cols:
+            conn.execute("ALTER TABLE todo ADD COLUMN kind TEXT DEFAULT 'followup'")
+            conn.commit()
 
     @router.get("/todos")
     def interview_todos(include_done: bool = False, limit: int = 200) -> dict[str, Any]:
@@ -512,12 +549,17 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
         due_date = str(data.get("due_date") or "").strip()
         if due_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", due_date):
             raise HTTPException(status_code=422, detail="due_date 格式须为 YYYY-MM-DD")
+        # kind='interview' 的待办是「面试时间类」：它的 due_date 由
+        # applications.interview_start_at 派生，改面试时间时会被自动同步。
+        kind = str(data.get("kind") or "followup").strip() or "followup"
+        if kind not in ("interview", "followup"):
+            raise HTTPException(status_code=422, detail="kind 必须是 interview 或 followup")
         conn = sqlite3.connect(_scripts_db())
         _ensure_todo_table(conn)
         c = conn.cursor()
         c.execute(
-            "INSERT INTO todo (title, detail, company, due_date, priority, status, created_at)"
-            " VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            "INSERT INTO todo (title, detail, company, due_date, priority, status, created_at, kind)"
+            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
             (
                 title,
                 str(data.get("detail") or "").strip(),
@@ -525,6 +567,7 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
                 due_date,
                 priority,
                 datetime.now().isoformat(timespec="seconds"),
+                kind,
             ),
         )
         conn.commit()

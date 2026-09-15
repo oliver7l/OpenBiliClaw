@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -83,6 +84,7 @@ def get_today() -> dict[str, Any]:
         plan = store.create_plan("秋招面试冲刺", daily_target=5)
     questions = store.get_today_queue(plan)
     result = []
+    queued_ids = {q.id for q, _p, _d in store.get_queue(limit=500)}
     for q in questions:
         mastery = store.get_question_mastery(q.id)
         result.append({
@@ -96,6 +98,7 @@ def get_today() -> dict[str, Any]:
             "url": q.url,
             "notes": q.notes,
             "mastery": mastery.value,
+            "from_queue": q.id in queued_ids,
         })
     return {
         "plan": {
@@ -106,6 +109,11 @@ def get_today() -> dict[str, Any]:
         },
         "date": date.today().isoformat(),
         "questions": result,
+        # 队列余量 + 今日进度：学习追踪此前空转（队列 48 条从不推送、
+        # iq_daily 恒 0 行），把这两个数暴露出来才能看出「今天还差几题」。
+        "queue_remaining": store.queue_count(),
+        "today_read": store.today_read_count(plan.id),
+        "from_queue_count": sum(1 for r in result if r["from_queue"]),
     }
 
 
@@ -427,7 +435,7 @@ def create_plan(req: PlanRequest) -> dict[str, Any]:
     }
 
 
-# ── 面试安排（job 表）──────────────────────────────────────
+# ── 面试安排（applications 表）──────────────────────────────
 
 def _get_application_conn() -> sqlite3.Connection:
     """投递域连接（data/resume.db applications 表，job 表已于 2026-09-14 迁入）。"""
@@ -436,45 +444,278 @@ def _get_application_conn() -> sqlite3.Connection:
     return conn
 
 
+# 视为「仍在推进」的阶段——只有这些阶段才可能出现在 upcoming 里。
+ACTIVE_STAGES = ("待面", "面试中", "谈薪中")
+
+# 未跑迁移 001（缺结构化列）时，从 status 自由文本兜底推断阶段。
+# 顺序语义同迁移脚本：终态必须排在「谈薪」之前。
+_FALLBACK_STAGE_RULES: tuple[tuple[str, str], ...] = (
+    ("已终止", "已终止"),
+    ("主动放弃", "已终止"),
+    ("已结束", "已结束"),
+    ("谈薪", "谈薪中"),
+    ("待面", "待面"),
+    ("约面", "待面"),
+    ("已确认参加", "待面"),
+    ("待决策", "候选"),
+    ("未投递", "候选"),
+    ("已投递", "已投递"),
+    ("已面", "面试中"),
+    ("一面通过", "面试中"),
+    ("进行中", "面试中"),
+    ("暂缓", "面试中"),
+)
+
+_DATE_PREFIX_RE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2})")
+
+
+def _fallback_stage(status: str) -> str:
+    """status 自由文本 → 阶段枚举（仅用于缺结构化列的旧库）。"""
+    for kw, stage in _FALLBACK_STAGE_RULES:
+        if kw in status:
+            return stage
+    return "已投递"
+
+
+def _order_jobs(jobs: list[dict[str, Any]], *, asc: bool) -> list[dict[str, Any]]:
+    """按 interview_start_at 排序，无时间的恒沉底（不参与 reverse 翻转）。"""
+    with_t = [j for j in jobs if j["interview_start_at"]]
+    without = [j for j in jobs if not j["interview_start_at"]]
+    with_t.sort(key=lambda j: j["interview_start_at"], reverse=not asc)
+    return with_t + without
+
+
+def _collect_time_conflicts(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """面试时间双写检测。
+
+    真值唯一：``applications.interview_start_at``。面试类待办
+    （``todo.kind='interview'``）的 ``due_date`` 应由它派生——改期时由
+    ``PATCH /schedule/{id}/time`` 同步。这里只报不一致，不自动改：
+    冲突出现意味着有人绕开写入口直接改了一边（深圳灵动 9/16 vs 9/17
+    就是这么漂出来的）。
+    """
+    if not INTERVIEW_DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(str(INTERVIEW_DB_PATH), timeout=30.0)
+    except sqlite3.Error:
+        return []
+    try:
+        conn.row_factory = sqlite3.Row
+        exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='todo'"
+        ).fetchone()
+        if not exists:
+            return []
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(todo)")}
+        if "kind" not in cols:
+            return []  # 未跑迁移 → 无法区分面试类待办，宁可不报
+        todos = conn.execute(
+            "SELECT id, title, company, due_date FROM todo"
+            " WHERE kind='interview' AND status='pending'"
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        conn.close()
+
+    by_company: dict[str, list[sqlite3.Row]] = {}
+    for t in todos:
+        by_company.setdefault(t["company"] or "", []).append(t)
+
+    conflicts: list[dict[str, Any]] = []
+    for j in jobs:
+        start = j.get("interview_start_at") or ""
+        if not start or j.get("stage") not in ACTIVE_STAGES:
+            continue
+        day = start[:10]
+        for t in by_company.get(j["company"] or "", []):
+            if (t["due_date"] or "") != day:
+                conflicts.append({
+                    "application_id": j.get("id"),
+                    "company": j["company"],
+                    "interview_start_at": start,
+                    "todo_id": t["id"],
+                    "todo_title": t["title"],
+                    "todo_due_date": t["due_date"] or "",
+                })
+    return conflicts
+
+
 @router.get("/schedule")
 def get_schedule() -> dict[str, Any]:
-    """获取面试安排列表。"""
+    """获取面试安排列表（upcoming / history 二分）。
+
+    时间：优先取结构化列 ``interview_start_at``（迁移 001 回填，形如
+    ``YYYY-MM-DD`` 或 ``YYYY-MM-DD HH:MM``，可直接字符串比较排序）；
+    该列缺失或为空时，回退从 ``interview_at`` 自由文本里抠日期前缀。
+
+    阶段：用 ``stage`` 枚举（候选/已投递/待面/面试中/谈薪中/已结束/已终止），
+    缺失时回退从 status 文本推断。
+
+    ⚠️ 历史 bug 已修：旧实现用 ``status in ("待面", "进行中")`` 硬匹配，
+    但 status 实际值形如 ``'已确认参加(9/17周四 19:00 视频面)'``，永远命不中，
+    导致 ``is_upcoming`` 恒为 False、upcoming 永远为空。现改为阶段枚举判断。
+    """
     conn = _get_application_conn()
     try:
-        rows = conn.execute(
-            "SELECT company, role, interview_at, status, direction, prep_dir, resume_ver, note "
-            "FROM applications ORDER BY interview_at DESC"
-        ).fetchall()
-        jobs = []
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(applications)")}
+        structured = "interview_start_at" in cols and "stage" in cols
+        sel = ("id, company, role, interview_at, status, direction, prep_dir, "
+               "resume_ver, note")
+        if structured:
+            sel += ", interview_start_at, round_note, stage"
+        rows = conn.execute(f"SELECT {sel} FROM applications").fetchall()
+
         today = date.today().isoformat()
+        jobs: list[dict[str, Any]] = []
         for r in rows:
-            interview_at = r["interview_at"] or ""
-            # 判断是否为即将到来的面试（日期 >= 今天且状态为待面/进行中）
-            is_upcoming = False
-            if interview_at and r["status"] in ("待面", "进行中"):
-                interview_date = interview_at.split()[0] if " " in interview_at else interview_at
-                is_upcoming = interview_date >= today
+            start = (r["interview_start_at"] or "") if structured else ""
+            stage = (r["stage"] or "") if structured else ""
+            round_note = (r["round_note"] or "") if structured else ""
+            raw_at = r["interview_at"] or ""
+            # 回退：结构化列缺失/为空 → 从自由文本抠日期、从 status 推断阶段
+            if not start:
+                m = _DATE_PREFIX_RE.match(raw_at)
+                start = m.group(1) if m else ""
+            if not stage:
+                stage = _fallback_stage(r["status"] or "")
+
+            # 仍在推进 = upcoming。无具体时间的（如"未约面"）也算，
+            # 由 _order_jobs 沉底——它需要出现在视野里提醒约时间，
+            # 而不是被归到 history 里消失。
+            is_upcoming = stage in ACTIVE_STAGES if not start else stage in ACTIVE_STAGES and start[:10] >= today
             jobs.append({
+                "id": r["id"],
                 "company": r["company"],
                 "role": r["role"],
-                "interview_at": interview_at,
-                "status": r["status"],
+                "interview_at": raw_at,
+                "interview_start_at": start,
+                "round_note": round_note,
+                "stage": stage,
+                "status": r["status"] or "",
                 "direction": r["direction"] or "",
                 "prep_dir": r["prep_dir"] or "",
                 "resume_ver": r["resume_ver"] or "",
                 "note": r["note"] or "",
                 "is_upcoming": is_upcoming,
             })
-        upcoming = [j for j in jobs if j["is_upcoming"]]
-        history = [j for j in jobs if not j["is_upcoming"]]
+
+        upcoming = _order_jobs([j for j in jobs if j["is_upcoming"]], asc=True)
+        history = _order_jobs([j for j in jobs if not j["is_upcoming"]], asc=False)
+        stage_counts: dict[str, int] = {}
+        for j in jobs:
+            stage_counts[j["stage"]] = stage_counts.get(j["stage"], 0) + 1
         return {
             "upcoming": upcoming,
             "history": history,
             "total": len(jobs),
             "upcoming_count": len(upcoming),
+            "stage_counts": stage_counts,
+            "structured": structured,
+            # 真值应在 applications.interview_start_at；面试类待办 due_date
+            # 由它派生。非空 = 有人绕开写入口直接改了一边（双写漂移）。
+            "time_conflicts": _collect_time_conflicts(jobs),
         }
     finally:
         conn.close()
+
+
+class ScheduleTimePatch(BaseModel):
+    """改面试时间的请求体。"""
+    interview_start_at: str  # YYYY-MM-DD 或 YYYY-MM-DD HH:MM
+    round_note: str = ""  # 场次备注（留空=沿用原值）
+    sync_todo: bool = True  # 是否同步该公司「面试时间类」待办
+
+
+_TIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$")
+
+
+def _sync_interview_todo_due_date(company: str, day: str) -> list[int]:
+    """把该公司「面试时间类」待办的 ``due_date`` 对齐到面试日期。
+
+    只动 ``kind='interview'`` 且 ``status='pending'`` 的待办——跟进类待办
+    （如「谈薪 R3 电话提级别 due 9/18」）有自己的节奏，不能被面试改期卷走。
+    """
+    if not company or not INTERVIEW_DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(str(INTERVIEW_DB_PATH), timeout=30.0)
+    except sqlite3.Error:
+        return []
+    try:
+        conn.row_factory = sqlite3.Row
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(todo)")}
+        if "kind" not in cols:
+            return []  # 未跑迁移 → 无法区分，宁可不动
+        rows = conn.execute(
+            "SELECT id, due_date FROM todo"
+            " WHERE company=? AND kind='interview' AND status='pending'",
+            (company,),
+        ).fetchall()
+        ids = [r["id"] for r in rows if (r["due_date"] or "") != day]
+        for tid in ids:
+            conn.execute("UPDATE todo SET due_date=? WHERE id=?", (day, tid))
+        conn.commit()
+        return ids
+    except sqlite3.Error:
+        return []
+    finally:
+        conn.close()
+
+
+@router.patch("/schedule/{application_id}/time")
+def patch_interview_time(application_id: int, req: ScheduleTimePatch) -> dict[str, Any]:
+    """改面试时间的唯一写入口。
+
+    真值写在 ``applications.interview_start_at``（ISO、可排序），另外两处
+    由它派生、不允许各自手改：
+
+    * ``applications.interview_at`` 自由文本 = 时间 + 场次备注（兼容旧读方）；
+    * ``interview.db`` 里该公司 ``kind='interview'`` 的待办 ``due_date``。
+
+    ⚠️ 2026-09-15 之前的做法是在 applications 和 todo 两处各改一次，
+    深圳灵动「applications 写 9/17、待办写 9/16」就是这么漂出来的。
+    改期一律走这个端点。
+    """
+    m = _TIME_RE.match((req.interview_start_at or "").strip())
+    if not m:
+        raise HTTPException(
+            status_code=422,
+            detail="interview_start_at 须为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM",
+        )
+    day, hm = m.group(1), m.group(2)
+    start = f"{day} {hm}" if hm else day
+
+    conn = _get_application_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, company, round_note FROM applications WHERE id=?", (application_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"岗位 {application_id} 不存在")
+        note = req.round_note if req.round_note else (row["round_note"] or "")
+        interview_at = start + (f" {note}" if note else "")
+        conn.execute(
+            "UPDATE applications SET interview_start_at=?, interview_at=?, round_note=? WHERE id=?",
+            (start, interview_at, note, application_id),
+        )
+        conn.commit()
+        company = row["company"] or ""
+    finally:
+        conn.close()
+
+    synced = _sync_interview_todo_due_date(company, day) if req.sync_todo else []
+    return {
+        "ok": True,
+        "application_id": application_id,
+        "company": company,
+        "interview_start_at": start,
+        "interview_at": interview_at,
+        "round_note": note,
+        "synced_todo_ids": synced,
+        "synced_todo_count": len(synced),
+    }
 
 
 # ── 岗位弹药库扫描 ─────────────────────────────────────────
