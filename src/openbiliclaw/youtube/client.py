@@ -105,7 +105,7 @@ def _ytdlp_channel(channel_ref: str, limit: int) -> list[dict[str, Any]]:
     if not url:
         return []
     try:
-        from yt_dlp import YoutubeDL  # type: ignore[import-untyped]
+        from yt_dlp import YoutubeDL
 
         options = {
             "quiet": True,

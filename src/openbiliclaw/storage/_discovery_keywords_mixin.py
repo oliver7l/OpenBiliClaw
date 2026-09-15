@@ -383,7 +383,7 @@ class DiscoveryKeywordsMixin:
               AND COALESCE(used_at, executing_at, claimed_at, created_at) < ?
               {platform_clause}
             """,
-            params,
+            tuple(params),
         )
         return int(cursor.rowcount or 0)
 

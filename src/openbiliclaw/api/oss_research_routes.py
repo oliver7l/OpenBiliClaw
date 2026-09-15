@@ -139,7 +139,9 @@ def insert_project(db_path: Path, data: dict[str, Any]) -> int:
     try:
         cur = conn.execute(sql, vals)
         conn.commit()
-        return int(cur.lastrowid)
+        new_id = cur.lastrowid
+        assert new_id is not None
+        return new_id
     finally:
         conn.close()
 

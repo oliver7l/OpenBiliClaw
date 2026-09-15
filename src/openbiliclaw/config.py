@@ -647,6 +647,9 @@ class StorageConfig:
     # 豆瓣书影音子库：douban_items 独立存放，与主库锁域隔离。
     # 默认 data/douban.db，可由配置覆盖。
     douban_db_path: str = "data/douban.db"
+    # 简历子库：resume_texts / applications 独立存放（db sharding）。
+    # 默认 data/resume.db，可由配置覆盖。
+    resume_db_path: str = "data/resume.db"
 
 
 @dataclass

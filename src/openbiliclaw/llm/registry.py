@@ -29,9 +29,17 @@ from obc_llm.registry import (
 )
 
 from openbiliclaw.llm._compat_registry import (  # noqa: F401
-    _maybe_openai_compatible_provider,
-    _ollama_is_chat_capable,
-    build_embedding_service,
-    build_llm_registry,
-    summarize_registry,
+    _maybe_openai_compatible_provider as _maybe_openai_compatible_provider,
+)
+from openbiliclaw.llm._compat_registry import (
+    _ollama_is_chat_capable as _ollama_is_chat_capable,
+)
+from openbiliclaw.llm._compat_registry import (
+    build_embedding_service as build_embedding_service,
+)
+from openbiliclaw.llm._compat_registry import (
+    build_llm_registry as build_llm_registry,
+)
+from openbiliclaw.llm._compat_registry import (
+    summarize_registry as summarize_registry,
 )

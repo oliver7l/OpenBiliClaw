@@ -6,7 +6,7 @@ Main project implements these protocols and injects them into LLMService.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, runtime_checkable
 
 from obc_llm.base import LLMResponse
 
@@ -164,6 +164,19 @@ class ToneProfile:
 
     def __contains__(self, key: str) -> bool:
         return hasattr(self, key)
+
+
+class ToneProfileDict(TypedDict):
+    """Mapping-shape tone profile (与 obc_soul.tone.ToneProfile 同构).
+
+    prompt 构造函数运行时通过 ``tone['density']`` 等下标取值，
+    实际调用方（recommendation/soul）传的都是这一映射形状。
+    """
+
+    density: str
+    warmth: str
+    playfulness: str
+    directness: str
 
 
 def build_tone_profile(

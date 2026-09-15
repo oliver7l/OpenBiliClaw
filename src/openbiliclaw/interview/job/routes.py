@@ -408,16 +408,16 @@ def build_interview_router(*, root: str | None = None) -> APIRouter:
     # ========== 简历管理 ==========
     @router.get("/resumes")
     def interview_resumes(
-        company: str = None,
-        position_id: int = None,
+        company: str | None = None,
+        position_id: int | None = None,
         page: int = 1,
         page_size: int = 50,
     ):
         conn = sqlite3.connect(_resume_db())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        where = []
-        params = []
+        where: list[str] = []
+        params: list[str | int] = []
         if company:
             where.append("company = ?")
             params.append(company)

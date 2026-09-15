@@ -268,7 +268,9 @@ class DouyinDiscoveryProducer:
     def _sources_for_limit(self, requested_limit: int) -> tuple[str, ...]:
         configured = tuple(source for source in self.sources if str(source).strip())
         if requested_limit >= 10:
-            selected = tuple(source for source in ("search", "hot") if source in configured)
+            selected: tuple[str, ...] = tuple(
+                source for source in ("search", "hot") if source in configured
+            )
             if selected:
                 return selected
             return configured[:1] or ("search",)

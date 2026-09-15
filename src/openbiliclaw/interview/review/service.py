@@ -11,11 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    EmotionLevel,
+    InterviewResult,
     InterviewReview,
     InterviewReviewCreate,
     InterviewReviewStats,
     InterviewReviewSummary,
     InterviewReviewUpdate,
+    InterviewRound,
 )
 from .store import InterviewReviewStore
 
@@ -103,8 +106,8 @@ class InterviewReviewService:
             company=company,
             position=position,
             interview_date=interview_date,
-            round=round_value,
-            result=result,
+            round=InterviewRound(round_value),
+            result=InterviewResult(result),
             duration_min=duration_min,
             transcript_text=transcript_text,
             transcript_path=transcript_path,
@@ -115,7 +118,7 @@ class InterviewReviewService:
             emotional_review=emotional_review,
             technical_review=technical_review,
             action_items=action_items,
-            emotion_level=emotion_level,
+            emotion_level=EmotionLevel(emotion_level),
             tags=tags,
             notes=notes,
         )

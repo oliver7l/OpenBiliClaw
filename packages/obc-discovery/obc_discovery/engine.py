@@ -28,8 +28,10 @@ from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
 # K6b：合同类型已下沉到 openbiliclaw.core.contracts，此处 re-export
 # 保持引擎/策略/测试既有 import 路径与类型身份不变。
 from openbiliclaw.core.contracts import (  # noqa: E402,F401
-    DiscoveredContent,
-    DiscoveryStrategy,
+    DiscoveredContent as DiscoveredContent,
+)
+from openbiliclaw.core.contracts import (
+    DiscoveryStrategy as DiscoveryStrategy,
 )
 
 if TYPE_CHECKING:

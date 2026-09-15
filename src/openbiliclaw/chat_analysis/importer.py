@@ -26,6 +26,8 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["ChatImporter", "DeepseekAnalysisImportResult", "ImportStats"]
+
 if TYPE_CHECKING:
     from .store import ChatAnalysisStore
 

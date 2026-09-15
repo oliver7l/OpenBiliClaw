@@ -325,7 +325,7 @@ class DiscoveryCandidatesMixin:
             WHERE id IN ({placeholders})
               AND status = 'pending_eval'
             """,
-            ids,
+            tuple(ids),
         )
         claimed_rows = self._discovery.execute(
             f"""

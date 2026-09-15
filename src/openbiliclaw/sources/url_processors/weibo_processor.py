@@ -202,7 +202,8 @@ class WeiboProcessor(BaseProcessor):
         author = None
         content_text = None
 
-        script = soup.find("script", string=re.compile(r"\$render_data"))
+        # bs4 运行时支持 Pattern 作为 string 参数（按文本正则匹配），类型桩未覆盖
+        script = soup.find("script", string=re.compile(r"\$render_data"))  # type: ignore[call-overload]
         if script and script.string:
             try:
                 match = re.search(r"\$render_data\s*=\s*(\[.*?\])\s*;", script.string, re.DOTALL)

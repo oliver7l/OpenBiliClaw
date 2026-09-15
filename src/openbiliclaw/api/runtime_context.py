@@ -405,8 +405,13 @@ class RuntimeContext:
 
         from openbiliclaw.bilibili.api import BilibiliAPIClient
         from openbiliclaw.bilibili.auth import resolve_runtime_cookie
+
+        # build_llm_registry 经 openbiliclaw.llm 公共属性读取：多个测试以
+        # monkeypatch.setattr("openbiliclaw.llm.build_llm_registry", ...) 注入假
+        # registry（函数内 import 在调用时解析包属性，patch 生效）。
+        # mypy 把该符号解析回 obc_llm 原签名（strict LLMConfig），故调用点带 ignore。
         from openbiliclaw.llm import build_llm_registry
-        from openbiliclaw.llm.registry import build_embedding_service
+        from openbiliclaw.llm._compat_registry import build_embedding_service
         from openbiliclaw.recommendation.engine import RecommendationEngine
         from openbiliclaw.runtime.account_sync import AccountSyncService
         from openbiliclaw.runtime.refresh import ContinuousRefreshController
@@ -415,7 +420,7 @@ class RuntimeContext:
         # 1. LLM layer (with usage ledger so ``openbiliclaw cost`` has data)
         # 传整个 config 而非 .llm：适配层 to_llm_config 会取 .llm，且对
         # 缺 .llm 属性的测试 fake_config（SimpleNamespace）更健壮。
-        new_registry = build_llm_registry(new_config)
+        new_registry = build_llm_registry(new_config)  # type: ignore[arg-type]
         new_usage_recorder = UsageRecorder(sink=self.database)
         new_module_overrides = module_overrides_from_config(new_config)
         llm_concurrency = _llm_concurrency_from_config(new_config)

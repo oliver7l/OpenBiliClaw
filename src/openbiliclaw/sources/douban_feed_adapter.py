@@ -222,8 +222,8 @@ class DoubanFeedAdapter:
             author = ((st.get("author") or {}) or {}).get("name") or "豆瓣"
             created = (st.get("create_time") or "").strip()
             # 标题取正文首行（动态通常为短句）
-            title = re.split(r"\s+", body)[:12]
-            title = " ".join(t for t in title if t)[:60] or "豆瓣动态"
+            title_words = re.split(r"\s+", body)[:12]
+            title = " ".join(t for t in title_words if t)[:60] or "豆瓣动态"
             content_id = f"douban_diary-{abs(hash(link)) & 0xFFFFFFFF:08x}"
             out.append(
                 DiscoveredContent(
@@ -287,8 +287,8 @@ class DoubanFeedAdapter:
 
         # diary（用户广播）走 rexxar JSON 接口直连，不走 RSS。
         if feed_kind == "diary" and uid:
-            items, _ = await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit)
-            return items
+            diary_items, _ = await self._fetch_diary(uid=uid, feed_name=feed_name, limit=limit)
+            return diary_items
 
         url = _feed_url(feed_kind, uid=uid, group_id=group_id)
 

@@ -202,7 +202,11 @@ class InterviewQuestionStore:
                 f"INSERT INTO iq_questions ({cols}) VALUES ({placeholders})", row
             )
             conn.commit()
-            return self.get_question(cur.lastrowid)
+            new_id = cur.lastrowid
+            assert new_id is not None
+            created = self.get_question(new_id)
+            assert created is not None, "刚插入的题目应能取回"
+            return created
         finally:
             conn.close()
 

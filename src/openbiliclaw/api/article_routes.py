@@ -357,9 +357,8 @@ def register_article_routes(app: FastAPI, ctx: Any) -> None:
                 status_code=422,
             )
         try:
-            from obc_llm.registry import build_llm_registry as _build_reg
-
             from openbiliclaw.config import load_config as _sum_cfg
+            from openbiliclaw.llm._compat_registry import build_llm_registry as _build_reg
 
             registry = _build_reg(_sum_cfg())
             system = (

@@ -163,10 +163,11 @@ def _default_registry() -> Any:
     传整个 Config 会因缺少 ``openai`` 等属性而失败（obc_llm.registry）。
     """
     from openbiliclaw.config import load_config
-    from openbiliclaw.llm import build_llm_registry
+    from openbiliclaw.llm._compat_registry import build_llm_registry
 
     cfg = load_config()
-    return build_llm_registry(getattr(cfg, "llm", cfg))
+    llm_cfg = cfg.llm if hasattr(cfg, "llm") else cfg
+    return build_llm_registry(llm_cfg)
 
 
 class KFLlmClient:

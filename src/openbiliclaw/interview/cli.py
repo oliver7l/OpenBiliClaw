@@ -519,7 +519,11 @@ def review_add(
     """添加一条面试复盘记录。"""
     from datetime import date as date_cls
 
-    from openbiliclaw.interview.review.models import InterviewReviewCreate
+    from openbiliclaw.interview.review.models import (
+        InterviewResult,
+        InterviewReviewCreate,
+        InterviewRound,
+    )
 
     svc = _review_service()
     if svc is None:
@@ -528,8 +532,8 @@ def review_add(
         company=company,
         position=position,
         interview_date=date_cls.fromisoformat(date_str),
-        round=round_val,
-        result=result,
+        round=InterviewRound(round_val),
+        result=InterviewResult(result),
         duration_min=duration,
         key_questions=questions,
         emotional_review=emotional,

@@ -11,7 +11,7 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 from rich.console import Console
 
-from openbiliclaw.llm.registry import _ollama_is_chat_capable
+from openbiliclaw.llm._compat_registry import _ollama_is_chat_capable
 
 if TYPE_CHECKING:
     import subprocess

@@ -319,8 +319,10 @@ class SchemaMixin:
                 self.conn.execute(
                     f"CREATE INDEX IF NOT EXISTS {idx} ON events ({cols})"
                 )
-        cols = {row[1] for row in self.conn.execute("PRAGMA events.table_info(events)").fetchall()}
-        if "source_platform" not in cols:
+        existing_cols = {
+            row[1] for row in self.conn.execute("PRAGMA events.table_info(events)").fetchall()
+        }
+        if "source_platform" not in existing_cols:
             try:  # noqa: SIM105
                 self.conn.execute(
                     "ALTER TABLE events.events ADD COLUMN source_platform TEXT "

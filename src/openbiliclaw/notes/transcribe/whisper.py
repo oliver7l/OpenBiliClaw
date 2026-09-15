@@ -46,7 +46,7 @@ class AudioTranscriber:
 
         """
         try:
-            from faster_whisper import WhisperModel
+            from faster_whisper import WhisperModel  # type: ignore[import-untyped]
         except ImportError as err:
             raise RuntimeError(
                 "faster-whisper 未安装。本地转录功能需要该可选依赖。"

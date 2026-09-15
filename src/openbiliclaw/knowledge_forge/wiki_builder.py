@@ -51,23 +51,21 @@ def _default_db_path() -> Path:
 
 def _build_embedding_service() -> Any:
     """惰性构建 embedding 服务（配置 [llm.embedding]，含 fallback）。"""
-    from obc_llm.registry import (  # type: ignore[attr-defined]
-        build_embedding_service as _build,
-    )
-
     from openbiliclaw.config import load_config
+    from openbiliclaw.llm._compat_registry import build_embedding_service as _build
 
     cfg = load_config()
     registry = None
     try:
-        from openbiliclaw.llm import build_llm_registry
+        from openbiliclaw.llm._compat_registry import build_llm_registry
 
         registry = build_llm_registry(getattr(cfg, "llm", cfg))
     except Exception:  # noqa: BLE001
         logger.warning("LLM registry build failed for embedding", exc_info=True)
     if registry is None:
         return None
-    return _build(getattr(cfg, "llm", cfg), registry)
+    llm_cfg = cfg.llm if hasattr(cfg, "llm") else cfg
+    return _build(llm_cfg, registry)
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

@@ -200,6 +200,7 @@ class InterviewReviewStore:
             )
             conn.commit()
             new_id = cur.lastrowid
+            assert new_id is not None
             created = self.get_by_id(new_id)
             assert created is not None
             return created

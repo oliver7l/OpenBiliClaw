@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 try:
     from obc_llm.generation import generate_structured
-except ImportError:
-    generate_structured = None
+except ImportError:  # pragma: no cover — obc_llm 缺失时降级
+    generate_structured = None  # type: ignore[assignment]
 
 
 class SynthesisEngine:

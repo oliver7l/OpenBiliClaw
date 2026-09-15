@@ -151,6 +151,7 @@ def _insert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:
                 continue
             logger.error("db locked after %d retries: %s", _max_retries, msg)
             raise
+    raise AssertionError("unreachable: retry loop must return or raise")
 
 
 def _do_insert(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> int:

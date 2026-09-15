@@ -146,7 +146,9 @@ class NoteStore:
             ),
         )
         self.conn.commit()
-        note = self.get_note(cursor.lastrowid)
+        new_id = cursor.lastrowid
+        assert new_id is not None
+        note = self.get_note(new_id)
         assert note is not None
         return note
 

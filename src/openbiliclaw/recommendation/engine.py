@@ -17,9 +17,10 @@ import time
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 from obc_discovery.style_keys import VALID_STYLE_KEYS, normalize_style_key
+from obc_llm._protocols import ToneProfileDict
 from obc_llm.json_utils import extract_llm_json_list, extract_llm_json_object
 from obc_llm.service import is_llm_rate_limit_error
 from obc_soul.tone import ToneProfile, build_tone_profile
@@ -1515,7 +1516,7 @@ class RecommendationEngine:
                 "body_text": content.body_text,
             },
             reason_stub=reason_stub,
-            tone_profile=tone_profile,
+            tone_profile=cast("ToneProfileDict", tone_profile),
             source_platform=content.source_platform or "bilibili",
         )
         try:
@@ -1584,7 +1585,7 @@ class RecommendationEngine:
         messages = build_batch_expression_prompt(
             profile_summary=_recommendation_profile_summary(profile),
             content_items=content_items,
-            tone_profile=tone_profile,
+            tone_profile=cast("ToneProfileDict", tone_profile),
             source_platform=batch[0].source_platform if batch else "bilibili",
         )
 
@@ -2069,7 +2070,7 @@ class RecommendationEngine:
                 "content_type": content.content_type,
                 "body_text": content.body_text,
             },
-            tone_profile=tone_profile,
+            tone_profile=cast("ToneProfileDict", tone_profile),
             source_platform=content.source_platform or "bilibili",
         )
         try:

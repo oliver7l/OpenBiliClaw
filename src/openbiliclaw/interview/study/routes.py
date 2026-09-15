@@ -693,7 +693,7 @@ def _read_file_safe(path: Path, max_lines: int = 100) -> str:
 
 def _extract_company_profile(company_dir: Path, company_name: str) -> dict[str, Any]:
     """提取公司岗位的结构化信息。"""
-    result = {
+    result: dict[str, Any] = {
         "company": company_name,
         "position": "",
         "location": "",

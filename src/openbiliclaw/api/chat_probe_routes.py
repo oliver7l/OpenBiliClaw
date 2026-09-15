@@ -1422,7 +1422,5 @@ def register_chat_probe_routes(
             content={"ok": True, "action": "chat", "domain": domain, "reply": reply}
         )
 
-    return {
-        "record_exploration_buffer_event": _record_exploration_buffer_event,
-        "recommendation_buffer_domain": _recommendation_buffer_domain,
-    }
+    # 历史：曾把内部 helper 以 dict 返回；全仓无消费方，函数契约是 -> None。
+    return

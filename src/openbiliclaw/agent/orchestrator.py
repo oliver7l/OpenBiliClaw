@@ -92,7 +92,7 @@ class AgentOrchestrator:
         logger.info("Starting discovery cycle...")
         # TODO: Implement discovery cycle
 
-    async def process_feedback(self, feedback: dict) -> None:  # type: ignore[type-arg]
+    async def process_feedback(self, feedback: dict) -> None:
         """Process user feedback and update all layers.
 
         Args:

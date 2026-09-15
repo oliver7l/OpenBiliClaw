@@ -21,7 +21,7 @@ from openbiliclaw.bilibili.api import BilibiliAPIClient
 from openbiliclaw.bilibili.auth import resolve_runtime_cookie
 from openbiliclaw.config import Config, load_config
 from openbiliclaw.config import llm_concurrency_from_config as _llm_concurrency_from_config
-from openbiliclaw.llm import build_llm_registry
+from openbiliclaw.llm._compat_registry import build_llm_registry
 from openbiliclaw.memory.manager import MemoryManager
 from openbiliclaw.recommendation.engine import RecommendationEngine
 from openbiliclaw.runtime.account_sync import AccountSyncService
@@ -119,7 +119,7 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         module_overrides=module_overrides,
         concurrency=llm_concurrency,
     )
-    from openbiliclaw.llm.registry import build_embedding_service
+    from openbiliclaw.llm._compat_registry import build_embedding_service
     from openbiliclaw.recommendation.bandit import sampler_from_scoring_config
     from openbiliclaw.recommendation.curator import PoolCurator
 

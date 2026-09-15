@@ -188,20 +188,20 @@ class ChatAnalysisStore:
     @property
     def conn(self) -> sqlite3.Connection:
         if self._database:
-            conn = self._database.conn
+            db_conn = self._database.conn
             if not self._initialized:
-                self._initialize_tables(conn)
+                self._initialize_tables(db_conn)
                 self._initialized = True
-            return conn
-        conn = getattr(self._local, "connection", None)
-        if conn is None:
-            conn = open_db_conn(str(self._db_path), isolation_level=None)
-            conn.execute("PRAGMA foreign_keys=ON")
-            self._local.connection = conn
+            return db_conn
+        thread_conn: sqlite3.Connection | None = getattr(self._local, "connection", None)
+        if thread_conn is None:
+            thread_conn = open_db_conn(str(self._db_path), isolation_level=None)
+            thread_conn.execute("PRAGMA foreign_keys=ON")
+            self._local.connection = thread_conn
         if not self._initialized:
-            self._initialize_tables(conn)
+            self._initialize_tables(thread_conn)
             self._initialized = True
-        return conn
+        return thread_conn
 
     def _initialize_tables(self, conn: sqlite3.Connection | None = None) -> None:
         c = conn or self.conn
@@ -260,7 +260,11 @@ class ChatAnalysisStore:
                 now,
             ),
         )
-        return self.get_session(cur.lastrowid)
+        new_id = cur.lastrowid
+        assert new_id is not None
+        session = self.get_session(new_id)
+        assert session is not None, "刚插入的会话应能取回"
+        return session
 
     def get_session(self, session_id: int) -> ChatSession | None:
         row = self.conn.execute(

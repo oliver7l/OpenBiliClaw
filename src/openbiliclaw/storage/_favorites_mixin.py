@@ -19,11 +19,10 @@ class FavoritesMixin:
         """content.db 连接，缺省回退主库。"""
         return getattr(self, "_content_conn", None) or self.conn
 
-    def _content_write(self, sql: str, params: tuple = ()) -> Any:
+    def _content_write(self, sql: str, params: tuple | None = None) -> None:
         """写入 content.db 并自动 commit。"""
-        cursor = self._content.execute(sql, params)
+        self._content.execute(sql, params or ())
         self._content.commit()
-        return cursor
 
     def add_to_favorites(self, bvid: str, note: str = "") -> bool:
         """Save a video to favorites. Returns True if newly inserted."""

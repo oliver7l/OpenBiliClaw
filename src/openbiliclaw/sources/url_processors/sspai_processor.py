@@ -95,7 +95,10 @@ class SspaiProcessor(BaseProcessor):
             published_at = None
             time_elem = soup.select_one(".article-time, .publish-time, time")
             if time_elem:
-                time_text = time_elem.get("datetime") or time_elem.get_text(strip=True)
+                raw_dt = time_elem.get("datetime")
+                time_text = (
+                    raw_dt if isinstance(raw_dt, str) and raw_dt else time_elem.get_text(strip=True)
+                )
                 if time_text:
                     published_at = self._parse_date(time_text)
 

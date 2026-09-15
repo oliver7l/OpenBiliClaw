@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from obc_llm._protocols import ToneProfile
+from obc_llm._protocols import ToneProfile, ToneProfileDict
 from obc_llm.json_utils import parse_llm_json_tolerant
 
 # Inlined from openbiliclaw.discovery.style_keys to avoid dependency
@@ -123,7 +123,7 @@ def _tone_context_line(source_platform_mix: dict[str, float] | None) -> str:
 
 
 def _render_tone_profile(
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     source_platform_mix: dict[str, float] | None = None,
 ) -> str:
     """Render tone profile guidance for prompt builders."""
@@ -185,7 +185,7 @@ def build_socratic_dialogue_prompt(
     *,
     user_message: str,
     core_memory_text: str,
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     history: list[dict[str, str]],
     source_platform_mix: dict[str, float] | None = None,
 ) -> list[dict[str, str]]:
@@ -317,7 +317,7 @@ def build_soul_profile_prompt(
     preference_summary: dict[str, object],
     recent_awareness: list[dict[str, object]] | None = None,
     active_insights: list[dict[str, object]] | None = None,
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     source_platform_mix: dict[str, float] | None = None,
 ) -> list[dict[str, str]]:
     """Build a structured prompt for initial soul-profile generation."""
@@ -1312,7 +1312,7 @@ def build_recommendation_expression_prompt(
     *,
     profile_summary: dict[str, object],
     content_summary: dict[str, object],
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     source_platform: str = "bilibili",
 ) -> list[dict[str, str]]:
     """Build a structured prompt for friend-style recommendation expression.
@@ -1392,7 +1392,7 @@ def build_batch_expression_prompt(
     *,
     profile_summary: dict[str, object],
     content_items: list[dict[str, object]],
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     source_platform: str = "bilibili",
 ) -> list[dict[str, str]]:
     """Build a prompt that generates expressions for multiple items in one call.
@@ -1541,7 +1541,7 @@ def build_delight_reason_prompt(
     profile_summary: dict[str, object],
     content_summary: dict[str, object],
     reason_stub: str,
-    tone_profile: ToneProfile | None,
+    tone_profile: ToneProfile | ToneProfileDict | None,
     source_platform: str = "bilibili",
 ) -> list[dict[str, str]]:
     """Build a prompt for generating a delight reason explanation.

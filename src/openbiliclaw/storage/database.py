@@ -13,7 +13,7 @@ import threading
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from openbiliclaw.storage._article_mixin import ArticleMixin
 from openbiliclaw.storage._auth_mixin import AuthMixin
@@ -111,7 +111,7 @@ def _is_write_statement(sql: object) -> bool:
 def open_db_conn(
     db_path: str | Path,
     *,
-    isolation_level: str | None = "",
+    isolation_level: Literal["", "DEFERRED", "EXCLUSIVE", "IMMEDIATE"] | None = "",
 ) -> LockedConnection:
     """Open a lock-serialized SQLite connection with sane WAL defaults.
 
@@ -126,7 +126,8 @@ def open_db_conn(
         str(db_path),
         timeout=60.0,
         check_same_thread=False,
-        isolation_level=isolation_level,
+        # sqlite3 类型桩未收录 "" （历史遗留默认值，运行时等价于延迟事务）
+        isolation_level=cast("Literal['DEFERRED', 'EXCLUSIVE', 'IMMEDIATE'] | None", isolation_level),
         factory=LockedConnection,
     )
     conn.row_factory = _sqlite3.Row
