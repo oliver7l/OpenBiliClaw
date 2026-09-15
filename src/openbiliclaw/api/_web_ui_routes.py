@@ -91,6 +91,9 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 "ed2k-app.js",
                 "douban-app.js",
                 "oss-research-app.js",
+                # 面试模块：此前漏登记，改了前端不刷新版本号 → 浏览器可能吃旧缓存
+                "interview-schedule-view.js",
+                "interview.js",
             ):
                 src = f'src="/web/assets/js/{script}"'
                 html = html.replace(src, f'src="/web/assets/js/{script}?v={version}"')

@@ -130,38 +130,97 @@
       });
   }
 
+  // 日期切分 / 倒计时 / 阶段分组 是纯逻辑，抽在 interview-schedule-view.js
+  // （UMD，可被 node 直接 require → tests/desktop 真跑真断言）。
+  // 本文件只负责把 VM 拼成 HTML。
+  const SCHEDULE_VIEW =
+    (typeof window !== "undefined" && window.OBCScheduleView) || null;
+
+  // 阶段色调 → 徽标配色。红涨绿跌不适用于此处，用语义色：
+  // 待面=蓝、面试中=橙、谈薪中=绿、其余中性灰。
+  const SCHEDULE_TONE_STYLE = {
+    upcoming: { bg: "rgba(74,125,255,.15)", fg: "var(--accent,#4a7dff)" },
+    progress: { bg: "rgba(245,158,11,.18)", fg: "#b45309" },
+    offer: { bg: "rgba(16,185,129,.18)", fg: "#047857" },
+    idle: { bg: "rgba(148,163,184,.18)", fg: "var(--muted,#64748b)" },
+    closed: { bg: "rgba(148,163,184,.18)", fg: "var(--muted,#64748b)" },
+  };
+
+  function toneStyle(tone) {
+    return SCHEDULE_TONE_STYLE[tone] || SCHEDULE_TONE_STYLE.idle;
+  }
+
+  // 视图模型脚本缺失时的降级：只列公司/岗位/状态，不做任何日期猜测。
+  // 正常加载顺序（index.html 先 schedule-view 再 interview）下不会走到这里。
+  function renderScheduleFallback(data) {
+    const rows = (data.upcoming || []).concat(data.history || []);
+    if (rows.length === 0) return '<div class="interview-empty">暂无面试安排</div>';
+    return rows
+      .map(
+        (j) => `<div class="interview-schedule-card ${j.is_upcoming ? "" : "status-done"}">
+          <div class="interview-schedule-info">
+            <div class="interview-schedule-company">${escapeHtml(j.company || "")}</div>
+            <div class="interview-schedule-role">${escapeHtml(j.role || "")}</div>
+          </div>
+          <div class="interview-schedule-status">${escapeHtml(j.status || "")}</div>
+        </div>`
+      )
+      .join("");
+  }
+
   function renderScheduleHtml(data) {
-    const all = (data.upcoming || []).concat(data.history || []);
-    if (all.length === 0) return '<div class="interview-empty">暂无面试安排</div>';
+    if (!SCHEDULE_VIEW) {
+      console.warn("[interview] OBCScheduleView 未加载，降级渲染面试安排");
+      return renderScheduleFallback(data || {});
+    }
+    const vm = SCHEDULE_VIEW.buildScheduleViewModel(data);
+    if (vm.isEmpty) return '<div class="interview-empty">暂无面试安排</div>';
+
+    const chips = vm.chips
+      .map((c) => {
+        const st = toneStyle(c.tone);
+        return `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg};font-weight:600;">${escapeHtml(c.stage)} ${c.count}</span>`;
+      })
+      .join("");
+
     return `
-      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">
-        📌 共 ${data.total} 场面试，${data.upcoming_count} 场待面
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <span>📌 共 ${vm.total} 个岗位，${vm.upcomingCount} 场待进行</span>
+        ${chips}
       </div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        ${all.map(renderScheduleCard).join("")}
+      ${vm.sections.map(renderScheduleSection).join("")}
+    `;
+  }
+
+  function renderScheduleSection(section) {
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--muted);">${escapeHtml(section.title)}（${section.items.length}）</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">${section.items.map(renderScheduleCard).join("")}</div>
       </div>
     `;
   }
 
-  function renderScheduleCard(job) {
-    const interviewAt = job.interview_at || "";
-    const datePart = interviewAt.split(" ")[0] || "";
-    const timePart = interviewAt.split(" ")[1] || "";
-    const day = datePart ? datePart.split("-")[2] : "?";
-    const month = datePart ? datePart.split("-")[1] + "月" : "";
-    const statusClass = job.is_upcoming ? (job.status === "进行中" ? "status-progress" : "status-upcoming") : "status-done";
+  function renderScheduleCard(item) {
+    const st = toneStyle(item.stageTone);
+    const monthLine = item.time ? `${item.month} ${item.time}` : item.month;
     return `
-      <div class="interview-schedule-card ${job.is_upcoming ? "" : "status-done"}">
+      <div class="interview-schedule-card ${item.isUpcoming ? "" : "status-done"}">
         <div class="interview-schedule-date">
-          <div class="day">${escapeHtml(day)}</div>
-          <div class="month">${escapeHtml(month)} ${escapeHtml(timePart)}</div>
+          <div class="day">${escapeHtml(item.day)}</div>
+          <div class="month">${escapeHtml(monthLine)}</div>
+          ${item.countdown ? `<span style="font-size:10px;font-weight:600;color:${item.countdown.tone === "soon" ? "#b45309" : "var(--muted,#64748b)"};">${escapeHtml(item.countdown.text)}</span>` : ""}
         </div>
         <div class="interview-schedule-info">
-          <div class="interview-schedule-company">${escapeHtml(job.company)}</div>
-          <div class="interview-schedule-role">${escapeHtml(job.role)}${job.direction ? " · " + escapeHtml(job.direction) : ""}</div>
-          ${job.note ? `<div class="interview-schedule-note">${escapeHtml(job.note)}</div>` : ""}
+          <div class="interview-schedule-company">${escapeHtml(item.company)}</div>
+          <div class="interview-schedule-role">${escapeHtml(item.role)}${item.direction ? " · " + escapeHtml(item.direction) : ""}</div>
+          ${item.note ? `<div class="interview-schedule-note">${escapeHtml(item.note)}</div>` : ""}
         </div>
-        <div class="interview-schedule-status ${statusClass}">${escapeHtml(job.status || "未知")}</div>
+        <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:190px;">
+          ${item.stage ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:${st.bg};color:${st.fg};font-weight:600;white-space:nowrap;">${escapeHtml(item.stage)}</span>` : ""}
+          ${item.roundNote ? `<span style="font-size:10px;color:var(--muted,#64748b);text-align:right;">${escapeHtml(item.roundNote)}</span>` : ""}
+          ${item.status ? `<span style="font-size:10px;color:var(--muted,#64748b);text-align:right;" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>` : ""}
+        </div>
       </div>
     `;
   }
