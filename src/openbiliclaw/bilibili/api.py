@@ -19,6 +19,12 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+#: 写接口里「等一会儿再来」的返回码：-412 风控拦截 / -799 请求过快 / -509 账号级限制。
+_RATE_LIMIT_CODES = frozenset({-412, -799, -509})
+
+#: 「默认收藏夹」的可能标题（B 站自动创建时叫法可能带空格/别名）。
+_DEFAULT_FAVORITE_FOLDER_TITLES = frozenset({"默认收藏夹", "默认收藏", "默认收藏夹 "})
+
 
 class BilibiliAPIError(RuntimeError):
     """Raised when a Bilibili API request returns an application error."""
@@ -33,6 +39,29 @@ class BilibiliAuthExpiredError(BilibiliAPIError):
 
     def __init__(self, message: str = "", code: int | None = -101) -> None:
         super().__init__(message, code=code)
+
+
+class BilibiliRateLimitedError(BilibiliAPIError):
+    """Raised when Bilibili throttles or risk-controls a write request.
+
+    ``-412`` 是风控拦截、``-799`` 是请求过快、``-509`` 是账号级封禁——三者对
+    调用方的**可恢复语义相同**（等一会儿再来，不是代码错了），所以归成一个类型，
+    由上层映射成 ``rate_limited`` 而不是 ``failed``。
+    """
+
+    def __init__(self, message: str = "", code: int | None = None) -> None:
+        super().__init__(message, code=code)
+
+
+class BilibiliFavoriteFolderNotFoundError(BilibiliAPIError):
+    """Raised when the account has no folder named 「默认收藏夹」.
+
+    单独成类是为了让上层能给出**可操作的**错误码（``favorite_folder_unresolved``），
+    而不是从 message 里做字符串匹配。
+    """
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
 
 
 def _json_object(value: Any) -> dict[str, Any]:
@@ -221,7 +250,13 @@ class BilibiliAPIClient:
 
     _WBI_KEY_TTL: float = 300.0  # Refresh WBI keys every 5 minutes
 
-    def __init__(self, cookie: str = "", *, min_request_interval: float = 0.2) -> None:
+    def __init__(
+        self,
+        cookie: str = "",
+        *,
+        min_request_interval: float = 0.2,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._cookie = cookie
         self._min_request_interval = min_request_interval
         self._last_request_at = 0.0
@@ -241,6 +276,9 @@ class BilibiliAPIClient:
             # downtime takes down every outbound request (observed 2026-09-01).
             trust_env=False,
             timeout=30.0,
+            # 注入点只给测试用（httpx.MockTransport）：写接口是「会改变用户账号」
+            # 的动作，必须在完全不发真实请求的前提下可测。
+            transport=transport,
         )
         if cookie:
             self._client.headers["Cookie"] = cookie
@@ -359,6 +397,119 @@ class BilibiliAPIClient:
                 raise BilibiliAuthExpiredError(detail)
             raise BilibiliAPIError(message)
         return _json_object(payload.get("data", {}))
+
+    async def _post_json(self, path: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Perform a POST and return the **whole** payload（含 ``code``）。
+
+        刻意与 :meth:`_get_json` 不同：不把非 0 ``code`` 直接抛掉。写接口的失败
+        是**业务语义**（``-101`` 未登录 / ``-412`` 风控 / 未知码需要原样上报给
+        用户），调用方要按码分支，而不是一律变成同一种异常。
+        """
+        await self._respect_rate_limit()
+        try:
+            resp = await self._client.post(f"{self._BASE_URL}{path}", data=data)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise BilibiliAPIError(str(exc)) from exc
+        return _json_object(resp.json())
+
+    @property
+    def csrf_token(self) -> str:
+        """Cookie 串里的 ``bili_jct``（所有写接口都要带它做 csrf 校验）。"""
+        for part in self._cookie.split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "bili_jct":
+                return value.strip()
+        return ""
+
+    def _require_csrf(self, action_label: str) -> str:
+        csrf = self.csrf_token
+        if not csrf:
+            raise BilibiliAuthExpiredError(
+                f"Bilibili cookie has no bili_jct — 无法完成{action_label}，请重新登录后再试"
+            )
+        return csrf
+
+    def _raise_for_write_code(self, code: int, payload: dict[str, Any], action_label: str) -> None:
+        """把写接口的非 0 ``code`` 映射成具体异常（不做「猜码等于成功」的事）。"""
+        message = str(payload.get("message", "")) or "Bilibili write request failed"
+        if code == -101:
+            raise BilibiliAuthExpiredError(f"Bilibili session expired while {action_label}: {message}")
+        if code in _RATE_LIMIT_CODES:
+            raise BilibiliRateLimitedError(f"Bilibili throttled {action_label} (code={code}): {message}", code=code)
+        raise BilibiliAPIError(f"Bilibili refused to {action_label} (code={code}): {message}", code=code)
+
+    async def add_to_watch_later(self, bvid: str) -> None:
+        """把视频加入「稍后再看」（官方接口本身幂等，重复调用不报错）。"""
+        normalized = bvid.strip()
+        if not normalized:
+            raise BilibiliAPIError("add_to_watch_later requires a bvid")
+        csrf = self._require_csrf("加入稍后再看")
+        payload = await self._post_json(
+            "/x/v2/history/toview/add",
+            {"bvid": normalized, "csrf": csrf},
+        )
+        code = int(payload.get("code", 0))
+        if code != 0:
+            self._raise_for_write_code(code, payload, "add to watch later")
+
+    async def is_in_watch_later(self, bvid: str) -> bool:
+        """Whether ``bvid`` is already in the user's watch-later list."""
+        normalized = bvid.strip()
+        if not normalized:
+            return False
+        data = await self._get_json("/x/v2/history/toview")
+        return any(
+            str(item.get("bvid", "")).strip() == normalized for item in _json_list(data.get("list", []))
+        )
+
+    async def resolve_default_favorite_folder_id(self) -> int:
+        """解析「默认收藏夹」的 media_id。
+
+        找不到就抛错：**绝不静默挑一个收藏夹**。写进用户没预期的夹子里，是那种
+        「没有报错但数据到了错地方」的缺陷，比直接失败难查得多。
+        """
+        folders = await self.get_favorite_folders()
+        for folder in folders:
+            if folder.title.strip() in _DEFAULT_FAVORITE_FOLDER_TITLES:
+                return folder.media_id
+        raise BilibiliFavoriteFolderNotFoundError(
+            "找不到名为「默认收藏夹」的收藏夹——请先在 B 站手动收藏一次，或改用稍后再看"
+        )
+
+    async def is_favorited(self, bvid: str, media_id: int, *, max_items: int = 100) -> bool:
+        """Whether ``bvid`` already sits in the given favorites folder."""
+        normalized = bvid.strip()
+        if not normalized or media_id <= 0:
+            return False
+        items = await self.get_favorites(media_id, max_items=max_items)
+        return any(str(item.get("bvid", "")).strip() == normalized for item in items)
+
+    async def get_video_aid(self, bvid: str) -> int:
+        """解析视频的数字 ``aid`` —— ``/x/v3/fav/resource/deal`` 只认 aid，不认 bvid。"""
+        info = await self.get_video_info(bvid)
+        if info.aid <= 0:
+            raise BilibiliAPIError(f"无法解析 {bvid} 的 aid")
+        return info.aid
+
+    async def add_to_favorites(self, aid: int, media_id: int) -> None:
+        """把视频收藏进指定收藏夹（``/x/v3/fav/resource/deal`` 需要数字 aid）。"""
+        if aid <= 0:
+            raise BilibiliAPIError("add_to_favorites requires a positive aid")
+        if media_id <= 0:
+            raise BilibiliAPIError("add_to_favorites requires a positive media_id")
+        csrf = self._require_csrf("收藏")
+        payload = await self._post_json(
+            "/x/v3/fav/resource/deal",
+            {"rid": aid, "type": 2, "add_media_ids": media_id, "csrf": csrf},
+        )
+        code = int(payload.get("code", 0))
+        if code != 0:
+            self._raise_for_write_code(code, payload, "add to favorites")
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client (writer adapters own their client)."""
+        await self._client.aclose()
 
     async def _get_wbi_keys(self) -> tuple[str, str]:
         """Fetch and cache the WBI image/sub keys used for signed search requests.

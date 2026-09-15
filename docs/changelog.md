@@ -42,6 +42,13 @@
 **阅读库**
 
 - feat(saved): 稍后读/收藏正本切到 `saved_memberships`，legacy 表冻结（`6c6a52b1`）
+- feat(saved_sync): **原生保存真正接线** —— 补平台适配器（B 站服务端 cookie 重放：
+  稍后再看 / 默认收藏夹收藏，均先查重再写）并把 router 构造收进
+  `build_native_save_router()`；需扩展的平台（小红书/抖音/YouTube）如实回报
+  `extension_required` 而不是 `unsupported`。此前 `NativeSaveRouter()` 是空构造，
+  `route()` 对所有平台抛 `UnsupportedNativeSaveError`，857 行 `service.py` 的申领/
+  心跳/超时机制一次都没跑到过 adapter。附 54 例假客户端测试（零真实请求）+
+  8 组鉴别力校验 + 一条 AST 静态防回归（`runtime_context` 不许再空构造）
 
 **旅游模块（T1/T2/T3 全部落地）**
 

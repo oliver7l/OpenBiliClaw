@@ -945,12 +945,20 @@ class RuntimeContext:
 
         # 12. Saved-sync service (reading library)
         try:
-            from openbiliclaw.saved_sync.router import NativeSaveRouter
+            from openbiliclaw.saved_sync.adapters import build_native_save_router
             from openbiliclaw.saved_sync.service import SavedSyncService
 
+            # 适配器必须真的注册进来：空构造的 NativeSaveRouter 会让 route() 对
+            # 所有平台抛 UnsupportedNativeSaveError，saved_sync/service.py 的申领 /
+            # 心跳 / 超时机制一次都跑不到（此前 native_save_states 恒 0 行）。
+            # 构造收在 build_native_save_router 里，测试可直接断言「每个平台都能
+            # 解析出 route」，防止这条接线再被改回空实现。
             new_saved_sync = SavedSyncService(
                 database=self.database,
-                router=NativeSaveRouter(),
+                router=build_native_save_router(
+                    data_dir=new_config.data_path,
+                    configured_cookie=new_config.bilibili.cookie,
+                ),
                 task_starter=self.task_registry.track,
             )
         except Exception:
