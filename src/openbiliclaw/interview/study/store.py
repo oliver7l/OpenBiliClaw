@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -20,6 +21,8 @@ from .models import (
     ReadingPlan,
     ReadingRecord,
 )
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS iq_questions (
@@ -99,12 +102,25 @@ CREATE INDEX IF NOT EXISTS idx_iq_daily_date ON iq_daily(progress_date);
 """
 
 
+def _coerce_category(raw: str) -> QuestionCategory:
+    """容错解析题目分类：未知值回落 OTHER 并告警，不让单行脏数据炸掉整个列表。
+
+    2026-09-15 实测：id=39 手工录入的 `行为面试/HR面` 不在枚举里，
+    曾使 GET /api/interview/study/questions 全量 500。
+    """
+    try:
+        return QuestionCategory(raw)
+    except ValueError:
+        logger.warning("iq_questions.category 非法值 %r，回落 OTHER（id 见日志上下文）", raw)
+        return QuestionCategory.OTHER
+
+
 def _row_to_question(row: sqlite3.Row) -> Question:
     return Question(
         id=row["id"],
         title=row["title"],
         answer=row["answer"] or "",
-        category=QuestionCategory(row["category"]),
+        category=_coerce_category(row["category"]),
         difficulty=row["difficulty"],
         source=row["source"] or "",
         tags=row["tags"] or "",

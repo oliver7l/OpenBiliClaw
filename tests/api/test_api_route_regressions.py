@@ -336,10 +336,9 @@ def test_chat_analysis_endpoints_registered_by_create_app() -> None:
 
 # 不贡献任何端点的 ``api/*_routes.py`` 白名单 —— 每一项必须写清理由，
 # 否则等于给「下一个孤儿模块」留后门。
-_ROUTE_MODULE_EXEMPT = {
-    "_interview_routes": "期 3 兼容垫片：只是把 openbiliclaw.interview.study.routes 的 "
-    "register_interview_routes / router 再导出一遍，本身不注册端点。",
-}
+# 历史：曾豁免 ``_interview_routes``（期 3 兼容垫片）；2026-09-15 垫片已全部
+# 摘除（commit 见当日日志），白名单清空。新的豁免须在此登记并写明理由。
+_ROUTE_MODULE_EXEMPT: dict[str, str] = {}
 
 
 def test_every_api_route_module_contributes_endpoints() -> None:
@@ -379,8 +378,9 @@ def test_every_api_route_module_contributes_endpoints() -> None:
 def test_exempt_route_modules_really_register_nothing() -> None:
     """F7 反向：白名单里的模块一旦开始贡献端点，说明豁免理由失效了。
 
-    例如 ``_interview_routes`` 若哪天真注册了端点，就会与 ``interview.study.routes``
-    的正主重复；豁免清单必须跟着失效或从测试里被点名。
+    历史案例：期 3 的 ``_interview_routes`` 垫片（已于 2026-09-15 摘除）——
+    若它哪天注册了端点，就会与 ``interview.study.routes`` 的正主重复。
+    白名单目前为空，本测试在登记新豁免时自动生效。
     """
     app = create_app()
     for stem in _ROUTE_MODULE_EXEMPT:

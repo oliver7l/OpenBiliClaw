@@ -48,8 +48,7 @@ src/openbiliclaw/interview/
     └── models.py
 ```
 
-旧导入路径（`interview.engine` / `interview.routes` / `interview.review_*` /
-`interview.questions.*` / `api._interview_routes`）保留 re-export 垫片一版，下一个大版本摘除。
+旧导入路径垫片已于 2026-09-15 全部摘除（12 个），旧路径不可用。
 
 ---
 

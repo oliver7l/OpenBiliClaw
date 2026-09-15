@@ -64,7 +64,7 @@ src/openbiliclaw/interview/
     └── routes.py         # build_interview_router → /api/interview/job/*
 ```
 
-旧导入路径（`interview.engine` / `interview.routes`）保留 re-export 垫片一版，下一个大版本摘除。
+旧导入路径垫片已于 2026-09-15 全部摘除（12 个，含 `api/_interview_routes.py`）；旧路径不再可用，导入请走 `interview.job / study / review`。
 
 ## 公开 API
 
