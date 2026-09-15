@@ -40,7 +40,7 @@
 | 多源适配层 | [modules/discovery.md](modules/discovery.md#多源适配层) | `src/openbiliclaw/sources/` | ✅ v0.3.0 落地 B 站 / 小红书 / 通用 Web；已接入抖音 DOM-first search / hot / feed discovery 和 YouTube 初始化画像 |
 | YouTube 接入 | [modules/youtube.md](modules/youtube.md) | `src/openbiliclaw/youtube/` + `src/openbiliclaw/sources/yt_tasks.py` | ✅ init / fetch smoke / Google Takeout 导入 |
 | 记忆系统 | [modules/memory.md](modules/memory.md) | `src/openbiliclaw/memory/` | ✅ 完成 |
-| 日记系统 | [modules/diary.md](modules/diary.md) | `src/openbiliclaw/diary/` | ✅ v0.3.173 完整日记记录 + AI 分析 + 多格式导入 + 桌面端页面 |
+| 日记系统 | [modules/diary.md](modules/diary.md) | `src/openbiliclaw/diary/` | ✅ 完整日记记录 + AI 分析 + 多格式导入 + 桌面端页面；v2026-09-14 补多来源导入管线（`diary/sources/` + `scripts/import_diary.py`，苹果备忘录 / 有道云 / WPS）与 24 表文档 |
 | 笔记系统 | [modules/notes.md](modules/notes.md) | `src/openbiliclaw/notes/` | ✅ v0.3.201 视频转笔记管线 + FTS 搜索 + 已读库导入 + CLI/API |
 | 聊天记录分析系统 | [modules/chat_analysis.md](modules/chat_analysis.md) | `src/openbiliclaw/chat_analysis/` | ✅ 独立数据库，801 会话，360 万消息，832 分析片段，13 个 API 端点 |
 | 灵魂引擎 | [modules/soul.md](modules/soul.md) | `src/openbiliclaw/soul/` | ✅ 完成 |

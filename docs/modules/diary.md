@@ -341,6 +341,88 @@ CREATE VIRTUAL TABLE diary_fts USING fts5(
 );
 ```
 
+### 子系统表一览
+
+除上面 8 张核心表外，日记库还有 16 张由各子系统持有的表。**全库共 24 张表**
+（不含 `diary_fts` 虚拟表），行数为 2026-09-14 实测：
+
+| 子系统 | 表 | 行数 | 说明 |
+|---|---|---|---|
+| 情绪 | `diary_emotion_analyses` | 925 | 每篇日记的情绪分析结果（情绪的唯一事实来源，见设计决策 5） |
+| 记忆 | `diary_memory_entries` | 925 | 记忆系统条目（`memory_system.py`） |
+| 高级记忆 | `diary_advanced_memories` | 134 | 分层记忆 / 巩固结果（`advanced_memory.py`） |
+| 时间线 | `diary_timeline_cards` | 4861 | 时间线卡片（`timeline.py`） |
+| 洞察 | `diary_insight_patterns` | 24 | 长周期模式洞察（`insights.py` / `insight_engine.py`） |
+| RAG | `diary_embedding_chunks` | 5 | 分块向量（`rag.py`，与 `diary_embeddings` 配合） |
+| 自进化 | `diary_lessons` | 448 | 经验教训（`self_evolution.py`） |
+| 自进化 | `diary_open_loops` | 123 | 未闭环事项 |
+| 自进化 | `diary_user_profiles` | 3 | 用户画像快照 |
+| 自进化 | `diary_tag_optimizations` | 3 | 标签优化建议 |
+| 自进化 | `diary_consolidation_logs` | 1 | 记忆巩固日志 |
+| 自进化 | `diary_nightly_logs` | 1 | nightly 运行日志 |
+| 自进化 | `diary_morning_briefings` | 1 | 晨报 |
+| 信念 ⚠️ | `diary_beliefs` | **0** | **已实现未接线**（`advanced_memory.py` 有完整实现与导出，无调用方），当前空转 |
+| 信念 ⚠️ | `diary_belief_conflicts` | **0** | 同上 |
+| 信念 ⚠️ | `diary_drift_events` | **0** | 同上 |
+
+> 信念 / 漂移三表当前**不产生数据**，属于已实现但未接入的功能。在决定接线或
+> 废弃之前，请勿据此认为"信念系统已上线"。
+
+## 多来源导入
+
+日记支持从多个外部来源导入，统一入口：
+
+```bash
+# 预演（默认，不写库）
+.venv/bin/python scripts/import_diary.py --source apple --folder 每日记录 --dry-run
+# 落库
+.venv/bin/python scripts/import_diary.py --source apple --folder 每日记录 --apply
+```
+
+### 来源与机制
+
+| `--source` | 落库后的 `source` 值 | 机制 | 自动化程度 | 历史导入量 |
+|---|---|---|---|---|
+| `apple` | `apple_notes` | **只读** `~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite`（`mode=ro`），gzip + protobuf 解码正文 | 可全自动 + 定时 | 85 篇 |
+| `youdao` | `youdao_note` | Cookie 注入 + 浏览器自动化；正文在 `bulb-editor` iframe 内 | 手动触发 | 126 篇 |
+| `wps` | `wps_note` | Cookie 注入 + 浏览器自动化（官方 V7 API 无云盘文件列表接口） | 手动触发 | 10 篇 |
+
+另有两条历史来源不在本管线内：`import_mindback`（657 篇，MindBack 备份库）、
+`import_lele`（47 篇，乐乐成长日记文本）。
+
+### 幂等与去重
+
+- **去重键 = 日期 + 归一化正文前 50 字**（所有空白压缩成单空格），与历史导入策略一致；
+- 命中即跳过，重复运行不会产生重复条目（含批次内去重）；
+- 记忆口诀：**先 `--dry-run` 看数量，确认后加 `--apply`**。
+
+### 已知限制
+
+1. **苹果备忘录需要「完全磁盘访问权限」**。`~/Library/Group Containers/` 受 macOS
+   TCC 保护，未授权时抛 `NotesAccessError` 并打印授权的具体步骤（设置 → 隐私与
+   安全性 → 完全磁盘访问权限 → 勾选 `WorkBuddy.app`，然后重启该 App）。
+2. **有道云 / WPS 依赖登录态**。Cookie 落地在 `data/cookies/{youdao,wps}.json`
+   （`data/` 已 gitignore，建议 0600 权限），过期后报 `CookieExpiredError`。
+   两者的 DOM 选择器基于历史导入记录，**首次实跑需用 `--debug-dump` 校对**。
+3. **历史导入脚本已流失**。2026-09-06 那批一次性脚本（changelog v0.3.177~181）
+   未保留在仓库中，因此本管线是这批来源**唯一**的可复用路径。
+4. 苹果备忘录解码层为 vendor 的第三方代码
+   （`sources/_apple_notes/`，MIT，来源 ingjieye/apple-notes-cli），不参与本项目
+   lint / 类型门禁。
+
+## 模块边界：`diary/` 与顶层 `self_evolution/`
+
+两个包里存在**同名文件**，改动时务必先确认改的是哪一个：
+
+| 文件名 | `src/openbiliclaw/diary/` | `src/openbiliclaw/self_evolution/` |
+|---|---|---|
+| `insights.py` | 日记洞察服务（`DiaryInsightsService`，情绪趋势 / 写作连续天数） | 内容侧自我进化洞察 |
+| `knowledge_graph.py` | 日记知识图谱（人物 / 事件关系） | 内容知识图谱 |
+| `self_evolution.py` | 日记轨迹自进化（nightly 日志 / 标签优化 / 用户画像） | 内容侧自进化包（`__init__.py` 所在的整个包） |
+
+判断依据：**只服务日记数据（`data/diary.db`）的落在 `diary/`**；服务于内容推荐 /
+发现链路的落在顶层 `self_evolution/`。
+
 ## 配置项
 
 日记系统当前无需额外配置项，复用项目主数据库和 LLM 服务。

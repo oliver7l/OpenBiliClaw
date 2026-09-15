@@ -4,6 +4,42 @@
 
 ---
 
+## 日记模块整理：多来源导入管线 + 文档补课（2026-09-14）
+
+把「把苹果备忘录 / 有道云笔记 / WPS 笔记抽成日记入库」这件事从**一次性脚本**
+变成**可复用、幂等的管线**，同时补上严重落后的模块文档。
+
+**背景**：`diary_entries` 里已有 928 篇日记，其中 `apple_notes` 85 / `youdao_note` 126 /
+`wps_note` 10 / `import_mindback` 657 / `import_lele` 47——但产生它们的脚本
+（changelog v0.3.177~181）**没有保留在仓库中**，`scripts/` 下已无任何日记导入脚本。
+唯一残留的导入能力是 `diary/importer.py`（只认本地 txt/md）。
+
+- feat: 新增 `src/openbiliclaw/diary/sources/` 子包
+  - `base.py` —— `RawNote` / `NoteSource` 协议 + 去重键 + 月度汇总拆分（纯函数）
+  - `apple_notes.py` —— 苹果备忘录，**只读** `NoteStore.sqlite`（`mode=ro`）
+  - `youdao.py` / `wps.py` —— Cookie + 浏览器自动化
+  - `upsert.py` —— 幂等落库，去重键 = 日期 + 归一化正文前 50 字
+  - `_browser.py` —— Cookie 装载 + 持久化 Chromium 上下文
+  - `_apple_notes/` —— **vendor** 的第三方解码层（MIT，ingjieye/apple-notes-cli，逐字复制）
+- feat: 新增 `scripts/import_diary.py` —— `--source apple|youdao|wps`、
+  `--dry-run`（默认）/`--apply`、`--since`、`--folder`、`--limit`、`--list-folders`、`--json`
+- feat: 苹果备忘录技术选型**从 AppleScript 改为只读 SQLite**——免登录、免 UI 自动化、
+  `mode=ro` 并发读安全；绝不用 `immutable=1`（会跳过 WAL 静默给陈旧快照）
+- test: `tests/diary/test_diary_sources.py`（15 例）——用**合成 NoteStore**
+  （自造 gzip + protobuf）跑端到端，不依赖 macOS 完全磁盘访问权限
+- docs: `docs/modules/diary.md` 补齐 —— 数据库表从 9 张补到 **24 张**、新增
+  「多来源导入」与「模块边界（`diary/` vs 顶层 `self_evolution/`）」章节、
+  标注信念/漂移三表为**已实现未接线**
+- chore: `pyproject.toml` 把 vendor 目录排除出 ruff / mypy 门禁
+
+> ⚠️ **运行前提**：苹果备忘录需要宿主进程有「完全磁盘访问权限」（macOS TCC）——
+> 未授权时抛 `NotesAccessError` 并打印授权步骤。有道云 / WPS 需要
+> `data/cookies/{youdao,wps}.json`，且 DOM 选择器**尚未实跑校验**。
+
+方案文档：`docs/plans/日记模块整理与导入管线方案.md`
+
+---
+
 ## 修复：恢复被 K5 误删的 `POST /api/delight/sent`（推送回执长期 404）（2026-09-14）
 
 `d5f02792`（K5 批量清理「重复」函数）删掉了 `app.py` 里的 `POST /api/delight/sent`，

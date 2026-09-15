@@ -106,6 +106,8 @@ packages = ["src/openbiliclaw"]
 target-version = "py311"
 line-length = 120
 src = ["src", "tests"]
+# vendor 的第三方解码层（MIT，逐字复制）不参与本项目 lint
+extend-exclude = ["src/openbiliclaw/diary/sources/_apple_notes"]
 
 [tool.ruff.lint]
 select = [
@@ -219,6 +221,11 @@ disable_error_code = ["untyped-decorator", "type-arg", "no-any-return", "union-a
 module = [
     "openbiliclaw.saved_sync.*",
 ]
+
+# vendor 的 Apple Notes 解码层（MIT，逐字复制，见同目录 LICENSE），不参与本项目类型门禁
+[[tool.mypy.overrides]]
+module = ["openbiliclaw.diary.sources._apple_notes.*"]
+ignore_errors = true
 disable_error_code = ["attr-defined"]
 
 # storage mixin 模式：mixin 类访问 Database 类提供的属性，mypy 无法识别
