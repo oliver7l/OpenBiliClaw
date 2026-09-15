@@ -1,12 +1,19 @@
 """Travel budget API routes — flight prices, budget document, and itinerary.
 
 Endpoints:
-- GET /api/travel/flights    — lowest tax-inclusive price per monitored route
-- GET /api/travel/doc        — raw budget markdown (for in-app rendering)
-- GET /api/travel/overview   — structured summary (plans, totals, per-person)
-- GET /api/travel/itinerary  — trip itinerary, members, and checklist from travel.db
+- GET /api/travel/flights        — lowest tax-inclusive price per monitored route
+- GET /api/travel/documents      — list of budget markdown files
+- GET /api/travel/doc            — raw budget markdown (for in-app rendering)
+- GET /api/travel/overview       — structured summary (plans, totals, per-person)
+- GET /api/travel/itinerary      — trip itinerary, members, and checklist from travel.db
+- GET /api/travel/expenses       — trip expenses grouped by category
+- GET /api/travel/flights-detail — booked flights split into departures/returns
+- GET /api/travel/hotels         — hotel nights with tour-included vs self-paid split
 
-The data directory is configured via ``[travel] data_path`` in config.toml.
+Paths come from ``TravelConfig`` (``data_path`` for markdown assets, ``db_path``
+for the SQLite file); relative values resolve against the project root. Keeping
+non-empty defaults matters — ``config.toml`` is gitignored, so a blank default
+silently turns every document endpoint into a 404 on a fresh checkout.
 """
 
 from __future__ import annotations
@@ -46,11 +53,28 @@ AIRPORT_FEE = 50
 FUEL_FEE = 70
 
 
-def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -> APIRouter:
-    """Create the travel router with resolved data paths."""
+def _under_root(value: str) -> Path:
+    """把配置项解析成绝对路径：相对路径按项目根解析，绝对路径原样使用。
+
+    这是本模块**唯一**的路径求解入口。此前 4 个 DB 端点各自硬编码
+    ``_project_root()/"data"/"travel.db"``，改数据目录时会静默读错库。
+    """
+
+    p = Path(value).expanduser()
+    return p if p.is_absolute() else _project_root() / p
+
+
+def build_travel_router(
+    *, data_path: str, db_path: str, budget_doc: str, flights_json: str
+) -> APIRouter:
+    """Create the travel router with resolved data paths.
+
+    相对路径一律按项目根解析（见 :func:`_under_root`）。
+    """
     router = APIRouter(prefix="/api/travel", tags=["travel"])
 
-    base = Path(data_path).expanduser() if data_path else None
+    base = _under_root(data_path) if data_path else None
+    db_file = _under_root(db_path) if db_path else None
 
     def _resolve(rel: str) -> Path | None:
         if base is None:
@@ -257,12 +281,12 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/itinerary")
     def get_itinerary() -> dict[str, Any]:
         """Return trip itinerary, members, and checklist from travel.db."""
-        db_path = (_project_root() / "data" / "travel.db")
-        if not db_path.exists():
+        db = db_file
+        if db is None or not db.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
         try:
-            conn = sqlite3.connect(str(db_path))
+            conn = sqlite3.connect(str(db))
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
 
@@ -312,12 +336,12 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/expenses")
     def get_expenses() -> dict[str, Any]:
         """Return trip expenses from trip_expenses table."""
-        db_path = (_project_root() / "data" / "travel.db")
-        if not db_path.exists():
+        db = db_file
+        if db is None or not db.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
         try:
-            conn = sqlite3.connect(str(db_path))
+            conn = sqlite3.connect(str(db))
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
 
@@ -368,12 +392,12 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/flights-detail")
     def get_flights_detail() -> dict[str, Any]:
         """Return detailed flight information from trip_flights table."""
-        db_path = (_project_root() / "data" / "travel.db")
-        if not db_path.exists():
+        db = db_file
+        if db is None or not db.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
         try:
-            conn = sqlite3.connect(str(db_path))
+            conn = sqlite3.connect(str(db))
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
 
@@ -420,12 +444,12 @@ def build_travel_router(*, data_path: str, budget_doc: str, flights_json: str) -
     @router.get("/hotels")
     def get_hotels() -> dict[str, Any]:
         """Return hotel information from trip_hotels table."""
-        db_path = (_project_root() / "data" / "travel.db")
-        if not db_path.exists():
+        db = db_file
+        if db is None or not db.exists():
             raise HTTPException(status_code=404, detail="旅行数据库不存在")
 
         try:
-            conn = sqlite3.connect(str(db_path))
+            conn = sqlite3.connect(str(db))
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
 

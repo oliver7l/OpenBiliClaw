@@ -547,9 +547,11 @@ unmanaged_max_age_days = 30
 satisfaction_filter_enabled = true
 
 [travel]
-# 旅行预算模块：指向存放预算文档和机票爬虫结果的目录
-# 留空则旅行 tab 显示"未配置数据目录"
-data_path = ""
+# 旅行预算模块：指向存放预算文档和机票爬虫结果的目录。
+# 相对路径按项目根解析；留空会回退到内置默认值 data/travel（不再退化成 404）。
+data_path = "data/travel"
+# SQLite 行程库。相对路径同样按项目根解析。
+db_path = "data/travel.db"
 # 预算文档文件名（相对 data_path）
 budget_doc = "新疆旅行预算.md"
 # 机票实时价格 JSON（相对 data_path）

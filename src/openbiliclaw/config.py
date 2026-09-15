@@ -721,9 +721,18 @@ class TravelConfig:
     Points at the directory containing the markdown budget doc and the
     ctrip-ticket-crawler results JSON, so the travel tab can render live
     prices without hard-coding absolute paths.
+
+    相对路径一律按项目根解析（见 :func:`openbiliclaw.config._project_root`），
+    写绝对路径则原样使用。两个默认值的含义：
+    - ``data_path``: md 攻略文档目录，**必须是非空默认值** —— 本项目
+      ``config.toml`` 在 .gitignore 内（换机即丢），留空会让桌面端
+      「✈️ 旅行」三个子标签直接 404。历史上这里就是 ``""`` 导致的线上故障。
+    - ``db_path``: SQLite 真值库。此前 4 个 DB 端点把它硬编码成
+      ``_project_root()/"data"/"travel.db"``，改数据目录时会静默读错库。
     """
 
-    data_path: str = ""
+    data_path: str = "data/travel"
+    db_path: str = "data/travel.db"
     budget_doc: str = "新疆旅行预算.md"
     flights_json: str = "ctrip-ticket-crawler/our_routes_results.json"
 

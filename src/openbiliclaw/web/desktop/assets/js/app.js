@@ -4490,24 +4490,35 @@
         const res = await fetch("/api/travel/flights");
         const data = await res.json();
         _travelLoaded.flights = true;
+        const View = window.OBCTravelView;
+        if (!View) {
+          grid.innerHTML = '<div class="travel-error">旅行视图模型未加载（travel-view.js 未引入或加载失败）</div>';
+          return;
+        }
+        // 字段对齐全部交给 travel-view.js：后端实际返回的是 lowest_price /
+        // lowest_flight / lowest_departure / child_fare / vs_baseline.{diff,pct}，
+        // 而早期代码按 a.price / a.drop / r.child_price / r.departure_time 取值——
+        // 这四个字段后端从未返回过，所以提醒/时刻/儿童价恒渲染 undefined。
+        const vm = View.buildFlightsViewModel(data);
         // 降价提醒
-        if (data.alerts && data.alerts.length) {
-          alertsEl.innerHTML = data.alerts.map((a) =>
-            `<div class="travel-alert">🔥 ${a.route} ${a.date} 降价至 ¥${a.price}（${a.flight}），较基线降 ¥${a.drop}</div>`
-          ).join("");
+        if (vm.alerts.length) {
+          alertsEl.innerHTML = vm.alerts
+            .map((a) => `<div class="travel-alert">${View.alertMessage(a)}</div>`)
+            .join("");
           alertsEl.hidden = false;
         }
         // 航线卡片（沿用推荐流小白卡 video-card.is-minimal）
-        grid.innerHTML = (data.routes || []).map((r) => {
-          const price = r.lowest_price ? `<span class="travel-flight-price">¥${Number(r.lowest_price).toLocaleString()}</span>` : '<span class="travel-flight-price muted">未取到</span>';
-          const child = r.child_price ? `<div class="travel-flight-child">儿童 ¥${r.child_price}</div>` : "";
-          const flight = r.lowest_flight || "";
-          const time = r.departure_time || "";
+        grid.innerHTML = vm.routes.map((r) => {
+          const price = r.hasPrice
+            ? `<span class="travel-flight-price">¥${r.priceText}</span>`
+            : '<span class="travel-flight-price muted">未取到</span>';
+          const child = r.hasChild ? `<div class="travel-flight-child">儿童 ¥${r.childText}</div>` : "";
+          const meta = [r.flightNo, r.departure].filter(Boolean).join(" ");
           return `<div class="video-card is-minimal travel-flight-card">
-            <div class="video-card-title">${escapeHtml(r.dep_city)} → ${escapeHtml(r.arr_city)}</div>
+            <div class="video-card-title">${escapeHtml(r.routeLabel)}</div>
             <div class="travel-flight-date">${escapeHtml(r.date)}</div>
             ${price}
-            <div class="video-card-footer travel-flight-meta">${escapeHtml(flight)} ${escapeHtml(time)}</div>
+            <div class="video-card-footer travel-flight-meta">${escapeHtml(meta)}</div>
             ${child}
           </div>`;
         }).join("");
