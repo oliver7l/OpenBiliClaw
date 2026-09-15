@@ -859,4 +859,15 @@ class SchemaMixin:
             );
             CREATE INDEX IF NOT EXISTS idx_native_save_task_items_order
                 ON native_save_task_items(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS native_save_tasks (
+                task_id TEXT PRIMARY KEY,
+                runner_id TEXT NOT NULL DEFAULT '',
+                state TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (state IN ('pending', 'running', 'released')),
+                heartbeat_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_native_save_tasks_state
+                ON native_save_tasks(state, heartbeat_at);
         """)

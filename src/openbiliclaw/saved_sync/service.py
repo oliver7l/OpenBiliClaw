@@ -314,8 +314,7 @@ class SavedSyncService:
 
     def has_sync_task(self, task_id: str) -> bool:
         """Return whether a durable task exists, including a zero-item batch."""
-        result = self._database.native_sync_task_exists(self._validated_task_id(task_id))
-        return cast("bool", result)
+        return bool(self._database.native_sync_task_exists(self._validated_task_id(task_id)))
 
     def _group_task_rows(self, task_id: str) -> tuple[list[dict[str, Any]], ...]:
         rows = self._database.list_native_save_states_by_task(task_id)
