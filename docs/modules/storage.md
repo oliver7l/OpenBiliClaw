@@ -197,3 +197,49 @@ db.suppress_low_confidence_recommendations()
 6. **pending 不是 raw 减 available**：最近已看、缺文案、缺分类、缺链接、待评估属于不同诊断含义，必须分开统计。
 7. **低分清理和展示防线都在存储层落地**：admission 仍由 discovery evaluator 决定；storage 只用统一阈值阻止旧脏数据、suppressed 低分复活和未来绕过入口继续进入可展示读取路径。
 8. **`style_key` 迁移只改已知旧值**：历史安装用户的本地 SQLite 里可能已有 `deep_dive`、`story_doc`、`lifestyle` 等旧内容风格 key。初始化迁移会把这些已知值物理改写为 `deep_focus`、`story_immersion`、`daily_wander` 等新观看模式；未知自定义值会原样保留，避免误删无法识别的历史数据。
+
+---
+
+## 2026-09-15 摸底增补
+
+> 只读实测复核（agent 摸底 + 人工抽查），新增四块原文档未覆盖的内容。
+
+### 连接约定（精确参数）
+
+`open_db_conn`（`database.py:111`）：WAL、`busy_timeout=60000`、`synchronous=NORMAL`、
+`timeout=60`、`check_same_thread=False`，返回 `LockedConnection`（:79，锁串行化封装）；
+同目录已存在的子库自动 ATTACH（:147-156）。连接是 **per-thread** 的（:634-640）——
+FastAPI 线程与后台刷新线程不共享连接，这是 SQLite 锁安全的基础。
+
+### 子库边界（storage 管什么、不管什么）
+
+storage 管 **1 + 6**：主库 + 同目录 ATTACH 的 `pool.db / events.db / llm.db /
+discovery.db / content.db / knowledge.db`。**不经 storage**、由领域模块直连的子库：
+`interview.db`（interview/ 自建连接）、`health.db`（health/store.py 经 db_path）、
+`douban.db`（douban/store.py），以及 diary/travel/weekend 等业务子库。
+判据：主库或 6 个 ATTACH 库 → 走 `Database`；领域子库 → 走该领域包的 store。
+
+### 写路径约定（跨库写必须走对方法，绕过会锁错库）
+
+- 写 **content.db** → `_content_write`（`_watch_later_mixin.py:30`、`_article_mixin.py`、`_favorites_mixin.py:30`）
+- 写 **discovery.db** → `_discovery_write` / `_discovery_write_many`（`_discovery_keywords_mixin.py:38`、`_discovery_candidates_mixin.py:36`）
+- 主库写 → `self.open_connection()` + `BEGIN IMMEDIATE` + commit/rollback（范例 `_saved_memberships_mixin.py:156-200`）
+
+### 已知技术债（已亲自复核）
+
+1. **稍后读双写不对称**：`upsert_saved_membership`（`_saved_memberships_mixin.py:145-205`）
+   只写 saved_items/saved_memberships，**不写** legacy `favorites`/`watch_later`；
+   而 `remove_saved_membership`（:207-300，:283-291）会额外 DELETE legacy 行。
+   ⇒ 新 API 收藏的内容，读 legacy 的旧路径看不到，两端漂移。真值源待拍板后修。
+2. **原生保存 = 调用存在、实现不存在**：`saved_sync/service.py` 的 25 处
+   `self._database.<method>` 中有 **14 个调用点 / 12 个方法全树无定义**
+   （claim_native_sync_task_runner:254、reconcile_stale_native_save_claims:256/:310、
+   release_pending_native_sync_task:300、release_stale_pending_native_sync_task:309、
+   list_native_sync_task_items:311、native_sync_task_exists:317、
+   list_native_save_states_by_task:321、claim_native_save_item:343、
+   update_native_save_claim_route:402、heartbeat_native_save_claim:745/:770、
+   heartbeat_native_sync_task:788、complete_native_save_claim:812）。
+   `_native_sync_mixin.py` 里只有降级 stub（:21-26 `pass`、:39-46 返回 `[]`）。
+   真执行会 AttributeError——佐证 `native_save_states` 0 行。处置待拍板。
+3. **超大文件**：`database.py`(1,230) / `_pool_candidate_mixin.py`(1,218) /
+   `_schema_mixin.py`(860) / `_article_mixin.py`(856)。
