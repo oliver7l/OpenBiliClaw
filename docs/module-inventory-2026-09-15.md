@@ -207,7 +207,7 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **saved_sync 原生保存：补 adapter 还是删** | 待你拍板 | 同上 §4 R3 |
 | **面试 12 个兼容垫片** | 待你拍板（我建议现在摘） | 同上 §5 I3 |
 | **健康模块三修**（时间线分页 / 空壳表 / 文档） | 未开始，**风险低** | 同上 §6 H1/H2/H6 |
-| **路径统一**（34 处） | 已用棘轮冻住，未逐个改 | `tests/test_architecture_contracts.py` 基线即清单，改一处删一行 |
+| **路径统一**（34 处） | ✅ **已清零（2026-09-15，`bc933c16`）**：26 处 CWD + 7 处 parents[N] + weekend 字符串路径 5 处；棘轮基线已清空，`tests/test_architecture_contracts.py` 守住新增 |
 | **`sources` + `storage` 模块文档** | 未开始（两个包都没文档） | 本文 §1 |
 | **`self_evolution` 零测试补课** | 未开始（9,284 行零测试） | 同上 |
 | **质量门禁 mypy 55 → 0** | 未开始 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
