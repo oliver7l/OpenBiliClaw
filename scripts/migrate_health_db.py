@@ -15,11 +15,14 @@ from datetime import datetime
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent / "data"
+#: 2026-09-16 奥卡姆瘦身：删掉了 4 个零数据的实体表（allergies / vitals /
+#: immunizations / insights）——需要时再加回来，表清单必须与
+#: ``health/store.py`` 的 `_SCHEMA_SQL` 保持一致。
 HEALTH_TABLES = [
     "health_patients", "health_encounters", "health_conditions", "health_medications",
-    "health_lab_results", "health_lab_components", "health_procedures", "health_allergies",
-    "health_vitals", "health_immunizations", "health_doctors", "health_documents",
-    "health_insights", "health_appointments", "health_medication_logs",
+    "health_lab_results", "health_lab_components", "health_procedures",
+    "health_doctors", "health_documents",
+    "health_appointments", "health_medication_logs",
 ]
 
 

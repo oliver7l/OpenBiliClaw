@@ -14,10 +14,6 @@ AI健康洞察、健康时间线等完整健康管理功能。
 from __future__ import annotations
 
 from .models import (
-    Allergy,
-    AllergyCreate,
-    AllergyStatus,
-    AllergyUpdate,
     Appointment,
     AppointmentCreate,
     AppointmentStatus,
@@ -41,11 +37,7 @@ from .models import (
     HealthDocument,
     HealthDocumentCreate,
     HealthDocumentUpdate,
-    HealthInsight,
-    HealthInsightCreate,
     HealthStats,
-    Immunization,
-    ImmunizationCreate,
     LabComponentStatus,
     LabResult,
     LabResultCreate,
@@ -70,18 +62,11 @@ from .models import (
     ProcedureType,
     ProcedureUpdate,
     TimelineEvent,
-    VitalGlucoseContext,
-    Vitals,
-    VitalsCreate,
 )
 from .service import HealthService
 from .store import HealthStore
 
 __all__ = [
-    "Allergy",
-    "AllergyCreate",
-    "AllergyStatus",
-    "AllergyUpdate",
     "Appointment",
     "AppointmentCreate",
     "AppointmentStatus",
@@ -105,13 +90,9 @@ __all__ = [
     "HealthDocument",
     "HealthDocumentCreate",
     "HealthDocumentUpdate",
-    "HealthInsight",
-    "HealthInsightCreate",
     "HealthService",
     "HealthStats",
     "HealthStore",
-    "Immunization",
-    "ImmunizationCreate",
     "LabComponentStatus",
     "LabResult",
     "LabResultCreate",
@@ -136,7 +117,4 @@ __all__ = [
     "ProcedureType",
     "ProcedureUpdate",
     "TimelineEvent",
-    "VitalGlucoseContext",
-    "Vitals",
-    "VitalsCreate",
 ]

@@ -51,9 +51,6 @@
       case 'medications': await renderMedications(); break;
       case 'labs': await renderLabs(); break;
       case 'procedures': await renderProcedures(); break;
-      case 'allergies': await renderAllergies(); break;
-      case 'vitals': await renderVitals(); break;
-      case 'immunizations': await renderImmunizations(); break;
       case 'timeline': await renderTimeline(); break;
       case 'documents': await renderDocuments(); break;
       case 'doctors': await renderDoctors(); break;
@@ -85,8 +82,6 @@
     html += statCard('医生信息', stats.total_doctors || 0);
     html += statCard('即将预约', stats.upcoming_appointments || 0);
     html += statCard('服药记录', stats.total_medication_logs || 0);
-    html += statCard('过敏史', stats.total_allergies);
-    html += statCard('疫苗接种', stats.total_immunizations);
     html += '</div>';
 
     if (patients.length > 1) {
@@ -287,7 +282,7 @@
     });
     modal('化验详情 — ' + esc(l.test_name), rows([['机构', l.facility], ['报告日期', fmtDate(l.completed_date)], ['总体解读', l.overall_interpretation]]) +
       '<table class="lab-table"><tr><th>项目</th><th>结果</th><th>单位</th><th>参考范围</th><th>状态</th></tr>' + (rows || '<tr><td colspan="5" class="health-empty">无明细</td></tr>') + '</table>' +
-      '<div class="modal-actions"><button class="pill-btn" onclick="interpretLab(' + l.id + ')">🤖 AI解读</button><button class="pill-btn health-danger" onclick="deleteItem(\'lab-results\',' + l.id + ')">删除</button><button class="pill-btn" onclick="closeModal()">关闭</button></div>');
+      '<div class="modal-actions"><button class="pill-btn health-danger" onclick="deleteItem(\'lab-results\',' + l.id + ')">删除</button><button class="pill-btn" onclick="closeModal()">关闭</button></div>');
   };
 
   window.showLabForm = function () {
@@ -339,7 +334,7 @@
     var p = res.data;
     modal('检查详情 — ' + esc(p.procedure_name),
       rows([['类型', p.procedure_type], ['部位', p.body_part], ['日期', fmtDate(p.procedure_date)], ['机构', p.facility], ['医生', p.doctor], ['检查所见', p.findings], ['诊断结论', p.conclusion ? '<strong>' + esc(p.conclusion) + '</strong>' : '-'], ['异常摘要', p.abnormal_summary], ['复查建议', p.follow_up_recommendation]]) +
-      '<div class="modal-actions"><button class="pill-btn" onclick="interpretProcedure(' + p.id + ')">🤖 AI解读</button><button class="pill-btn health-danger" onclick="deleteItem(\'procedures\',' + p.id + ')">删除</button><button class="pill-btn" onclick="closeModal()">关闭</button></div>');
+      '<div class="modal-actions"><button class="pill-btn health-danger" onclick="deleteItem(\'procedures\',' + p.id + ')">删除</button><button class="pill-btn" onclick="closeModal()">关闭</button></div>');
   };
 
   window.showProcedureForm = function () {
@@ -363,108 +358,6 @@
     closeModal(); renderTab('procedures');
   };
 
-  // ── Allergies ──
-  async function renderAllergies() {
-    var el = $('healthContent');
-    var res = await api('/allergies' + (currentPatientId ? '?patient_id=' + currentPatientId : ''));
-    var html = '<div class="health-card"><h2>过敏史 <button class="pill-btn dark health-sm" onclick="showAllergyForm()">+ 新增过敏</button></h2>';
-    if (res.items && res.items.length) {
-      html += '<div class="table-wrap"><table><tr><th>过敏原</th><th>反应</th><th>严重程度</th><th>状态</th><th>操作</th></tr>';
-      res.items.forEach(function (a) {
-        html += '<tr><td><strong>' + esc(a.allergen) + '</strong></td><td>' + esc(a.reaction || '-') + '</td><td>' + badge('severity', a.severity) + '</td><td>' + badge('status', a.status) + '</td><td><button class="pill-btn health-sm health-danger" onclick="deleteItem(\'allergies\',' + a.id + ')">删除</button></td></tr>';
-      });
-      html += '</table></div>';
-    } else html += '<div class="health-empty">暂无过敏记录</div>';
-    html += '</div>';
-    el.innerHTML = html;
-  }
-
-  window.showAllergyForm = function () {
-    modal('新增过敏记录', formField('过敏原 *', 'text', 'f_allergen') + formField('过敏反应', 'text', 'f_reaction') +
-      '<div class="form-row"><div class="form-group"><label>严重程度</label><select id="f_severity"><option value="mild">轻度</option><option value="moderate">中度</option><option value="severe">重度</option><option value="critical">危重</option></select></div>' +
-      '<div class="form-group"><label>状态</label><select id="f_status"><option value="active">活跃</option><option value="inactive">不活跃</option><option value="resolved">已缓解</option></select></div></div>' +
-      formField('首次发现日期', 'date', 'f_onset') +
-      '<div class="modal-actions"><button class="pill-btn" onclick="closeModal()">取消</button><button class="pill-btn dark" onclick="submitAllergy()">保存</button></div>');
-  };
-
-  window.submitAllergy = async function () {
-    await api('/allergies', { method: 'POST', body: JSON.stringify({
-      patient_id: currentPatientId || 1, allergen: v('f_allergen'), reaction: v('f_reaction'),
-      severity: v('f_severity'), status: v('f_status'), onset_date: v('f_onset') || null,
-    }) });
-    closeModal(); renderTab('allergies');
-  };
-
-  // ── Vitals ──
-  async function renderVitals() {
-    var el = $('healthContent');
-    if (!currentPatientId) { el.innerHTML = '<div class="health-empty">请先选择患者</div>'; return; }
-    var res = await api('/vitals?patient_id=' + currentPatientId + '&limit=200');
-    var html = '<div class="health-card"><h2>生命体征 <button class="pill-btn dark health-sm" onclick="showVitalsForm()">+ 新增记录</button></h2>';
-    if (res.items && res.items.length) {
-      html += '<div class="table-wrap"><table><tr><th>日期</th><th>血压</th><th>心率</th><th>体温</th><th>体重</th><th>血氧</th><th>血糖</th><th>操作</th></tr>';
-      res.items.forEach(function (v) {
-        html += '<tr><td>' + fmtDate(v.recorded_date) + '</td><td>' + (v.systolic_bp ? v.systolic_bp + '/' + v.diastolic_bp : '-') + '</td><td>' + (v.heart_rate || '-') + '</td><td>' + (v.temperature_c || '-') + '</td><td>' + (v.weight_kg || '-') + '</td><td>' + (v.oxygen_saturation || '-') + '</td><td>' + (v.blood_glucose || '-') + '</td><td><button class="pill-btn health-sm health-danger" onclick="deleteItem(\'vitals\',' + v.id + ')">删除</button></td></tr>';
-      });
-      html += '</table></div>';
-    } else html += '<div class="health-empty">暂无生命体征记录</div>';
-    html += '</div>';
-    el.innerHTML = html;
-  }
-
-  window.showVitalsForm = function () {
-    modal('新增生命体征', formField('日期 *', 'date', 'f_date', new Date().toISOString().slice(0, 10)) +
-      '<div class="form-row">' + formField('收缩压', 'number', 'f_sbp') + formField('舒张压', 'number', 'f_dbp') + '</div>' +
-      '<div class="form-row">' + formField('心率', 'number', 'f_hr') + formField('体温(℃)', 'number', 'f_temp') + '</div>' +
-      '<div class="form-row">' + formField('体重(kg)', 'number', 'f_weight') + formField('血氧(%)', 'number', 'f_spo2') + '</div>' +
-      '<div class="form-row">' + formField('血糖(mmol/L)', 'number', 'f_glucose') + formField('疼痛评分(0-10)', 'number', 'f_pain') + '</div>' +
-      '<div class="modal-actions"><button class="pill-btn" onclick="closeModal()">取消</button><button class="pill-btn dark" onclick="submitVitals()">保存</button></div>');
-  };
-
-  window.submitVitals = async function () {
-    await api('/vitals', { method: 'POST', body: JSON.stringify({
-      patient_id: currentPatientId || 1, recorded_date: v('f_date'),
-      systolic_bp: parseInt(v('f_sbp')) || null, diastolic_bp: parseInt(v('f_dbp')) || null,
-      heart_rate: parseInt(v('f_hr')) || null, temperature_c: parseFloat(v('f_temp')) || null,
-      weight_kg: parseFloat(v('f_weight')) || null, oxygen_saturation: parseFloat(v('f_spo2')) || null,
-      blood_glucose: parseFloat(v('f_glucose')) || null, pain_scale: parseInt(v('f_pain')) || null,
-    }) });
-    closeModal(); renderTab('vitals');
-  };
-
-  // ── Immunizations ──
-  async function renderImmunizations() {
-    var el = $('healthContent');
-    var res = await api('/immunizations' + (currentPatientId ? '?patient_id=' + currentPatientId : ''));
-    var html = '<div class="health-card"><h2>疫苗接种 <button class="pill-btn dark health-sm" onclick="showImmunizationForm()">+ 新增接种</button></h2>';
-    if (res.items && res.items.length) {
-      html += '<div class="table-wrap"><table><tr><th>疫苗</th><th>接种日期</th><th>剂次</th><th>制造商</th><th>机构</th><th>操作</th></tr>';
-      res.items.forEach(function (i) {
-        html += '<tr><td><strong>' + esc(i.vaccine_name) + '</strong></td><td>' + fmtDate(i.date_administered) + '</td><td>' + (i.dose_number || '-') + '</td><td>' + esc(i.manufacturer || '-') + '</td><td>' + esc(i.facility || '-') + '</td><td><button class="pill-btn health-sm health-danger" onclick="deleteItem(\'immunizations\',' + i.id + ')">删除</button></td></tr>';
-      });
-      html += '</table></div>';
-    } else html += '<div class="health-empty">暂无疫苗接种记录</div>';
-    html += '</div>';
-    el.innerHTML = html;
-  }
-
-  window.showImmunizationForm = function () {
-    modal('新增疫苗接种', formField('疫苗名称 *', 'text', 'f_name') +
-      '<div class="form-row">' + formField('接种日期 *', 'date', 'f_date', new Date().toISOString().slice(0, 10)) + formField('剂次', 'number', 'f_dose') + '</div>' +
-      '<div class="form-row">' + formField('制造商', 'text', 'f_manu') + formField('批号', 'text', 'f_lot') + '</div>' +
-      formField('接种机构', 'text', 'f_facility') +
-      '<div class="modal-actions"><button class="pill-btn" onclick="closeModal()">取消</button><button class="pill-btn dark" onclick="submitImmunization()">保存</button></div>');
-  };
-
-  window.submitImmunization = async function () {
-    await api('/immunizations', { method: 'POST', body: JSON.stringify({
-      patient_id: currentPatientId || 1, vaccine_name: v('f_name'), date_administered: v('f_date'),
-      dose_number: parseInt(v('f_dose')) || null, manufacturer: v('f_manu'),
-      lot_number: v('f_lot'), facility: v('f_facility'),
-    }) });
-    closeModal(); renderTab('immunizations');
-  };
-
   // ── Common delete ──
   window.deleteItem = async function (type, id) {
     if (!confirm('确定删除这条记录？')) return;
@@ -484,7 +377,6 @@
       encounter: { icon: '🏥', color: '#2563eb', label: '就诊' }, procedure: { icon: '🔬', color: '#7c3aed', label: '检查' },
       lab: { icon: '🧪', color: '#0891b2', label: '化验' }, medication: { icon: '💊', color: '#16a34a', label: '用药' },
       condition: { icon: '⚠️', color: '#dc2626', label: '健康问题' }, document: { icon: '📄', color: '#65a30d', label: '文档' },
-      immunization: { icon: '💉', color: '#0d9488', label: '疫苗' }, vitals: { icon: '❤️', color: '#e11d48', label: '体征' },
     };
     var html = '<div class="page-header"><h2>健康时间线</h2><p>按时间顺序展示所有健康事件</p></div>';
     if (events.length === 0) { html += '<div class="health-empty">暂无时间线数据</div>'; }
@@ -617,22 +509,6 @@
       '<div class="modal-actions"><button class="pill-btn health-danger" onclick="deleteRecord(\'doctors\',' + d.id + ')">删除</button></div>');
   };
 
-  // ── AI Interpretation ──
-  async function interpret(id, path) {
-    if (!confirm('使用 AI 解读这份报告？\n\n注意：AI 解读仅供参考，不能替代医生诊断。')) return;
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = '解读中...';
-    try {
-      var res = await api('/' + path + '/' + id + '/interpret', { method: 'POST' });
-      if (res.ok && res.data) {
-        modal('AI 报告解读', '<div class="ai-insight">' + esc(res.data.content) + '</div>' +
-          '<p class="health-sub">模型：' + esc(res.data.model || '未知') + ' · ' + fmtDate(res.data.created_at) + '</p>');
-      } else { alert('解读失败：' + (res.error || '未知错误')); }
-    } catch (e) { alert('解读失败：' + e.message); }
-    finally { btn.disabled = false; btn.textContent = '🤖 AI解读'; }
-  }
-  window.interpretLab = function (id) { interpret(id, 'lab-results'); };
-  window.interpretProcedure = function (id) { interpret(id, 'procedures'); };
 
   // ── Appointments ──
   async function renderAppointments() {

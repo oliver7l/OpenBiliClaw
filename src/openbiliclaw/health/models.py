@@ -113,24 +113,6 @@ class ProcedureStatus(StrEnum):
     POSTPONED = "postponed"
 
 
-class AllergyStatus(StrEnum):
-    """过敏状态。"""
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    RESOLVED = "resolved"
-    UNCONFIRMED = "unconfirmed"
-
-
-class VitalGlucoseContext(StrEnum):
-    """血糖测量上下文。"""
-
-    FASTING = "fasting"
-    BEFORE_MEAL = "before_meal"
-    AFTER_MEAL = "after_meal"
-    RANDOM = "random"
-
-
 # ── 患者 ──────────────────────────────────────────────────────
 
 
@@ -537,126 +519,6 @@ class ProcedureUpdate(BaseModel):
     tags: list[str] | None = None
 
 
-# ── 过敏史 ────────────────────────────────────────────────────
-
-
-class Allergy(BaseModel):
-    """过敏史。"""
-
-    id: int = Field(description="过敏记录 ID")
-    patient_id: int = Field(description="关联患者 ID")
-    allergen: str = Field(description="过敏原")
-    reaction: str = Field(default="", description="过敏反应")
-    severity: ConditionSeverity = Field(default=ConditionSeverity.MILD, description="严重程度")
-    onset_date: str | None = Field(default=None, description="首次发现日期")
-    status: AllergyStatus = Field(default=AllergyStatus.ACTIVE, description="状态")
-    notes: str = Field(default="", description="备注")
-    created_at: datetime = Field(description="创建时间")
-    updated_at: datetime = Field(description="更新时间")
-
-
-class AllergyCreate(BaseModel):
-    """创建过敏记录。"""
-
-    patient_id: int
-    allergen: str = Field(min_length=1)
-    reaction: str = ""
-    severity: ConditionSeverity = ConditionSeverity.MILD
-    onset_date: str | None = None
-    status: AllergyStatus = AllergyStatus.ACTIVE
-    notes: str = ""
-
-
-class AllergyUpdate(BaseModel):
-    """更新过敏记录。"""
-
-    patient_id: int | None = None
-    allergen: str | None = None
-    reaction: str | None = None
-    severity: ConditionSeverity | None = None
-    onset_date: str | None = None
-    status: AllergyStatus | None = None
-    notes: str | None = None
-
-
-# ── 生命体征 ──────────────────────────────────────────────────
-
-
-class Vitals(BaseModel):
-    """生命体征记录。"""
-
-    id: int = Field(description="记录 ID")
-    patient_id: int = Field(description="关联患者 ID")
-    recorded_date: str = Field(description="测量日期 YYYY-MM-DD")
-    systolic_bp: int | None = Field(default=None, description="收缩压 mmHg")
-    diastolic_bp: int | None = Field(default=None, description="舒张压 mmHg")
-    heart_rate: int | None = Field(default=None, description="心率 bpm")
-    temperature_c: float | None = Field(default=None, description="体温 ℃")
-    weight_kg: float | None = Field(default=None, description="体重 kg")
-    height_cm: float | None = Field(default=None, description="身高 cm")
-    oxygen_saturation: float | None = Field(default=None, description="血氧饱和度 %")
-    respiratory_rate: int | None = Field(default=None, description="呼吸频率 次/分")
-    blood_glucose: float | None = Field(default=None, description="血糖 mmol/L")
-    glucose_context: VitalGlucoseContext | None = Field(default=None, description="血糖测量上下文")
-    pain_scale: int | None = Field(default=None, description="疼痛评分 0-10")
-    notes: str = Field(default="", description="备注")
-    created_at: datetime = Field(description="创建时间")
-
-
-class VitalsCreate(BaseModel):
-    """创建生命体征记录。"""
-
-    patient_id: int
-    recorded_date: str
-    systolic_bp: int | None = None
-    diastolic_bp: int | None = None
-    heart_rate: int | None = None
-    temperature_c: float | None = None
-    weight_kg: float | None = None
-    height_cm: float | None = None
-    oxygen_saturation: float | None = None
-    respiratory_rate: int | None = None
-    blood_glucose: float | None = None
-    glucose_context: VitalGlucoseContext | None = None
-    pain_scale: int | None = None
-    notes: str = ""
-
-
-# ── 疫苗接种 ──────────────────────────────────────────────────
-
-
-class Immunization(BaseModel):
-    """疫苗接种记录。"""
-
-    id: int = Field(description="记录 ID")
-    patient_id: int = Field(description="关联患者 ID")
-    vaccine_name: str = Field(description="疫苗名称")
-    date_administered: str = Field(description="接种日期")
-    dose_number: int | None = Field(default=None, description="剂次")
-    manufacturer: str = Field(default="", description="制造商")
-    lot_number: str = Field(default="", description="批号")
-    site: str = Field(default="", description="接种部位")
-    facility: str = Field(default="", description="接种机构")
-    administering_person: str = Field(default="", description="接种人")
-    notes: str = Field(default="", description="备注")
-    created_at: datetime = Field(description="创建时间")
-
-
-class ImmunizationCreate(BaseModel):
-    """创建疫苗接种记录。"""
-
-    patient_id: int
-    vaccine_name: str = Field(min_length=1)
-    date_administered: str
-    dose_number: int | None = None
-    manufacturer: str = ""
-    lot_number: str = ""
-    site: str = ""
-    facility: str = ""
-    administering_person: str = ""
-    notes: str = ""
-
-
 # ── 医生信息 ──────────────────────────────────────────────────
 
 
@@ -929,35 +791,6 @@ class TimelineEvent(BaseModel):
     related_id: int = Field(description="关联记录 ID")
 
 
-# ── AI 健康洞察 ───────────────────────────────────────────────
-
-
-class HealthInsight(BaseModel):
-    """AI 生成的健康洞察/报告解读。"""
-
-    id: int = Field(description="洞察 ID")
-    patient_id: int = Field(description="关联患者 ID")
-    target_type: str = Field(description="目标类型：lab_result/procedure/encounter/summary")
-    target_id: int = Field(description="目标记录 ID")
-    insight_type: str = Field(
-        default="interpretation", description="洞察类型：interpretation/trend/summary/warning"
-    )
-    content: str = Field(description="洞察内容")
-    model: str = Field(default="", description="使用的模型")
-    created_at: datetime = Field(description="创建时间")
-
-
-class HealthInsightCreate(BaseModel):
-    """创建 AI 洞察。"""
-
-    patient_id: int
-    target_type: str
-    target_id: int
-    insight_type: str = "interpretation"
-    content: str
-    model: str = ""
-
-
 # ── 统计 ──────────────────────────────────────────────────────
 
 
@@ -972,12 +805,8 @@ class HealthStats(BaseModel):
     active_medications: int = 0
     total_lab_results: int = 0
     total_procedures: int = 0
-    total_allergies: int = 0
-    total_vitals: int = 0
-    total_immunizations: int = 0
     total_doctors: int = 0
     total_documents: int = 0
-    total_insights: int = 0
     total_appointments: int = 0
     upcoming_appointments: int = 0
     total_medication_logs: int = 0

@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from openbiliclaw.api.runtime_context import RuntimeContext
 from openbiliclaw.cycle import CycleStore
 from openbiliclaw.health import (
-    AllergyCreate,
     AppointmentCreate,
     AppointmentUpdate,
     ConditionCreate,
@@ -25,9 +24,7 @@ from openbiliclaw.health import (
     EncounterUpdate,
     HealthDocumentCreate,
     HealthDocumentUpdate,
-    HealthInsightCreate,
     HealthService,
-    ImmunizationCreate,
     LabResultCreate,
     LabResultUpdate,
     MedicationCreate,
@@ -37,7 +34,6 @@ from openbiliclaw.health import (
     PatientUpdate,
     ProcedureCreate,
     ProcedureUpdate,
-    VitalsCreate,
 )
 
 _health_service: HealthService | None = None
@@ -66,8 +62,7 @@ def _get_health_service(ctx: RuntimeContext) -> HealthService | None:
             db_path = str(Path(main_path).with_name("health.db"))
     if not db_path:
         db_path = "data/health.db"
-    llm_service = getattr(ctx, "llm_service", None)
-    _health_service = HealthService(db_path=db_path, llm_service=llm_service)
+    _health_service = HealthService(db_path=db_path)
     return _health_service
 
 
@@ -568,115 +563,6 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
 
-    # ── 过敏史 ──
-
-    @app.get("/api/health/allergies")
-    def health_allergies_list(patient_id: int | None = None) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_allergies(patient_id=patient_id)
-        return JSONResponse({"ok": True, "items": [a.model_dump(mode="json") for a in items]})
-
-    @app.post("/api/health/allergies")
-    def health_allergies_create(payload: dict[str, Any]) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = AllergyCreate(**payload)
-            allergy = svc.create_allergy(data)
-            return JSONResponse({"ok": True, "data": allergy.model_dump(mode="json")})
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/allergies/{allergy_id}")
-    def health_allergies_delete(allergy_id: int) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            svc.delete_allergy(allergy_id)
-            return JSONResponse({"ok": True})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    # ── 生命体征 ──
-
-    @app.get("/api/health/vitals")
-    def health_vitals_list(patient_id: int, limit: int = 100, offset: int = 0) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items, total = svc.list_vitals(
-            patient_id=patient_id,
-            limit=max(1, min(int(limit), 500)),
-            offset=max(0, int(offset)),
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "items": [v.model_dump(mode="json") for v in items],
-                "total": total,
-            }
-        )
-
-    @app.post("/api/health/vitals")
-    def health_vitals_create(payload: dict[str, Any]) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = VitalsCreate(**payload)
-            vitals = svc.create_vitals(data)
-            return JSONResponse({"ok": True, "data": vitals.model_dump(mode="json")})
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/vitals/{vitals_id}")
-    def health_vitals_delete(vitals_id: int) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            svc.delete_vitals(vitals_id)
-            return JSONResponse({"ok": True})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    # ── 疫苗接种 ──
-
-    @app.get("/api/health/immunizations")
-    def health_immunizations_list(patient_id: int | None = None) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_immunizations(patient_id=patient_id)
-        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
-
-    @app.post("/api/health/immunizations")
-    def health_immunizations_create(payload: dict[str, Any]) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = ImmunizationCreate(**payload)
-            immunization = svc.create_immunization(data)
-            return JSONResponse({"ok": True, "data": immunization.model_dump(mode="json")})
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/immunizations/{immunization_id}")
-    def health_immunizations_delete(immunization_id: int) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            svc.delete_immunization(immunization_id)
-            return JSONResponse({"ok": True})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
     # ── 医生信息 ──
 
     @app.get("/api/health/doctors")
@@ -811,49 +697,6 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
         try:
             svc.delete_document(document_id)
-            return JSONResponse({"ok": True})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    # ── AI 健康洞察 ──
-
-    @app.get("/api/health/insights")
-    def health_insights_list(
-        patient_id: int | None = None,
-        target_type: str | None = None,
-        target_id: int | None = None,
-        limit: int = 50,
-    ) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        items = svc.list_insights(
-            patient_id=patient_id,
-            target_type=target_type,
-            target_id=target_id,
-            limit=max(1, min(int(limit), 200)),
-        )
-        return JSONResponse({"ok": True, "items": [i.model_dump(mode="json") for i in items]})
-
-    @app.post("/api/health/insights")
-    def health_insights_create(payload: dict[str, Any]) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            data = HealthInsightCreate(**payload)
-            insight = svc.create_insight(data)
-            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
-    @app.delete("/api/health/insights/{insight_id}")
-    def health_insights_delete(insight_id: int) -> JSONResponse:
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        try:
-            svc.delete_insight(insight_id)
             return JSONResponse({"ok": True})
         except ValueError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
@@ -1043,40 +886,3 @@ def register_health_routes(app: FastAPI, ctx: RuntimeContext) -> None:
             }
         )
 
-    # ── AI 报告解读 ──
-
-    @app.post("/api/health/lab-results/{lab_result_id}/interpret")
-    async def health_lab_interpret(lab_result_id: int) -> JSONResponse:
-        """使用 AI 解读化验报告。"""
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
-        try:
-            insight = await svc.interpret_lab_result(lab_result_id)
-            if insight is None:
-                return JSONResponse(
-                    {"ok": False, "error": "interpretation failed"}, status_code=500
-                )
-            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
-
-    @app.post("/api/health/procedures/{procedure_id}/interpret")
-    async def health_procedure_interpret(procedure_id: int) -> JSONResponse:
-        """使用 AI 解读检查报告。"""
-        svc = _get_health_service(ctx)
-        if svc is None:
-            return JSONResponse({"ok": False, "error": "database unavailable"}, status_code=503)
-        if svc.llm_service is None:
-            return JSONResponse({"ok": False, "error": "LLM service unavailable"}, status_code=503)
-        try:
-            insight = await svc.interpret_procedure(procedure_id)
-            if insight is None:
-                return JSONResponse(
-                    {"ok": False, "error": "interpretation failed"}, status_code=500
-                )
-            return JSONResponse({"ok": True, "data": insight.model_dump(mode="json")})
-        except ValueError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)

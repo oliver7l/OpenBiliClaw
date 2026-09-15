@@ -17,9 +17,6 @@ from typing import TYPE_CHECKING, Any
 from openbiliclaw.storage.database import open_db_conn
 
 from .models import (
-    Allergy,
-    AllergyCreate,
-    AllergyStatus,
     Appointment,
     AppointmentCreate,
     AppointmentStatus,
@@ -43,11 +40,7 @@ from .models import (
     HealthDocument,
     HealthDocumentCreate,
     HealthDocumentUpdate,
-    HealthInsight,
-    HealthInsightCreate,
     HealthStats,
-    Immunization,
-    ImmunizationCreate,
     LabComponentStatus,
     LabResult,
     LabResultCreate,
@@ -72,9 +65,6 @@ from .models import (
     ProcedureType,
     ProcedureUpdate,
     TimelineEvent,
-    VitalGlucoseContext,
-    Vitals,
-    VitalsCreate,
 )
 
 if TYPE_CHECKING:
@@ -241,64 +231,6 @@ CREATE INDEX IF NOT EXISTS idx_health_procedures_patient ON health_procedures(pa
 CREATE INDEX IF NOT EXISTS idx_health_procedures_date ON health_procedures(procedure_date);
 CREATE INDEX IF NOT EXISTS idx_health_procedures_type ON health_procedures(procedure_type);
 
--- 过敏史
-CREATE TABLE IF NOT EXISTS health_allergies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id INTEGER NOT NULL,
-    allergen TEXT NOT NULL,
-    reaction TEXT DEFAULT '',
-    severity TEXT DEFAULT 'mild',
-    onset_date TEXT,
-    status TEXT DEFAULT 'active',
-    notes TEXT DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES health_patients(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_health_allergies_patient ON health_allergies(patient_id);
-
--- 生命体征
-CREATE TABLE IF NOT EXISTS health_vitals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id INTEGER NOT NULL,
-    recorded_date TEXT NOT NULL,
-    systolic_bp INTEGER,
-    diastolic_bp INTEGER,
-    heart_rate INTEGER,
-    temperature_c REAL,
-    weight_kg REAL,
-    height_cm REAL,
-    oxygen_saturation REAL,
-    respiratory_rate INTEGER,
-    blood_glucose REAL,
-    glucose_context TEXT,
-    pain_scale INTEGER,
-    notes TEXT DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES health_patients(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_health_vitals_patient ON health_vitals(patient_id);
-CREATE INDEX IF NOT EXISTS idx_health_vitals_date ON health_vitals(recorded_date);
-
--- 疫苗接种
-CREATE TABLE IF NOT EXISTS health_immunizations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id INTEGER NOT NULL,
-    vaccine_name TEXT NOT NULL,
-    date_administered TEXT NOT NULL,
-    dose_number INTEGER,
-    manufacturer TEXT DEFAULT '',
-    lot_number TEXT DEFAULT '',
-    site TEXT DEFAULT '',
-    facility TEXT DEFAULT '',
-    administering_person TEXT DEFAULT '',
-    notes TEXT DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES health_patients(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_health_immunizations_patient ON health_immunizations(patient_id);
-CREATE INDEX IF NOT EXISTS idx_health_immunizations_date ON health_immunizations(date_administered);
-
 -- 医生 / 医疗机构
 CREATE TABLE IF NOT EXISTS health_doctors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,21 +271,6 @@ CREATE TABLE IF NOT EXISTS health_documents (
 CREATE INDEX IF NOT EXISTS idx_health_documents_patient ON health_documents(patient_id);
 CREATE INDEX IF NOT EXISTS idx_health_documents_type ON health_documents(document_type);
 CREATE INDEX IF NOT EXISTS idx_health_documents_date ON health_documents(document_date);
-
--- AI 健康洞察 / 报告解读
-CREATE TABLE IF NOT EXISTS health_insights (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id INTEGER NOT NULL,
-    target_type TEXT NOT NULL,
-    target_id INTEGER NOT NULL,
-    insight_type TEXT DEFAULT 'interpretation',
-    content TEXT NOT NULL,
-    model TEXT DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES health_patients(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_health_insights_patient ON health_insights(patient_id);
-CREATE INDEX IF NOT EXISTS idx_health_insights_target ON health_insights(target_type, target_id);
 
 -- 预约 / 复诊
 CREATE TABLE IF NOT EXISTS health_appointments (
@@ -1184,224 +1101,6 @@ class HealthStore:
         self.conn.execute("DELETE FROM health_procedures WHERE id = ?", (procedure_id,))
         self.conn.commit()
 
-    # ── 过敏史 ────────────────────────────────────────────────
-
-    def create_allergy(self, data: AllergyCreate) -> Allergy:
-        cur = self.conn.execute(
-            """INSERT INTO health_allergies
-               (patient_id, allergen, reaction, severity, onset_date, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                data.patient_id,
-                data.allergen,
-                data.reaction,
-                data.severity.value,
-                data.onset_date,
-                data.status.value,
-                data.notes,
-            ),
-        )
-        self.conn.commit()
-        return self.get_allergy(cur.lastrowid)
-
-    def get_allergy(self, allergy_id: int) -> Allergy:
-        row = self.conn.execute(
-            "SELECT * FROM health_allergies WHERE id = ?", (allergy_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"过敏记录不存在: {allergy_id}")
-        return Allergy(
-            id=row["id"],
-            patient_id=row["patient_id"],
-            allergen=row["allergen"],
-            reaction=row["reaction"],
-            severity=ConditionSeverity(row["severity"]),
-            onset_date=row["onset_date"],
-            status=AllergyStatus(row["status"]),
-            notes=row["notes"],
-            created_at=_parse_dt(row["created_at"]),
-            updated_at=_parse_dt(row["updated_at"]),
-        )
-
-    def list_allergies(self, patient_id: int | None = None) -> list[Allergy]:
-        conditions = []
-        params: list[Any] = []
-        if patient_id is not None:
-            conditions.append("patient_id = ?")
-            params.append(patient_id)
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        rows = self.conn.execute(
-            f"SELECT * FROM health_allergies {where} ORDER BY id", params
-        ).fetchall()
-        return [
-            Allergy(
-                id=r["id"],
-                patient_id=r["patient_id"],
-                allergen=r["allergen"],
-                reaction=r["reaction"],
-                severity=ConditionSeverity(r["severity"]),
-                onset_date=r["onset_date"],
-                status=AllergyStatus(r["status"]),
-                notes=r["notes"],
-                created_at=_parse_dt(r["created_at"]),
-                updated_at=_parse_dt(r["updated_at"]),
-            )
-            for r in rows
-        ]
-
-    def delete_allergy(self, allergy_id: int) -> None:
-        self.conn.execute("DELETE FROM health_allergies WHERE id = ?", (allergy_id,))
-        self.conn.commit()
-
-    # ── 生命体征 ──────────────────────────────────────────────
-
-    def create_vitals(self, data: VitalsCreate) -> Vitals:
-        cur = self.conn.execute(
-            """INSERT INTO health_vitals
-               (patient_id, recorded_date, systolic_bp, diastolic_bp, heart_rate, temperature_c,
-                weight_kg, height_cm, oxygen_saturation, respiratory_rate, blood_glucose,
-                glucose_context, pain_scale, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                data.patient_id,
-                data.recorded_date,
-                data.systolic_bp,
-                data.diastolic_bp,
-                data.heart_rate,
-                data.temperature_c,
-                data.weight_kg,
-                data.height_cm,
-                data.oxygen_saturation,
-                data.respiratory_rate,
-                data.blood_glucose,
-                data.glucose_context.value if data.glucose_context else None,
-                data.pain_scale,
-                data.notes,
-            ),
-        )
-        self.conn.commit()
-        return self.get_vitals(cur.lastrowid)
-
-    def get_vitals(self, vitals_id: int) -> Vitals:
-        row = self.conn.execute("SELECT * FROM health_vitals WHERE id = ?", (vitals_id,)).fetchone()
-        if row is None:
-            raise ValueError(f"生命体征记录不存在: {vitals_id}")
-        return Vitals(
-            id=row["id"],
-            patient_id=row["patient_id"],
-            recorded_date=row["recorded_date"],
-            systolic_bp=row["systolic_bp"],
-            diastolic_bp=row["diastolic_bp"],
-            heart_rate=row["heart_rate"],
-            temperature_c=row["temperature_c"],
-            weight_kg=row["weight_kg"],
-            height_cm=row["height_cm"],
-            oxygen_saturation=row["oxygen_saturation"],
-            respiratory_rate=row["respiratory_rate"],
-            blood_glucose=row["blood_glucose"],
-            glucose_context=VitalGlucoseContext(row["glucose_context"])
-            if row["glucose_context"]
-            else None,
-            pain_scale=row["pain_scale"],
-            notes=row["notes"],
-            created_at=_parse_dt(row["created_at"]),
-        )
-
-    def list_vitals(
-        self, patient_id: int, limit: int = 100, offset: int = 0
-    ) -> tuple[list[Vitals], int]:
-        total = self.conn.execute(
-            "SELECT COUNT(*) FROM health_vitals WHERE patient_id = ?", (patient_id,)
-        ).fetchone()[0]
-        rows = self.conn.execute(
-            """SELECT * FROM health_vitals WHERE patient_id = ?
-               ORDER BY recorded_date DESC, id DESC LIMIT ? OFFSET ?""",
-            (patient_id, limit, offset),
-        ).fetchall()
-        return [self.get_vitals(r["id"]) for r in rows], total
-
-    def delete_vitals(self, vitals_id: int) -> None:
-        self.conn.execute("DELETE FROM health_vitals WHERE id = ?", (vitals_id,))
-        self.conn.commit()
-
-    # ── 疫苗接种 ──────────────────────────────────────────────
-
-    def create_immunization(self, data: ImmunizationCreate) -> Immunization:
-        cur = self.conn.execute(
-            """INSERT INTO health_immunizations
-               (patient_id, vaccine_name, date_administered, dose_number, manufacturer,
-                lot_number, site, facility, administering_person, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                data.patient_id,
-                data.vaccine_name,
-                data.date_administered,
-                data.dose_number,
-                data.manufacturer,
-                data.lot_number,
-                data.site,
-                data.facility,
-                data.administering_person,
-                data.notes,
-            ),
-        )
-        self.conn.commit()
-        return self.get_immunization(cur.lastrowid)
-
-    def get_immunization(self, immunization_id: int) -> Immunization:
-        row = self.conn.execute(
-            "SELECT * FROM health_immunizations WHERE id = ?", (immunization_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"疫苗记录不存在: {immunization_id}")
-        return Immunization(
-            id=row["id"],
-            patient_id=row["patient_id"],
-            vaccine_name=row["vaccine_name"],
-            date_administered=row["date_administered"],
-            dose_number=row["dose_number"],
-            manufacturer=row["manufacturer"],
-            lot_number=row["lot_number"],
-            site=row["site"],
-            facility=row["facility"],
-            administering_person=row["administering_person"],
-            notes=row["notes"],
-            created_at=_parse_dt(row["created_at"]),
-        )
-
-    def list_immunizations(self, patient_id: int | None = None) -> list[Immunization]:
-        conditions = []
-        params: list[Any] = []
-        if patient_id is not None:
-            conditions.append("patient_id = ?")
-            params.append(patient_id)
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        rows = self.conn.execute(
-            f"SELECT * FROM health_immunizations {where} ORDER BY date_administered DESC, id DESC",
-            params,
-        ).fetchall()
-        return [
-            Immunization(
-                id=r["id"],
-                patient_id=r["patient_id"],
-                vaccine_name=r["vaccine_name"],
-                date_administered=r["date_administered"],
-                dose_number=r["dose_number"],
-                manufacturer=r["manufacturer"],
-                lot_number=r["lot_number"],
-                site=r["site"],
-                facility=r["facility"],
-                administering_person=r["administering_person"],
-                notes=r["notes"],
-                created_at=_parse_dt(r["created_at"]),
-            )
-            for r in rows
-        ]
-
-    def delete_immunization(self, immunization_id: int) -> None:
-        self.conn.execute("DELETE FROM health_immunizations WHERE id = ?", (immunization_id,))
-        self.conn.commit()
-
     # ── 统计 ──────────────────────────────────────────────────
 
     def get_stats(self) -> HealthStats:
@@ -1424,12 +1123,8 @@ class HealthStore:
             active_medications=_count("health_medications", "WHERE status = 'active'"),
             total_lab_results=_count("health_lab_results"),
             total_procedures=_count("health_procedures"),
-            total_allergies=_count("health_allergies"),
-            total_vitals=_count("health_vitals"),
-            total_immunizations=_count("health_immunizations"),
             total_doctors=_count("health_doctors"),
             total_documents=_count("health_documents"),
-            total_insights=_count("health_insights"),
             total_appointments=_count("health_appointments"),
             upcoming_appointments=_count(
                 "health_appointments",
@@ -1628,72 +1323,6 @@ class HealthStore:
         self.conn.execute("DELETE FROM health_documents WHERE id = ?", (document_id,))
         self.conn.commit()
 
-    # ── AI 健康洞察 ────────────────────────────────────────────
-
-    def create_insight(self, data: HealthInsightCreate) -> HealthInsight:
-        cur = self.conn.execute(
-            """INSERT INTO health_insights
-               (patient_id, target_type, target_id, insight_type, content, model)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                data.patient_id,
-                data.target_type,
-                data.target_id,
-                data.insight_type,
-                data.content,
-                data.model,
-            ),
-        )
-        self.conn.commit()
-        return self.get_insight(cur.lastrowid)
-
-    def get_insight(self, insight_id: int) -> HealthInsight:
-        row = self.conn.execute(
-            "SELECT * FROM health_insights WHERE id = ?", (insight_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"洞察不存在: {insight_id}")
-        return HealthInsight(
-            id=row["id"],
-            patient_id=row["patient_id"],
-            target_type=row["target_type"],
-            target_id=row["target_id"],
-            insight_type=row["insight_type"],
-            content=row["content"],
-            model=row["model"],
-            created_at=_parse_dt(row["created_at"]),
-        )
-
-    def list_insights(
-        self,
-        patient_id: int | None = None,
-        target_type: str | None = None,
-        target_id: int | None = None,
-        limit: int = 50,
-    ) -> list[HealthInsight]:
-        conditions = []
-        params: list[Any] = []
-        if patient_id is not None:
-            conditions.append("patient_id = ?")
-            params.append(patient_id)
-        if target_type:
-            conditions.append("target_type = ?")
-            params.append(target_type)
-        if target_id is not None:
-            conditions.append("target_id = ?")
-            params.append(target_id)
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        rows = self.conn.execute(
-            f"""SELECT * FROM health_insights {where}
-                ORDER BY created_at DESC LIMIT ?""",
-            [*params, limit],
-        ).fetchall()
-        return [self.get_insight(r["id"]) for r in rows]
-
-    def delete_insight(self, insight_id: int) -> None:
-        self.conn.execute("DELETE FROM health_insights WHERE id = ?", (insight_id,))
-        self.conn.commit()
-
     # ── 健康时间线 ──────────────────────────────────────────────
 
     def get_timeline(
@@ -1843,27 +1472,6 @@ class HealthStore:
                     title=r["title"],
                     description=r["hospital"] or "",
                     status=r["document_type"],
-                    severity="",
-                    related_id=r["id"],
-                )
-            )
-
-        # 疫苗接种
-        rows = self.conn.execute(
-            """SELECT id, date_administered as date, vaccine_name, dose_number, facility
-               FROM health_immunizations WHERE patient_id = ?
-               ORDER BY date_administered DESC""",
-            (patient_id,),
-        ).fetchall()
-        for r in rows:
-            events.append(
-                TimelineEvent(
-                    id=r["id"],
-                    date=r["date"],
-                    event_type="immunization",
-                    title=r["vaccine_name"],
-                    description=f"第{r['dose_number']}剂" if r["dose_number"] else "",
-                    status=r["facility"] or "",
                     severity="",
                     related_id=r["id"],
                 )

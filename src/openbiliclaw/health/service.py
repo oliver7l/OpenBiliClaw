@@ -1,8 +1,7 @@
 """健康管理系统业务逻辑层。
 
 封装存储层，提供患者档案管理、就诊记录、健康问题追踪、
-用药管理、化验结果、检查记录、过敏史、生命体征、疫苗接种等
-高层业务接口。
+用药管理、化验结果、检查记录、预约与服药依从性等高层业务接口。
 """
 
 from __future__ import annotations
@@ -11,8 +10,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from .models import (
-    Allergy,
-    AllergyCreate,
     Appointment,
     AppointmentCreate,
     AppointmentUpdate,
@@ -29,11 +26,7 @@ from .models import (
     HealthDocument,
     HealthDocumentCreate,
     HealthDocumentUpdate,
-    HealthInsight,
-    HealthInsightCreate,
     HealthStats,
-    Immunization,
-    ImmunizationCreate,
     LabResult,
     LabResultCreate,
     LabResultUpdate,
@@ -49,8 +42,6 @@ from .models import (
     ProcedureCreate,
     ProcedureUpdate,
     TimelineEvent,
-    Vitals,
-    VitalsCreate,
 )
 from .store import HealthStore
 
@@ -84,11 +75,9 @@ class HealthService:
         self,
         database: Database | None = None,
         db_path: str | None = None,
-        llm_service: Any = None,
     ) -> None:
         self.store = HealthStore(database=database, db_path=db_path)
         self.store.initialize()
-        self.llm_service = llm_service
 
     # ── 患者档案 ──────────────────────────────────────────────
 
@@ -278,54 +267,6 @@ class HealthService:
     def delete_procedure(self, procedure_id: int) -> None:
         self.store.delete_procedure(procedure_id)
 
-    # ── 过敏史 ────────────────────────────────────────────────
-
-    def create_allergy(self, data: AllergyCreate) -> Allergy:
-        return self.store.create_allergy(data)
-
-    def get_allergy(self, allergy_id: int) -> Allergy:
-        allergies = self.store.list_allergies()
-        for a in allergies:
-            if a.id == allergy_id:
-                return a
-        raise ValueError(f"过敏记录不存在: {allergy_id}")
-
-    def list_allergies(self, patient_id: int | None = None) -> list[Allergy]:
-        return self.store.list_allergies(patient_id=patient_id)
-
-    def delete_allergy(self, allergy_id: int) -> None:
-        self.store.delete_allergy(allergy_id)
-
-    # ── 生命体征 ──────────────────────────────────────────────
-
-    def create_vitals(self, data: VitalsCreate) -> Vitals:
-        return self.store.create_vitals(data)
-
-    def get_vitals(self, vitals_id: int) -> Vitals:
-        return self.store.get_vitals(vitals_id)
-
-    def list_vitals(
-        self, patient_id: int, limit: int = 100, offset: int = 0
-    ) -> tuple[list[Vitals], int]:
-        return self.store.list_vitals(patient_id=patient_id, limit=limit, offset=offset)
-
-    def delete_vitals(self, vitals_id: int) -> None:
-        self.store.delete_vitals(vitals_id)
-
-    # ── 疫苗接种 ──────────────────────────────────────────────
-
-    def create_immunization(self, data: ImmunizationCreate) -> Immunization:
-        return self.store.create_immunization(data)
-
-    def get_immunization(self, immunization_id: int) -> Immunization:
-        return self.store.get_immunization(immunization_id)
-
-    def list_immunizations(self, patient_id: int | None = None) -> list[Immunization]:
-        return self.store.list_immunizations(patient_id=patient_id)
-
-    def delete_immunization(self, immunization_id: int) -> None:
-        self.store.delete_immunization(immunization_id)
-
     # ── 统计与概览 ────────────────────────────────────────────
 
     def get_stats(self) -> HealthStats:
@@ -345,9 +286,6 @@ class HealthService:
         )
         _, lab_count = self.store.list_lab_results(patient_id=patient_id, limit=1)
         _, procedure_count = self.store.list_procedures(patient_id=patient_id, limit=1)
-        allergies = self.store.list_allergies(patient_id=patient_id)
-        _, vitals_count = self.store.list_vitals(patient_id=patient_id, limit=1)
-        immunizations = self.store.list_immunizations(patient_id=patient_id)
         pending_procedures, _ = self.store.list_procedures(
             patient_id=patient_id, needs_follow_up=True, limit=100
         )
@@ -364,15 +302,11 @@ class HealthService:
                 "active_medications": len(active_medications),
                 "lab_results": lab_count,
                 "procedures": procedure_count,
-                "allergies": len(allergies),
-                "vitals": vitals_count,
-                "immunizations": len(immunizations),
                 "documents": doc_count,
                 "pending_follow_ups": len(pending_procedures),
             },
             "active_conditions": [c.model_dump(mode="json") for c in active_conditions],
             "active_medications": [m.model_dump(mode="json") for m in active_medications],
-            "allergies": [a.model_dump(mode="json") for a in allergies],
             "pending_follow_ups": [p.model_dump(mode="json") for p in pending_procedures],
         }
 
@@ -425,31 +359,6 @@ class HealthService:
     def delete_document(self, document_id: int) -> None:
         self.store.delete_document(document_id)
 
-    # ── AI 健康洞察 ────────────────────────────────────────────
-
-    def create_insight(self, data: HealthInsightCreate) -> HealthInsight:
-        return self.store.create_insight(data)
-
-    def get_insight(self, insight_id: int) -> HealthInsight:
-        return self.store.get_insight(insight_id)
-
-    def list_insights(
-        self,
-        patient_id: int | None = None,
-        target_type: str | None = None,
-        target_id: int | None = None,
-        limit: int = 50,
-    ) -> list[HealthInsight]:
-        return self.store.list_insights(
-            patient_id=patient_id,
-            target_type=target_type,
-            target_id=target_id,
-            limit=limit,
-        )
-
-    def delete_insight(self, insight_id: int) -> None:
-        self.store.delete_insight(insight_id)
-
     # ── 健康时间线 ──────────────────────────────────────────────
 
     def get_timeline(
@@ -457,113 +366,6 @@ class HealthService:
     ) -> list[TimelineEvent]:
         """获取患者的健康时间线，聚合所有类型的健康事件。"""
         return self.store.get_timeline(patient_id=patient_id, limit=limit, offset=offset)
-
-    # ── AI 报告解读 ────────────────────────────────────────────
-
-    async def interpret_lab_result(self, lab_result_id: int) -> HealthInsight | None:
-        """使用 LLM 解读化验报告。"""
-        if self.llm_service is None:
-            return None
-        lab = self.store.get_lab_result(lab_result_id)
-        components = self.store.list_lab_components(lab_result_id)
-        components_text = "\n".join(
-            f"- {c.test_name}: {c.value} {c.unit or ''} "
-            f"(参考范围 {_format_ref_range(c)} ) "
-            f"[{'异常' if c.status != 'normal' else '正常'}]"
-            for c in components
-        )
-        prompt = f"""你是一位专业的健康报告解读助手。请用通俗、客观的语言解读以下化验报告。
-注意：你只能做信息整理和科普解释，不能给出确诊或治疗方案，必须建议咨询专业医生。
-
-报告名称：{lab.test_name}
-检验机构：{lab.facility or "未知"}
-检验日期：{lab.completed_date or "未知"}
-
-检验项目：
-{components_text}
-
-整体结论：{lab.overall_interpretation or "无"}
-
-请按以下结构输出：
-1. 【总体概况】一句话总结
-2. 【异常项说明】逐项解释异常指标的可能含义（用通俗语言）
-3. 【正常项确认】确认主要指标正常
-4. 【建议方向】给出就医或生活方式的建议方向（非治疗方案）
-5. 【免责声明】明确说明本解读仅供参考，不能替代医生诊断"""
-
-        try:
-            response = await self.llm_service.complete(
-                [{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=2000,
-            )
-            content = response.content if hasattr(response, "content") else str(response)
-            insight = self.store.create_insight(
-                HealthInsightCreate(
-                    patient_id=lab.patient_id,
-                    target_type="lab_result",
-                    target_id=lab_result_id,
-                    insight_type="interpretation",
-                    content=content,
-                    model=getattr(response, "model", ""),
-                )
-            )
-            return insight
-        except Exception as exc:
-            logging.getLogger(__name__).warning("AI解读化验报告失败: %s", exc)
-            return None
-
-    async def interpret_procedure(self, procedure_id: int) -> HealthInsight | None:
-        """使用 LLM 解读检查报告。"""
-        if self.llm_service is None:
-            return None
-        proc = self.store.get_procedure(procedure_id)
-        prompt = f"""你是一位专业的健康报告解读助手。请用通俗、客观的语言解读以下检查报告。
-注意：你只能做信息整理和科普解释，不能给出确诊或治疗方案，必须建议咨询专业医生。
-
-检查名称：{proc.procedure_name}
-检查类型：{proc.procedure_type}
-检查部位：{proc.body_part or "未知"}
-检查机构：{proc.facility or "未知"}
-检查日期：{proc.procedure_date}
-
-检查所见：
-{proc.findings or "无"}
-
-检查结论：
-{proc.conclusion or "无"}
-
-异常摘要：{proc.abnormal_summary or "无"}
-随访建议：{proc.follow_up_recommendation or "无"}
-
-请按以下结构输出：
-1. 【总体概况】一句话总结
-2. 【关键发现】用通俗语言解释主要发现
-3. 【需要关注】说明需要关注的问题及可能含义
-4. 【建议方向】给出就医或随访的建议方向（非治疗方案）
-5. 【免责声明】明确说明本解读仅供参考，不能替代医生诊断"""
-
-        try:
-            response = await self.llm_service.complete(
-                [{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=2000,
-            )
-            content = response.content if hasattr(response, "content") else str(response)
-            insight = self.store.create_insight(
-                HealthInsightCreate(
-                    patient_id=proc.patient_id,
-                    target_type="procedure",
-                    target_id=procedure_id,
-                    insight_type="interpretation",
-                    content=content,
-                    model=getattr(response, "model", ""),
-                )
-            )
-            return insight
-        except Exception as exc:
-            logging.getLogger(__name__).warning("AI解读检查报告失败: %s", exc)
-            return None
 
     # ── 预约 / 复诊 ────────────────────────────────────────────
 
