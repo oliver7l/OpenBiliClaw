@@ -72,12 +72,28 @@ class ReadingScheduleItem:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> ReadingScheduleItem:
-        """从数据库行创建对象。"""
+        """从数据库行创建对象。
+
+        ⚠️ ``sqlite3.Row`` **没有 ``.get()``**（那是 dict 的方法），此前的
+        ``row.get("title", "")`` 会让三个调用方全部抛 ``AttributeError``：
+        ``review_article`` / ``get_daily_queue`` / ``get_article_schedule``
+        ——也就是说「复习」与「今日队列」这两条主路径在生产上是坏的，
+        零测试才让它藏了这么久。
+
+        容错是必须的，因为查询有两种形状：纯 ``reading_schedule`` 行，
+        以及 JOIN ``articles`` 之后多出 title/url/source_type 的行。
+        所以「列在不在」用 ``row.keys()`` 判断，而不是假定它一定在。
+        """
+        available = set(row.keys())
+
+        def pick(key: str, default: Any) -> Any:
+            return row[key] if key in available else default
+
         return cls(
             article_id=row["article_id"],
-            title=row.get("title", ""),
-            url=row.get("url", ""),
-            source_type=row.get("source_type", ""),
+            title=pick("title", "") or "",
+            url=pick("url", "") or "",
+            source_type=pick("source_type", "") or "",
             stability=row["stability"],
             difficulty=row["difficulty"],
             retrievability=row["retrievability"],
@@ -134,6 +150,18 @@ class ReadingScheduler:
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
+        # 建表必须在构造时做一次：``_ensure_table`` 只能挂在 ``__init__`` 上，
+        # 不能挂进 ``_get_conn``（它自己会调 ``_get_conn``，挂进去就无限递归）。
+        # 此前这句被写在 ``_get_conn`` 的 ``return conn`` **之后**（不可达），
+        # 于是全新库上 ``reading_schedule`` 永远建不出来：
+        # ``register_article`` 吞掉 "no such table" 静默返回 False、
+        # ``review_article`` 直接抛 OperationalError。真实库里表是历史遗留的，
+        # 所以这个洞一直没暴露（501 行数据看着一切正常）。
+        try:
+            self._ensure_table()
+        except Exception:
+            # 只读库 / 权限不足时不要连累读路径（get_daily_queue 等仍然可用）
+            logger.warning("无法确保 reading_schedule 表存在：%s", self.db_path, exc_info=True)
 
     def _get_conn(self):
         """返回 ATTACH 了 content.db 的连接（v0.4.0+ articles 表迁移）。"""
@@ -146,8 +174,6 @@ class ReadingScheduler:
             with _suppress(Exception):
                 conn.execute('ATTACH DATABASE ? AS content', (str(_content_path),))
         return conn
-
-        self._ensure_table()
 
     def _ensure_table(self) -> None:
         """确保 reading_schedule 表存在。"""
@@ -196,7 +222,7 @@ class ReadingScheduler:
 
         try:
             with self._get_conn() as conn:
-                conn.execute(
+                cursor = conn.execute(
                     """INSERT OR IGNORE INTO reading_schedule
                        (article_id, stability, difficulty, retrievability, state,
                         next_review_at, created_at, updated_at)
@@ -204,7 +230,10 @@ class ReadingScheduler:
                     (article_id, next_review, now, now),
                 )
                 conn.commit()
-                return True
+                # 返回值必须反映「这次到底插进去没有」：`INSERT OR IGNORE` 撞 UNIQUE
+                # 时不会抛异常，只看「没抛」会把重复注册也报成成功（与 docstring
+                # 的「False 如果已存在」相反，调用方就无法区分）。
+                return cursor.rowcount > 0
         except Exception as e:
             logger.exception("Failed to register article %s: %s", article_id, e)
             return False

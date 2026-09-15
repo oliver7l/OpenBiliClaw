@@ -31,7 +31,7 @@
 | `diary` | 13,837 | 25 | 4 | ✅ `diary.md`（**过期**） | 09-13 | ✅ 已梳理（§六模块） |
 | `sources` | 11,263 | 56 | 40 | ✅ `sources.md`（09-15 新建） | 09-13 | ✅ 已梳理 |
 | `storage` | 11,173 | 35 | 66 | ✅ `storage.md`（09-15 增补） | 09-11 | ✅ 已梳理 |
-| `self_evolution` | 9,284 | 15 | **0** | ❌ **无** | 09-14 | 🔴 **最该先梳理** |
+| `self_evolution` | 9,296 | 15 | 3 | ✅ `self_evolution.md`（09-16 新建） | 09-14 | 🔶 已梳理（3/15 文件有测试；修掉 2 个真 bug） |
 | `cli` | 7,478 | 12 | 15 | ✅ `cli.md` | 09-14 | ⬜ 未梳理 |
 | `eval` | 7,193 | 24 | 6 | ❌ **无** | 09-14 | ⬜ 未梳理 |
 | `recommendation` | 6,419 | 9 | 11 | ✅ `recommendation.md` | 09-14 | ⬜ 未梳理 |
@@ -209,7 +209,7 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **健康模块三修**（时间线分页 / 空壳表 / 文档） | 未开始，**风险低** | 同上 §6 H1/H2/H6 |
 | **路径统一**（34 处） | ✅ **已清零（2026-09-15，`bc933c16`）**：26 处 CWD + 7 处 parents[N] + weekend 字符串路径 5 处；棘轮基线已清空，`tests/test_architecture_contracts.py` 守住新增 |
 | ~~**`sources` + `storage` 模块文档**~~ | ✅ **已完成（2026-09-15）**：`docs/modules/sources.md` 新建、`storage.md` 增补摸底（含原生保存 12 个缺失方法清单） |
-| **`self_evolution` 零测试补课** | 🔶 首批 6 条已落地（`cf9ba22c`，State/ContentFilter/空转跳过），其余待续 | 同上 |
+| **`self_evolution` 零测试补课** | 🔶 首批 6 条已落地（`cf9ba22c`，State/ContentFilter/空转跳过）；**09-16 第二轮**：+52 例（`reading_schedule` FSRS 全量 + SM-2 算法），并修掉两个真 bug（`_ensure_table` 不可达 / `from_row` 用 `sqlite3.Row.get`）+ 模块文档 `self_evolution.md`。剩余 12 个文件仍零测试 | 同上 |
 | ~~**`core` 小模块补课 + 分层闸门**~~ | ✅ **已完成（2026-09-15 晚）**：`tests/core/` 47 例（落库映射完整性 / X 异常类型身份 / 跨平台派生）+ `docs/modules/core.md`；新增 `tests/test_layering_contracts.py` 用 **AST** 守 K5/K6b（区分模块级 import、`TYPE_CHECKING`、函数内延迟 import） | 本文 §4 批次⑮ |
 | **`agent` 死包处置** | 待拍板（**建议删除**）：零引用 + 全 TODO 桩，取证见 `docs/modules/agent.md` | 同上 |
 | **`clone` `synthesis` `topics` `rag` `ed2k` 小模块补课** | 未开始（批次⑮ 剩余） | 本文 §4 批次⑮ |
