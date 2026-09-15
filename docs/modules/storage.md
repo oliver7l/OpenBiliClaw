@@ -227,10 +227,12 @@ discovery.db / content.db / knowledge.db`。**不经 storage**、由领域模块
 
 ### 已知技术债（已亲自复核）
 
-1. **稍后读双写不对称**：`upsert_saved_membership`（`_saved_memberships_mixin.py:145-205`）
-   只写 saved_items/saved_memberships，**不写** legacy `favorites`/`watch_later`；
-   而 `remove_saved_membership`（:207-300，:283-291）会额外 DELETE legacy 行。
-   ⇒ 新 API 收藏的内容，读 legacy 的旧路径看不到，两端漂移。真值源待拍板后修。
+1. ✅ **已解决（2026-09-15，用户拍板「新表为正本」）**：legacy `favorites`/`watch_later`
+   （content.db）数据经 `scripts/migrate_legacy_lists_to_saved.py` 迁入
+   saved_items/saved_memberships 后冻结；`/api/watch-later`、`/api/favorites`、
+   `/api/saved-status` 全部改读写新表（URL 与响应形状不变，浏览器扩展无感）。
+   顺带修掉 remove 的两个潜伏 bug（快照 SELECT 缺列、legacy DELETE 引用不存在的
+   item_key 列）——此前任何 remove 都会 500（ saved_memberships 恒 0 行从未暴露）。
 2. **原生保存 = 调用存在、实现不存在**：`saved_sync/service.py` 的 25 处
    `self._database.<method>` 中有 **14 个调用点 / 12 个方法全树无定义**
    （claim_native_sync_task_runner:254、reconcile_stale_native_save_claims:256/:310、

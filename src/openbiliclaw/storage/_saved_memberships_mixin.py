@@ -220,7 +220,8 @@ class SavedMembershipsMixin:
             removed_snapshot = conn.execute(
                 """
                 SELECT m.list_kind, i.item_key, i.source_platform,
-                       i.content_id, i.content_url, i.content_type
+                       i.content_id, i.content_url, i.content_type,
+                       i.title, i.author_name, i.cover_url
                 FROM saved_memberships AS m
                 JOIN saved_items AS i ON i.item_key = m.item_key
                 WHERE m.list_kind = ? AND m.item_key = ?
@@ -280,15 +281,15 @@ class SavedMembershipsMixin:
                 WHERE removed_at < datetime('now', '-30 days')
                 """,
             )
-            direct_bilibili_clause = "bvid = ? OR" if legacy_bvid else ""
-            legacy_params = (legacy_bvid, normalized_key) if legacy_bvid else (normalized_key,)
-            legacy_cursor = conn.execute(
-                f"""
-                DELETE FROM {legacy_table}
-                WHERE {direct_bilibili_clause} item_key = ?
-                """,
-                legacy_params,
-            )
+            # legacy 表只有 bvid 列（无 item_key）——此前按 item_key 删是死代码，
+            # 任何 remove 都会在此 OperationalError（2026-09-15 修正）
+            if legacy_bvid:
+                legacy_cursor = conn.execute(
+                    f"DELETE FROM {legacy_table} WHERE bvid = ?",
+                    (legacy_bvid,),
+                )
+            else:
+                legacy_cursor = conn.execute(f"DELETE FROM {legacy_table} WHERE 1 = 0")
             removed = removed or int(legacy_cursor.rowcount or 0) > 0
             conn.commit()
         except Exception:
