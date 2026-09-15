@@ -4,6 +4,70 @@
 
 ---
 
+## 全量盘点与「静默不一致」清收（2026-09-15）
+
+一整天按「先只读取证 → 写回归测试证明它会失败 → 再改」的节奏，把盘点出的欠账逐批收口。
+六个模块逐个梳理（日记 / 旅游 / 周末 / 阅读库 / 面试 / 健康监控），产出
+`docs/architecture-map.md`（框架地图）、`docs/module-review-2026-09-15.md`（六模块欠账）、
+`docs/module-inventory-2026-09-15.md`（35 个源码包清单）。
+
+**止血：正在持续恶化的两处**
+
+- fix(chat_analysis): 止住增量分析「空转标记」（`5d31f193`）——219 个会话被标记 `analyzed`
+  却零产出，且每晚继续污染；读路径丢失 `analyzed` 字段一并修
+- chore(chat_analysis): 重置存量毒化会话 219 个（`84947fc1`，用户授权）
+- fix(chat_analysis): chunk 导入加幂等护栏（`b27af5e5`）——原「419 条重复」结论**已证伪**，
+  改为给 `analysis_file` 加唯一索引 + `INSERT OR IGNORE`，**未删任何数据**
+- fix(health): 时间线全局分页静默丢数据 + 清除主库 15 张空壳表 + 模块文档 5 处更正（`73642dd9`）
+
+**质量门禁与路径棘轮**
+
+- refactor(paths): 清零 **34 处** CWD 相对路径与 `Path(__file__).parents[N]` 自算（`bc933c16`），
+  统一走 `config._project_root()` / `interview/_paths.PROJECT_ROOT`；棘轮基线清空，
+  `tests/test_architecture_contracts.py` 守住新增
+- fix(types): mypy 70 → 16（`1aeed497`）→ 补实现 saved_sync 原生保存 12 个存储方法后
+  **全量归零**（`31ef4fdd`，实测 `mypy src/` 427 文件零问题）；ruff 维持基线 3 条既有 N806
+- refactor(api): chat_analysis 路由收口到 `create_app()`（`4c44baea`）——堵住注册入口分叉导致的静默缺端点
+- test(self_evolution): 此前 9,284 行零覆盖，首批单测落地（`cf9ba22c`）
+- docs: 新建 `sources.md`、`storage.md` 增补摸底（`9f033334`）
+
+**面试模块（期 0–4 重构收尾）**
+
+- refactor(interview): 摘除期 3 的 12 个兼容垫片 + 修 study 分类脏数据 500（`d90f5bcf`）
+- feat(interview): 面试时间结构化 + 去双写 + 录音死表救活（`96957a3e`）——真值唯一
+  `interview_start_at`，改期唯一入口 `PATCH /api/interview/study/schedule/{id}/time`
+- feat(interview-web): 面试安排面板改用结构化字段渲染 + 抽出可测视图模型
+  `interview-schedule-view.js`（13 例 node 真跑）（`e1a7b50a`）
+
+**阅读库**
+
+- feat(saved): 稍后读/收藏正本切到 `saved_memberships`，legacy 表冻结（`6c6a52b1`）
+
+**旅游模块（T1/T2/T3 全部落地）**
+
+- fix(travel): 桌面端旅行页复活 —— `TravelConfig.data_path` 默认值不再留空、新增 `db_path`、
+  `travel/routes.py` 删 4 处硬编码，改用 `_under_root()`；前端修 5 处字段漂移
+  （`lowest_price` / `vs_baseline.diff` 等后端从未返回的旧字段名）（`67065d8c`）
+- feat(travel): `src/openbiliclaw/travel/md_parser.py`（纯函数）+
+  `scripts/travel/build_travel_db.py`（**默认 dry-run**，`--apply` 才写）——把「md 是内容真值源、
+  travel.db 是派生视图」落成可执行、可回滚的代码（`b7e2dad9`）
+- docs: `docs/modules/travel.md`（端点表 / 真值源声明 / 幂等键 / schema / 前端字段对照）
+
+**core 契约层补课 + 分层闸门**
+
+- test(core): `tests/core/` 47 例 —— 落库映射完整性（39 字段 ↔ 32 键 + 显式白名单，
+  防「新增字段忘映射 → 静默丢数据」）、X 异常跨 import 路径**类型身份**、跨平台 URL 派生
+- test(arch): 新增 `tests/test_layering_contracts.py`，用 **AST** 守 K5（storage 不得依赖 sources）
+  与 K6b（sources 加载期不得引 discovery/soul），能区分「模块级 import / `TYPE_CHECKING` /
+  函数内延迟 import」三种写法，并带阳性-阴性自检
+- docs: 新建 `docs/modules/core.md`；`docs/modules/agent.md` 记录 **240 行零引用死包**取证
+  （建议删除，待拍板）
+
+> ⚠️ 本日所有 Python 改动均**未跑全量测试**（服务在线，SQLite 写锁会导致线上 `database is locked`），
+> 只跑目标文件 + ruff + mypy；API 重启一律用 `pm2 restart 84`（pm_id）并快照 diff 核对。
+
+---
+
 ## 日记模块整理：多来源导入管线 + 文档补课（2026-09-14）
 
 把「把苹果备忘录 / 有道云笔记 / WPS 笔记抽成日记入库」这件事从**一次性脚本**

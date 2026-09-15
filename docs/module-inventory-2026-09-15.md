@@ -56,8 +56,8 @@
 | `rag` | 400 | 2 | 1 | ❌ **无** | 09-14 | ⬜ 未梳理 |
 | `ed2k` | 287 | 3 | **0** | ✅ `ed2k.md` | 09-11 | ⬜ 未梳理 |
 | `conversation_archive` | 274 | 2 | 1 | ✅ `conversation_archive.md` | 09-14 | ✅ 已梳理（归入阅读库） |
-| `agent` | 240 | 3 | **0** | ❌ **无** | 09-14 | ⬜ 未梳理 |
-| `core` | 204 | 3 | **0** | ❌ **无** | 09-13 | ⬜ 未梳理 |
+| `agent` | 240 | 3 | **0** | ✅ `agent.md`（**取证：零引用死包**） | 09-14 | ✅ 已梳理（待拍板删除） |
+| `core` | 204 | 3 | 47 | ✅ `core.md`（09-15 新建） | 09-13 | ✅ 已梳理 |
 | `reading` | 197 | 2 | 1 | ❌ **无** | 09-02 | ✅ 已梳理（归入阅读库） |
 | `cycle` | 148 | 3 | 1 | ✅ `cycle.md` | 09-11 | ⬜ 未梳理 |
 | `web` | 静态 | — | 1 | ❌ 无 | 09-14 | ⬜ 未梳理（两个前端） |
@@ -184,7 +184,7 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **⑫** | **`sources` + `storage`** | 采集线 + 库抽象，合计 2.2 万行、106 文件，都**没有模块文档**；改错影响 18 个 producer |
 | **⑬** | **`eval`** | 7,193 行 / 只有 6 个测试文件提及 / 无文档 |
 | **⑭** | **`cli` + `runtime`** | 有文档但滞后；`runtime` 是 20K 行的调度核心 |
-| **⑮** | 小模块补课：`clone` `synthesis` `topics` `agent` `core` `rag` `ed2k` | 都是 200–1,000 行、零或近零测试，适合批量补文档 + 补测 |
+| **⑮** | 小模块补课：`clone` `synthesis` `topics` `agent` `core` `rag` `ed2k` | 都是 200–1,000 行、零或近零测试，适合批量补文档 + 补测；**🔶 第一轮已完成（09-15 晚）**：`core` 补 47 例测试 + `core.md`，`agent` 出死包取证（`agent.md`），并新增分层依赖棘轮 `tests/test_layering_contracts.py`。剩余：`clone` `synthesis` `topics` `rag` `ed2k` |
 | **⑯** | `scripts/` + `extension/` + 两个前端 | 索引与文档建设，风险最低 |
 
 ## 5. 需要你拍板的（承接上一轮）
@@ -210,7 +210,11 @@ analysis_file: 832 行 / 832 个不同值（真正的来源标识，唯一）
 | **路径统一**（34 处） | ✅ **已清零（2026-09-15，`bc933c16`）**：26 处 CWD + 7 处 parents[N] + weekend 字符串路径 5 处；棘轮基线已清空，`tests/test_architecture_contracts.py` 守住新增 |
 | ~~**`sources` + `storage` 模块文档**~~ | ✅ **已完成（2026-09-15）**：`docs/modules/sources.md` 新建、`storage.md` 增补摸底（含原生保存 12 个缺失方法清单） |
 | **`self_evolution` 零测试补课** | 🔶 首批 6 条已落地（`cf9ba22c`，State/ContentFilter/空转跳过），其余待续 | 同上 |
-| **质量门禁 mypy 55 → 0** | ✅ 基本完成（`1aeed497`，2026-09-15）：实测 70 → **16**，剩余全部为 `saved_sync/service.py` 原生保存死代码族（14 个 Database 方法全树无定义，删或补待拍板）；ruff 3 条（既有 N806）。⚠️ mypy 2.3.1 冷缓存全量会撞 pydantic INTERNAL ERROR、TypedDict 结构兼容显著收紧（连 Mapping 都拒）——按文件核对才可靠 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
+| ~~**`core` 小模块补课 + 分层闸门**~~ | ✅ **已完成（2026-09-15 晚）**：`tests/core/` 47 例（落库映射完整性 / X 异常类型身份 / 跨平台派生）+ `docs/modules/core.md`；新增 `tests/test_layering_contracts.py` 用 **AST** 守 K5/K6b（区分模块级 import、`TYPE_CHECKING`、函数内延迟 import） | 本文 §4 批次⑮ |
+| **`agent` 死包处置** | 待拍板（**建议删除**）：零引用 + 全 TODO 桩，取证见 `docs/modules/agent.md` | 同上 |
+| **`clone` `synthesis` `topics` `rag` `ed2k` 小模块补课** | 未开始（批次⑮ 剩余） | 本文 §4 批次⑮ |
+| **`eval` 模块文档 + 补测** | 未开始（7,193 行 / 6 个测试文件提及 / 无文档） | 本文 §4 批次⑬ |
+| **质量门禁 mypy 55 → 0** | ✅ **已完成（2026-09-15）**：`1aeed497` 收到 70 → 16（剩余全是 `saved_sync/service.py` 原生保存死代码族），`31ef4fdd` 补实现 12 个 Database 方法 + `native_save_tasks` 表后 **全量归零** —— 复核实测 `mypy src/` = `Success: no issues found in 427 source files`；ruff 维持基线 3 条既有 N806。⚠️ mypy 2.3.1 冷缓存全量会撞 pydantic INTERNAL ERROR、TypedDict 结构兼容显著收紧（连 Mapping 都拒）——按文件核对才可靠 | `docs/module-cleanup-inventory-2026-09-14.md` §4 批次③ |
 
 **每批次的固定动作**（本轮已验证有效，照做即可）：
 
