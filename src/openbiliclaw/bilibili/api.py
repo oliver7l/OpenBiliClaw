@@ -93,6 +93,7 @@ class VideoInfo:
 
     bvid: str = ""
     aid: int = 0
+    cid: int = 0  # 分 P 的内容 id —— 播放地址接口必须携带
     title: str = ""
     description: str = ""
     duration: int = 0  # seconds
@@ -250,6 +251,13 @@ class BilibiliAPIClient:
 
     _WBI_KEY_TTL: float = 300.0  # Refresh WBI keys every 5 minutes
 
+    #: 移动端 auth/export 会把这个 UA 带回给客户端（直连 B 站读接口时保持一致）。
+    DEFAULT_USER_AGENT: str = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+
     def __init__(
         self,
         cookie: str = "",
@@ -264,11 +272,7 @@ class BilibiliAPIClient:
         self._wbi_keys_fetched_at: float = 0.0
         self._client = httpx.AsyncClient(
             headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
+                "User-Agent": self.DEFAULT_USER_AGENT,
                 "Referer": "https://www.bilibili.com",
             },
             # Connect directly to Bilibili — do NOT inherit the macOS system
@@ -395,7 +399,9 @@ class BilibiliAPIClient:
                 )
                 logger.warning("%s", detail)
                 raise BilibiliAuthExpiredError(detail)
-            raise BilibiliAPIError(message)
+            # 带上原始 code（此前只抛 message）：调用方需要按 code 分流，
+            # 例如 /view 被风控(-412)时降级到 WBI 签名端点重试。
+            raise BilibiliAPIError(message, code=code)
         return _json_object(payload.get("data", {}))
 
     async def _post_json(self, path: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -581,6 +587,26 @@ class BilibiliAPIClient:
             mid=int(data.get("mid", 0)),
         )
 
+    async def get_video_view_data(self, bvid: str) -> dict[str, Any]:
+        """取 `/view` 数据对象；裸端点被风控(-412)时降级到 WBI 签名端点。
+
+        B 站会对特定网络/IP 封禁裸的 ``/x/web-interface/view``（HTTP 412 / code
+        -412），而 WBI 签名的 ``/x/web-interface/wbi/view`` 仍然接受——这也是 web
+        端实际走的路径。移植自上游 8a1e98a4。
+        """
+        try:
+            return await self._get_json("/x/web-interface/view", params={"bvid": bvid})
+        except BilibiliAPIError as exc:
+            if exc.code != -412:
+                raise
+            logger.warning(
+                "Bilibili plain /view blocked with 412; retrying via WBI view (bvid=%s)",
+                bvid,
+            )
+            img_key, sub_key = await self._get_wbi_keys()
+            signed = self._sign_wbi_params({"bvid": bvid}, img_key=img_key, sub_key=sub_key)
+            return await self._get_json("/x/web-interface/wbi/view", params=signed)
+
     async def get_video_info(self, bvid: str) -> VideoInfo:
         """Get video information by BV ID.
 
@@ -591,19 +617,14 @@ class BilibiliAPIClient:
             VideoInfo dataclass.
 
         """
-        resp = await self._client.get(
-            f"{self._BASE_URL}/x/web-interface/view",
-            params={"bvid": bvid},
-        )
-        resp.raise_for_status()
-        payload = _json_object(resp.json())
-        data = _json_object(payload.get("data"))
+        data = await self.get_video_view_data(bvid)
         stat = _json_object(data.get("stat", {}))
         owner = _json_object(data.get("owner", {}))
 
         return VideoInfo(
             bvid=data.get("bvid", bvid),
             aid=data.get("aid", 0),
+            cid=data.get("cid", 0),
             title=data.get("title", ""),
             description=data.get("desc", ""),
             duration=data.get("duration", 0),
@@ -618,6 +639,189 @@ class BilibiliAPIClient:
             danmaku_count=stat.get("danmaku", 0),
             pub_date=data.get("pubdate", ""),
         )
+
+    async def get_play_info(
+        self,
+        bvid: str,
+        cid: int | None = None,
+        qn: int = 80,
+        preferred_codec: str = "avc",
+    ) -> dict[str, Any]:
+        """给原生播放器的**扁平化**播放载荷（移动端 play-url 契约）。
+
+        Cookie/WBI 细节全部留在后端；返回结构与移动端
+        ``/api/bilibili/player/play-url`` 的约定一致：dash 里按首选编解码挑
+        一路视频/音频，附上画质清单、分 P 列表和字幕轨。移植自上游
+        90a88262/9422c35e/a50ec617。
+        """
+        if cid is None:
+            cid = (await self.get_video_info(bvid)).cid
+        if not cid:
+            raise BilibiliAPIError("missing cid", code=-404)
+
+        img_key, sub_key = await self._get_wbi_keys()
+        params: dict[str, object] = {
+            "bvid": bvid,
+            "cid": cid,
+            "qn": qn,
+            "fnval": 4048,  # DASH + HDR + 4K + Dolby + AV1 全开
+            "fnver": 0,
+            "fourk": 1,
+            "platform": "html5",
+            "high_quality": 1,
+            "gaia_source": "pre-load",
+            "web_location": 1315873,
+        }
+        data = await self._get_json(
+            "/x/player/wbi/playurl",
+            params=self._sign_wbi_params(params, img_key=img_key, sub_key=sub_key),
+        )
+
+        pages_data: list[dict[str, Any]] = []
+        try:
+            pages_raw = await self._get_json("/x/player/pagelist", params={"bvid": bvid})
+            if isinstance(pages_raw, list):
+                pages_data = [dict(item) for item in pages_raw]
+        except BilibiliAPIError:
+            logger.debug("pagelist fetch failed for bvid=%s", bvid, exc_info=True)
+
+        qualities: list[dict[str, Any]] = [
+            {
+                "qn": int(item.get("quality", 0) or 0),
+                "label": item.get("new_description")
+                or item.get("display_desc")
+                or str(item.get("quality", "")),
+                "width": int(item.get("width", 0) or 0),
+                "height": int(item.get("height", 0) or 0),
+            }
+            for item in (data.get("support_formats", []) or [])
+            if isinstance(item, dict)
+        ]
+
+        video: dict[str, Any] | None = None
+        audio: dict[str, Any] | None = None
+        dash = data.get("dash")
+        if isinstance(dash, dict):
+            video_items = dash.get("video", []) or []
+            audio_items = dash.get("audio", []) or []
+            if isinstance(video_items, list) and video_items:
+                preferred = [
+                    item
+                    for item in video_items
+                    if isinstance(item, dict)
+                    and str(item.get("codecs", "") or "")
+                    .lower()
+                    .startswith(preferred_codec.lower())
+                ]
+                chosen = preferred[0] if preferred else video_items[0]
+                if isinstance(chosen, dict):
+                    video = {
+                        "qn": int(chosen.get("id", 0) or 0),
+                        "label": "",
+                        "codec": str(chosen.get("codecs", "") or ""),
+                        "url": str(chosen.get("baseUrl") or chosen.get("base_url") or ""),
+                        "backup_urls": list(
+                            chosen.get("backupUrl") or chosen.get("backup_url") or []
+                        ),
+                        "width": int(chosen.get("width", 0) or 0),
+                        "height": int(chosen.get("height", 0) or 0),
+                        "bandwidth": int(chosen.get("bandwidth", 0) or 0),
+                        "mime_type": str(
+                            chosen.get("mimeType") or chosen.get("mime_type") or ""
+                        ),
+                    }
+            if isinstance(audio_items, list) and audio_items:
+                chosen_audio = audio_items[0]
+                if isinstance(chosen_audio, dict):
+                    audio = {
+                        "qn": int(chosen_audio.get("id", 0) or 0),
+                        "codec": str(chosen_audio.get("codecs", "") or ""),
+                        "url": str(
+                            chosen_audio.get("baseUrl") or chosen_audio.get("base_url") or ""
+                        ),
+                        "backup_urls": list(
+                            chosen_audio.get("backupUrl") or chosen_audio.get("backup_url") or []
+                        ),
+                        "width": 0,
+                        "height": 0,
+                        "bandwidth": int(chosen_audio.get("bandwidth", 0) or 0),
+                        "mime_type": str(
+                            chosen_audio.get("mimeType") or chosen_audio.get("mime_type") or ""
+                        ),
+                    }
+
+        # 非 DASH 兜底（durl 形态：低清晰度 / 老接口行为）
+        durl = data.get("durl")
+        if video is None and isinstance(durl, list) and durl:
+            first = durl[0]
+            if isinstance(first, dict):
+                video = {
+                    "qn": int(data.get("quality", 0) or 0),
+                    "label": "",
+                    "codec": "mp4",
+                    "url": str(first.get("url", "") or ""),
+                    "backup_urls": list(first.get("backup_url", []) or []),
+                    "width": 0,
+                    "height": 0,
+                    "bandwidth": 0,
+                    "mime_type": "video/mp4",
+                }
+
+        subtitles: list[dict[str, Any]] = []
+        try:
+            player_data = await self._get_json(
+                "/x/player/wbi/v2",
+                params={"bvid": bvid, "cid": cid},
+            )
+            raw_subtitle = player_data.get("subtitle", {})
+            if isinstance(raw_subtitle, dict):
+                for item in raw_subtitle.get("subtitles", []) or []:
+                    if not isinstance(item, dict):
+                        continue
+                    raw_url = str(item.get("subtitle_url", "") or "")
+                    if raw_url.startswith("//"):
+                        raw_url = f"https:{raw_url}"
+                    if raw_url:
+                        subtitles.append(
+                            {
+                                "lan": str(item.get("lan", "") or ""),
+                                "name": str(item.get("lan_doc", "") or item.get("lan", "")),
+                                "url": raw_url,
+                            }
+                        )
+        except BilibiliAPIError:
+            logger.debug("subtitle fetch failed for bvid=%s cid=%s", bvid, cid, exc_info=True)
+
+        duration = int(data.get("timelength", 0) or 0)
+        if duration > 1000:
+            duration = duration // 1000
+
+        return {
+            "bvid": bvid,
+            "cid": cid,
+            "duration": duration,
+            "pages": [
+                {
+                    "cid": int(page.get("cid", 0) or 0),
+                    "page": int(page.get("page", 0) or 0),
+                    "part": str(page.get("part", "") or ""),
+                    "duration": int(page.get("duration", 0) or 0),
+                    "dimension": {
+                        "width": int(page.get("dimension", {}).get("width", 0) or 0)
+                        if isinstance(page.get("dimension"), dict)
+                        else 0,
+                        "height": int(page.get("dimension", {}).get("height", 0) or 0)
+                        if isinstance(page.get("dimension"), dict)
+                        else 0,
+                    },
+                }
+                for page in pages_data
+            ],
+            "qualities": qualities,
+            "video": video,
+            "audio": audio,
+            "subtitles": subtitles,
+        }
 
     async def get_playurl(
         self,

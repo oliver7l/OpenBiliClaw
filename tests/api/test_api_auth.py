@@ -273,9 +273,11 @@ def test_mutating_get_task_claim_requires_csrf(tmp_path, monkeypatch) -> None:
     client = _remote(app)
     client.post("/api/auth/login", json={"password": "hunter2"}, headers={"origin": _ORIGIN})
     for path in (
+        "/api/sources/bili/next-task",
         "/api/sources/xhs/next-task",
         "/api/sources/dy/next-task",
         "/api/sources/yt/next-task",
+        "/api/sources/zhihu/next-task",
         "/api/recommendations",  # serve() bootstrap-writes rows
         "/api/chat/turns/abc123",  # GET resumes a pending turn
     ):
@@ -286,6 +288,28 @@ def test_mutating_get_task_claim_requires_csrf(tmp_path, monkeypatch) -> None:
     # uncovered: cookie alone authorizes them)
     ok = client.get("/api/recommendations", headers={"x-obc-auth": "1"})
     assert ok.status_code == 200
+
+
+def test_csrf_get_set_covers_every_registered_claim_route(tmp_path, monkeypatch) -> None:
+    """Set equality between the exact CSRF paths and the live claim routes.
+
+    移植自上游 #242 的防回归思路：每个 ``*/next-task`` 都是写形状的 GET
+    （pending → in_progress），注册了却没进 ``_CSRF_GET_EXACT`` 就是没防护的
+    状态变更；反过来白名单里残留已删除的路由则是死条目。两个方向都红。
+    路由清单从 app 实例现取，而不是手抄——以后新增源会自动被这个测试盯上。
+    """
+    from openbiliclaw.api.auth import _CSRF_GET_EXACT
+
+    app, _ = _build_app(tmp_path, monkeypatch)
+    registered = {
+        str(getattr(route, "path", ""))
+        for route in app.routes
+        if str(getattr(route, "path", "")).endswith("/next-task")
+    }
+    declared = {path for path in _CSRF_GET_EXACT if path.endswith("/next-task")}
+
+    assert registered, "app 应至少注册了一条 next-task claim 路由"
+    assert registered == declared
 
 
 def test_cross_origin_cookie_post_blocked(tmp_path, monkeypatch) -> None:

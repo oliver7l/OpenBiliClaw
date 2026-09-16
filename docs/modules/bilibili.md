@@ -191,3 +191,35 @@ headed = false     # 调试时设为 true
 9. **Cookie 过期显式化**：`/nav` 的 `-101` 与普通业务错误分开处理，日志和异常文本都包含 session expired / re-auth 提示；上层仍可按 `BilibiliAPIError` 统一兜底
 10. **进程级 search 冷却（分级）**：`BilibiliAPIClient.search()` 把 412 与 `v_voucher` 拆开处理——412 即时硬冷却（base 600s）；`v_voucher` 走 `_record_voucher_block()` 阈值化，连续 `_SEARCH_VOUCHER_BLOCK_THRESHOLD`（默认 3）个关键词耗尽才设共享 cooldown（base 180s），单个被风控的关键词不再让整轮 search + explore 归零十几分钟，`_reset_search_cooldown_backoff()` 在任一成功时清零 streak 与升级档位。dedicated search clients 和主 runtime client 仍通过 `search_cooldown_remaining()` 共享同一状态
 11. **扩展兜底只做冷却时补位**：B 站 API 搜索仍是主路径；后端搜索任务只在服务端搜索冷却且浏览器 presence 在线时触发，避免常驻打开搜索页或把插件变成主 crawler。扩展侧只抓用户真实会话中可见的渲染结果，不在 isolated world 里伪造签名请求；background 对 `BILI_TASK_EXECUTE` 做短重试以吸收 content script 注入时序抖动；回传结果也不直接入正式池，而是进入统一候选待评估池，继续复用跨源评估、去重和 admission 规则。
+
+## 移动端播放器端点（2026-09-16 移植自上游）
+
+为对接上游独立仓库的 Flutter 客户端（[OpenBiliClaw-mobile](https://github.com/whiteguo233/OpenBiliClaw-mobile)，
+Android APK / iOS IPA，连接同一本地后端），从上游 v0.3.222 移植了三个端点（契约与其
+API 客户端严格对齐，装官方 APK 填后端地址即可）：
+
+| 端点 | 方法 | 作用 |
+|------|------|------|
+| `/api/bilibili/player/play-url` | POST | 扁平化播放载荷：dash 按 `preferred_codec` 挑流、画质清单（`support_formats`）、分 P 列表、字幕轨（`/x/player/wbi/v2`，`//` 封面协议归一化）、durl 兜底 |
+| `/api/bilibili/video/info` | GET | 视频元数据（简介 tab），走 `get_video_view_data`（见下） |
+| `/api/bilibili/auth/export` | POST | 把后端 B 站 cookie 导出给 App（内存态、只读直连用；登录态真值仍在后端） |
+
+配套客户端层改动（`bilibili/api.py`）：
+
+- **`get_video_view_data()`**（移植自上游 8a1e98a4）：裸 `/x/web-interface/view` 被风控
+  （code -412）时自动降级到 WBI 签名的 `/x/web-interface/wbi/view` 重试；`get_video_info`
+  与 `get_video_aid` 均走此链路。`_get_json` 现在会把原始 code 附在 `BilibiliAPIError` 上。
+- **`VideoInfo.cid`** 新字段（播放地址接口必须携带，`get_play_info` 缺省时自动解析）。
+- **`get_play_info()`**（移植自上游 90a88262/9422c35e/a50ec617）：fnval=4048 全格式、
+  pagelist / 字幕失败不致命（只降级）、durl 形态兜底。
+- **`DEFAULT_USER_AGENT`** 类常量（auth/export 契约字段，原来内联在 `__init__`）。
+
+测试：`tests/bilibili/test_bilibili_mobile_player.py`（客户端层，MockTransport 零真实请求）
++ `tests/api/test_bilibili_mobile_routes.py`（路由层，假客户端 + monkeypatch load_config）。
+
+**Mobile 依赖端点覆盖现状（实测对照其 dart 客户端）**：推荐/反馈/点击、delight 惊喜、
+saved/稍后再看、auth 登录四件套、runtime-status/activity-feed、config、events、
+播放链路三端点 **全部可用**；仍缺（App 对应页面会降级）：`/api/chat/stream`（SSE 流式，
+大件）、`/api/content-history`（30 天历史）、`/api/chat/pending-confirmations` 系、
+`/api/bilibili/auth/qrcode`（扫码登录，App 内改用 cookie 导入即可）、
+`/api/bilibili/video/relation`、`/comment-replies`、`/recommendations/platform-availability`。

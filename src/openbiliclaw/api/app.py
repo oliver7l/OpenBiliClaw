@@ -19,10 +19,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path as _Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
@@ -1091,6 +1091,31 @@ def create_app(
                 enabled=False,
                 event_publisher=getattr(ctx.event_hub, "publish", None),
             )
+        # 注入路径此前从不构建 saved_sync_service ⇒ POST /api/favorites 一律 503
+        #（6c6a52b1 把收藏/稍后看切到 saved_memberships 正本后，这个端点依赖该服务）。
+        # cookie 现取（配置为空时回落 data/bilibili_cookie.json），构造失败只降级不炸。
+        if ctx.saved_sync_service is None and _db is not None:
+            try:
+                from pathlib import Path as _Path
+
+                from openbiliclaw.saved_sync.adapters import build_native_save_router
+                from openbiliclaw.saved_sync.service import SavedSyncService
+
+                _db_file = getattr(_db, "_db_path", None)
+                _data_dir = _Path(_db_file).parent if _db_file else _Path("data")
+                ctx.saved_sync_service = SavedSyncService(
+                    database=_db,
+                    router=build_native_save_router(
+                        data_dir=_data_dir,
+                        configured_cookie="",
+                    ),
+                    task_starter=ctx.task_registry.track,
+                )
+            except Exception:
+                logger.warning(
+                    "Injection path: failed to initialize saved-sync service",
+                    exc_info=True,
+                )
     else:
         # Production path: build everything from config.
         try:
@@ -2300,6 +2325,90 @@ def create_app(
                 else "Cookie already synced; runtime unchanged."
             ),
         )
+
+    # ── 移动端原生播放器端点（移植自上游 90a88262/728fdd71/326486dc） ──
+    # 契约与上游 OpenBiliClaw-mobile 的 API 客户端严格对齐：装上游 APK 填后端
+    # 地址即可用。每条路由现取 cookie、现建客户端、用完即关；测试走
+    # monkeypatch load_config + transport 注入，零真实请求。
+
+    def _mobile_bili_client_and_cookie() -> tuple[Any, str]:
+        from openbiliclaw.bilibili.api import BilibiliAPIClient
+        from openbiliclaw.bilibili.auth import resolve_runtime_cookie
+        from openbiliclaw.config import load_config
+
+        cfg = load_config()
+        cookie = resolve_runtime_cookie(
+            data_dir=cfg.data_path,
+            configured_cookie=str(getattr(cfg.bilibili, "cookie", "") or ""),
+        )
+        if not cookie:
+            raise HTTPException(status_code=401, detail="B站 Cookie 未配置或已失效")
+        return BilibiliAPIClient(cookie=cookie), cookie
+
+    @app.get("/api/bilibili/video/info")
+    async def bilibili_video_info(bvid: str = Query(...)) -> dict[str, Any]:
+        """视频元数据（移动端播放页简介 tab）——/view 被风控时走 WBI 兜底。"""
+        from openbiliclaw.bilibili.api import BilibiliAPIError
+
+        client, _ = _mobile_bili_client_and_cookie()
+        try:
+            return await client.get_video_view_data(bvid)
+        except BilibiliAPIError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            await client.close()
+
+    @app.post("/api/bilibili/player/play-url")
+    async def bilibili_play_url(payload: Annotated[dict[str, Any], Body()]) -> dict[str, Any]:
+        """解析 B 站播放地址（移动端原生播放器）。"""
+        from openbiliclaw.bilibili.api import BilibiliAPIError
+
+        bvid = str(payload.get("bvid", "") or "").strip()
+        if not bvid:
+            raise HTTPException(status_code=400, detail="missing bvid")
+        cid = payload.get("cid")
+        qn = payload.get("qn", 80)
+        preferred_codec = str(payload.get("preferred_codec", "avc") or "avc")
+
+        client, _ = _mobile_bili_client_and_cookie()
+        try:
+            info = await client.get_play_info(
+                bvid=bvid,
+                cid=int(cid) if cid is not None else None,
+                qn=int(qn) if qn else 80,
+                preferred_codec=preferred_codec,
+            )
+            return {"ok": True, **info}
+        except BilibiliAPIError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            await client.close()
+
+    @app.post("/api/bilibili/auth/export")
+    async def bilibili_auth_export() -> dict[str, Any]:
+        """把后端的 B 站 cookie 导出给移动 App（内存态、只读直连用）。
+
+        登录态真值仍在后端：写操作与 WBI 接口照旧走后端代理。
+        """
+        from openbiliclaw.bilibili.api import BilibiliAPIClient
+
+        client, cookie = _mobile_bili_client_and_cookie()
+        with suppress(Exception):
+            await client.aclose()
+        cookies: dict[str, str] = {}
+        for part in cookie.split(";"):
+            key, separator, value = part.strip().partition("=")
+            if separator and key:
+                cookies[key] = value.strip()
+        return {
+            "ok": True,
+            "cookie": cookie,
+            "cookies": cookies,
+            "user_agent": BilibiliAPIClient.DEFAULT_USER_AGENT,
+            "buvid": cookies.get("buvid3", "") or cookies.get("buvid4", "") or "",
+            "user": None,
+            "expires_at": "",
+        }
 
     @app.post("/api/init-completed")
     async def init_completed() -> dict[str, object]:
