@@ -262,6 +262,45 @@ class TestContentHistory:
         assert resp.status_code == 422
 
 
+class TestChatStubEndpoints:
+    """上游「认知卡/追问确认」体系的兼容桩：我们的对话从不产生确认队列。"""
+
+    def test_pending_confirmations_returns_empty_queue(
+        self, monkeypatch: Any, tmp_path: Any
+    ) -> None:
+        with _build(monkeypatch, tmp_path) as client:
+            resp = client.get("/api/chat/pending-confirmations", params={"session": "popup"})
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload == {"count": 0, "items": [], "total": 0}
+
+    def test_pending_confirmations_count_only(self, monkeypatch: Any, tmp_path: Any) -> None:
+        with _build(monkeypatch, tmp_path) as client:
+            resp = client.get(
+                "/api/chat/pending-confirmations",
+                params={"session": "popup", "count_only": "true"},
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"count": 0, "total": 0}
+
+    def test_open_unknown_ref_is_404(self, monkeypatch: Any, tmp_path: Any) -> None:
+        with _build(monkeypatch, tmp_path) as client:
+            resp = client.post(
+                "/api/chat/pending-confirmations/nope/open", json={"session": "popup"}
+            )
+        assert resp.status_code == 404
+
+    def test_card_action_is_404(self, monkeypatch: Any, tmp_path: Any) -> None:
+        with _build(monkeypatch, tmp_path) as client:
+            resp = client.post("/api/chat/cards/turn-x/action", json={"action": "confirm"})
+        assert resp.status_code == 404
+
+    def test_context_is_404(self, monkeypatch: Any, tmp_path: Any) -> None:
+        with _build(monkeypatch, tmp_path) as client:
+            resp = client.get("/api/chat/contexts/turn-x")
+        assert resp.status_code == 404
+
+
 class TestChatStream:
     def test_stream_emits_done_even_when_completion_fails(
         self, monkeypatch: Any, tmp_path: Any

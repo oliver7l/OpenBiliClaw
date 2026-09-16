@@ -6,9 +6,9 @@ import asyncio
 import logging
 import uuid
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from obc_soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
 
@@ -982,6 +982,40 @@ def register_chat_probe_routes(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # ── 上游「认知卡/追问确认」体系的兼容桩（docs/plans/2026-09-16-mobile-parity.md §6）──
+    # mobile 每次对话收尾都会拉 pending-confirmations（loadPendingConfirmations）；
+    # 我们的对话系统用的是另一套（兴趣探针/认知更新），从不产生确认队列——
+    # 返回空队列是诚实语义：App 的待确认徽标恒为空、轮询不再吃 404 异常。
+    # cards/contexts 只在确认卡存在时才会被触发，按 404 走 App 的优雅降级路径。
+
+    @app.get("/api/chat/pending-confirmations")
+    async def list_pending_confirmations(
+        count_only: bool = Query(default=False),
+        session: str = Query(default=""),
+    ) -> dict[str, Any]:
+        del session  # 兼容 mobile 的 ?session=popup 查询参数
+        if count_only:
+            return {"count": 0, "total": 0}
+        return {"count": 0, "items": [], "total": 0}
+
+    @app.post("/api/chat/pending-confirmations/{ref}/open")
+    async def open_pending_confirmation(ref: str) -> ChatTurnOut:
+        raise HTTPException(status_code=404, detail="Pending confirmation not found.")
+
+    @app.post("/api/chat/cards/{turn_id}/action")
+    async def act_on_chat_card(
+        turn_id: str,
+        payload: Annotated[dict[str, Any], Body()] | None = None,
+    ) -> dict[str, Any]:
+        del turn_id, payload
+        raise HTTPException(
+            status_code=404, detail="Chat cards are not produced by this backend."
+        )
+
+    @app.get("/api/chat/contexts/{turn_id}")
+    async def get_chat_context(turn_id: str) -> dict[str, Any]:
+        raise HTTPException(status_code=404, detail="Dialogue contexts are not produced by this backend.")
 
     @app.post("/api/interest-probes/trigger")
     async def trigger_interest_probe() -> dict[str, Any]:
