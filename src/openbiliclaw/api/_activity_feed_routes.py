@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING, Any
 
 from openbiliclaw.api.models import ActivityFeedItemOut, ActivityFeedResponse
@@ -14,12 +15,26 @@ if TYPE_CHECKING:
 def register_activity_feed_routes(app: Any, ctx: RuntimeContext) -> None:
     """Register activity feed endpoints on the FastAPI app."""
 
+    #: mobile 客户端每 ~8s 轮询本端点；按 (limit, before) 键控的 2s TTL 缓存。
+    feed_cache_ttl_seconds = 2.0
+    feed_cache: dict[tuple[int, str], tuple[float, ActivityFeedResponse]] = {}
+
     @app.get("/api/activity-feed", response_model=ActivityFeedResponse)
     async def activity_feed(
         limit: int = 10,
         before: str = "",
+        refresh: bool = False,
     ) -> ActivityFeedResponse:
         from openbiliclaw.runtime.activity_feed import ActivityFeedBuilder
+
+        cache_key = (limit, before)
+        if not refresh:
+            cached = feed_cache.get(cache_key)
+            if (
+                cached is not None
+                and time.monotonic() - cached[0] < feed_cache_ttl_seconds
+            ):
+                return cached[1]
 
         def _collect_feed_inputs() -> dict[str, object]:
             runtime_status: dict[str, object] = {}
@@ -48,7 +63,7 @@ def register_activity_feed_routes(app: Any, ctx: RuntimeContext) -> None:
         payload = await asyncio.get_running_loop().run_in_executor(None, _collect_feed_inputs)
         payload_items = payload.get("items", [])
         item_dicts = payload_items if isinstance(payload_items, list) else []
-        return ActivityFeedResponse(
+        response = ActivityFeedResponse(
             live_summary=str(payload.get("live_summary", "")),
             headline=str(payload.get("headline", "")),
             items=[
@@ -66,3 +81,5 @@ def register_activity_feed_routes(app: Any, ctx: RuntimeContext) -> None:
             has_more=bool(payload.get("has_more", False)),
             next_cursor=str(payload.get("next_cursor", "")),
         )
+        feed_cache[cache_key] = (time.monotonic(), response)
+        return response

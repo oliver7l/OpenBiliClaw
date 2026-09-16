@@ -969,6 +969,36 @@ class ChatRecommendResponse(BaseModel):
     recommendations: list[RecommendationOut] = Field(default_factory=list)
 
 
+class ContentHistoryItemOut(BaseModel):
+    """One canonical item in a bounded content-history category（mobile 契约）."""
+
+    item_key: str
+    source_platform: str
+    content_id: str = ""
+    content_url: str = ""
+    content_type: str = "video"
+    title: str = ""
+    author_name: str = ""
+    cover_url: str = ""
+    body_text: str = ""
+    recommendation_id: int | None = None
+    occurred_at: str = ""
+    context: str = ""
+    restored: bool = False
+    contexts: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ContentHistoryResponse(BaseModel):
+    """One paginated 30-day history category（mobile ContentHistoryPage 契约）."""
+
+    category: str
+    items: list[ContentHistoryItemOut]
+    total: int = 0
+    retention_days: int = 30
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
 class ChatTurnIn(BaseModel):
     """Durable popup chat turn request.
 

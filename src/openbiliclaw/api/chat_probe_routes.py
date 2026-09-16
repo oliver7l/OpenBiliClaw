@@ -9,7 +9,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from obc_soul.dislike_writeback import apply_new_dislikes, topics_for_confirmed_avoidance
 
 from openbiliclaw.api.models import (
@@ -911,6 +911,77 @@ def register_chat_probe_routes(
         if turn.status == "pending":
             asyncio.create_task(_complete_durable_chat_turn(turn.turn_id))
         return turn
+
+    @app.post("/api/chat/stream")
+    async def stream_chat_turn(payload: ChatTurnIn) -> StreamingResponse:
+        """SSE 推送 durable 对话轮（mobile chat_api.streamChat 契约）。
+
+        事件序列：``content``（delta 增量）→ ``done``（reply 全文）。
+        当前补完任务是一次性写回复，所以实际表现为「一段 delta + done」；
+        将来对话层支持真流式时，增量逻辑天然生效，协议不变。
+        长等待期间每 ~15s 发一行 SSE 注释（``: ping``）保活公网链路，
+        mobile 的行解析器会忽略注释。
+        """
+        import json
+        import time as _time
+
+        message = payload.message.strip()
+        if not message:
+            raise HTTPException(status_code=422, detail="Chat message is required.")
+        turn_id = payload.turn_id.strip() or f"turn-{uuid.uuid4().hex}"
+        existing = _get_chat_turn_row(turn_id)
+        if existing is None:
+            _create_chat_turn_row(payload, turn_id=turn_id)
+            asyncio.create_task(_complete_durable_chat_turn(turn_id))
+        else:
+            turn = _normalize_chat_turn(existing)
+            if turn.status == "pending":
+                asyncio.create_task(_complete_durable_chat_turn(turn.turn_id))
+
+        poll_interval = 0.2
+        ping_every_n = 75  # 0.2s × 75 = 15s
+        deadline_seconds = 150.0
+
+        async def _event_stream():
+            sent_reply_chars = 0
+            deadline = _time.monotonic() + deadline_seconds
+            ticks = 0
+            while True:
+                row = _get_chat_turn_row(turn_id)
+                turn = _normalize_chat_turn(row) if row is not None else None
+                if turn is not None and len(turn.reply) > sent_reply_chars:
+                    delta = turn.reply[sent_reply_chars:]
+                    sent_reply_chars = len(turn.reply)
+                    yield (
+                        "event: content\n"
+                        f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
+                    )
+                if turn is not None and turn.status in ("done", "failed"):
+                    final_reply = turn.reply
+                    if turn.status == "failed" and not final_reply:
+                        final_reply = f"出错了：{turn.error}"
+                    yield (
+                        "event: done\n"
+                        f"data: {json.dumps({'reply': final_reply}, ensure_ascii=False)}\n\n"
+                    )
+                    return
+                if _time.monotonic() > deadline:
+                    yield (
+                        "event: done\n"
+                        "data: {\"reply\": \"后台正忙，回复超时了，稍后在对话记录里看看。\"}\n\n"
+                    )
+                    return
+                ticks += 1
+                if ticks >= ping_every_n:
+                    yield ": ping\n\n"
+                    ticks = 0
+                await asyncio.sleep(poll_interval)
+
+        return StreamingResponse(
+            _event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/api/interest-probes/trigger")
     async def trigger_interest_probe() -> dict[str, Any]:

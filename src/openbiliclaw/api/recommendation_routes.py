@@ -40,10 +40,12 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 
 from openbiliclaw.api.models import (
+    ContentHistoryItemOut,
+    ContentHistoryResponse,
     PoolAllResponse,
     PoolItemOut,
     RecommendationAppendIn,
@@ -1334,5 +1336,101 @@ Keep keywords focused and specific. Remove stop words."""
         except Exception:
             logger.exception("agent-recommend failed (q=%r)", q)
             return PoolAllResponse(items=[], total=0, available=0, raw=0, pending=0)
+
+    @router.get("/api/recommendations/platform-availability")
+    async def recommendation_platform_availability() -> dict[str, Any]:
+        """各平台可服务候选数（mobile 底部 tab 徽标 + 自动加载判定）。
+
+        响应契约（mobile PlatformAvailability.fromJson）：
+        ``{total_available, version, by_platform: {platform: count}}``。
+        数据源 = pool.content_cache 里 ``pool_status='fresh'`` 的候选按平台计数。
+        失败绝不回全零——那会让 App 判定「全线无货」并关掉所有平台的自动加载
+        （照抄上游 10017 行处的防御注释原则）。
+        """
+        conn = ctx.database.conn
+        try:
+            rows = conn.execute(
+                """
+                SELECT source_platform, COUNT(*) AS cnt
+                  FROM pool.content_cache
+                 WHERE pool_status = 'fresh'
+                 GROUP BY source_platform
+                """
+            ).fetchall()
+        except Exception as exc:
+            logger.exception("Failed to read platform availability snapshot")
+            raise HTTPException(
+                status_code=500, detail=f"failed to read platform availability: {exc}"
+            ) from exc
+        by_platform = {
+            str(row["source_platform"] or "bilibili"): max(0, int(row["cnt"]))
+            for row in rows
+        }
+        return {
+            "total_available": sum(by_platform.values()),
+            "version": time.time_ns() // 1_000_000,
+            "by_platform": by_platform,
+        }
+
+    @router.get("/api/content-history", response_model=ContentHistoryResponse)
+    async def content_history(
+        category: str = Query(default="shown", description="clicked / shown / removed"),
+        limit: int = Query(default=12, ge=1, le=50),
+        cursor: str | None = Query(default=None, min_length=1, max_length=512),
+    ) -> ContentHistoryResponse:
+        """30 天内容历史（mobile 历史标签；兼容垫层，见 docs/plans/2026-09-16-mobile-parity.md）。"""
+        import base64
+
+        if category not in ("clicked", "shown", "removed"):
+            raise HTTPException(status_code=422, detail=f"unknown category: {category}")
+        cursor_position = None
+        if cursor is not None:
+            try:
+                decoded = json.loads(base64.b64decode(cursor).decode("utf-8"))
+                cursor_position = (str(decoded["t"]), int(decoded["i"]))
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail="invalid cursor") from exc
+        try:
+            rows, total, has_more, next_position = await asyncio.to_thread(
+                ctx.database.list_content_history_page,
+                category,
+                limit=limit,
+                cursor_position=cursor_position,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        items = [
+            ContentHistoryItemOut(
+                item_key=f"{row.get('source_platform', 'bilibili')}:{row.get('content_id', '')}",
+                source_platform=str(row.get("source_platform", "bilibili")),
+                content_id=str(row.get("content_id", "") or ""),
+                content_url=str(row.get("content_url", "") or ""),
+                content_type=str(row.get("content_type", "") or "video"),
+                title=str(row.get("title", "") or ""),
+                author_name=str(row.get("author_name", "") or ""),
+                cover_url=str(row.get("cover_url", "") or ""),
+                body_text=str(row.get("body_text", "") or ""),
+                recommendation_id=(
+                    int(row["recommendation_id"]) if row.get("recommendation_id") else None
+                ),
+                occurred_at=str(row.get("occurred_at", "") or ""),
+                context=category if category == "removed" else "",
+            )
+            for row in rows
+        ]
+        next_cursor = None
+        if has_more and next_position is not None:
+            next_cursor = base64.b64encode(
+                json.dumps({"t": next_position[0], "i": next_position[1]}).encode("utf-8")
+            ).decode("ascii")
+        return ContentHistoryResponse(
+            category=category,
+            items=items,
+            total=total,
+            retention_days=30,
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
 
     return router

@@ -823,6 +823,83 @@ class BilibiliAPIClient:
             "subtitles": subtitles,
         }
 
+    async def get_video_relation_state(self, bvid: str) -> dict[str, Any]:
+        """当前登录用户对视频的互动状态（赞/投币/收藏/稍后再看）。
+
+        移动端播放页的状态徽标用；移植自上游 90a88262。
+        """
+        aid = await self.get_video_aid(bvid)
+        data = await self._get_json(
+            "/x/web-interface/archive/relation",
+            params={"aid": aid, "bvid": bvid},
+        )
+        return {
+            "like": bool(data.get("like", False) or data.get("is_like", False)),
+            "coin": int(data.get("coin", 0) or 0),
+            "favorite": bool(data.get("favorite", False) or data.get("is_fav", False)),
+            "watch_later": bool(
+                data.get("watch_later", False) or data.get("is_watch_later", False)
+            ),
+        }
+
+    async def generate_qrcode(self) -> dict[str, Any]:
+        """生成 B 站网页版扫码登录二维码（passport 域，独立于 `_BASE_URL`）。"""
+        await self._respect_rate_limit()
+        try:
+            resp = await self._client.get(
+                "https://passport.bilibili.com/x/passport-login/web/qrcode/generate"
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise BilibiliAPIError(f"GET passport/qrcode/generate failed: {exc}") from exc
+        payload = _json_object(resp.json())
+        code = int(payload.get("code", 0) or 0)
+        if code != 0:
+            raise BilibiliAPIError(
+                str(payload.get("message", "generate qrcode failed")), code=code
+            )
+        return _json_object(payload.get("data", {}) or {})
+
+    async def poll_qrcode(self, qrcode_key: str) -> dict[str, Any]:
+        """轮询扫码登录状态，归一化为 pending/scanned/confirmed/expired。
+
+        移动端登录页只认这四个值（`confirmed` 才算成功）——**不要**把
+        「已写入凭据」的状态混进这个字段（见 docs/plans/2026-09-16-mobile-parity.md）。
+        """
+        await self._respect_rate_limit()
+        try:
+            resp = await self._client.get(
+                "https://passport.bilibili.com/x/passport-login/web/qrcode/poll",
+                params={"qrcode_key": qrcode_key},
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise BilibiliAPIError(f"GET passport/qrcode/poll failed: {exc}") from exc
+        payload = _json_object(resp.json())
+        code = int(payload.get("code", 0) or 0)
+        if code != 0:
+            raise BilibiliAPIError(
+                str(payload.get("message", "poll qrcode failed")), code=code
+            )
+        data = _json_object(payload.get("data", {}))
+        inner_code = int(data.get("code", 86101) or 86101)
+        message = str(data.get("message", "") or "")
+        if inner_code == 0 or (inner_code == 86101 and data.get("url")):
+            status = "confirmed"
+        elif inner_code == 86090:
+            status = "scanned"
+        elif inner_code == 86038:
+            status = "expired"
+        else:
+            status = "pending"
+        return {
+            "status": status,
+            "message": message,
+            "url": str(data.get("url", "") or ""),
+            "qrcode_key": qrcode_key,
+            "raw_code": inner_code,
+        }
+
     async def get_playurl(
         self,
         bvid: str,

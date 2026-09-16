@@ -1150,6 +1150,80 @@ class Database(
         if self.conn.in_transaction:
             self.conn.commit()
 
+    #: content-history 三类的排序/过滤键（列名都在 pool.recommendations 上）
+    _CONTENT_HISTORY_SOURCES: dict[str, tuple[str, str]] = {
+        # category -> (时间戳列, 固定过滤谓词)
+        "clicked": ("clicked_at", "clicked_at IS NOT NULL"),
+        "shown": ("presented_at", "presented_at IS NOT NULL"),
+        "removed": ("feedback_at", "feedback_type = 'dislike' AND feedback_at IS NOT NULL"),
+    }
+
+    def list_content_history_page(
+        self,
+        category: str,
+        *,
+        limit: int = 12,
+        cursor_position: tuple[str, int] | None = None,
+    ) -> tuple[list[dict[str, Any]], int, bool, tuple[str, int] | None]:
+        """Bounded content history 兼容垫层（mobile 30 天历史契约）。
+
+        把 pool.recommendations 的 presented/clicked/dislike 时间戳映射成
+        上游 clicked/shown/removed 三类，keyset 游标为 ``(时间戳, id)``。
+        元数据（标题/封面/平台等）从同库 content_cache 取最新一条。
+
+        Returns:
+            (rows, total, has_more, next_position)；row 为原始字段，形状
+            投影在路由层完成（保持存储层与展示契约解耦）。
+
+        """
+        source = self._CONTENT_HISTORY_SOURCES.get(category)
+        if source is None:
+            raise ValueError(f"unknown content history category: {category}")
+        ts_col, predicate = source
+
+        self._ensure_fresh_read()
+        params: list[Any] = []
+        where = f"r.{predicate}"
+        if cursor_position is not None:
+            cursor_ts, cursor_id = cursor_position
+            where += f" AND (r.{ts_col} < ? OR (r.{ts_col} = ? AND r.id < ?))"
+            params.extend([cursor_ts, cursor_ts, cursor_id])
+
+        total = int(
+            self.conn.execute(
+                f"SELECT COUNT(*) FROM pool.recommendations r WHERE {where}",
+                tuple(params),
+            ).fetchone()[0]
+        )
+        rows = self.conn.execute(
+            f"""
+            SELECT r.id AS recommendation_id, r.bvid AS content_id,
+                   r.{ts_col} AS occurred_at,
+                   cc.source_platform, cc.content_url, cc.title,
+                   cc.up_name AS author_name, cc.cover_url, cc.body_text,
+                   cc.content_type
+              FROM pool.recommendations r
+              LEFT JOIN pool.content_cache cc ON cc.bvid = r.bvid
+             WHERE {where}
+             ORDER BY r.{ts_col} DESC, r.id DESC
+             LIMIT ?
+            """,
+            (*params, limit + 1),
+        ).fetchall()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        next_position = None
+        if has_more and rows:
+            last = rows[-1]
+            next_position = (str(last["occurred_at"] or ""), int(last["recommendation_id"]))
+        items = []
+        for row in rows:
+            item = dict(row)
+            if not item.get("source_platform"):
+                item["source_platform"] = "bilibili"
+            items.append(item)
+        return items, total, has_more, next_position
+
     def _execute_write(
         self,
         sql: str,

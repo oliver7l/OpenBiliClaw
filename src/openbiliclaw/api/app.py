@@ -2410,6 +2410,189 @@ def create_app(
             "expires_at": "",
         }
 
+    # ── 移动端凭据与互动端点（B1 批次，契约见 docs/plans/2026-09-16-mobile-parity.md）──
+
+    async def _mobile_persist_bili_cookie(cookie_value: str) -> None:
+        """写入 B 站 cookie（cookie 文件 + config 镜像）并热重建运行时。
+
+        与扩展的 `/api/bilibili/cookie` 同一套持久化语义：幂等（相同 cookie
+        不重建）、rebuild_from_config 原子失败保旧。
+        """
+        from openbiliclaw.bilibili.auth import AuthManager
+        from openbiliclaw.config import (
+            load_config_with_diagnostics,
+            save_config,
+        )
+
+        config, diagnostics = load_config_with_diagnostics()
+        auth_manager = AuthManager(data_dir=config.data_path)
+        stored_cookie = ""
+        with suppress(Exception):
+            stored_cookie = auth_manager.load_cookie().strip()
+        configured_cookie = (config.bilibili.cookie or "").strip()
+        changed = stored_cookie != cookie_value or configured_cookie != cookie_value
+        if stored_cookie != cookie_value:
+            auth_manager.set_cookie(cookie_value)
+        if configured_cookie != cookie_value:
+            config.bilibili.cookie = cookie_value
+            save_config(config, diagnostics.config_path)
+        if changed:
+            with suppress(Exception):
+                await ctx.rebuild_from_config(config)
+                await ctx.restart_background_tasks(app)
+
+    async def _mobile_bili_auth_payload() -> dict[str, Any]:
+        """auth/status 与 auth/import 共用的响应形状（mobile BilibiliAuthInfo 契约）。
+
+        注意字段名是 `status` 而非 `state`——mobile 的 fromJson 只读 `status`。
+        """
+        from openbiliclaw.bilibili.api import BilibiliAPIError
+
+        try:
+            client, cookie = _mobile_bili_client_and_cookie()
+        except HTTPException:
+            return {"status": "anonymous", "user": None, "scopes": [], "expires_at": ""}
+        try:
+            nav = await client.get_nav_info()
+        except BilibiliAPIError:
+            return {"status": "anonymous", "user": None, "scopes": [], "expires_at": ""}
+        finally:
+            with suppress(Exception):
+                await client.aclose()
+        if not nav.is_login:
+            return {"status": "anonymous", "user": None, "scopes": [], "expires_at": ""}
+        return {
+            "status": "logged_in",
+            "user": {"mid": nav.mid, "name": nav.uname, "face": "", "vip": False},
+            "scopes": [],
+            "expires_at": "",
+        }
+
+    def _qr_cookie_from_url(url: str) -> str:
+        """从扫码确认回调 URL 的 query 里拼出 cookie 头（上游 _qr_cookie_header 同款）。"""
+        from urllib.parse import parse_qsl, urlsplit
+
+        pairs = [
+            (key, value)
+            for key, value in parse_qsl(urlsplit(url).query, keep_blank_values=True)
+            if key and value
+        ]
+        return "; ".join(f"{key}={value}" for key, value in pairs)
+
+    @app.get("/api/bilibili/auth/status")
+    async def bilibili_auth_status() -> dict[str, Any]:
+        """B 站登录状态（mobile 设置页）。"""
+        return await _mobile_bili_auth_payload()
+
+    @app.post("/api/bilibili/auth/qrcode")
+    async def bilibili_qrcode_create() -> dict[str, Any]:
+        """生成 B 站扫码登录二维码（mobile 登录页）。
+
+        扫码是无登录操作——**不要求已有 cookie**（复用
+        `_mobile_bili_client_and_cookie` 的 401 门槛会让没登录过的用户扫不了码）。
+        """
+        from openbiliclaw.bilibili.api import BilibiliAPIClient, BilibiliAPIError
+
+        client = BilibiliAPIClient(cookie="")
+        try:
+            data = await client.generate_qrcode()
+            return {
+                "ok": True,
+                "qrcode_key": str(data.get("qrcode_key", "") or ""),
+                "qrcode_url": str(data.get("url", "") or ""),
+                "expires_in": 180,
+                "expires_at": "",
+            }
+        except BilibiliAPIError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            with suppress(Exception):
+                await client.aclose()
+
+    @app.get("/api/bilibili/auth/qrcode/poll")
+    async def bilibili_qrcode_poll(qrcode_key: str = Query(...)) -> dict[str, Any]:
+        """轮询扫码登录。
+
+        ⚠️ 契约陷阱：status 必须回 `confirmed`（mobile 的 BilibiliQrStatus 枚举
+        没有 logged_in，回 logged_in 会被解析成 failed）。
+        """
+        from openbiliclaw.bilibili.api import BilibiliAPIClient, BilibiliAPIError
+
+        client = BilibiliAPIClient(cookie="")
+        try:
+            data = await client.poll_qrcode(qrcode_key)
+        except BilibiliAPIError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            with suppress(Exception):
+                await client.aclose()
+
+        status = str(data.get("status", "pending"))
+        user: dict[str, Any] | None = None
+        if status == "confirmed":
+            cookie_header = _qr_cookie_from_url(str(data.get("url", "") or ""))
+            if cookie_header:
+                await _mobile_persist_bili_cookie(cookie_header)
+                payload = await _mobile_bili_auth_payload()
+                status = "confirmed"  # 保持枚举合法；用户信息一并带回
+                user = payload.get("user")
+        return {
+            "ok": True,
+            "status": status,
+            "user": user,
+            "message": str(data.get("message", "") or ""),
+        }
+
+    @app.post("/api/bilibili/auth/import")
+    async def bilibili_auth_import(payload: Annotated[dict[str, Any], Body()]) -> dict[str, Any]:
+        """mobile WebView 抓到的 cookie 导入后端（与扩展同步同一持久化路径）。"""
+        raw_cookies = payload.get("cookies")
+        if not isinstance(raw_cookies, dict) or not raw_cookies:
+            raise HTTPException(status_code=422, detail="cookies is required")
+        cookie_header = "; ".join(
+            f"{str(key).strip()}={str(value).strip()}"
+            for key, value in raw_cookies.items()
+            if str(key).strip() and str(value).strip()
+        )
+        if not cookie_header:
+            raise HTTPException(status_code=422, detail="cookies is empty")
+        await _mobile_persist_bili_cookie(cookie_header)
+        return await _mobile_bili_auth_payload()
+
+    @app.delete("/api/bilibili/auth/session")
+    async def bilibili_auth_session_delete() -> dict[str, Any]:
+        """清除后端持久化的 B 站登录态（mobile「退出登录」）。"""
+        from openbiliclaw.bilibili.auth import AuthManager
+        from openbiliclaw.config import (
+            load_config_with_diagnostics,
+            save_config,
+        )
+
+        config, diagnostics = load_config_with_diagnostics()
+        with suppress(Exception):
+            AuthManager(data_dir=config.data_path).clear_cookie()
+        if (config.bilibili.cookie or "").strip():
+            config.bilibili.cookie = ""
+            save_config(config, diagnostics.config_path)
+            with suppress(Exception):
+                await ctx.rebuild_from_config(config)
+                await ctx.restart_background_tasks(app)
+        return {"ok": True}
+
+    @app.get("/api/bilibili/video/relation")
+    async def bilibili_video_relation(bvid: str = Query(...)) -> dict[str, Any]:
+        """当前用户对该视频的互动状态（赞/投币/收藏/稍后再看徽标）。"""
+        from openbiliclaw.bilibili.api import BilibiliAPIError
+
+        client, _ = _mobile_bili_client_and_cookie()
+        try:
+            return {"ok": True, **await client.get_video_relation_state(bvid)}
+        except BilibiliAPIError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            with suppress(Exception):
+                await client.aclose()
+
     @app.post("/api/init-completed")
     async def init_completed() -> dict[str, object]:
         """Notify the running server that ``openbiliclaw init`` has finished.
