@@ -478,6 +478,21 @@ class RecommendationMixin:
             recommendation_ids,
         )
 
+    def find_latest_recommendation_id_by_bvid(self, bvid: str) -> int | None:
+        """按内容 id 回查最近一条推荐卡的 id（click 落账兜底）。
+
+        mobile/extension 的点击上报不一定带 recommendation_id；只带
+        content_id/bvid 时用它把点击闭环到 recommendations 行。
+        """
+        if not bvid:
+            return None
+        self._ensure_fresh_read()
+        row = self.conn.execute(
+            "SELECT id FROM recommendations WHERE bvid = ? ORDER BY id DESC LIMIT 1",
+            (bvid,),
+        ).fetchone()
+        return int(row["id"]) if row else None
+
     def mark_recommendations_clicked(self, recommendation_ids: list[int]) -> None:
         """Mark recommendations as clicked-through and record click timestamp.
 

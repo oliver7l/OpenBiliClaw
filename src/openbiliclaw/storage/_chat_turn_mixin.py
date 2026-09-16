@@ -62,6 +62,21 @@ class ChatTurnMixin:
             (reply, turn_id),
         )
 
+    def update_chat_turn_partial(self, turn_id: str, *, reply: str) -> None:
+        """流式打字机：把**部分**回复写回 pending 轮（不改变状态）。
+
+        SSE 端点靠轮询 reply 增长推送 content delta；节流由调用方控制。
+        """
+        self._execute_write(
+            """
+            UPDATE chat_turns
+            SET reply = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE turn_id = ? AND status = 'pending'
+            """,
+            (reply, turn_id),
+        )
+
     def fail_chat_turn(self, turn_id: str, *, error: str, reply: str = "") -> None:
         """Mark a popup chat turn as failed while preserving visible copy."""
         self._execute_write(

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -359,6 +360,65 @@ class LLMRegistry:
                 else:
                     logger.warning("Provider %s failed, trying next fallback.", provider_name)
 
+        attempted_list = ", ".join(attempted)
+        if last_error is None:
+            raise LLMFallbackError("No provider was available to process the request.")
+        raise LLMFallbackError(
+            f"All providers failed ({attempted_list}). Last error: {last_error}"
+        ) from last_error
+
+    async def complete_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[str]:
+        """流式补全：按 fallback 顺序找第一个可用 provider 逐段 yield。
+
+        惰性迭代语义：只有当前一个 provider **真正开始产出**后才算成功——
+        首 delta 之前的失败会按冷却/降级规则尝试下一个 provider。provider
+        不支持流式（无 ``complete_stream``）时，退化为一次性 complete 并把
+        整段文本作为单个 delta yield（调用方协议不变）。
+        """
+        last_error: Exception | None = None
+        attempted: list[str] = []
+        for provider_name in self._fallback_order():
+            attempted.append(provider_name)
+            if self._provider_on_cooldown(provider_name):
+                last_error = LLMRateLimitError(
+                    f"Provider {provider_name} is cooling down after rate limit."
+                )
+                continue
+            provider = self.get(provider_name)
+            stream_fn = getattr(provider, "complete_stream", None)
+            try:
+                if callable(stream_fn):
+                    iterator = stream_fn(
+                        messages, temperature=temperature, max_tokens=max_tokens
+                    )
+                else:
+                    async def _one_shot_delta(provider=provider) -> AsyncIterator[str]:
+                        response = await provider.complete(
+                            messages, temperature=temperature, max_tokens=max_tokens
+                        )
+                        if response.content:
+                            yield response.content
+
+                    iterator = _one_shot_delta()
+                first = True
+                async for delta in iterator:
+                    if first:
+                        # 首 delta 才算成功；清掉本 provider 的限速标记。
+                        self._rate_limited_until.pop(provider_name, None)
+                        first = False
+                    yield delta
+                return
+            except LLMResponseError:
+                raise
+            except (LLMProviderError, LLMRateLimitError, LLMTimeoutError) as exc:
+                last_error = exc
+                logger.warning("Provider %s stream failed, trying next fallback.", provider_name)
         attempted_list = ", ".join(attempted)
         if last_error is None:
             raise LLMFallbackError("No provider was available to process the request.")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any, NoReturn
 
 from .base import (
@@ -167,6 +168,51 @@ class GeminiProvider(LLMProvider):
             usage=usage,
             raw=response,
         )
+
+    async def complete_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        model: str | None = None,
+    ) -> AsyncIterator[str]:
+        """流式对话补全（google-genai ``generate_content(stream=True)``）。
+
+        错误处理与 :meth:`_request_with_retry` 同源；流只在首块之前可重试。
+        """
+        if types is None:
+            _raise_missing_sdk()
+        effective_model = (model or "").strip() or self._model
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        )
+        last_error: Exception | None = None
+        stream: Any = None
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                stream = await self._client.aio.models.generate_content(
+                    model=effective_model,
+                    contents=self._render_messages(messages),
+                    config=config,
+                    stream=True,
+                )
+                break
+            except Exception as exc:
+                mapped = self._map_error(exc)
+                last_error = mapped
+                if not self._is_retryable(mapped) or attempt == self._MAX_RETRIES:
+                    raise mapped from exc
+                await asyncio.sleep(self._BASE_RETRY_DELAY * attempt)
+        if stream is None:
+            raise LLMProviderError(f"gemini stream failed: {last_error}")
+
+        async for response in stream:
+            text = getattr(response, "text", None)
+            if text:
+                yield text
 
     async def _request_with_retry(self, **kwargs: Any) -> Any:
         last_error: Exception | None = None

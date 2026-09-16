@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -67,6 +68,58 @@ class SocraticDialogue:
         self._tools = tools or []
         self._tool_dispatcher = tool_dispatcher
         self._module_overrides = dict(module_overrides) if module_overrides is not None else None
+
+    async def respond_stream(
+        self, user_message: str, *, retrieval_context: str | None = None
+    ) -> AsyncIterator[str]:
+        """流式版 :meth:`respond`：逐段 yield 文本增量，结束时落历史 + 后台学习。
+
+        工具调用路径暂不支持流式——退化为一次性产出单个 delta，调用方协议不变。
+        """
+        from obc_llm.service import LLMServiceError
+
+        self._history.append(DialogueTurn(role="user", content=user_message))
+        effective_message = user_message
+        if retrieval_context:
+            effective_message = f"{user_message}\n\n{retrieval_context}"
+
+        reply_parts: list[str] = []
+        try:
+            service = self._llm_service or self._build_service()
+            if self._tools and self._tool_dispatcher:
+                reply = await self._respond_with_tools(service, effective_message)
+                reply_parts.append(reply)
+                yield reply
+            else:
+                async for delta in service.complete_socratic_dialogue_stream(
+                    user_message=effective_message,
+                    history=self._history_to_messages(),
+                    caller="soul.dialogue",
+                ):
+                    reply_parts.append(delta)
+                    yield delta
+        except (LLMServiceError, RuntimeError):
+            logger.exception("Failed to generate streaming Socratic dialogue response.")
+            fallback = "我刚刚思路断了一下，你可以换个说法再告诉我一次吗？"
+            reply_parts.append(fallback)
+            yield fallback
+
+        reply = "".join(reply_parts)
+        self._history.append(DialogueTurn(role="agent", content=reply))
+        learn_fn = getattr(self._soul_engine, "learn_from_dialogue", None)
+        if callable(learn_fn):
+
+            async def _background_learn_stream() -> None:
+                try:
+                    await learn_fn(
+                        user_message=user_message,
+                        assistant_reply=reply,
+                        session=self._session,
+                    )
+                except Exception:
+                    logger.exception("Failed to learn from dialogue turn.")
+
+            asyncio.create_task(_background_learn_stream())
 
     async def respond(self, user_message: str, *, retrieval_context: str | None = None) -> str:
         """Generate a Socratic response to a user message.

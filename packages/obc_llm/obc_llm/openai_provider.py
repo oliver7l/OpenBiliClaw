@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -273,6 +274,78 @@ class OpenAIProvider(LLMProvider):
             or "invalid" in message
             or "not allowed" in message
         )
+
+    async def complete_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        model: str | None = None,
+    ) -> AsyncIterator[str]:
+        """流式对话补全：逐段 yield 文本增量（打字机）。
+
+        与 :meth:`complete` 同源的错误处理（temperature 兼容重试、动态 token、
+        有界重试），但只在**首块之前**可重试——流中途断开不重放已发内容。
+        """
+        effective_model = (model or "").strip() or self._model
+        kwargs: dict[str, Any] = {
+            "model": effective_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        stream = await self._open_stream_with_temperature_compat(**kwargs)
+        async for chunk in stream:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
+
+    async def _open_stream_with_temperature_compat(self, **kwargs: Any) -> Any:
+        """打开流；后端拒绝 temperature 时按语义适配后重试一次。"""
+        try:
+            return await self._open_stream_once(**kwargs)
+        except LLMProviderError as exc:
+            if "temperature" in kwargs and self._temperature_rejected(exc):
+                message = str(exc).lower()
+                if "only 1 is allowed" in message:
+                    kwargs["temperature"] = 1
+                else:
+                    kwargs.pop("temperature", None)
+                logger.info(
+                    "%s rejected temperature on stream completion; retrying with compatible value",
+                    self._provider_name,
+                )
+                return await self._open_stream_once(**kwargs)
+            raise
+
+    async def _open_stream_once(self, **kwargs: Any) -> Any:
+        """打开一次 SSE 流（错误处理与 :meth:`_request_with_retry` 同源）。"""
+        last_error: Exception | None = None
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                await self._apply_dynamic_token(force_refresh=False)
+                return await self._client.chat.completions.create(**kwargs)
+            except Exception as exc:
+                if self._is_unauthorized(exc) and self._token_provider is not None:
+                    try:
+                        await self._apply_dynamic_token(force_refresh=True)
+                        return await self._client.chat.completions.create(**kwargs)
+                    except Exception as refresh_exc:
+                        raise self._map_error(refresh_exc) from refresh_exc
+                mapped = self._map_error(exc)
+                last_error = mapped
+                if not self._is_retryable(mapped) or attempt == self._MAX_RETRIES:
+                    raise mapped from exc
+                await asyncio.sleep(self._BASE_RETRY_DELAY * attempt)
+        if last_error is None:
+            raise LLMProviderError(f"{self._provider_name} stream failed")
+        raise last_error
 
     async def _request_with_retry(self, **kwargs: Any) -> Any:
         """Send a request with bounded retry for transient failures."""

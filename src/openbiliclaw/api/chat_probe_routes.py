@@ -143,6 +143,15 @@ def register_chat_probe_routes(
         )
         return dict(fallback_chat_turns[turn_id])
 
+    def _update_chat_turn_partial(turn_id: str, reply: str) -> None:
+        """打字机中间态：只写部分回复，不改状态（SSE 靠它推送增量）。"""
+        update_partial = _chat_db_method("update_chat_turn_partial")
+        if update_partial is not None:
+            update_partial(turn_id, reply=reply)
+            return
+        if turn_id in fallback_chat_turns:
+            fallback_chat_turns[turn_id]["reply"] = reply
+
     def _complete_chat_turn_row(turn_id: str, *, reply: str) -> None:
         complete_chat_turn = _chat_db_method("complete_chat_turn")
         if complete_chat_turn is not None:
@@ -688,7 +697,9 @@ def register_chat_probe_routes(
             return f"[关于避雷方向「{label}」的反馈] {turn.message}"
         return turn.message
 
-    async def _generate_durable_chat_reply(turn: ChatTurnOut) -> str:
+    async def _generate_durable_chat_reply(
+        turn: ChatTurnOut, *, turn_id: str = ""
+    ) -> str:
         if ctx.dialogue is None:
             return "对话引擎暂不可用。"
 
@@ -708,15 +719,41 @@ def register_chat_probe_routes(
         if concurrency is not None:
             concurrency.chat_active = True
         try:
-            async with chat_turn_lock:
-                reply = await asyncio.wait_for(
-                    ctx.dialogue.respond(
-                        _contextual_chat_message(turn),
-                        retrieval_context=retrieval_context,
-                    ),
-                    timeout=120,
-                )
-                reply = str(reply)
+            # 真·打字机：dialogue 支持流式时边生成边把部分回复写回 turn 行，
+            # SSE 端点轮询到 reply 增长即推送 content delta。每 ~0.4s 落一次盘，
+            # 避免逐 token 写库。不支持流式（如工具路径/老 dialogue）则一次性。
+            respond_stream = getattr(ctx.dialogue, "respond_stream", None)
+            if callable(respond_stream) and turn_id:
+                import time as _time
+
+                reply_parts: list[str] = []
+                last_flush = 0.0
+
+                async def _consume() -> str:
+                    nonlocal last_flush
+                    async with chat_turn_lock:
+                        async for delta in respond_stream(
+                            _contextual_chat_message(turn),
+                            retrieval_context=retrieval_context,
+                        ):
+                            reply_parts.append(delta)
+                            now = _time.monotonic()
+                            if now - last_flush >= 0.4:
+                                _update_chat_turn_partial(turn_id, "".join(reply_parts))
+                                last_flush = now
+                    return "".join(reply_parts)
+
+                reply = await asyncio.wait_for(_consume(), timeout=120)
+            else:
+                async with chat_turn_lock:
+                    reply = await asyncio.wait_for(
+                        ctx.dialogue.respond(
+                            _contextual_chat_message(turn),
+                            retrieval_context=retrieval_context,
+                        ),
+                        timeout=120,
+                    )
+                    reply = str(reply)
         except TimeoutError:
             return "后台正忙，等一下再聊。"
         except Exception:
@@ -863,7 +900,7 @@ def register_chat_probe_routes(
             turn = _normalize_chat_turn(row)
             if turn.status != "pending":
                 return
-            reply = await _generate_durable_chat_reply(turn)
+            reply = await _generate_durable_chat_reply(turn, turn_id=turn_id)
             _complete_chat_turn_row(turn_id, reply=reply)
         except Exception as exc:
             logger.exception("Failed to complete durable chat turn %s", turn_id)
@@ -940,7 +977,7 @@ def register_chat_probe_routes(
 
         poll_interval = 0.2
         ping_every_n = 75  # 0.2s × 75 = 15s
-        deadline_seconds = 150.0
+        deadline_seconds = 300.0
 
         async def _event_stream():
             sent_reply_chars = 0

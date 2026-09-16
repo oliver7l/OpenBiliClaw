@@ -307,9 +307,19 @@ def register_feedback_topics_routes(
         # mark the stored card presented+clicked so it stops being re-served
         # (get_recommendations(exclude_processed=True) drops clicked rows) and
         # presented_at/clicked_at yield real CTR data for online metrics.
+        recommendation_ids_to_mark: list[int] = []
         if payload.recommendation_id is not None:
+            recommendation_ids_to_mark.append(int(payload.recommendation_id))
+        else:
+            # 上报缺 id 时按 bvid/content_id 回查最近一条推荐卡（mobile 历史卡片
+            # 的 reportClick 与旧版扩展都可能不带 id）。
+            with suppress(Exception):
+                resolved_id = ctx.database.find_latest_recommendation_id_by_bvid(bvid)
+                if resolved_id is not None:
+                    recommendation_ids_to_mark.append(resolved_id)
+        if recommendation_ids_to_mark:
             try:
-                ctx.database.mark_recommendations_clicked([payload.recommendation_id])
+                ctx.database.mark_recommendations_clicked(recommendation_ids_to_mark)
             except Exception:
                 logger.exception("mark_recommendations_clicked failed")
 

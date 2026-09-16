@@ -262,6 +262,65 @@ class TestContentHistory:
         assert resp.status_code == 422
 
 
+class TestClickHistory:
+    def _seed_pool(self, tmp_path: Any) -> None:
+        pool_path = tmp_path / "pool.db"
+        conn = sqlite3.connect(str(pool_path))
+        conn.execute(
+            "INSERT INTO recommendations (bvid, presented_at) VALUES ('BV1click001', '2026-09-16T09:00:00')"
+        )
+        conn.commit()
+        conn.close()
+
+    def test_click_by_bvid_sets_clicked_at(self, monkeypatch: Any, tmp_path: Any) -> None:
+        """上报不带 recommendation_id 时按 bvid 回查落账（历史深度修复）。"""
+        with _build(monkeypatch, tmp_path) as client:
+            self._seed_pool(tmp_path)
+            resp = client.post(
+                "/api/recommendation-click",
+                json={"bvid": "BV1click001", "content_id": "BV1click001", "source_platform": "bilibili"},
+            )
+        assert resp.status_code == 200
+        pool_path = tmp_path / "pool.db"
+        conn = sqlite3.connect(str(pool_path))
+        row = conn.execute(
+            "SELECT clicked_at FROM recommendations WHERE bvid='BV1click001'"
+        ).fetchone()
+        conn.close()
+        assert row is not None and row[0] is not None  # clicked_at 已落账
+        # content-history 的 clicked 类立刻可见
+        with _build(monkeypatch, tmp_path) as client:
+            self._seed_pool(tmp_path)
+            resp = client.post(
+                "/api/recommendation-click",
+                json={"bvid": "BV1click001", "content_id": "BV1click001", "source_platform": "bilibili"},
+            )
+            resp2 = client.get("/api/content-history", params={"category": "clicked"})
+        payload = resp2.json()
+        assert payload["total"] >= 1
+        assert payload["items"][0]["content_id"] == "BV1click001"
+
+
+class TestChatTurnPartial:
+    def test_partial_update_keeps_pending_status(self, monkeypatch: Any, tmp_path: Any) -> None:
+        """打字机中间态：部分回复写回后轮次仍是 pending，SSE 才能持续推送。"""
+
+        with _build(monkeypatch, tmp_path):
+            db = Database(tmp_path / "parity.db")
+            db.initialize()
+            db.create_chat_turn(
+                turn_id="turn-partial-1", message="hi", session="popup", scope="chat"
+            )
+            db.update_chat_turn_partial("turn-partial-1", reply="部分回复…")
+            row = db.get_chat_turn("turn-partial-1")
+            assert row is not None
+            assert row["status"] == "pending"
+            assert row["reply"] == "部分回复…"
+            db.complete_chat_turn("turn-partial-1", reply="完整回复")
+            row = db.get_chat_turn("turn-partial-1")
+            assert row is not None and row["status"] == "completed"
+
+
 class TestChatStubEndpoints:
     """上游「认知卡/追问确认」体系的兼容桩：我们的对话从不产生确认队列。"""
 

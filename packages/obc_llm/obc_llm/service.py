@@ -58,6 +58,16 @@ class SupportsComplete(Protocol):
 
     def is_chat_capable(self, name: str) -> bool: ...
 
+    def complete_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[str]:
+        """流式补全（异步生成器：调用即返回 AsyncIterator，不 await）。"""
+        ...
+
 
 class LLMServiceError(Exception):
     """Base exception for service-layer LLM errors."""
@@ -671,6 +681,67 @@ class LLMService:
             caller=caller,
             bypass_semaphore=True,
         )
+
+    async def complete_socratic_dialogue_stream(
+        self,
+        *,
+        user_message: str,
+        history: list[dict[str, str]],
+        caller: str = "",
+    ) -> AsyncIterator[str]:
+        """流式版 :meth:`complete_socratic_dialogue`：逐段 yield 文本增量。
+
+        复用同一套 prompt 组装（语气画像 + core memory 注入）。per-module
+        override 的 provider 若不支持流式，registry 层会退化为一次性补全。
+        用量台账暂不记录流式调用（无完整 LLMResponse），见计划文档。
+        """
+        tone_profile = self._build_dialogue_tone_profile()
+        preference_raw = self.memory.get_layer("preference").data
+        source_mix = preference_layer_from_dict(preference_raw).source_platform_mix
+        prompt_messages = build_socratic_dialogue_prompt(
+            user_message=user_message,
+            core_memory_text="",
+            tone_profile=tone_profile,
+            history=[],
+            source_platform_mix=source_mix or None,
+        )
+        system_instruction = prompt_messages[0]["content"]
+        core_memory_block = ""
+        if self.memory is not None:
+            with suppress(Exception):
+                core_memory_block = self.memory.render_core_memory_prompt()
+        parts = [system_instruction.strip()]
+        if core_memory_block:
+            parts.append("以下是当前用户的 core memory，请作为理解背景：")
+            parts.append(core_memory_block)
+        messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(parts)}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
+        routed = self._resolve_module_override(caller)
+        if routed is not None:
+            provider, model = routed
+            stream_fn = getattr(cast("Any", provider), "complete_stream", None)
+            if callable(stream_fn):
+                async for delta in stream_fn(
+                    messages, temperature=0.7, max_tokens=4096, model=model
+                ):
+                    yield delta
+                return
+            response = await self.registry.complete_provider(
+                provider,
+                messages,
+                temperature=0.7,
+                max_tokens=4096,
+                reasoning_effort=None,
+                model=model,
+            )
+            if response.content:
+                yield response.content
+            return
+        async for delta in self.registry.complete_stream(messages):
+            yield delta
 
     def _build_dialogue_tone_profile(self) -> ToneProfile:
         """Infer tone profile for dialogue from persisted memory."""
