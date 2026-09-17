@@ -4,6 +4,15 @@
 
 ---
 
+## 乐仔成长相册集成（2026-09-17）
+
+新独立模块 `src/openbiliclaw/lezai/`（paths/sync/CLI），把外部源库（夸克网盘
+「乐仔相片库」，2576 张）同步进包内 `web/lezai/` 并挂载 `/lezai` 对外提供
+成长分析平台页；thumbs 66MB 属个人照片数据，.gitignore 排除（同
+`web/clone/sites/` 先例）。挂载顺序铁律：`/lezai/thumbs` 必须在 `/lezai`
+之前。桌面端顶栏新增「🍼 乐仔」tab（`/web/lezai`，iframe 内嵌）。详见
+`docs/modules/lezai.md`。
+
 ## 全量盘点与「静默不一致」清收（2026-09-15）
 
 一整天按「先只读取证 → 写回归测试证明它会失败 → 再改」的节奏，把盘点出的欠账逐批收口。

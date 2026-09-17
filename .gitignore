@@ -97,6 +97,10 @@ extension/dist-firefox/
 # 克隆系统运行时生成的站点数据（勿提交）
 src/openbiliclaw/web/clone/sites/
 
+# 乐仔成长相册缩略图（个人照片数据，本地保留不入库；
+# 由 `python -m openbiliclaw.lezai --apply` 从外部源库同步进来）
+src/openbiliclaw/web/lezai/thumbs/
+
 # 求职面试知识库：01 原始资料（13G）保持本地不入库，
 # 其余（02 方向/03 岗位弹药/系统引擎脚本·CSV·规范·总索引）纳入版本控制
 求职知识库/01_原始资料库/
@@ -140,3 +144,6 @@ config.toml
 # 二创项目与参考克隆（各自独立 git，勿被外层跟踪）
 二创/
 references/
+
+# 移动端定制构建源码（独立 git 仓库，勿入主仓库）
+mobile/

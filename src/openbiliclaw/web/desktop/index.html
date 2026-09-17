@@ -120,6 +120,7 @@
         <button class="tab-btn" id="selfEvolutionBtn" type="button">🧬 自进化</button>
         <button class="tab-btn" id="healthBtn" type="button">🏥 健康档案</button>
         <button class="tab-btn" id="travelBtn" type="button">✈️ 旅行</button>
+        <button class="tab-btn" id="lezaiBtn" type="button">🍼 乐仔</button>
         <button class="tab-btn" id="mediaBtn" type="button">🎬 媒体</button>
         <button class="tab-btn" id="ed2kBtn" type="button">⬇ ed2k 下载</button>
         <button class="tab-btn" id="doubanBtn" type="button">📚 豆瓣</button>
@@ -1313,6 +1314,13 @@
               <p class="ed2k-empty">点击上方按钮，让模型读你的书影音清单，生成一份观影/读书画像报告。</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- 乐仔相册：内嵌独立 /lezai 成长分析平台（iframe 懒加载） -->
+      <section class="content-page" id="lezaiPage" aria-label="乐仔相册" hidden>
+        <div class="lezai-embed">
+          <iframe id="lezaiFrame" title="乐仔成长分析平台" src="about:blank" loading="lazy"></iframe>
         </div>
       </section>
 

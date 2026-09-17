@@ -144,6 +144,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "xiaoyuzhou-feed",
             "self-evolution",
             "travel",
+            "lezai",
             "topics",
             "health",
             "interview",
@@ -242,6 +243,29 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
                 _StaticFiles(directory=_dir, html=True),
                 name="knowledge-forge-" + _slug,
             )
+
+    # ── Lezai 乐仔成长相册 ────────────────────────────────────────
+    # 独立模块（openbiliclaw.lezai）：源库在夸克网盘「乐仔相片库」，
+    # 由 `python -m openbiliclaw.lezai --apply` 同步进包内 web/lezai/。
+    # 页面自包含（数据内嵌），缩略图单独挂子前缀；⚠️ thumbs 挂载必须在
+    # /lezai 之前，否则前缀 /lezai 会吞掉 /lezai/thumbs 请求。
+    from openbiliclaw.lezai.paths import thumbs_dir as _lezai_thumbs_dir
+    from openbiliclaw.lezai.paths import web_assets_dir as _lezai_web_dir
+
+    _lezai_dir = _lezai_web_dir()
+    if _lezai_dir.is_dir():
+        _lezai_thumbs = _lezai_thumbs_dir()
+        if _lezai_thumbs.is_dir():
+            app.mount(
+                "/lezai/thumbs",
+                _StaticFiles(directory=_lezai_thumbs),
+                name="lezai-thumbs",
+            )
+        app.mount(
+            "/lezai",
+            _StaticFiles(directory=_lezai_dir, html=True),
+            name="lezai",
+        )
 
     # ── Clone Sites static mount ──────────────────────────────────
     # Serves cloned sites under /clone/sites/{slug} so they can be

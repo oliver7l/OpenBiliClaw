@@ -1225,7 +1225,7 @@
       }
     }
 
-    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "conversationArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "mediaPage", "ed2kPage", "doubanPage", "ossResearchPage"];
+    const MAIN_PAGE_IDS = ["homePage", "customFilterPage", "poolAllPage", "poolFilterPage", "observabilityPage", "interviewPage", "poolExplorePage", "xhsFeedPage", "zhihuFeedPage", "biliFeedPage", "youtubeFeedPage", "v2exFeedPage", "xiaoyuzhouFeedPage", "delightPage", "savedPage", "watchLaterPage", "profilePage", "chatPage", "diaryPage", "clonePage", "selfEvolutionPage", "libraryPage", "readArchivePage", "conversationArchivePage", "settingsPage", "topicsPage", "healthPage", "travelPage", "lezaiPage", "mediaPage", "ed2kPage", "doubanPage", "ossResearchPage"];
 
     window.showMainPage = showMainPage;
     window.$ = $;
@@ -1279,7 +1279,7 @@
       document.body.classList.toggle("clone-page-open", pageId === "clonePage");
       document.body.classList.toggle("travel-page-open", pageId === "travelPage");
       document.body.classList.toggle("self-evolution-page-open", pageId === "selfEvolutionPage");
-      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", conversationArchivePage: "convArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn", ossResearchPage: "ossResearchBtn" };
+      const tabSync = { homePage: "homeBtn", customFilterPage: "customFilterBtn", poolAllPage: "poolAllBtn", poolExplorePage: "poolExploreBtn", poolFilterPage: "poolFilterBtn", delightPage: "delightTabBtn", savedPage: "favoritesBtn", watchLaterPage: "watchLaterBtn", diaryPage: "diaryBtn", clonePage: "cloneBtn", profilePage: "profileBtn", chatPage: "chatBtn", libraryPage: "libraryBtn", readArchivePage: "readArchiveBtn", conversationArchivePage: "convArchiveBtn", settingsPage: "settingsBtn", travelPage: "travelBtn", lezaiPage: "lezaiBtn", topicsPage: "topicsBtn", healthPage: "healthBtn", mediaPage: "mediaBtn", ed2kPage: "ed2kBtn", doubanPage: "doubanBtn", ossResearchPage: "ossResearchBtn" };
       const activeTab = document.getElementById(tabSync[pageId]);
       document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("is-active", btn === activeTab));
       // 筛选下拉菜单：当前在筛选页面时高亮触发按钮和对应菜单项
@@ -1395,6 +1395,7 @@
       "conversation-archive": () => openConversationArchivePage(),
       settings: () => openSettingsPage("models"),
       travel: () => openTravelPage(),
+      lezai: () => openLezaiPage(),
       ed2k: () => openEd2kPage(),
       douban: () => openDoubanPage(),
       "oss-research": () => openOssResearchPage(),
@@ -4019,6 +4020,7 @@
     safeBind("#topicsBtn", "click", () => { window.navigateTo("/web/topics"); });
     safeBind("#healthBtn", "click", () => { window.navigateTo("/web/health"); });
     safeBind("#travelBtn", "click", () => { window.navigateTo("/web/travel"); });
+    safeBind("#lezaiBtn", "click", () => { window.navigateTo("/web/lezai"); });
     safeBind("#mediaBtn", "click", () => { window.navigateTo("/web/media"); });
     safeBind("#ed2kBtn", "click", () => { window.navigateTo("/web/ed2k"); });
     safeBind("#doubanBtn", "click", () => { window.navigateTo("/web/douban"); });
@@ -4476,6 +4478,24 @@
       if (!_travelLoaded.overview) loadTravelOverview();
       if (!_travelLoaded.doc) loadTravelDoc();
       loadTravelDocs();
+    }
+
+    // ── 乐仔相册页面（内嵌 /lezai 独立静态平台，iframe 懒加载）─────
+
+    let _lezaiFrameLoaded = false;
+
+    function openLezaiPage() {
+      closeMobileMenu();
+      document.querySelectorAll(".drawer.is-open, .overlay.is-open").forEach((panel) => closePanel(panel.id));
+      showMainPage("lezaiPage");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (!_lezaiFrameLoaded) {
+        const frame = document.getElementById("lezaiFrame");
+        if (frame) {
+          frame.src = "/lezai/";
+          _lezaiFrameLoaded = true;
+        }
+      }
     }
 
     async function loadTravelFlights() {
