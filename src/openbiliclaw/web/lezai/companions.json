@@ -1,0 +1,440 @@
+{
+ "params": {
+  "lezai_t": 0.6,
+  "cw_thresh": 0.45,
+  "cw_k": 8
+ },
+ "n_library": 2576,
+ "n_faces_total": 21098,
+ "n_clusters": 1315,
+ "n_lezai_clusters": 102,
+ "n_lezai_faces": 2674,
+ "n_photos_with_lezai": 2152,
+ "companions": [
+  {
+   "cluster": "16750",
+   "co_photos": 327,
+   "n_faces": 340,
+   "high_frac": 0.0,
+   "mean_score": 0.258,
+   "幼儿园": 12,
+   "家庭生活": 312,
+   "待确认": 3,
+   "first_date": "2024-05-05",
+   "last_date": "2026-09-13",
+   "sample_rows": [
+    0,
+    13575,
+    13581
+   ]
+  },
+  {
+   "cluster": "6852",
+   "co_photos": 152,
+   "n_faces": 1209,
+   "high_frac": 0.0,
+   "mean_score": 0.228,
+   "幼儿园": 71,
+   "家庭生活": 80,
+   "待确认": 1,
+   "first_date": "2024-07-07",
+   "last_date": "2026-09-13",
+   "sample_rows": [
+    10,
+    22,
+    23
+   ]
+  },
+  {
+   "cluster": "16831",
+   "co_photos": 96,
+   "n_faces": 98,
+   "high_frac": 0.0,
+   "mean_score": 0.368,
+   "幼儿园": 3,
+   "家庭生活": 92,
+   "待确认": 1,
+   "first_date": "2024-07-13",
+   "last_date": "2026-09-13",
+   "sample_rows": [
+    13567,
+    13780,
+    13829
+   ]
+  },
+  {
+   "cluster": "10388",
+   "co_photos": 82,
+   "n_faces": 363,
+   "high_frac": 0.0,
+   "mean_score": 0.206,
+   "幼儿园": 23,
+   "家庭生活": 57,
+   "待确认": 2,
+   "first_date": "2024-07-13",
+   "last_date": "2026-09",
+   "sample_rows": [
+    1,
+    17,
+    28
+   ]
+  },
+  {
+   "cluster": "17144",
+   "co_photos": 76,
+   "n_faces": 77,
+   "high_frac": 0.0,
+   "mean_score": 0.158,
+   "幼儿园": 6,
+   "家庭生活": 70,
+   "待确认": 0,
+   "first_date": "2024-06-08",
+   "last_date": "2026-08-22",
+   "sample_rows": [
+    13669,
+    13693,
+    13708
+   ]
+  },
+  {
+   "cluster": "3078",
+   "co_photos": 73,
+   "n_faces": 560,
+   "high_frac": 0.0,
+   "mean_score": 0.254,
+   "幼儿园": 59,
+   "家庭生活": 13,
+   "待确认": 1,
+   "first_date": "2025-01-30",
+   "last_date": "2026-09",
+   "sample_rows": [
+    32,
+    36,
+    37
+   ]
+  },
+  {
+   "cluster": "7199",
+   "co_photos": 70,
+   "n_faces": 77,
+   "high_frac": 0.039,
+   "mean_score": 0.506,
+   "幼儿园": 70,
+   "家庭生活": 0,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    151,
+    219,
+    299
+   ]
+  },
+  {
+   "cluster": "1602",
+   "co_photos": 63,
+   "n_faces": 80,
+   "high_frac": 0.087,
+   "mean_score": 0.476,
+   "幼儿园": 63,
+   "家庭生活": 0,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    332,
+    501,
+    563
+   ]
+  },
+  {
+   "cluster": "18079",
+   "co_photos": 62,
+   "n_faces": 63,
+   "high_frac": 0.0,
+   "mean_score": 0.22,
+   "幼儿园": 3,
+   "家庭生活": 59,
+   "待确认": 0,
+   "first_date": "2024-07-21",
+   "last_date": "2026-08-22",
+   "sample_rows": [
+    13579,
+    13610,
+    13645
+   ]
+  },
+  {
+   "cluster": "7113",
+   "co_photos": 59,
+   "n_faces": 68,
+   "high_frac": 0.0,
+   "mean_score": 0.487,
+   "幼儿园": 59,
+   "家庭生活": 0,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    847,
+    1030,
+    1326
+   ]
+  },
+  {
+   "cluster": "15676",
+   "co_photos": 55,
+   "n_faces": 56,
+   "high_frac": 0.0,
+   "mean_score": 0.155,
+   "幼儿园": 2,
+   "家庭生活": 52,
+   "待确认": 1,
+   "first_date": "2024-07-13",
+   "last_date": "2026-06-21",
+   "sample_rows": [
+    13909,
+    13934,
+    14002
+   ]
+  },
+  {
+   "cluster": "15532",
+   "co_photos": 49,
+   "n_faces": 52,
+   "high_frac": 0.0,
+   "mean_score": 0.214,
+   "幼儿园": 0,
+   "家庭生活": 49,
+   "待确认": 0,
+   "first_date": "2025-01-05",
+   "last_date": "2026-08-30",
+   "sample_rows": [
+    13696,
+    14611,
+    14614
+   ]
+  },
+  {
+   "cluster": "4390",
+   "co_photos": 41,
+   "n_faces": 359,
+   "high_frac": 0.0,
+   "mean_score": 0.397,
+   "幼儿园": 38,
+   "家庭生活": 2,
+   "待确认": 1,
+   "first_date": "2025-08-13",
+   "last_date": "2026-09",
+   "sample_rows": [
+    162,
+    211,
+    214
+   ]
+  },
+  {
+   "cluster": "18105",
+   "co_photos": 40,
+   "n_faces": 40,
+   "high_frac": 0.0,
+   "mean_score": 0.243,
+   "幼儿园": 1,
+   "家庭生活": 39,
+   "待确认": 0,
+   "first_date": "2024-05-03",
+   "last_date": "2026-08-22",
+   "sample_rows": [
+    13980,
+    13982,
+    13989
+   ]
+  },
+  {
+   "cluster": "18071",
+   "co_photos": 39,
+   "n_faces": 42,
+   "high_frac": 0.0,
+   "mean_score": 0.229,
+   "幼儿园": 7,
+   "家庭生活": 32,
+   "待确认": 0,
+   "first_date": "2024-07-21",
+   "last_date": "2026-08-09",
+   "sample_rows": [
+    14063,
+    14082,
+    15541
+   ]
+  },
+  {
+   "cluster": "13983",
+   "co_photos": 37,
+   "n_faces": 38,
+   "high_frac": 0.0,
+   "mean_score": 0.359,
+   "幼儿园": 1,
+   "家庭生活": 35,
+   "待确认": 1,
+   "first_date": "2025-11-08",
+   "last_date": "2026-09-13",
+   "sample_rows": [
+    13928,
+    13935,
+    13979
+   ]
+  },
+  {
+   "cluster": "522",
+   "co_photos": 33,
+   "n_faces": 313,
+   "high_frac": 0.0,
+   "mean_score": 0.334,
+   "幼儿园": 30,
+   "家庭生活": 2,
+   "待确认": 1,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    173,
+    202,
+    210
+   ]
+  },
+  {
+   "cluster": "19464",
+   "co_photos": 29,
+   "n_faces": 30,
+   "high_frac": 0.0,
+   "mean_score": 0.188,
+   "幼儿园": 0,
+   "家庭生活": 28,
+   "待确认": 1,
+   "first_date": "2026-01-02",
+   "last_date": "2026-08-22",
+   "sample_rows": [
+    14503,
+    14506,
+    14512
+   ]
+  },
+  {
+   "cluster": "3265",
+   "co_photos": 24,
+   "n_faces": 251,
+   "high_frac": 0.0,
+   "mean_score": 0.222,
+   "幼儿园": 23,
+   "家庭生活": 1,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    142,
+    144,
+    188
+   ]
+  },
+  {
+   "cluster": "11391",
+   "co_photos": 23,
+   "n_faces": 25,
+   "high_frac": 0.0,
+   "mean_score": 0.462,
+   "幼儿园": 23,
+   "家庭生活": 0,
+   "待确认": 0,
+   "first_date": "2025-10",
+   "last_date": "2026-09",
+   "sample_rows": [
+    117,
+    119,
+    583
+   ]
+  },
+  {
+   "cluster": "19367",
+   "co_photos": 23,
+   "n_faces": 26,
+   "high_frac": 0.0,
+   "mean_score": 0.214,
+   "幼儿园": 0,
+   "家庭生活": 23,
+   "待确认": 0,
+   "first_date": "2026-03-09",
+   "last_date": "2026-08-07",
+   "sample_rows": [
+    14318,
+    14422,
+    14426
+   ]
+  },
+  {
+   "cluster": "4537",
+   "co_photos": 22,
+   "n_faces": 175,
+   "high_frac": 0.0,
+   "mean_score": 0.364,
+   "幼儿园": 22,
+   "家庭生活": 0,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    149,
+    167,
+    277
+   ]
+  },
+  {
+   "cluster": "3367",
+   "co_photos": 22,
+   "n_faces": 325,
+   "high_frac": 0.0,
+   "mean_score": 0.258,
+   "幼儿园": 21,
+   "家庭生活": 1,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    86,
+    126,
+    138
+   ]
+  },
+  {
+   "cluster": "6096",
+   "co_photos": 22,
+   "n_faces": 129,
+   "high_frac": 0.0,
+   "mean_score": 0.365,
+   "幼儿园": 15,
+   "家庭生活": 6,
+   "待确认": 1,
+   "first_date": "2025-08-15",
+   "last_date": "2026-09",
+   "sample_rows": [
+    912,
+    1341,
+    1350
+   ]
+  },
+  {
+   "cluster": "1911",
+   "co_photos": 21,
+   "n_faces": 165,
+   "high_frac": 0.0,
+   "mean_score": 0.273,
+   "幼儿园": 20,
+   "家庭生活": 1,
+   "待确认": 0,
+   "first_date": "2025-09",
+   "last_date": "2026-09",
+   "sample_rows": [
+    93,
+    135,
+    190
+   ]
+  }
+ ]
+}

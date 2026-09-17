@@ -21,6 +21,14 @@
 
 当前规模：**2576 张**（幼儿园 525 / 家庭 2041 / 待确认 10），thumbs 66MB。
 
+平台两个分析 section（2026-09-17）：
+- **同伴网络**：数据由源库侧 `042-QQ相册备份/companion_network_v2.py` 产出
+  （21,098 脸 kNN+Chinese Whispers 聚类 → 排除乐仔簇 → 数同框），
+  `companions.json` + `同伴接触表-top15.jpg` 随 sync 分发；人工命名写
+  `companion_names.json`（042/companion_out/）后重跑 build_site.py 即显真名；
+- **活动细分类**：`activity_classify.py` 产出 `activities.json`
+  （相册专辑真值优先 + Vision 标签弱信号）。
+
 ## 2. 目录与路径锚点
 
 | 内容 | 位置 | 说明 |

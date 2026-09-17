@@ -23,10 +23,13 @@ FILE_ASSETS: tuple[str, ...] = (
     "index.html",
     "data.json",
     "platform_data.json",
+    "activities.json",
+    "companions.json",
     "README.md",
     "清单.csv",
     "分析报告.md",
     "分析报告-数据表.md",
+    "同伴接触表-top15.jpg",
 )
 
 THUMBS_SUBDIR = "thumbs"
