@@ -1,8 +1,8 @@
 # 求职面试备战模块（interview）
 
-> ⚠️ **本文只描述「面试域」三子系统中的 A · 岗位备战**。三子系统总览见
-> [`interview-overview.md`](./interview-overview.md)（另有 B · 题目研习、C · 面试复盘，
-> 期 2 URL 分区后 A 独占前缀 `/api/interview/job/*`，旧 `/api/interview/*` 仍兼容）。
+> **面试域由三个独立的子系统组成**，共用了 `/api/interview` 命名空间与同一个前端页面。
+> 完整总览见 [`interview-overview.md`](./interview-overview.md)；本文档聚焦 A · 岗位备战的完整细节，
+> 并在下方提供 B · C 的快速入口。
 
 > 把外部「三层求职知识库」接入 OpenBiliClaw 的统一入口：岗位信息、全文检索、
 > 真实数字、项目库、面试速记卡、全库索引、面试日志、新岗位建档，CLI 与 API 双通道。
@@ -29,7 +29,49 @@
 设计原则：**原始材料始终保留在原目录**，引擎只读检索；仅「面试日志追加」与
 「新岗位建档」两个显式操作会写入引擎数据目录（只追加、不覆盖）。
 
-## 已实现功能
+## 三子系统速览与数据流
+
+面试域由三个**互不相关、平行演进**的子系统组成，共用 `/api/interview` 前缀与同一前端页。
+
+| # | 子系统 | 职责 | 核心数据 | 前端标签 | 详细文档 |
+|---|--------|------|----------|----------|---------|
+| **A** | **岗位备战**（job） | 求职知识库 / 速记卡 / 面试日志 / 建档 / 全文检索 | `interview.db` 裸表 + `knowledge.db` | 桌面「✅待办」；移动端整个面试页 | 本文档 §A（下方） |
+| **B** | **题目研习**（study） | 题库 / 今日待读 / 待看队列 / 掌握度 / 弹药库 / 反问话术 | `interview_questions.db`（iq_*）+ `interview.db`（ammo/rebuttals） | 桌面「📖今日待读 / 📋待看队列 / 📚全部题目 / 📊学习统计 / 🧨弹药库」 | [`interview-reading-tracker.md`](../interview-reading-tracker.md) |
+| **C** | **面试复盘**（review） | 复盘记录 / 搜索 / 统计 | `interview.db.interview_reviews` | 桌面「📝复盘」 | [`interview-overview.md`](./interview-overview.md) §C |
+
+### 数据层三库关系
+
+```
+┌─────────────────────────────────────────────┐
+│  求职知识库/03_岗位弹药库/  （只读 Markdown） │
+└──────────┬──────────────────────────────────┘
+           │  import_kb_questions_to_interview_db.py
+           ▼
+┌──────────────────────┐     ┌────────────────────────────┐
+│  data/interview.db   │     │ data/interview_questions.db │
+│  interview_questions │ ←── │ iq_questions (51条)         │
+│  (199条)             │  源 │ iq_queue / iq_records ...  │
+│  ammo_doc/rebuttals  │     └────────────────────────────┘
+│  question(25)        │
+│  concept/number/...  │ ←──── 岗位弹药库 Markdown 读入
+└──────────────────────┘          (B 弹药库功能)
+           ▲
+     InterviewEngine
+     (A 岗位备战引擎)
+```
+
+> 两套题表并存是设计决策，不合并：interview_questions（199条）覆盖各公司岗位预测题；
+> iq_questions（51条）走独立刷题队列/掌握度追踪。各自有消费方，维持现状。
+
+### API 前缀
+
+| 子系统 | 正规前缀 | 兼容别名 |
+|--------|----------|----------|
+| A 岗位备战 | `/api/interview/job/*` | `/api/interview/*` |
+| B 题目研习 | `/api/interview/study/*` | `/api/interview/*` |
+| C 面试复盘 | `/api/interview/review/*` | `/api/interview/reviews/*` |
+
+## 已实现功能（仅 A · 岗位备战）
 
 | 功能 | 状态 | 说明 |
 |------|------|------|

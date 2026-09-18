@@ -1,8 +1,16 @@
 """向 iq 题库（``data/interview_questions.db``）播种内置面试题。
 
-与 ``scripts/import_interview_questions.py`` **用途不同，勿混用**：
-- 本脚本：播撒硬编码的内置题（淘天生成式推荐 / ReAct / 作业帮），写 ``interview_questions.db`` 的 ``iq_*`` 表；
-- 那个脚本：把 ``求职知识库/03_岗位弹药库`` 的题库/速成包 md 解析进 ``interview.db.interview_questions``。
+【重要】本脚本与 scripts/import_kb_questions_to_interview_db.py 互为镜像，勿混用：
+
+  ✅ 本脚本
+     - 数据源：硬编码内置题（淘天生成式推荐 / ReAct / 作业帮）
+     - 目标库：interview_questions.db（iq_* 表，51 条）
+     - 用途：独立「刷题库」，走 iq 双轨（队列/今日待读/掌握度）
+
+  ❌ import_kb_questions_to_interview_db.py（勿混淆）
+     - 数据源：求职知识库/03_岗位弹药库/ 题库 Markdown
+     - 目标库：interview.db（interview_questions 表，199 条）
+     - 用途：岗位备战题库，供速记卡 / /study/kb-questions 使用
 
 用法：
     python -m openbiliclaw.interview.study.seed_iq_questions

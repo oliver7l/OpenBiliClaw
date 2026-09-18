@@ -62,9 +62,60 @@ def is_active(item: dict) -> bool:
     return any(s in blob for s in ACTIVE_STAGES) and "已结束" not in blob and "已终止" not in blob
 
 
+def create_followup_todos(added: list[dict], changed: list[tuple[dict, list[tuple[str, str, str]]]]) -> list[str]:
+    """状态变化的投递 → 自动在 interview.db.todo 建跟进待办（幂等：同名 pending 去重）。"""
+    if not added and not changed:
+        return []
+    iv = ROOT / "data" / "interview.db"
+    conn = sqlite3.connect(str(iv), timeout=20)
+    created = []
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+
+    due = (_date.today() + _td(days=2)).isoformat()
+    now = _dt.now().strftime("%Y-%m-%d %H:%M")
+    today = _date.today().isoformat()
+
+    def insert(title: str, detail: str, company: str, priority: str) -> None:
+        dup = conn.execute(
+            "SELECT COUNT(*) FROM todo WHERE title=? AND status='pending'", (title,)
+        ).fetchone()[0]
+        if dup:
+            return
+        conn.execute(
+            "INSERT INTO todo(title, detail, company, due_date, priority, status, created_at, done_at, kind)"
+            " VALUES(?,?,?,?,?,'pending',?,'','followup')",
+            (title, detail, company, due, priority, now),
+        )
+        created.append(title)
+
+    for i in added:
+        insert(
+            f"{i['company']}：新投递跟进（自动）",
+            f"{today} 新增投递：{i['company']} · {i['role']} | 状态 {i['status']}。建议 2 天后查看进展；若已约面，把面试时间同步回 resume.db.applications.interview_at。",
+            i["company"], "中",
+        )
+    for item, diffs in changed:
+        fields = {f for f, _, _ in diffs}
+        prio = "高" if "interview_at" in fields else "中"
+        detail_lines = [f"{today} 检测到状态变化：{item['company']} · {item['role']}"]
+        for f, old, new in diffs:
+            label = {"status": "状态", "stage": "阶段", "interview_at": "面试时间", "round_note": "轮次备注"}.get(f, f)
+            detail_lines.append(f"  {label}：{old or '(空)'} → {new or '(空)'}")
+        if "interview_at" in fields:
+            detail_lines.append("→ 面试时间有变：确认时间/链接/联系人，并准备该岗位弹药。")
+        else:
+            detail_lines.append("→ 建议判断是否需要跟进（问结果/推进流程），跟进后手动更新 resume.db。")
+        insert(f"{item['company']}：跟进投递状态变化（自动）", "\n".join(detail_lines), item["company"], prio)
+
+    conn.commit()
+    conn.close()
+    return created
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-todo", action="store_true", help="不自动创建跟进待办")
     args = parser.parse_args()
 
     today = date.today().isoformat()
@@ -129,6 +180,17 @@ def main() -> None:
             json.dumps(current, ensure_ascii=False, indent=1)
         )
 
+    created_todos: list[str] = []
+    if not args.dry_run and not args.no_todo and (added or changed):
+        try:
+            created_todos = create_followup_todos(added, changed)
+        except Exception as exc:  # noqa: BLE001
+            print(f"⚠️ 自动建跟进待办失败：{exc}")
+    if created_todos:
+        print(f"\n✅ 已自动创建 {len(created_todos)} 条跟进待办（2 天后到期）：")
+        for t in created_todos:
+            print(f"  · {t}")
+
     print("\n" + json.dumps({
         "date": today,
         "total": len(current),
@@ -137,6 +199,7 @@ def main() -> None:
         "changed": len(changed),
         "removed": len(removed),
         "has_changes": bool(added or changed or removed),
+        "todos_created": created_todos,
     }, ensure_ascii=False))
 
 
