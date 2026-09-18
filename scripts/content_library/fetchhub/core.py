@@ -102,28 +102,30 @@ def detect_platform(url: str) -> str:
     return "generic"
 
 
-# 每个平台的声明式降级链；AgentLimb（真 Chrome 桥）是所有平台的最终兜底。
+# 每个平台的声明式降级链；Scrapling（TLS 伪装/隐身过 CF）与 AgentLimb（真 Chrome 桥）是兜底。
 CHANNEL_CHAINS: dict[str, list[str]] = {
-    "v2ex": ["v2ex-mindback", "v2ex-api-proxy", "agentlimb-v2ex"],
-    "zhihu": ["zhihu-cli", "agentlimb-text"],
-    "xhs": ["xhs-cli", "agentlimb-text"],
+    "v2ex": ["v2ex-mindback", "v2ex-api-proxy", "v2ex-scrapling", "agentlimb-v2ex"],
+    "zhihu": ["zhihu-cli", "scrapling-generic", "agentlimb-text"],
+    "xhs": ["xhs-cli", "scrapling-generic", "agentlimb-text"],
     "bilibili": ["bili-cli", "agentlimb-text"],
-    "generic": ["generic-webfetch", "agentlimb-text"],
+    "generic": ["generic-webfetch", "scrapling-generic", "agentlimb-text"],
 }
 
 
 def _dispatch(channel: str, url: str) -> UnifiedDoc:
     """通道名 → 具体实现。懒加载避免循环依赖。"""
-    from . import agentlimb, bilibili, generic, v2ex, xhs, zhihu
+    from . import agentlimb, bilibili, generic, scrapling_channel, v2ex, xhs, zhihu
 
     table: dict[str, Callable[[str], UnifiedDoc]] = {
         "v2ex-mindback": v2ex.mindback_fetch,
         "v2ex-api-proxy": v2ex.api_proxy_fetch,
+        "v2ex-scrapling": scrapling_channel.v2ex_scrapling_fetch,
         "agentlimb-v2ex": agentlimb.v2ex_fetch,
         "zhihu-cli": zhihu.cli_fetch,
         "xhs-cli": xhs.cli_fetch,
         "bili-cli": bilibili.cli_fetch,
         "generic-webfetch": generic.webfetch,
+        "scrapling-generic": scrapling_channel.generic_scrapling_fetch,
         "agentlimb-text": agentlimb.text_fetch,
     }
     fn = table.get(channel)
@@ -168,6 +170,10 @@ def fetch(url: str, *, forced_channel: str | None = None, no_fallback: bool = Fa
             doc = _dispatch(ch, url)
             if doc is None or not (doc.title or doc.content_md):
                 raise ChannelError("parse", "空结果（无标题也无正文）", ch)
+            # 内容护栏：无条件消毒（提示注入/伪造标记/编码块），发现项记入 doc.extra["guard"]
+            from . import content_guard
+
+            doc = content_guard.sanitize_doc(doc)
             doc.fetched_via = ch
             doc.fetched_at = now_bj()
             latency = int((time.monotonic() - t0) * 1000)

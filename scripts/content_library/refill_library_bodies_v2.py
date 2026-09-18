@@ -248,12 +248,36 @@ def fetch_youtube_body(url: str) -> tuple[str, bool]:
     return "", False  # 抓取失败/无字幕 → 重试
 
 
+OBC_PY = os.path.join(BASE, ".venv", "bin", "python3.11")
+FETCH_HUB = os.path.join(BASE, "scripts", "content_library", "fetch_hub.py")
+
+
+def fetch_v2ex_body(url: str) -> tuple[str, bool]:
+    """v2ex 主题：走 fetch_hub 降级链（mindback → 官方API → Scrapling 隐身过 CF）。
+
+    用项目 .venv 子进程调用（scrapling 装在 .venv），JSON 取 UnifiedDoc。
+    被安趣 CF 挡的帖子在 v2ex-scrapling 通道自动突破，无需人工过验证。
+    """
+    try:
+        r = _run_clean([OBC_PY, FETCH_HUB, url, "--json"], timeout=TIMEOUT)
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            return "", False
+        d = json.loads(r.stdout)
+        body = (d.get("content_md") or "").strip()
+        title = (d.get("title") or "").strip()
+        if len(body) > MIN_BODY:
+            return (f"【{title}】\n{body}" if title else body)[:20000], True
+        return "", True  # 拿到页面但正文为空 → 确认无正文
+    except Exception:
+        return "", False
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description="阅读库正文统一补抓（zhihu / 小红书 / youtube / bilibili / 其他）"
     )
     ap.add_argument("limit", nargs="?", type=int, default=100, help="本批最多补多少条（默认 100）")
-    ap.add_argument("--source", help="只补指定来源（zhihu / xiaohongshu / youtube / bilibili），默认全部")
+    ap.add_argument("--source", help="只补指定来源（zhihu / xiaohongshu / youtube / bilibili / v2ex），默认全部")
     ap.add_argument("--dry-run", action="store_true", help="只列出待补行，不抓取、不写库")
     return ap
 
@@ -304,6 +328,8 @@ def main() -> None:
             body, call_ok = fetch_xhs_body(url)
         elif src == "youtube":
             body, call_ok = fetch_youtube_body(url)
+        elif src == "v2ex":
+            body, call_ok = fetch_v2ex_body(url)
         else:
             body, call_ok = fetch_autocli(url), True
         attempts = db.execute(
