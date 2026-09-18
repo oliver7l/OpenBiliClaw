@@ -192,6 +192,40 @@ def verify_token(
     return not (not isinstance(ep, int) or ep < current_epoch)
 
 
+# ── cookieless media signature (微信小程序 <image>) ─────────────────────────
+
+_MEDIA_SIG_CONTEXT = b"obc-album-media-v1"
+# 媒体签名放进 URL（而不是 header），所以短一些更省流量；256 bit 的 HMAC
+# 取前 32 个 base64url 字符 ≈ 192 bit，穷举不可行。
+_MEDIA_SIG_LEN = 32
+
+
+def album_media_token(session_secret: str) -> str:
+    """Derive the long-lived media signature for cookieless clients.
+
+    微信小程序的 ``<image>`` 组件既不带 Cookie、也带不了自定义 header
+    （``Authorization`` 无法附加到图片请求上），家庭照片因此只能靠 **URL 参数**
+    放行。签名从 ``session_secret`` 派生：
+
+    * 无状态——服务端不需要存任何东西，重启后同一个 secret 推出同一个值；
+    * 可整体作废——换掉 ``session_secret``（重启服务）即可让所有已分发的
+      图片链接立刻失效，这也是本方案唯一的撤销手段，故 secret 不能外泄；
+    * 与 session token 相互独立——拿到媒体签名只能读受保护静态前缀下的图片，
+      换不出会话（不能调 ``/api``、更不能改门禁配置）。
+    """
+    if not session_secret:
+        return ""
+    digest = hmac.new(session_secret.encode("utf-8"), _MEDIA_SIG_CONTEXT, hashlib.sha256).digest()
+    return _b64u_encode(digest)[:_MEDIA_SIG_LEN]
+
+
+def verify_album_media_token(provided: str | None, expected: str) -> bool:
+    """Constant-time compare of a client-supplied media signature."""
+    if not provided or not expected:
+        return False
+    return hmac.compare_digest(provided, expected)
+
+
 # ── IP / proxy handling (§4.1, §6) ──────────────────────────────────────────
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1"})

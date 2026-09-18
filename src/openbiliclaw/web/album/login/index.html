@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>乐仔相册 · 需要密码</title>
+<meta name="theme-color" content="#ffb703">
+<meta name="robots" content="noindex">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#0f1115;--fg:#e8eaed;--muted:#9aa0a6;--card:#1b1f27;--line:rgba(140,150,170,.2);--accent:#ffb703}
+@media (prefers-color-scheme:light){:root{--bg:#fafafa;--fg:#16181d;--muted:#6b7280;--card:#fff;--line:rgba(0,0,0,.1);--accent:#d97706}}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+ background:var(--bg);color:var(--fg);padding:24px;
+ font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB",sans-serif}
+.box{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);
+ border-radius:16px;padding:26px 22px}
+h1{margin:0 0 4px;font-size:19px}
+p.sub{margin:0 0 20px;color:var(--muted);font-size:13px}
+input{width:100%;background:transparent;border:1px solid var(--line);color:var(--fg);
+ border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:12px}
+input:focus{outline:none;border-color:var(--accent)}
+button{width:100%;background:var(--accent);color:#1a1a1a;border:0;border-radius:10px;
+ padding:12px;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.55}
+#msg{margin-top:12px;font-size:13px;color:#e5484d;min-height:18px;text-align:center}
+</style>
+</head>
+<body>
+<form class="box" id="f">
+  <h1>乐仔的相册</h1>
+  <p class="sub">这是私人相册，请输入密码进入</p>
+  <input type="password" id="pw" placeholder="密码" autocomplete="current-password" autofocus>
+  <button id="go" type="submit">进入相册</button>
+  <div id="msg"></div>
+</form>
+<script>
+(function(){
+  var f=document.getElementById('f'), pw=document.getElementById('pw'),
+      go=document.getElementById('go'), msg=document.getElementById('msg');
+  // 只允许回跳受保护前缀内部，避免开放重定向
+  var q=new URLSearchParams(location.search).get('next')||'';
+  var next=/^\/album(\/|$)/.test(q)?q:'/album/';
+  function say(t){msg.textContent=t}
+  f.onsubmit=function(e){
+    e.preventDefault();
+    if(!pw.value){say('请输入密码');return}
+    go.disabled=true; say('');
+    fetch('/api/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:pw.value})
+    }).then(function(r){
+      if(r.ok){location.replace(next);return}
+      go.disabled=false;
+      if(r.status===429){say('尝试次数过多，请 15 分钟后再试')}
+      else if(r.status===401){say('密码不对');pw.select()}
+      else{say('暂时不可用，请稍后再试（'+r.status+'）')}
+    }).catch(function(){go.disabled=false;say('网络异常，请重试')});
+  };
+})();
+</script>
+</body>
+</html>

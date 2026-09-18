@@ -29,6 +29,9 @@ _SRC = _REPO_ROOT / "src"
 # 项目根自算（走 config._project_root() 才是唯一受支持的锚点）
 _PATTERN_PARENTS = re.compile(r"Path\(__file__\)\.resolve\(\)\.parents\[\d+\]")
 # CWD 相对的数据路径
+# ⚠️ 判据是**文本行**扫描而非 AST：文档字符串里拿这个写法当反面示例同样会
+# 命中。2026-09-17 新增 album/lezai 的 paths.py 就这样假阳性红过灯——措辞
+# 改成文字描述即可，别在 src/ 的 .py 里写出该字面量。
 _PATTERN_CWD_DATA = re.compile(r"""Path\(\s*["']data/""")
 
 # ── 设计上就必须这么写的地方（不是违规）──────────────────────────

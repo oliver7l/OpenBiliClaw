@@ -21,7 +21,7 @@ from fastapi import FastAPI  # noqa: TC002 - FastAPI needs runtime annotations f
 from starlette.requests import (
     Request,  # noqa: TC002 - FastAPI needs runtime annotations for routes.
 )
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from openbiliclaw import auth_core
 from openbiliclaw.auth_core import COOKIE_NAME, CSRF_HEADER
@@ -267,6 +267,48 @@ def _is_secure(gate: AuthGate, request: Request) -> bool:
 
 # ── whitelist (always-public paths) ─────────────────────────────────────────
 
+# 需要门禁的**静态**前缀。这些路径不以 /api 开头，历史上被一律放行；但家庭
+# 照片这类敏感静态资源挂在这些前缀下，而后端经 frpc 直通公网（见
+# infra/frpc/frpc-passnat4.toml），裸挂等于把照片直接发布到互联网。故这里
+# 显式登记，交给下面的 token 校验（浏览器已登录时带 session cookie，图片等
+# 子资源同源请求自动携带）。
+_PROTECTED_STATIC_PREFIXES = ("/album",)
+
+# 受保护前缀仍需公开的子路径：登录页本身（否则未登录打不开登录页 → 死循环）
+# 与 PWA 图标/manifest（不含隐私，且 iOS「添加到主屏幕」取图标时未必带 cookie）。
+_PROTECTED_STATIC_PUBLIC = ("/album/login", "/album/assets", "/album/manifest.json")
+
+
+def _is_protected_static(path: str) -> bool:
+    """该路径是否属于「不以 /api 开头但仍要过门禁」的静态资源。"""
+    if not path.startswith(_PROTECTED_STATIC_PREFIXES):
+        return False
+    return not path.startswith(_PROTECTED_STATIC_PUBLIC)
+
+
+def _static_login_redirect(request: Request) -> RedirectResponse | None:
+    """受保护静态前缀下的浏览器导航 → 302 到公开登录页。
+
+    一律回 401 JSON 的话，手机浏览器只会显示一坨 JSON、用户无从下手；这里
+    对 HTML 导航做跳转并带上回跳地址（只接受受保护前缀内部，防开放重定向）。
+    图片等子资源不带 ``text/html``，仍走 401，不会连环跳转。
+    """
+    path = request.url.path
+    if not _is_protected_static(path):
+        return None
+    if "text/html" not in request.headers.get("accept", ""):
+        return None
+    from urllib.parse import quote as _quote
+
+    # 末尾斜杠不能省：登录页是 ``web/album/login/index.html``，由
+    # ``StaticFiles(html=True)`` 静态挂载在 ``/album`` 下。缺斜杠时 Starlette 会先
+    # 做一次「目录补斜杠」307 重定向，而那条重定向是用**请求的 Host 头**拼绝对
+    # URL 的——经 frp 反向代理时 Host 可能是 127.0.0.1，浏览器就会被送去
+    # https://127.0.0.1/album/login/ 而彻底打不开登录页（实测踩过）。
+    # 这里直接给带斜杠的地址，绕开那次重定向。
+    login_path = _PROTECTED_STATIC_PREFIXES[0] + "/login/"
+    return RedirectResponse(url=f"{login_path}?next={_quote(path)}", status_code=302)
+
 
 def _is_public(request: Request) -> bool:
     """Paths that bypass the gate even when auth is enabled (§4.2)."""
@@ -275,7 +317,9 @@ def _is_public(request: Request) -> bool:
     if method == "OPTIONS":
         return True
     if not path.startswith("/api"):
-        return True  # static SPA shells, "/", favicon, etc.
+        # 大部分静态资源（SPA 壳、"/"、favicon）仍然公开；但已登记的敏感
+        # 静态前缀必须过门禁，否则公网穿透下照片裸奔。
+        return not _is_protected_static(path)
     if path == "/api/health":
         return True
     if path in ("/api/auth/status", "/api/auth/login"):
@@ -299,6 +343,35 @@ def _is_public(request: Request) -> bool:
     return bool(path == "/api/auth/logout" and request.query_params.get("all") != "true")
 
 
+# ── cookieless media signature ──────────────────────────────────────────────
+
+# 小程序侧图片 URL 携带的查询参数名：``/album/thumbs/x.jpg?k=<签名>``。
+_ALBUM_MEDIA_PARAM = "k"
+
+# 允许用媒体签名访问的**媒体子路径**。刻意不含 ``/album/`` 本身：签名只能换到
+# 图片字节，拿不到相册页面（页面仍走 Cookie 门禁，浏览器侧行为零变化）。
+_ALBUM_MEDIA_PATHS = ("/album/thumbs/", "/album/heic/", "/album/full/")
+
+
+def _album_media_ok(request: Request, gate: AuthGate) -> bool:
+    """Accept a media signature on protected static paths (cookieless clients).
+
+    微信小程序的 ``<image>`` 组件带不了 Cookie 与自定义 header，照片 URL 只能
+    把签名放进查询参数。校验范围**严格限定**在媒体子路径（见
+    ``_ALBUM_MEDIA_PATHS``）与 ``_is_protected_static`` 的交集；``/api`` 一律
+    不受影响——因此泄露一个媒体签名最多暴露照片，换不出会话。
+    """
+    path = request.url.path
+    if not path.startswith(_ALBUM_MEDIA_PATHS):
+        return False
+    if not _is_protected_static(path):
+        return False
+    return auth_core.verify_album_media_token(
+        request.query_params.get(_ALBUM_MEDIA_PARAM),
+        auth_core.album_media_token(gate.auth.session_secret),
+    )
+
+
 # ── middleware ──────────────────────────────────────────────────────────────
 
 
@@ -311,6 +384,10 @@ def make_auth_middleware(get_gate: GateGetter) -> Any:
             return await call_next(request)
         if _is_public(request):
             return await call_next(request)
+        # 无 Cookie 客户端（微信小程序 <image>）的媒体签名放行——只覆盖受保护
+        # 静态前缀下的图片，不触达 /api，也不影响浏览器侧的门禁。
+        if _album_media_ok(request, gate):
+            return await call_next(request)
         if gate.is_trusted_local(request):
             return await call_next(request)
 
@@ -321,6 +398,11 @@ def make_auth_middleware(get_gate: GateGetter) -> Any:
             logger.warning("auth: epoch read failed; failing closed", exc_info=True)
             return _unauthorized(clear_cookie=False)
         if not valid:
+            # 受保护静态前缀（家庭照片）的浏览器导航：跳登录页而不是甩
+            # 401 JSON，否则手机上用户看到一坨 JSON 无从下手。
+            _login = _static_login_redirect(request)
+            if _login is not None:
+                return _login
             return _unauthorized(clear_cookie=used_cookie)
 
         method = request.method.upper()

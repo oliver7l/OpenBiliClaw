@@ -267,6 +267,37 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             name="lezai",
         )
 
+    # ── Album 乐仔时间线相册 ──────────────────────────────────────
+    # 独立模块（openbiliclaw.album）：源库是夸克网盘里按拍摄年月归档的
+    # 「乐仔的照片」（5206 张 / 16.5GB，与 lezai 的「乐仔相片库」是两个
+    # 不同源库）。原图不同步进包内，这里直接挂源库目录；页面与 PWA 图标
+    # 在包内 web/album/，由 `scripts/build_album_page.py` 生成。
+    # ⚠️ 前缀吞并铁律：/album/thumbs、/album/full、/album/heic 必须注册在
+    # /album 之前，否则会被前缀 /album 吞掉。
+    # ⚠️ 该前缀已在 api/auth.py 的 _PROTECTED_STATIC_PREFIXES 登记，走密码
+    # 门禁——后端经 frpc 直通公网，非 /api 前缀默认免密，裸挂等于把 5206
+    # 张家庭照片发布到互联网。
+    from openbiliclaw.album.paths import heic_preview_dir as _album_heic_dir
+    from openbiliclaw.album.paths import original_photos_dir as _album_full_dir
+    from openbiliclaw.album.paths import thumbs_dir as _album_thumbs_dir
+    from openbiliclaw.album.paths import web_assets_dir as _album_web_dir
+
+    for _album_prefix, _album_sub, _album_name in (
+        ("/album/thumbs", _album_thumbs_dir(), "album-thumbs"),
+        ("/album/heic", _album_heic_dir(), "album-heic"),
+        ("/album/full", _album_full_dir(), "album-full"),
+    ):
+        if _album_sub.is_dir():
+            app.mount(_album_prefix, _StaticFiles(directory=_album_sub), name=_album_name)
+
+    _album_dir = _album_web_dir()
+    if _album_dir.is_dir():
+        app.mount(
+            "/album",
+            _StaticFiles(directory=_album_dir, html=True),
+            name="album",
+        )
+
     # ── Clone Sites static mount ──────────────────────────────────
     # Serves cloned sites under /clone/sites/{slug} so they can be
     # previewed in the browser. Sites live in <data>/clone-sites/.
