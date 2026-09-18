@@ -146,8 +146,8 @@ config.toml
 二创/
 references/
 
-# 移动端定制构建源码（独立 git 仓库，勿入主仓库）
-mobile/
+# 移动端定制构建源码（独立 git 仓库，勿入主仓库；2026-09-18 编号 15_，14 已被微信小店占用）
+15_mobile/
 
 # 乐仔相册微信小程序：生成物含**媒体签名**与个人照片路径，本地生成不入库
 # （跑 `python scripts/build_album_miniprogram.py` 重新产出）
