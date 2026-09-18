@@ -1,7 +1,7 @@
 """开源项目研究 API 路由。
 
 把「发给助手的开源项目 → 研究 → 入库 → 前端 tab 展示」做成一个可持续闭环。
-数据落在独立 SQLite 库 ``data/oss_research.db`` 的 ``oss_projects`` 表，
+数据落在独立 SQLite 库 ``12_开源项目研究/oss_research.db`` 的 ``oss_projects`` 表，
 与既有各业务库（douban.db / travel.db / interview.db …）隔离，互不污染。
 
 表字段说明（详见 docs/modules/oss_research.md）：
@@ -34,7 +34,9 @@ from openbiliclaw.config import _project_root
 logger = logging.getLogger(__name__)
 
 # src/openbiliclaw/api/oss_research_routes.py -> parents[3] == 项目根
-DEFAULT_DB_PATH = _project_root() / "data" / "oss_research.db"
+# 开源研究模块资产 2026-09-18 收编到项目根 `12_开源项目研究/`
+# （数据库 + 研究报告/克隆 + 回填脚本；路由代码本身必须留在可导入的 src 包内）
+DEFAULT_DB_PATH = _project_root() / "12_开源项目研究" / "oss_research.db"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS oss_projects (
@@ -149,7 +151,7 @@ def insert_project(db_path: Path, data: dict[str, Any]) -> int:
 def build_oss_research_router(db_path: str | None = None) -> APIRouter:
     """构建开源项目研究路由（FastAPI APIRouter）。
 
-    db_path 为空时回退到项目根 ``data/oss_research.db``。
+    db_path 为空时回退到项目根 ``12_开源项目研究/oss_research.db``。
     """
     resolved = Path(db_path) if db_path else DEFAULT_DB_PATH
     init_db(resolved)
@@ -272,19 +274,22 @@ def build_oss_research_router(db_path: str | None = None) -> APIRouter:
             conn.close()
 
     # ── 研究报告静态服务（白名单目录，只读） ───────────────────
-    # report_path 存的是仓库相对路径（如 references/xxx.md），
-    # 前端拼成 /references/xxx.md 站内链接。只允许白名单目录下的
+    # report_path 存的是仓库相对路径（如 12_开源项目研究/references/xxx.md），
+    # 前端拼成站内链接。只允许白名单目录下的
     # .md 文件，resolve 后必须仍落在白名单目录内（防路径穿越）。
-    _REPO_ROOT = DEFAULT_DB_PATH.parent.parent  # 项目根
-    _ALLOWED_DIRS = (_REPO_ROOT / "references", _REPO_ROOT / "docs")
-    _ALLOWED_SUFFIXES = {".md"}
+    _repo_root = DEFAULT_DB_PATH.parent.parent  # 项目根
+    _allowed_dirs = (
+        _repo_root / "12_开源项目研究" / "references",
+        _repo_root / "docs",
+    )
+    _allowed_suffixes = {".md"}
 
     @router.get("/references/{file_path:path}")
     @router.get("/docs/{file_path:path}")
     def serve_report_file(file_path: str):
-        if not file_path or Path(file_path).suffix.lower() not in _ALLOWED_SUFFIXES:
+        if not file_path or Path(file_path).suffix.lower() not in _allowed_suffixes:
             return JSONResponse({"error": "not found"}, status_code=404)
-        for base in _ALLOWED_DIRS:
+        for base in _allowed_dirs:
             base_resolved = base.resolve()
             candidate = (base_resolved / file_path).resolve()
             try:

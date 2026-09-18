@@ -4,6 +4,61 @@
 
 ---
 
+## 开源研究模块收编至 `12_开源项目研究/`（2026-09-18）
+
+按「编号工作区」口径，把散落三处的开源研究（oss_research）资产收进项目根
+编号目录 `12_开源项目研究/`（接 `10_旅游/`、`11_qq相册导出…/` 之后）：
+
+- **物理迁移**：`references/`（772M / 67 项第三方克隆）→ `12_开源项目研究/references/`；
+  `data/oss_research.db`（95 条）→ `12_开源项目研究/oss_research.db`；
+  `scripts/oss_research/backfill.py` → `12_开源项目研究/scripts/backfill.py`。
+- **代码仅改路径指向**（路由前缀/端点不变）：`src/openbiliclaw/api/oss_research_routes.py`
+  的 `DEFAULT_DB_PATH` 与报告服务白名单 `_ALLOWED_DIRS` 的 references 根。
+- **数据自洽**：库内 27 条 `report_path` 与 28 条 `caveats` 中的 `references/…`
+  引用批量补 `12_开源项目研究/` 前缀，磁盘存在性逐条校验通过。
+- **`.gitignore`**：新位置已被既有 `references/`（非锚定）与 `*.db`/`*.db.bak*`
+  规则覆盖；`backfill.py`（原已入库的代码）继续跟踪，故**不做整目录忽略**。
+- 同步文档：`docs/modules/oss_research.md`（新增「目录迁移」小节）、`docs/references-index.md`。
+
+---
+
+## 旅行数据目录迁移至 `10_旅游/`（2026-09-18）
+
+- 旅行资料（md 真值源、travel.db、ctrip-ticket-crawler）从 `data/travel/` 整体迁至项目根编号工作区 `10_旅游/`（与 `01_`~`09_` 口径一致，个人资料不入 git）。
+- 同步改默认值：`config.py::TravelConfig`（`data_path="10_旅游"`、`db_path="10_旅游/travel.db"`）与 `scripts/travel/build_travel_db.py` 的 `DEFAULT_DB`/`DEFAULT_DATA_DIR`。
+- TestClient 实测 `/api/travel/{documents,doc,itinerary,hotels,flights}` 全部 200；文档 `docs/modules/travel.md`、`docs/modules/config.md` 已同步新路径。
+
+---
+
+## 乐仔相册：公网 HTTPS、手机入口与微信小程序通道（2026-09-17）
+
+把 `/album` 从「局域网能用」推到「手机在任何网络下能用」，并补齐无 Cookie 客户端
+（微信小程序）的取图路径。四块交付：
+
+**1. 公网 HTTPS 通道**（`https://lezai.odn.cc` → PassNAT HTTPS 隧道 → 本机 frpc
+终止 TLS → `127.0.0.1:8420`）。踩出并修掉两个真 bug：frp `https2http` 的
+`hostHeaderRewrite` 改写 Host 导致 Starlette 绝对重定向把手机送去
+`https://127.0.0.1/...`；`trusted_proxies` 为空导致带 `Origin` 的浏览器登录 403
+`origin_forbidden`。`trust_loopback` 保持 false（防伪造 XFF 绕过密码）。隧道进程
+`pm2 frpc-lezai` 用启动器 `~/.local/bin/frpc-odn.sh` 启动（无条件 `unset` 代理变量，
+否则沙箱代理一停隧道就断）。见 `docs/modules/album.md §7`，技能 `passnat-https-tunnel`。
+
+**2. 手机入口卡**：`scripts/build_album_entry_card.py` → `docs/album-手机入口.png`
+（局域网 + 公网双二维码）。二维码按整数模块尺寸绘制并用 `cv2.QRCodeDetector`
+实测解码后才交付。
+
+**3. 无 Cookie 客户端的媒体签名**（`auth_core.album_media_token` +
+`api/auth.py::_album_media_ok`）：小程序 `<image>` 既不带 cookie 也带不了自定义
+header，照片只能走 `?k=<HMAC 签名>`。**权限边界卡死在媒体子路径**——签名打不开
+相册页面、换不到 `/api` 会话、碰不到 `/api/auth/admin`（回归测试
+`tests/api/test_album_gate.py` 锁住这五条）。
+
+**4. 微信小程序工程** `miniprogram-album/`（原生，非 web-view）：数据由
+`scripts/build_album_miniprogram.py` 从同一份源库索引生成（26 月 / 5205 张 /
+481KB，自动排除 `00-` 总览拼图）。首页按月份切换 + 月内分页 60 张 + 路径增量
+`setData`（5205 节点一次性渲染会卡死）；查看页单图 + 手势切换，不用 swiper。
+生成物含签名与照片路径，`.gitignore` 排除。
+
 ## 乐仔成长相册集成（2026-09-17）
 
 新独立模块 `src/openbiliclaw/lezai/`（paths/sync/CLI），把外部源库（夸克网盘

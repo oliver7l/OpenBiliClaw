@@ -109,6 +109,7 @@ references/agent-interview-hub/
 references/my-interview/
 
 # 全部参考项目（第三方代码/个人资料，本地保留，不进版本控制）
+# 非锚定规则 → 同时覆盖 12_开源项目研究/references/（2026-09-18 迁入）
 references/
 # 个人面试转录等隐私材料
 transcript/
@@ -126,7 +127,7 @@ transcript/
 求职知识库/03_岗位弹药库/GoodLuckStudio-面试准备/
 求职知识库/03_岗位弹药库/万联易达-面试准备/
 求职知识库/03_岗位弹药库/定制简历/
-求职知识库/03_岗位弹药库/比亚迪-面试准备/
+/04_比亚迪/
 求职知识库/03_岗位弹药库/深圳灵动-面试准备/
 
 # Cookie / 敏感信息
@@ -147,3 +148,23 @@ references/
 
 # 移动端定制构建源码（独立 git 仓库，勿入主仓库）
 mobile/
+
+# 乐仔相册微信小程序：生成物含**媒体签名**与个人照片路径，本地生成不入库
+# （跑 `python scripts/build_album_miniprogram.py` 重新产出）
+miniprogram-album/data/photos.js
+miniprogram-album/utils/config.js
+
+# 个人相册库（2026-09-18 自 009-暂存内容 迁入项目根，共 ~127G 私人照片/视频，整目录绝不入库）
+# 含 _photo_index/ 下的索引库、缩略图、CLIP 向量、专用 venv、工具脚本
+/07_相册/
+/08_乐仔相册/
+/09_QQ相册/
+
+# QQ 相册导出·按小孩人脸分组（2026-09-18 自 009-暂存内容 迁入；10204 张含未成年人 PII，绝不入库）
+/11_qq相册导出-中三班-小孩儿分组/
+
+# 开源项目研究模块（2026-09-18 自 references/ + data/ + scripts/oss_research/ 迁入项目根统一编号）
+#   · 12_开源项目研究/references/  ——第三方克隆（772M），已由下方 references/ 规则忽略
+#   · 12_开源项目研究/oss_research.db(+ .bak)——派生数据，已由 *.db / *.db.bak* 规则忽略
+#   · 12_开源项目研究/scripts/backfill.py ——种子回填脚本（代码），保持入库跟踪
+# 故此处不做整目录忽略，避免误伤 backfill.py。

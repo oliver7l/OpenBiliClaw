@@ -1,18 +1,18 @@
 """开源研究种子库回填脚本。
 
-把已研究/已克隆的开源项目结构化结论写入 data/oss_research.db（前端「开源研究」tab
+把已研究/已克隆的开源项目结构化结论写入 12_开源项目研究/oss_research.db（前端「开源研究」tab
 的数据源）。单一数据源：所有要入库的项目都登记在 PROJECTS 列表里，重复运行幂等
 （按 (owner, name) 去重）。新项目研究完后在此追加条目再重跑即可。
 
 内容分三批：
   1. 2026-09-14 当天深度研究的 6 个（TraeWorkAssistant/wikitok/lushu/brosis/exercise-helper/red）
-  2. references/ 目录历史研究存量 13 个（索引 11 + 深度蓝图 2）
-  3. references/ 目录仅克隆未精读 18 个（unstudied 占位，研究待补）
+  2. 12_开源项目研究/references/ 目录历史研究存量 13 个（索引 11 + 深度蓝图 2）
+  3. 12_开源项目研究/references/ 目录仅克隆未精读 18 个（unstudied 占位，研究待补）
 
 注意：caveats 是 TEXT 字段，只能传字符串（分号拼接），传 list 会绑定报错。
 
 用法（在项目根目录执行）：
-    .venv/bin/python3 scripts/oss_research/backfill.py
+    .venv/bin/python3 12_开源项目研究/scripts/backfill.py
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ PROJECTS = [
         "relevance_summary": "形态不同（桌面应用非浏览器扩展），但工程手法可迁移：原子写、错误冷却状态机、代理回环防护、退出清理、确定性身份派生、NDJSON 流式 IPC。",
         "reusable_techniques": ["原子写 tmp+rename 防半截文件", "错误分类→冷却状态机+持久化", "NO_PROXY=* 防代理回环", "退出清理子进程/还原系统代理", "确定性身份派生 seeded_hex", "NDJSON 子进程流式 IPC", "严格契约文档(AGENT.md 式)"],
         "caveats": "桌面应用，不能解密 HTTPS；与知乎卡片化扩展架构不同，MITM 那套扩展做不了。",
-        "report_path": "references/TraeWorkAssistant-架构分析.md",
+        "report_path": "12_开源项目研究/references/TraeWorkAssistant-架构分析.md",
         "tags": ["desktop", "tauri", "multi-account", "reference"],
     },
     {
@@ -53,7 +53,7 @@ PROJECTS = [
         "relevance_summary": "直接有用——本身就是 TikTok 式全屏竖向卡片流，正是知乎首页卡片化要的视觉形态，且纯前端、feed 机制能搬进 content script。",
         "reusable_techniques": ["snap-y snap-mandatory 吸附滚动", "IntersectionObserver 哨兵预取(rootMargin 100px)", "双缓冲缩略图预加载(先 preload 再渲染)", "骨架+淡入+失败兜底", "100dvh 替代 100vh(移动端)", "scoped class 前缀隔离样式"],
         "caveats": "整页接管 DOM（扩展需注入 position:fixed 覆盖层）；调试用 console.log；点赞侧栏不适用于研究场景。",
-        "report_path": "references/WikiTok-借鉴分析.md",
+        "report_path": "12_开源项目研究/references/WikiTok-借鉴分析.md",
         "tags": ["card-feed", "frontend", "reference", "zhihu-extension"],
     },
     {
@@ -67,7 +67,7 @@ PROJECTS = [
         "relevance_summary": "最有价值——自带 Chrome 扩展，与 OpenBiliClaw 扩展的 content/background/main 架构同构；LLM 抽取健壮性模板也可直接复用。",
         "reusable_techniques": ["content/background 分工协议(content 同源写回、background 跨站)", "MAIN world React 受控输入驱动(descriptor setter+_valueTracker)", "真点击派 Pointer/Mouse 事件而非 .click()", "流式输出稳定检测(连 4 次相同+长度阈值)", "健壮 LLM JSON 抽取(剥围栏→子串兜底→多形状)", "客户端/边缘共享纯逻辑(orderedIds 只是缓存)"],
         "caveats": "默认高德 POI/OSRM，国内需 WGS84↔GCJ-02 偏移；自托管路书需 Cloudflare 账号。",
-        "report_path": "references/Lushu-借鉴分析.md",
+        "report_path": "12_开源项目研究/references/Lushu-借鉴分析.md",
         "tags": ["chrome-extension", "llm", "reference", "zhihu-extension", "xhs"],
     },
     {
@@ -82,7 +82,7 @@ PROJECTS = [
         "relevance_summary": "形态是桌面 App 与扩展不重叠，但「把本地数据变成 AI 可消费上下文」的四套机制正是 OpenBiliClaw 强化 agentic 能力最该抄的：MCP 出口、混合检索、确定性规则层、入库前脱敏——且 OpenBiliClaw 已有 Python API 与 sqlite-vec，迁移成本极低。",
         "reusable_techniques": ["MCP 只读服务+grant 细粒度授权暴露本地数据", "字段路由+FTS5+sqlite-vec+RRF(k=60) 混合检索", "确定性规则层替代 LLM 做理解/聚合", "入库前规则脱敏(gitleaks+Luhn+验证码,33 测试向量)", "严格时间口径(半开区间/桶对齐/区间并集/三类时间)", "规则纯数据+引擎执行+合成树单测(抽取层范式)", "原子写配置(tmp+replaceItemAt+时间戳备份)", "本地 IPC 对端校验(getpeereid+audit token)+限流", "硬性 fail-closed 约束(不离机/必脱敏/固定上限)"],
         "caveats": "macOS 原生 App，AX/OCR/SQLCipher/Metal 构建链平台绑定；Chrome 扩展无法做桌面采集。与知乎卡片化扩展的视觉形态无关。",
-        "report_path": "references/Brosis-借鉴分析.md",
+        "report_path": "12_开源项目研究/references/Brosis-借鉴分析.md",
         "tags": ["macos", "desktop", "mcp", "local-first", "privacy", "reference", "sqlite-vec", "agentic"],
     },
     {
@@ -97,7 +97,7 @@ PROJECTS = [
         "relevance_summary": "与 WikiTok 同属纯前端+本地存储路线，但多了语音引导、离线 SW、引导式会话状态机、微信 WebView 适配四块，对 OpenBiliClaw Web UI（同为本地 serve 的 SPA）与扩展均有直接可抄的健壮性原语。",
         "reusable_techniques": ["事件表+预排程双轨定时：tick 兜底推进，节奏敏感 token(倒计时/蜂鸣)独立 setTimeout 预排，恢复按已过秒数跳过——setInterval catch-up 压缩节奏问题的标准解 (engine.js:181-237)", "语音三通道降级+token 防串音：预生成mp3(exact→前缀兜底)→<audio>→AudioContext解码→原生TTS→静默推进；lastSpeechToken 单调递增，onEnd 只认当前 token；_estimateDurationMs 超时兜底绝不挂起 (audio.js:120-354)", "SW 分层缓存+注释带真机根因：HTML/CSS/JS 网络优先(微信 WebView 懒更新会锁死旧版)、sw.js 自身网络优先、静态缓存优先；版本号激活期清旧缓存 (sw.js:39-98)", "mergeSettings：结构以默认为准、数值以存储为准(新增设置自动有默认值)；读取一律 clone 不外泄内部引用；dayType 归一化兼容旧记录 (storage.js:37-57)", "环境音 Web Audio 程序合成(雨声/心跳/和弦)零文件体积，语音播报 duckDown 0.2x 播完 duckUp (audio.js:443-632)", "llms.txt——给 LLM 看的项目说明书，AGENTS.md 思路的 Web 标准版"],
         "caveats": "morning/evening 两目录同构代码各复制一份——是零构建部署形态的取舍，勿照搬到有模块系统的项目；68 条 TTS_MAP 硬编码靠 tts/gen-*.js 生成脚本保证与播报文本逐字一致，手写必漂移；微信小程序版不开源，PWA 版才是完整实现",
-        "report_path": "references/ExerciseHelper-借鉴分析.md",
+        "report_path": "12_开源项目研究/references/ExerciseHelper-借鉴分析.md",
         "tags": ["pwa", "vanilla-js", "voice-guidance", "web-ui", "local-first", "reference"],
     },
     {
@@ -112,12 +112,12 @@ PROJECTS = [
         "relevance_summary": "与用户既有工作流同构：docs/plans/≈E、docs/modules+AGENTS.md≈D、借鉴分析≈R、MEMORY.md≈D、工作日志≈R(append-only)。项目已自发实践 RED,缺的只是 E 态显式承载与「冲突必须记录」纪律。与 brosis 互补：brosis 管 AI 看得到什么数据,RED 管 AI 如何理解数据的状态。",
         "reusable_techniques": ["知识状态显式化：把 R/E/D 三态词汇写进 AGENTS.md,让 Agent 自动分清待查/推进中/已定 (spec/protocol.md)", "检查点授权语义原句：得到可行方案≠获得实施授权；宽泛早期请求不构成后面的转换授权——正是用户「先方案确认再开发」的协议化 (protocol.md Transitions)", "冲突显式化：发现文档与实现不符必须记录(如 changelog/drift_reports)而非默默绕过——补 AGENTS.md 文档强制同步规则的最大漏洞", "Skill 路由化按需加载：主文件极短+分路由 references,操作需要时才读 (SKILL.md:20-34)——写任何 SKILL 的范本", "双实现一致性：cases.json 就是 args+exitCode 序列,Node/Python 跑同一组用例 (cli/conformance/)", "机器可读契约三件套：config/artifact/output 各配 JSON Schema+独立 exit-codes 文档 (spec/)", "TOML front matter Markdown 工件(+++ 分隔,id/state/status/title/created 必填)：人可读+机器可校验", "policy 开关(document_requires_approval 等)：协议留开关项目自选严格度 (red.toml:12-14)"],
         "caveats": "对单人+单 Agent 项目,完整 CLI+red.toml 偏重——取其神(三态区分+检查点纪律+冲突显式化)舍其形(双CLI/conformance/自举CI)；方法论长文若要挂载给 Agent 读,摘核心十几行即可,不必整篇；Research/Evolve 记录是否入 Git 由项目自定,协议不强制",
-        "report_path": "references/RED-借鉴分析.md",
+        "report_path": "12_开源项目研究/references/RED-借鉴分析.md",
         "tags": ["methodology", "ai-collaboration", "docs-as-state", "cli", "reference", "workflow"],
     },
-    # ── references/ 目录历史研究存量统一归档（2026-09-14）──────────────
-    # 13 个已有正式研究（11 个见 references/参考项目索引_求职知识库优化.md，
-    # 2 个见 references/两项目深度研究与Agent改造蓝图.md），18 个仅克隆未精读。
+    # ── 12_开源项目研究/references/ 目录历史研究存量统一归档（2026-09-14）──────────────
+    # 13 个已有正式研究（11 个见 12_开源项目研究/references/参考项目索引_求职知识库优化.md，
+    # 2 个见 12_开源项目研究/references/两项目深度研究与Agent改造蓝图.md），18 个仅克隆未精读。
     {
         "name": "obsidian-curator",
         "owner": "onlelonely",
@@ -125,8 +125,8 @@ PROJECTS = [
         "one_liner": "本地 Ollama 打 frontmatter 标签 + 语义聚类合并碎片标签",
         "purpose": "Obsidian 笔记自动打标：7 步管线——标准化→通用词过滤→别名→精确→模糊→语义→新标签。",
         "relevance_summary": "已借鉴：求职知识库 kb.py 的 TAG_ALIAS + BLOCKED_GENERIC + _semantic_direction_fallback（bge-m3 语义兜底）。",
-        "caveats": "研究程度：已精读并落地。源码在 references/obsidian-curator。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：已精读并落地。源码在 12_开源项目研究/references/obsidian-curator。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "tagging", "obsidian", "llm", "reference"],
     },
     {
@@ -136,8 +136,8 @@ PROJECTS = [
         "one_liner": "Obsidian 命令行：增量/混合检索 + 带行定位的 PATCH 编辑 + frontmatter 组装",
         "purpose": "Obsidian vault 的 CLI 工具集，hybrid 检索与外科手术式笔记编辑。",
         "relevance_summary": "部分借鉴思路（hybrid 检索）；未整体引入。",
-        "caveats": "研究程度：索引级（借鉴点+落地状态已登记），未单独写深度报告。源码在 references/obsidian-cli。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级（借鉴点+落地状态已登记），未单独写深度报告。源码在 12_开源项目研究/references/obsidian-cli。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "obsidian", "cli", "reference"],
     },
     {
@@ -147,8 +147,8 @@ PROJECTS = [
         "one_liner": "把 Obsidian vault 暴露成 MCP：vault_find_related 本地 embedding 找相关页",
         "purpose": "MCP 服务暴露 vault，概念相关检索给 AI 用。",
         "relevance_summary": "未用；候选：把 vault_find_related 思路接到 MCP 只读服务方案（docs/plans/mcp-readonly-server.md）。",
-        "caveats": "研究程度：索引级。源码在 references/obsidian-vault-mcp。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/obsidian-vault-mcp。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "mcp", "obsidian", "reference"],
     },
     {
@@ -158,8 +158,8 @@ PROJECTS = [
         "one_liner": "语义检索 MCP，SHA-256 哈希跳过未变更文件只 embed 新增（增量索引）",
         "purpose": "语义检索 MCP，增量索引降成本。",
         "relevance_summary": "思路已参考（增量索引）；未引入。",
-        "caveats": "研究程度：索引级。源码在 references/obsidian-semantic-mcp。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/obsidian-semantic-mcp。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "mcp", "embedding", "reference"],
     },
     {
@@ -169,8 +169,8 @@ PROJECTS = [
         "one_liner": "AI 打标时尊重已有标签词表，复用旧标签防近似重复",
         "purpose": "Obsidian 自动打标，防止标签碎片化。",
         "relevance_summary": "思路已被 kb.py 的 TAG_ALIAS 收敛方案替代。",
-        "caveats": "研究程度：索引级。源码在 references/obsidian-auto-tagger。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/obsidian-auto-tagger。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "tagging", "obsidian", "reference"],
     },
     {
@@ -180,8 +180,8 @@ PROJECTS = [
         "one_liner": "Obsidian AI 打标插件（可自定义端点/本地模型，Apache-2.0）",
         "purpose": "打标插件，LLM 端点可插拔。",
         "relevance_summary": "未用。",
-        "caveats": "研究程度：索引级。源码在 references/obsidian-ai-tagger。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/obsidian-ai-tagger。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "tagging", "obsidian", "reference"],
     },
     {
@@ -191,8 +191,8 @@ PROJECTS = [
         "one_liner": "把 md wiki 做成类似问 ChatGPT 的纯本地 RAG 问答",
         "purpose": "纯本地 markdown wiki RAG 问答。",
         "relevance_summary": "未用；候选：面试前对求职知识库「问一句即出答案」。",
-        "caveats": "研究程度：索引级。源码在 references/wiki-rag。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/wiki-rag。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "rag", "local-first", "reference"],
     },
     {
@@ -202,8 +202,8 @@ PROJECTS = [
         "one_liner": "markdown RAG 知识库问答",
         "purpose": "markdown RAG 知识库组装。",
         "relevance_summary": "未用。",
-        "caveats": "研究程度：索引级。源码在 references/markdown-rag-knowledgebase。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/markdown-rag-knowledgebase。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "rag", "reference"],
     },
     {
@@ -213,8 +213,8 @@ PROJECTS = [
         "one_liner": "schema 强制的 wiki 搜索/写入 MCP，防 tag drift、孤儿笔记",
         "purpose": "用 schema 约束 MCP 写入：标签 schema、frontmatter 模板约束。",
         "relevance_summary": "契合打标收敛思路；未引入。MCP 只读服务方案可参考其 schema 约束设计。",
-        "caveats": "研究程度：索引级。源码在 references/wiki-mcp。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/wiki-mcp。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "mcp", "schema", "reference"],
     },
     {
@@ -224,8 +224,8 @@ PROJECTS = [
         "one_liner": "AI 求职全流程 Skill：简历准备→岗位匹配→模拟面试→申请跟踪",
         "purpose": "求职全流程 Agent Skill，命令设计可参考。",
         "relevance_summary": "已参考命令设计思路。",
-        "caveats": "研究程度：索引级。源码在 references/interview-coach-skill。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级。源码在 12_开源项目研究/references/interview-coach-skill。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "skill", "interview", "reference"],
     },
     {
@@ -235,8 +235,8 @@ PROJECTS = [
         "one_liner": "完整自托管 AI 第二大脑（聚合文档 + 自然语言查询 + Web/CLI）",
         "purpose": "自托管第二大脑统一入口。",
         "relevance_summary": "未用；体量大（≈164MB）按需参考。",
-        "caveats": "研究程度：索引级；体量大只做了概览。源码在 references/khoj。",
-        "report_path": "references/参考项目索引_求职知识库优化.md",
+        "caveats": "研究程度：索引级；体量大只做了概览。源码在 12_开源项目研究/references/khoj。",
+        "report_path": "12_开源项目研究/references/参考项目索引_求职知识库优化.md",
         "tags": ["references-archive", "job-kg", "second-brain", "self-hosted", "reference"],
     },
     {
@@ -247,8 +247,8 @@ PROJECTS = [
         "purpose": "把一个人/一份简历武装到能面任何公司的方法论骨架：Intake→Candidate KB→公司调研(5 维度+置信度)→Resume×JD Match→P0-P4 预测出题→Draft Answers→Mock→STAR 评估。单文件 Skill + 3 references。",
         "relevance_summary": "深度研究（307 行蓝图）。可直接映射求职知识库/面试 Agent 设计：出题方法论、Storybank 弹药库、去 AI 味 Greet 话术、真实材料原则（缺口诚实标注）。",
         "reusable_techniques": ["8-Phase 备战流水线", "P0-P4 五档出题优先级", "信息置信度标注 HIGH/MEDIUM/LOW/GAP", "Resume 是事实基准原则", "文件优先输出+版本管理(保留10版)", "公司风格适配 culture-tags", "去 AI 味话术 9 项检查清单"],
-        "caveats": "研究程度：深度（蓝图含改造方案 §五）。源码在 references/my-interview。",
-        "report_path": "references/两项目深度研究与Agent改造蓝图.md",
+        "caveats": "研究程度：深度（蓝图含改造方案 §五）。源码在 12_开源项目研究/references/my-interview。",
+        "report_path": "12_开源项目研究/references/两项目深度研究与Agent改造蓝图.md",
         "tags": ["references-archive", "job-kg", "interview", "agent", "skill", "reference"],
     },
     {
@@ -259,8 +259,8 @@ PROJECTS = [
         "purpose": "静态站仓库 + collect_interviews.py 采集流水线 + 跨平台 Agent 规范：Candidate 结构化 schema、自动打标签/评分/去重、公司三合一知识库组织。",
         "relevance_summary": "深度研究（307 行蓝图）。与 my-interview 互补：管「素材从哪来、怎么存」。采集流水线与去重评分可直接改造成面经采集器。",
         "reusable_techniques": ["Candidate 结构化 schema", "自动打标+评分+去重流水线", "公司三合一知识库组织", "collect_interviews.py 工程实现"],
-        "caveats": "研究程度：深度（蓝图含改造方案 §五）。源码在 references/agent-interview-hub。",
-        "report_path": "references/两项目深度研究与Agent改造蓝图.md",
+        "caveats": "研究程度：深度（蓝图含改造方案 §五）。源码在 12_开源项目研究/references/agent-interview-hub。",
+        "report_path": "12_开源项目研究/references/两项目深度研究与Agent改造蓝图.md",
         "tags": ["references-archive", "job-kg", "interview", "crawler", "agent", "reference"],
     },
     # ── 18 个仅克隆未精读（登记占位，研究待用户点名后补做）──────────────
@@ -726,40 +726,40 @@ PROJECTS = [
         "caveats": "仅克隆未精读；xhs_refill 目录还含用户自己的 agentlimb_* 小红书采集实验脚本（非第三方）。克隆位置：040-OpenBiliClaw/二创/xhs_refill/MediaCrawler。",
         "tags": ["explore-archive", "unstudied", "crawler", "xhs", "playwright", "reference"],
     },
-    # 日记类研究批次（references/diary-projects，09-06 建；nightDiary 与 references/ 根目录重复不重复入库）
+    # 日记类研究批次（12_开源项目研究/references/diary-projects，09-06 建；nightDiary 与 12_开源项目研究/references/ 根目录重复不重复入库）
     {
         "name": "Night-Journal", "owner": "Haaaiawd",
         "url": "https://github.com/Haaaiawd/Night-Journal",
         "one_liner": "晚记 Night Journal：夜间日记/陪伴向记录应用",
-        "caveats": "仅克隆未精读。克隆位置：references/diary-projects/Night-Journal（09-06 日记研究批次）。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/diary-projects/Night-Journal（09-06 日记研究批次）。",
         "tags": ["explore-archive", "unstudied", "diary", "journal", "reference"],
     },
     {
         "name": "cube-diary", "owner": "HoPGoldy",
         "url": "https://github.com/HoPGoldy/cube-diary",
         "one_liner": "cube-diary：日记应用（HoPGoldy 出品）",
-        "caveats": "仅克隆未精读。克隆位置：references/diary-projects/cube-diary。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/diary-projects/cube-diary。",
         "tags": ["explore-archive", "unstudied", "diary", "reference"],
     },
     {
         "name": "journiv-app", "owner": "journiv",
         "url": "https://github.com/journiv/journiv-app",
         "one_liner": "Journiv：日记/日志应用（journiv-app）",
-        "caveats": "仅克隆未精读。克隆位置：references/diary-projects/journiv-app。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/diary-projects/journiv-app。",
         "tags": ["explore-archive", "unstudied", "diary", "journal", "reference"],
     },
     {
         "name": "memex", "owner": "memex-lab",
         "url": "https://github.com/memex-lab/memex",
         "one_liner": "Memex：记忆/知识管理应用（memex-lab）",
-        "caveats": "仅克隆未精读；与 agent-memory 系同类可对照。克隆位置：references/diary-projects/memex。",
+        "caveats": "仅克隆未精读；与 agent-memory 系同类可对照。克隆位置：12_开源项目研究/references/diary-projects/memex。",
         "tags": ["explore-archive", "unstudied", "diary", "memory", "reference"],
     },
     {
         "name": "nightly-journal", "owner": "damofer",
         "url": "https://github.com/damofer/nightly-journal",
         "one_liner": "nightly-journal：夜间日记应用",
-        "caveats": "仅克隆未精读。克隆位置：references/diary-projects/nightly-journal。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/diary-projects/nightly-journal。",
         "tags": ["explore-archive", "unstudied", "diary", "reference"],
     },
     # 2026-09-14 深度研究批次（7）
@@ -780,66 +780,66 @@ PROJECTS = [
             "无 FTS 现实下：小数据量先量化再决定缓存与否（800条<1s 则不缓存）",
             "SKILL.md 范本：双语触发词/先查可用性/两步读/退出码约定/隐私节",
         ],
-        "caveats": "直读他人 App 私有库是其场景所限（Apple 无公开 API），OpenBiliClaw 数据源都是自家库无需解码 blob；SetFile 改创建时间是外部依赖锦上添花；recent 的 Python 侧 break 代替 LIMIT 是被 folder 过滤逼的，自家查询不拼父链可直接 SQL LIMIT。报告已挪至 references/。",
-        "report_path": "references/AppleNotesCLI-借鉴分析.md",
+        "caveats": "直读他人 App 私有库是其场景所限（Apple 无公开 API），OpenBiliClaw 数据源都是自家库无需解码 blob；SetFile 改创建时间是外部依赖锦上添花；recent 的 Python 侧 break 代替 LIMIT 是被 folder 过滤逼的，自家查询不拼父链可直接 SQL LIMIT。报告已挪至 12_开源项目研究/references/。",
+        "report_path": "12_开源项目研究/references/AppleNotesCLI-借鉴分析.md",
         "tags": ["macos", "cli", "sqlite", "readonly", "local-first", "mcp-plan-reference", "reference", "deep-research"],
     },
-    # 微信读书研究批次（000-微信读书，09-14 迁入 references/；012 weread-skill-web 为用户自研不入库）
+    # 微信读书研究批次（000-微信读书，09-14 迁入 12_开源项目研究/references/；012 weread-skill-web 为用户自研不入库）
     {
         "name": "awesome-weread", "owner": "BENZEMA216",
         "url": "https://github.com/BENZEMA216/awesome-weread",
         "one_liner": "微信读书笔记导出/自动化工具合集（bot 自动更新 seen.json）",
-        "caveats": "仅克隆未精读。克隆位置：references/awesome-weread。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/awesome-weread。",
         "tags": ["explore-archive", "unstudied", "weread", "export", "reference"],
     },
     {
         "name": "carl-weread", "owner": "LearnPrompt",
         "url": "https://github.com/LearnPrompt/carl-weread",
         "one_liner": "carl-weread：微信读书 Skill + reading coach（v0.3），Python 包结构含 workflows/examples",
-        "caveats": "仅克隆未精读。克隆位置：references/carl-weread。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/carl-weread。",
         "tags": ["explore-archive", "unstudied", "weread", "skill", "reference"],
     },
     {
         "name": "WeRead-Agent", "owner": "WenWen610",
         "url": "https://github.com/WenWen610/WeRead-Agent",
         "one_liner": "WeRead-Agent：微信读书对话 Agent（前后端+Docker+Prometheus/Grafana+evals）",
-        "caveats": "仅克隆未精读。克隆位置：references/WeRead-Agent。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/WeRead-Agent。",
         "tags": ["explore-archive", "unstudied", "weread", "agent", "reference"],
     },
     {
         "name": "weread-skill-api", "owner": "lucis-yg",
         "url": "https://github.com/lucis-yg/weread-skill-api",
         "one_liner": "微信读书 Skill 的 Node.js API 封装（Express server + src）",
-        "caveats": "仅克隆未精读；用户自研 weread-skill-web（二创/）即基于此 API。克隆位置：references/weread-skill-api。",
+        "caveats": "仅克隆未精读；用户自研 weread-skill-web（二创/）即基于此 API。克隆位置：12_开源项目研究/references/weread-skill-api。",
         "tags": ["explore-archive", "unstudied", "weread", "nodejs", "api", "reference"],
     },
     {
         "name": "weread-skill-desktop", "owner": "Duosl",
         "url": "https://github.com/Duosl/weread-skill-desktop",
         "one_liner": "微信读书 Skill 桌面端（Tauri + Vite，含 landing/docs/ui-style-guide）",
-        "caveats": "仅克隆未精读；迁移时已清 node_modules(154M)+src-tauri/target(2.8G) 构建缓存入废纸篓。克隆位置：references/weread-skill-desktop。",
+        "caveats": "仅克隆未精读；迁移时已清 node_modules(154M)+src-tauri/target(2.8G) 构建缓存入废纸篓。克隆位置：12_开源项目研究/references/weread-skill-desktop。",
         "tags": ["explore-archive", "unstudied", "weread", "tauri", "desktop", "reference"],
     },
-    # 小宇宙研究批次（000-小宇宙，09-14 迁入 references/）
+    # 小宇宙研究批次（000-小宇宙，09-14 迁入 12_开源项目研究/references/）
     {
         "name": "xiaoyuzhou_script_skill", "owner": "zdhgreat",
         "url": "https://github.com/zdhgreat/xiaoyuzhou_script_skill",
         "one_liner": "小宇宙播客脚本技能（SKILL.md + scripts，抓取/转写工作流）",
-        "caveats": "仅克隆未精读。克隆位置：references/xiaoyuzhou_script_skill。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/xiaoyuzhou_script_skill。",
         "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "skill", "reference"],
     },
     {
         "name": "xiaoyuzhou-api", "owner": "ylw1997",
         "url": "https://github.com/ylw1997/xiaoyuzhou-api",
         "one_liner": "小宇宙播客非官方 API 封装（Python，含 docs/tests）",
-        "caveats": "仅克隆未精读。克隆位置：references/xiaoyuzhou-api。",
+        "caveats": "仅克隆未精读。克隆位置：12_开源项目研究/references/xiaoyuzhou-api。",
         "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "api", "reference"],
     },
     {
         "name": "xiaoyuzhou-mcp", "owner": "r266-tech",
         "url": "https://github.com/r266-tech/xiaoyuzhou-mcp",
         "one_liner": "小宇宙播客 MCP 服务（只读形态，与 mcp-readonly-server 方案同类）",
-        "caveats": "仅克隆未精读；只读 MCP 形态与 OpenBiliClaw MCP 只读服务方案（docs/plans/mcp-readonly-server.md）同类。克隆位置：references/xiaoyuzhou-mcp。",
+        "caveats": "仅克隆未精读；只读 MCP 形态与 OpenBiliClaw MCP 只读服务方案（docs/plans/mcp-readonly-server.md）同类。克隆位置：12_开源项目研究/references/xiaoyuzhou-mcp。",
         "tags": ["explore-archive", "unstudied", "xiaoyuzhou", "podcast", "mcp", "reference"],
     },
 ]

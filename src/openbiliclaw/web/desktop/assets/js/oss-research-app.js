@@ -1,6 +1,6 @@
 /* 开源项目研究页（桌面 SPA 内嵌视图）。
  *
- * 数据来自 /api/oss-research/*（后端从独立 data/oss_research.db 读取）。
+ * 数据来自 /api/oss-research/*（后端从独立 12_开源项目研究/oss_research.db 读取）。
  * 流程：把 GitHub 链接发给助手 → 助手研究并入库 → 本页卡片网格展示。
  * - 顶部统计条 + 搜索 + 标签筛选。
  * - 卡片展示：仓库名/owner、一句话定位、技术栈 chips、与本项目关联摘要。
