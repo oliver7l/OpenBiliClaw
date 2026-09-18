@@ -1,0 +1,34 @@
+ok: true
+schema_version: '1'
+data:
+- id: BV1QC4y1K7bp
+  bvid: BV1QC4y1K7bp
+  title: 几千首歌曲一秒钟自动按歌手和专辑创建文件夹，并自动重命名整理好歌曲，这个方法不容错过。
+  author: 秋未暝
+  play: 15406
+  duration: '11:3'
+- id: BV14HD5YXEZm
+  bvid: BV14HD5YXEZm
+  title: 听歌识曲用这一个神器就够了！成功率直接提高200% | LALAL.AI音乐分离器
+  author: 田同学Tino
+  play: 107804
+  duration: '1:44'
+- id: BV1Zid3YVEEz
+  bvid: BV1Zid3YVEEz
+  title: 一个docker解决音乐 搜刮、整理、播放。music_tag_webV2
+  author: 蔡叔的房车NAS露影记
+  play: 17723
+  duration: '5:33'
+- id: BV1Zt411y73s
+  bvid: BV1Zt411y73s
+  title: Spotify的音乐推荐算法
+  author: Feynmanist
+  play: 1572
+  duration: '55:44'
+- id: BV1xN411J7zD
+  bvid: BV1xN411J7zD
+  title: 【c/c++】音乐播放器！全网最详细教程！70分钟手把手带你打造一款专属于自己的音乐播放器~图文详解+代码实现~
+  author: 毛橘fondness
+  play: 14788
+  duration: '88:16'
+
