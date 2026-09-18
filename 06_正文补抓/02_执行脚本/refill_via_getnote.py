@@ -29,7 +29,7 @@ import sys
 import time
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parents[2]
 DB_MAIN = BASE / "data" / "openbiliclaw.db"
 DB_CONTENT = BASE / "data" / "content.db"
 GETNOTE = "getnote"

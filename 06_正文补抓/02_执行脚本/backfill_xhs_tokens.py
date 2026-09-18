@@ -19,8 +19,8 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "openbiliclaw.db"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DB_PATH = PROJECT_ROOT / "data" / "content.db"
 STATE_PATH = PROJECT_ROOT / "data" / ".xhs_token_backfill_state.json"
 DONE_MARKER = PROJECT_ROOT / "data" / ".xhs_token_backfill_done"
 def _resolve_xhs_bin() -> str:
@@ -128,11 +128,14 @@ def _find_token(data: dict | None, target_note_id: str) -> str | None:
 def _get_bare_rows(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
     cursor = conn.execute(
         """
-        SELECT bvid, content_id, title, content_url
-        FROM content_cache
-        WHERE content_url LIKE '%xiaohongshu.com/explore/%'
-          AND content_url NOT LIKE '%xsec_token=%'
-        ORDER BY discovered_at DESC
+        SELECT id AS bvid, id AS content_id, title, url AS content_url
+        FROM articles
+        WHERE source_type = 'xiaohongshu'
+          AND url LIKE '%xiaohongshu.com%'
+          AND url NOT LIKE '%xsec_token=%'
+          AND (content_text IS NULL OR content_text = '')
+          AND body_fetch_attempts < 3
+        ORDER BY created_at DESC
         LIMIT ?
         """,
         (limit,),
@@ -142,7 +145,7 @@ def _get_bare_rows(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
 
 def _update_row(conn: sqlite3.Connection, bvid: str, new_url: str) -> int:
     cursor = conn.execute(
-        "UPDATE content_cache SET content_url = ? WHERE bvid = ? AND content_url NOT LIKE '%xsec_token=%'",
+        "UPDATE articles SET url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND url NOT LIKE '%xsec_token=%'",
         (new_url, bvid),
     )
     conn.commit()
@@ -290,9 +293,12 @@ def main() -> int:
         if not args.dry_run:
             try:
                 remaining = conn.execute(
-                    "SELECT COUNT(*) FROM content_cache "
-                    "WHERE content_url LIKE '%xiaohongshu.com/explore/%' "
-                    "  AND content_url NOT LIKE '%xsec_token=%'"
+                    "SELECT COUNT(*) FROM articles "
+                    "WHERE source_type='xiaohongshu' "
+                    "  AND url LIKE '%xiaohongshu.com%' "
+                    "  AND url NOT LIKE '%xsec_token=%' "
+                    "  AND (content_text IS NULL OR content_text='') "
+                    "  AND body_fetch_attempts < 3"
                 ).fetchone()[0]
                 if remaining == 0:
                     DONE_MARKER.write_text(
