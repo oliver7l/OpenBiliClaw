@@ -169,6 +169,16 @@ miniprogram-album/utils/config.js
 #   · 12_开源项目研究/scripts/backfill.py ——种子回填脚本（代码），保持入库跟踪
 # 故此处不做整目录忽略，避免误伤 backfill.py。
 
+# 小火车英语启蒙（2026-09-18 自 002-探索项目/041-KidsEnglish 迁入统一编号）
+#   · 成品/原片 mp4（约 1G）不入库；build/ 只留构建脚本，其余（yt-dlp 下载残留、TTS 中间产物）忽略
+#   · build 脚本、播放器 HTML、方案 md 照常入库
+/13_KidsEnglish/**/*.mp4
+# 上方全局 build/ 规则会把目录本身也排除（目录被排除后其内容无法被 ! 救回），
+# 故先重新包含本目录，再排除其中非脚本内容：
+!13_KidsEnglish/build/
+13_KidsEnglish/build/*
+!/13_KidsEnglish/build/*.py
+
 # 根级杂项产物（2026-09-18 清理盘点时补）
 #   · 简历库打包备份（8.2MB，个人求职资料，同 /简历库/ 口径）
 #   · 下载残留的空归档、WorkBuddy 会话元数据文件

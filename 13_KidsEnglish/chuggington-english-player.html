@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚂 小火车英语课堂 · Chuggington English Player</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #bfe3ff 0%, #e8f6ff 40%, #fff7e0 100%);
+    min-height: 100vh; color: #2b3a4a;
+  }
+  .topbar {
+    background: #1e6bb8; color: #fff; padding: 10px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  .topbar h1 { font-size: 20px; }
+  .topbar .btns button {
+    background: #ffb347; border: none; color: #6b3d00; font-weight: bold;
+    padding: 8px 14px; border-radius: 20px; cursor: pointer; margin-left: 8px; font-size: 14px;
+  }
+  .topbar .btns button:hover { background: #ffc46b; }
+  .stage { max-width: 960px; margin: 20px auto; padding: 0 16px; }
+  .dropzone {
+    border: 3px dashed #7ab8e8; border-radius: 20px; background: rgba(255,255,255,.75);
+    padding: 60px 20px; text-align: center; cursor: pointer; transition: all .2s;
+  }
+  .dropzone:hover, .dropzone.drag { background: #fff; border-color: #1e6bb8; }
+  .dropzone .big { font-size: 56px; }
+  .dropzone h2 { margin: 12px 0 6px; font-size: 22px; }
+  .dropzone p { color: #5b7288; font-size: 14px; line-height: 1.7; }
+  #videoWrap { display: none; position: relative; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 6px 24px rgba(0,0,0,.18); background: #000; }
+  video { width: 100%; display: block; max-height: 70vh; }
+  /* ===== 单词卡覆盖层 ===== */
+  #cardOverlay {
+    position: absolute; inset: 0; display: none;
+    background: rgba(10, 30, 55, .55); backdrop-filter: blur(3px);
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  .wordcard {
+    background: #fff; border-radius: 28px; padding: 28px 36px; text-align: center;
+    width: min(520px, 88%); box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    border: 6px solid #ffb347; animation: pop .35s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes pop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .wordcard .emoji { font-size: 84px; line-height: 1; }
+  .wordcard .en { font-size: 52px; font-weight: 900; color: #1e6bb8; margin: 8px 0 2px; letter-spacing: 1px; }
+  .wordcard .zh { font-size: 26px; color: #444; margin-bottom: 6px; }
+  .wordcard .sentence { font-size: 18px; color: #7a8a99; font-style: italic; margin-bottom: 16px; }
+  .wordcard .row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .wordcard button {
+    font-size: 22px; font-weight: bold; border: none; border-radius: 999px;
+    padding: 14px 26px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,.15);
+    transition: transform .1s;
+  }
+  .wordcard button:active { transform: translateY(3px); box-shadow: none; }
+  .btn-sound { background: #ffd54f; color: #6b4d00; }
+  .btn-go { background: #4caf50; color: #fff; font-size: 26px !important; padding: 14px 34px !important; }
+  /* ===== 底部状态栏 ===== */
+  .statusbar {
+    display: none; margin-top: 12px; background: #fff; border-radius: 16px;
+    padding: 12px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  }
+  .statusbar .stars { font-size: 22px; letter-spacing: 2px; }
+  .statusbar .info { color: #5b7288; font-size: 14px; }
+  .statusbar .spacer { flex: 1; }
+  .statusbar select, .statusbar input[type=number] {
+    border: 1px solid #c8d8e8; border-radius: 10px; padding: 6px 10px; font-size: 14px;
+  }
+  /* ===== 词表抽屉 ===== */
+  #deckPanel {
+    display: none; position: fixed; right: 0; top: 0; bottom: 0; width: min(480px, 92vw);
+    background: #fff; z-index: 50; box-shadow: -6px 0 24px rgba(0,0,0,.2);
+    padding: 20px; overflow-y: auto;
+  }
+  #deckPanel h3 { margin-bottom: 10px; }
+  #deckPanel textarea {
+    width: 100%; height: 46vh; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    border: 2px solid #c8d8e8; border-radius: 12px; padding: 10px;
+  }
+  #deckPanel .hint { font-size: 12px; color: #7a8a99; margin: 8px 0; line-height: 1.6; }
+  #deckPanel .apply {
+    width: 100%; background: #1e6bb8; color: #fff; font-size: 18px; font-weight: bold;
+    border: none; border-radius: 12px; padding: 12px; cursor: pointer; margin-top: 8px;
+  }
+  #deckPanel .close { position: absolute; right: 16px; top: 14px; font-size: 26px; cursor: pointer; color: #888; border:none; background:none; }
+  /* ===== 复习模式 ===== */
+  #reviewModal {
+    position: fixed; inset: 0; background: rgba(10,30,55,.6); z-index: 60;
+    display: none; align-items: center; justify-content: center;
+  }
+  #reviewModal .wordcard { border-color: #4caf50; }
+  .toast {
+    position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+    background: #2b3a4a; color: #fff; padding: 10px 22px; border-radius: 999px;
+    font-size: 14px; z-index: 99; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>🚂 小火车英语课堂</h1>
+  <div class="btns">
+    <button onclick="openDeck()">📋 词表设置</button>
+    <button onclick="startReview()">⭐ 单词复习</button>
+    <button onclick="loadDemoVideo()">🎮 没有视频？试试演示</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="big">🚂💨</div>
+    <h2>把小火车的视频拖到这里，或者点击选择</h2>
+    <p>
+      支持 mp4 / webm / mov 等常见格式，视频只在本机播放，不会上传。<br>
+      播放过程中会在设定的时间点自动暂停，弹出英文单词卡片，读完可继续。<br>
+      💡 词表默认内置小火车主题单词（每 90 秒弹一张），可以在「词表设置」里改成精确到秒的自定义词表。
+    </p>
+    <input type="file" id="fileInput" accept="video/*" style="display:none">
+  </div>
+
+  <div id="videoWrap">
+    <video id="video" controls></video>
+    <div id="cardOverlay">
+      <div class="wordcard">
+        <div class="emoji" id="cEmoji">🚂</div>
+        <div class="en" id="cEn">train</div>
+        <div class="zh" id="cZh">火车</div>
+        <div class="sentence" id="cSent">The train goes chugga-chugga!</div>
+        <div class="row">
+          <button class="btn-sound" onclick="speakCurrent()">🔊 再听一遍</button>
+          <button class="btn-go" onclick="resumeVideo()">🚦 继续开车 ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar" id="statusbar">
+    <span class="stars" id="stars"></span>
+    <span class="info" id="progressInfo">已学 0 个单词</span>
+    <span class="spacer"></span>
+    <span class="info">弹卡间隔</span>
+    <select id="intervalSel" onchange="savePrefs()">
+      <option value="60">每 1 分钟</option>
+      <option value="90" selected>每 1.5 分钟</option>
+      <option value="120">每 2 分钟</option>
+      <option value="180">每 3 分钟</option>
+      <option value="0">不自动弹（按空格键手动弹）</option>
+    </select>
+    <span class="info">发音速度</span>
+    <select id="rateSel" onchange="savePrefs()">
+      <option value="0.7">慢速 🐢</option>
+      <option value="0.85" selected>正常</option>
+      <option value="1">原速</option>
+    </select>
+  </div>
+</div>
+
+<div id="deckPanel">
+  <button class="close" onclick="closeDeck()">✕</button>
+  <h3>📋 词表设置</h3>
+  <p class="hint">
+    两种模式：<br>
+    <b>① 自动模式（默认）</b>：不填时间点，按下方「弹卡间隔」每隔一段时间随机弹卡；<br>
+    <b>② 精确模式</b>：给每个词填 <code>t</code>（视频秒数），到点精准弹出。<br>
+    JSON 数组，每项字段：<code>t</code>秒(可省)、<code>en</code>英文、<code>zh</code>中文、<code>emoji</code>表情、<code>say</code>朗读句(可省)。
+  </p>
+  <textarea id="deckText" spellcheck="false"></textarea>
+  <button class="apply" onclick="applyDeck()">✅ 保存词表</button>
+  <button class="apply" style="background:#5b7288;margin-top:6px" onclick="resetDeck()">↩️ 恢复默认词表</button>
+</div>
+
+<div id="reviewModal">
+  <div class="wordcard">
+    <div class="emoji" id="rEmoji">⭐</div>
+    <div class="en" id="rEn"></div>
+    <div class="zh" id="rZh"></div>
+    <div class="sentence" id="rSent"></div>
+    <div class="row">
+      <button class="btn-sound" onclick="speakReview()">🔊 听发音</button>
+      <button class="btn-go" onclick="nextReview()">下一个 ▶</button>
+      <button class="btn-sound" style="background:#e0e6ec;color:#444" onclick="closeReview()">✕ 退出复习</button>
+    </div>
+    <p style="margin-top:12px;color:#9aa8b5;font-size:14px" id="rCount"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ================= 默认词表（小火车主题，4岁启蒙高频词） =================
+const DEFAULT_DECK = [
+  { en: "train",   zh: "火车",   emoji: "🚂", say: "Chugga chugga choo choo! The train!" },
+  { en: "station", zh: "车站",   emoji: "🏠", say: "Welcome to the station!" },
+  { en: "tunnel",  zh: "隧道",   emoji: "🕳️", say: "Through the tunnel!" },
+  { en: "bridge",  zh: "桥",     emoji: "🌉", say: "Cross the bridge!" },
+  { en: "tracks",  zh: "铁轨",   emoji: "🛤️", say: "Stay on the tracks!" },
+  { en: "wheels",  zh: "车轮",   emoji: "🛞", say: "The wheels go round and round!" },
+  { en: "whistle", zh: "汽笛",   emoji: "📢", say: "Toot toot! Hear the whistle!" },
+  { en: "fast",    zh: "快",     emoji: "💨", say: "Go, go, go! So fast!" },
+  { en: "slow",    zh: "慢",     emoji: "🐢", say: "Slow and steady!" },
+  { en: "stop",    zh: "停",     emoji: "✋", say: "Stop! Red light!" },
+  { en: "go",      zh: "出发",   emoji: "🟢", say: "Green light! Let's go!" },
+  { en: "help",    zh: "帮忙",   emoji: "🆘", say: "Can you help me, please?" },
+  { en: "friend",  zh: "朋友",   emoji: "🤝", say: "Wilson, Koko and Brewster are friends!" },
+  { en: "cargo",   zh: "货物",   emoji: "📦", say: "Carry the heavy cargo!" },
+  { en: "engine",  zh: "发动机", emoji: "⚙️", say: "The engine goes vroom!" },
+  { en: "honor",   zh: "徽章",   emoji: "🎖️", say: "You earned a badge! Great job!", zh: "奖章" },
+  { en: "water",   zh: "水",     emoji: "💧", say: "The train needs water!" },
+  { en: "night",   zh: "夜晚",   emoji: "🌙", say: "Good night, little trains!" },
+  { en: "hello",   zh: "你好",   emoji: "👋", say: "Hello! Nice to see you!" },
+  { en: "thank you", zh: "谢谢", emoji: "😊", say: "Thank you very much!" }
+];
+
+// ================= 状态 =================
+let deck = loadDeck();
+let learned = JSON.parse(localStorage.getItem("ke_learned") || "{}");
+let prefs = JSON.parse(localStorage.getItem("ke_prefs") || "{}");
+let nextPopTime = 0;         // 下次自动弹卡时间（秒）
+let currentWord = null;      // 当前弹卡单词
+let reviewList = [], reviewIdx = 0;
+let firedIdx = new Set();    // 已触发的精确时间点
+
+const video = document.getElementById("video");
+const overlay = document.getElementById("cardOverlay");
+const $ = id => document.getElementById(id);
+
+// ================= 工具 =================
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 2200);
+}
+function savePrefs() {
+  prefs.interval = +$("intervalSel").value;
+  prefs.rate = +$("rateSel").value;
+  localStorage.setItem("ke_prefs", JSON.stringify(prefs));
+}
+function loadDeck() {
+  try { const d = JSON.parse(localStorage.getItem("ke_deck")); if (Array.isArray(d) && d.length) return d; } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DECK));
+}
+function saveDeck(d) { localStorage.setItem("ke_deck", JSON.stringify(d)); deck = d; }
+function updateStars() {
+  const n = Object.keys(learned).length;
+  $("stars").textContent = "⭐".repeat(Math.min(n, 20)) || "☆";
+  $("progressInfo").textContent = `已学 ${n} 个单词`;
+}
+
+// ================= 发音（Web Speech API，本地免费） =================
+function speak(text, rate) {
+  if (!("speechSynthesis" in window)) { toast("当前浏览器不支持朗读，建议用 Chrome / Edge"); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US"; u.rate = rate || (prefs.rate || 0.85);
+  const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
+  // 优先选发音自然的女声/儿童向声音
+  const pick = vs.find(v => /Samantha|Aria|Zira|Google US|Karen|Moira/.test(v.name)) || vs[0];
+  if (pick) u.voice = pick;
+  speechSynthesis.speak(u);
+}
+function speakCurrent() { if (currentWord) speak(currentWord.say || currentWord.en); }
+function speakReview()  { const w = reviewList[reviewIdx]; if (w) speak(w.say || w.en); }
+
+// ================= 弹卡逻辑 =================
+function showCard(word) {
+  currentWord = word;
+  video.pause();
+  $("cEmoji").textContent = word.emoji || "⭐";
+  $("cEn").textContent = word.en;
+  $("cZh").textContent = word.zh || "";
+  $("cSent").textContent = word.say || "";
+  overlay.style.display = "flex";
+  learned[word.en] = (learned[word.en] || 0) + 1;
+  localStorage.setItem("ke_learned", JSON.stringify(learned));
+  updateStars();
+  setTimeout(() => speak(word.say || word.en, Math.max(0.6, (prefs.rate || 0.85) - 0.1)), 350);
+  scheduleNext();
+}
+function resumeVideo() {
+  overlay.style.display = "none";
+  if (video.src) video.play();
+}
+function scheduleNext() {
+  const interval = prefs.interval !== undefined ? prefs.interval : 90;
+  nextPopTime = interval > 0 ? video.currentTime + interval : Infinity;
+}
+video.addEventListener("timeupdate", () => {
+  if (overlay.style.display === "flex" || !video.src) return;
+  // 精确模式：到点触发
+  deck.forEach((w, i) => {
+    if (typeof w.t === "number" && !firedIdx.has(i) && video.currentTime >= w.t) {
+      firedIdx.add(i); showCard(w);
+    }
+  });
+  // 自动模式：到间隔触发
+  if (video.currentTime >= nextPopTime) {
+    const pool = deck.filter(w => typeof w.t !== "number");
+    if (pool.length) showCard(pool[Math.floor(Math.random() * pool.length)]);
+    else scheduleNext();
+  }
+});
+video.addEventListener("keydown", e => {
+  if (e.code === "Space" && overlay.style.display !== "flex") {
+    e.preventDefault();
+    const pool = deck.filter(w => typeof w.t !== "number");
+    if (pool.length) showCard(pool[Math.floor(Math.random() * pool.length)]);
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") {
+    if (overlay.style.display === "flex") { e.preventDefault(); resumeVideo(); }
+    else if (video.src && document.activeElement === document.body) {
+      e.preventDefault();
+      const pool = deck.filter(w => typeof w.t !== "number");
+      if (pool.length) showCard(pool[Math.floor(Math.random() * pool.length)]);
+    }
+  }
+  if (e.code === "Enter" && overlay.style.display === "flex") { e.preventDefault(); resumeVideo(); }
+});
+
+// ================= 加载视频 =================
+function mountVideo(src, name) {
+  video.src = src;
+  $("dropzone").style.display = "none";
+  $("videoWrap").style.display = "block";
+  $("statusbar").style.display = "flex";
+  firedIdx.clear();
+  scheduleNext();
+  toast("🚂 装货完成：" + name + "，按播放开始学英语！");
+  video.play().catch(()=>{});
+}
+$("fileInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (f) mountVideo(URL.createObjectURL(f), f.name);
+});
+const dz = $("dropzone");
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+dz.addEventListener("drop", e => {
+  e.preventDefault(); dz.classList.remove("drag");
+  const f = [...e.dataTransfer.files].find(f => f.type.startsWith("video/"));
+  if (f) mountVideo(URL.createObjectURL(f), f.name);
+});
+
+// 演示视频：使用公开测试视频（Big Buck Bunny 片段）
+function loadDemoVideo() {
+  mountVideo("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4", "演示视频（10秒）");
+  toast("演示视频只有10秒，主要用来体验弹卡效果");
+}
+
+// ================= 词表面板 =================
+function openDeck() {
+  $("deckText").value = JSON.stringify(deck, null, 2);
+  $("deckPanel").style.display = "block";
+}
+function closeDeck() { $("deckPanel").style.display = "none"; }
+function applyDeck() {
+  try {
+    const d = JSON.parse($("deckText").value);
+    if (!Array.isArray(d) || !d.length) throw new Error("必须是含单词的数组");
+    for (const w of d) {
+      if (!w.en) throw new Error("每个词都要有 en 字段");
+      w.emoji = w.emoji || "⭐"; w.zh = w.zh || ""; w.say = w.say || w.en;
+    }
+    saveDeck(d); firedIdx.clear(); scheduleNext(); closeDeck();
+    toast("✅ 词表已保存（" + d.length + " 个词）");
+  } catch(err) { alert("词表格式有误：" + err.message); }
+}
+function resetDeck() {
+  saveDeck(JSON.parse(JSON.stringify(DEFAULT_DECK)));
+  $("deckText").value = JSON.stringify(deck, null, 2);
+  firedIdx.clear(); toast("已恢复默认词表");
+}
+
+// ================= 复习模式 =================
+function startReview() {
+  reviewList = deck.filter(w => learned[w.en]);
+  if (!reviewList.length) { toast("还没有学过单词，先看视频吧！"); return; }
+  reviewIdx = 0; showReview();
+  $("reviewModal").style.display = "flex";
+}
+function showReview() {
+  const w = reviewList[reviewIdx];
+  $("rEmoji").textContent = w.emoji; $("rEn").textContent = w.en;
+  $("rZh").textContent = w.zh; $("rSent").textContent = w.say || "";
+  $("rCount").textContent = `第 ${reviewIdx + 1} / ${reviewList.length} 个`;
+  setTimeout(() => speak(w.say || w.en, Math.max(0.6, (prefs.rate || 0.85) - 0.1)), 300);
+}
+function nextReview() {
+  reviewIdx = (reviewIdx + 1) % reviewList.length;
+  showReview();
+}
+function closeReview() { $("reviewModal").style.display = "none"; speechSynthesis.cancel(); }
+
+// ================= 初始化 =================
+$("intervalSel").value = prefs.interval !== undefined ? prefs.interval : 90;
+$("rateSel").value = prefs.rate !== undefined ? prefs.rate : 0.85;
+updateStars();
+if ("speechSynthesis" in window) speechSynthesis.getVoices(); // 预热声音列表
+</script>
+</body>
+</html>
