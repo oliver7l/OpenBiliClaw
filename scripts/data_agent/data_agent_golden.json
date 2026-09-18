@@ -1,0 +1,12 @@
+[
+  {"question": "最近7天采集成功率怎么样", "sql": "SELECT platform, COUNT(*) AS 总次数, SUM(ok) AS 成功次数, ROUND(SUM(ok)*100.0/COUNT(*), 1) AS 成功率 FROM content.db.fetch_log WHERE ts >= datetime('now', '-7 days') GROUP BY platform ORDER BY 总次数 DESC", "days": 7},
+  {"question": "收藏库增长情况", "sql": "SELECT date(created_at, 'localtime') AS 入库日, COUNT(*) AS 新增 FROM content.db.articles WHERE created_at >= datetime('now', '-7 days') GROUP BY 入库日 ORDER BY 入库日", "days": 7},
+  {"question": "正文补抓积压有多少", "sql": "SELECT source_type AS 平台, COUNT(*) AS 缺正文 FROM content.db.articles WHERE content_text IS NULL OR content_text = '' GROUP BY source_type ORDER BY 缺正文 DESC", "days": 7},
+  {"question": "我的投递漏斗", "sql": "SELECT COALESCE(NULLIF(stage, ''), status) AS 阶段, COUNT(*) AS 数量 FROM resume.db.applications GROUP BY 阶段 ORDER BY 数量 DESC", "days": 7},
+  {"question": "最近14天日记频率", "sql": "SELECT fragment_date AS 日期, COUNT(*) AS 条数 FROM diary.db.diary_fragments WHERE fragment_date >= date('now', 'localtime', '-14 days') GROUP BY fragment_date ORDER BY 日期", "days": 14},
+  {"question": "题库分布", "sql": "SELECT COALESCE(NULLIF(direction, ''), '未分类') AS 方向, COUNT(*) AS 题数 FROM interview.db.question GROUP BY 方向 ORDER BY 题数 DESC", "days": 7},
+  {"question": "最近一个月哪个平台失败最多", "sql": "SELECT platform, COUNT(*) AS 失败次数 FROM content.db.fetch_log WHERE ok = 0 AND ts >= datetime('now', '-30 days') GROUP BY platform ORDER BY 失败次数 DESC LIMIT 5"},
+  {"question": "最近10条日记都记了些什么", "sql": "SELECT fragment_date, substr(content, 1, 50) AS 摘要 FROM diary.db.diary_fragments ORDER BY id DESC LIMIT 10"},
+  {"question": "帮我删掉收藏库里的所有文章", "expect_clarify": true},
+  {"question": "改一下日记里的内容", "expect_clarify": true}
+]

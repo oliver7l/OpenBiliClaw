@@ -1,0 +1,3795 @@
+{
+ "generated_at": "2026-09-17 08:40:17",
+ "dbs": {
+  "content.db": {
+   "tables": {
+    "articles": {
+     "rows": 91017,
+     "desc": "阅读收藏库主表：收藏的文章/视频，一行一篇（含小红书/V2EX/知乎/B站/公众号）",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_type",
+       "type": "TEXT",
+       "note": "来源平台：xiaohongshu/v2ex/zhihu/bilibili/youtube/wechat 等"
+      },
+      {
+       "name": "source_name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "author",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_text",
+       "type": "TEXT",
+       "note": "正文全文（空=正文还没补抓成功）"
+      },
+      {
+       "name": "published_at",
+       "type": "TEXT",
+       "note": "原始发布时间（TEXT，可为空）"
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": "入库时间（UTC）"
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": "JSON 数组字符串，如 '[\"Agent\",\"推荐\"]'"
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": "阅读状态：unread 未读 / read 已读（口径：收藏后读完= status='read'）"
+      },
+      {
+       "name": "body_fetch_attempts",
+       "type": "INTEGER",
+       "note": "正文补抓尝试次数"
+      },
+      {
+       "name": "reading_percent",
+       "type": "REAL",
+       "note": "阅读进度百分比 0~100"
+      },
+      {
+       "name": "reading_progress",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "favorited",
+       "type": "INTEGER",
+       "note": "1=标星"
+      },
+      {
+       "name": "ai_summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_hash",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_cleaned",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_clean_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "content_clean_log",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_verified",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "content_verify_result",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary_detailed",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary_compact",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary_ultra_compact",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary_quality",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "summary_version",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "summary_generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic_group",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "article_entities": {
+     "rows": 1226,
+     "desc": "",
+     "columns": [
+      {
+       "name": "article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entity_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "relevance",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "context",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "article_notes": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "quote",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "color",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "article_relations": {
+     "rows": 200,
+     "desc": "",
+     "columns": [
+      {
+       "name": "article_id_a",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "article_id_b",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "relation_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "article_snapshots": {
+     "rows": 20,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_html",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "fetch_source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "fetched_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "article_tldrs": {
+     "rows": 1566,
+     "desc": "",
+     "columns": [
+      {
+       "name": "article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "key_points_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "conclusion",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "reading_minutes",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "word_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "model",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "favorites": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "bvid",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "added_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "watch_later": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "bvid",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "added_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "fetch_log": {
+     "rows": 23,
+     "desc": "采集线抓取流水日志：每次 fetch 一行，体检/成功率分析的源表",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "ts",
+       "type": "TEXT",
+       "note": "发生时间 TEXT（ISO 格式，UTC）"
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "platform",
+       "type": "TEXT",
+       "note": "目标平台：v2ex/zhihu/xhs/generic 等"
+      },
+      {
+       "name": "channel",
+       "type": "TEXT",
+       "note": "通道名：v2ex-mindback/v2ex-scrapling/agentlimb-text 等（降级链）"
+      },
+      {
+       "name": "ok",
+       "type": "INTEGER",
+       "note": "1=成功 0=失败（口径：成功率 = SUM(ok)*100/COUNT(*))"
+      },
+      {
+       "name": "error_kind",
+       "type": "TEXT",
+       "note": "失败类别：parse/cf_challenge/timeout/proxy 等；成功时为空"
+      },
+      {
+       "name": "latency_ms",
+       "type": "INTEGER",
+       "note": "耗时毫秒"
+      },
+      {
+       "name": "detail",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    }
+   }
+  },
+  "diary.db": {
+   "tables": {
+    "diary_advanced_memories": {
+     "rows": 134,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "layer",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "importance",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "access_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "last_accessed",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "metadata",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_analyses": {
+     "rows": 27,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "key_points",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "emotions",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "themes",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "people_mentioned",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "growth_insight",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "mood_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "model_used",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_belief_conflicts": {
+     "rows": 0,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "belief_a_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "belief_b_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "conflict_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "resolution",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "detected_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "resolved_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_beliefs": {
+     "rows": 0,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "evidence_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "first_seen",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_seen",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "version",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "parent_belief_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_consolidation_logs": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "consolidated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "entries_processed",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entries_promoted",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entries_demoted",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entries_archived",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entries_forgotten",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "beliefs_updated",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "conflicts_detected",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "lessons_validated",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "lessons_disputed",
+       "type": "INTEGER",
+       "note": ""
+      }
+     ]
+    },
+    "diary_drift_events": {
+     "rows": 0,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "drift_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "drift_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "severity",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "evidence_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "current_value",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "previous_value",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "change_percent",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "detected_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_embedding_chunks": {
+     "rows": 5,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entry_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "chunk_index",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "chunk_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "vector",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "model",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "dimension",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_embeddings": {
+     "rows": 925,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entry_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "vector",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "model",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "dimension",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_emotion_analyses": {
+     "rows": 925,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "valence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "arousal",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "emotion_label",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "evidence",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_entries": {
+     "rows": 928,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entry_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "mood",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "mood_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "word_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "analysis_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_entry_persons": {
+     "rows": 739,
+     "desc": "",
+     "columns": [
+      {
+       "name": "entry_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "person_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "context",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_entry_tags": {
+     "rows": 1922,
+     "desc": "",
+     "columns": [
+      {
+       "name": "entry_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "tag_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_fragments": {
+     "rows": 29,
+     "desc": "日记碎片：随手记录的想法/事件/观察，一行一条",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "mood",
+       "type": "TEXT",
+       "note": "情绪：hopeful/reflective/thoughtful/tired 等"
+      },
+      {
+       "name": "fragment_date",
+       "type": "TEXT",
+       "note": "归属日期 YYYY-MM-DD（本地日期）"
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": "来源：im=聊天随手说 / manual / voice"
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "fragment_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "media_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "media_description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": "JSON 数组字符串"
+      }
+     ]
+    },
+    "diary_insight_patterns": {
+     "rows": 24,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "pattern_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "evidence",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "severity",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "detected_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_lessons": {
+     "rows": 448,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "first_seen",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_validated",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "validation_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "dispute_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_memory_entries": {
+     "rows": 925,
+     "desc": "",
+     "columns": [
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "memory_tier",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "importance_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "access_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "last_accessed",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "compressed_summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "entities",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "emotion_intensity",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_morning_briefings": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "briefing_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_nightly_logs": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "log_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "log_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_open_loops": {
+     "rows": 123,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "loop_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "loop_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_mentioned_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "mention_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "related_entries",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "priority",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_persons": {
+     "rows": 10,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "aliases",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "relation",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "first_appeared",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_appeared",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "appearance_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_tag_optimizations": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "optimization_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "optimization_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_tags": {
+     "rows": 27,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_timeline_cards": {
+     "rows": 4861,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "diary_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "card_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "entry_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "entities",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "importance",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "metadata",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "diary_user_profiles": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "profile_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "profile_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "total_entries",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "diary_fts5": {
+     "rows": 928,
+     "desc": "",
+     "columns": [
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    }
+   }
+  },
+  "interview.db": {
+   "tables": {
+    "interview_reviews": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "position",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "interview_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "round",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "result",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "duration_min",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "transcript_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "transcript_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "audio_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "ai_evaluation",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "key_questions",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "self_assessment",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "emotional_review",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "technical_review",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "action_items",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "emotion_level",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "interview_questions": {
+     "rows": 199,
+     "desc": "面试实录中被问到的题（复盘来源）",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "position",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "question",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "answer",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "want_to_hear",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "idx",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "interview_questions_fts_content": {
+     "rows": 199,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "c0",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "c1",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "ammo_doc": {
+     "rows": 151,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "kind",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "rel_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "char_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "mtime",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "ammo_fts_content": {
+     "rows": 151,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "c0",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "c1",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "c2",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "concept": {
+     "rows": 33,
+     "desc": "",
+     "columns": [
+      {
+       "name": "concept",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "ctype",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "related",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "relation",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "numbers",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_doc",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "log": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "round",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "interviewer",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "asked",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "review",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "review_doc",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "number": {
+     "rows": 60,
+     "desc": "",
+     "columns": [
+      {
+       "name": "value",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "metric",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company_project",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "ingested_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "project": {
+     "rows": 24,
+     "desc": "",
+     "columns": [
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "stack",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "numbers",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "talking_points",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "question": {
+     "rows": 25,
+     "desc": "刷题题库：面试题/知识点，topic 是题目文本",
+     "columns": [
+      {
+       "name": "topic",
+       "type": "TEXT",
+       "note": "题目内容"
+      },
+      {
+       "name": "direction",
+       "type": "TEXT",
+       "note": "方向：推荐/广告/NLP/Agent 等"
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": "关联公司（可空）"
+      },
+      {
+       "name": "answer_loc",
+       "type": "TEXT",
+       "note": "答案位置/出处"
+      }
+     ]
+    },
+    "ammo_reading": {
+     "rows": 1,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "interview_rebuttals": {
+     "rows": 23,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "question",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "purpose",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "priority",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "used_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "interview_recordings": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "round",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "interview_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "audio_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "transcript_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "duration_sec",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "key_points",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "interview_scripts": {
+     "rows": 116,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "position",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "key_points",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "priority",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "used_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "todo": {
+     "rows": 24,
+     "desc": "面试/跟进待办：kind=interview 是面试，followup 是投递跟进",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "detail",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": "关联公司"
+      },
+      {
+       "name": "due_date",
+       "type": "TEXT",
+       "note": "截止/面试日期 YYYY-MM-DD"
+      },
+      {
+       "name": "priority",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": "pending 待办 / done 完成"
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "done_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "kind",
+       "type": "TEXT",
+       "note": "类型：interview/followup"
+      }
+     ]
+    }
+   }
+  },
+  "resume.db": {
+   "tables": {
+    "applications": {
+     "rows": 21,
+     "desc": "投递台账：一公司一岗一行，求职漏斗的源表",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": "公司名"
+      },
+      {
+       "name": "role",
+       "type": "TEXT",
+       "note": "岗位名"
+      },
+      {
+       "name": "interview_at",
+       "type": "TEXT",
+       "note": "下次面试时间 TEXT"
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": "状态：active/已终止/offer 等"
+      },
+      {
+       "name": "direction",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "prep_dir",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "resume_ver",
+       "type": "TEXT",
+       "note": "自由文本简历版本（旧字段，逐渐被 resume_file_id 替代）"
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "interview_start_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "round_note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "stage",
+       "type": "TEXT",
+       "note": "阶段：投递/一面/二面/HR面/已终止"
+      },
+      {
+       "name": "resume_file_id",
+       "type": "INTEGER",
+       "note": "关联 resume_files.id（sha256 级文件索引）"
+      }
+     ]
+    },
+    "job_postings": {
+     "rows": 71,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "bg",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "city",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "years_required",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "education",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "salary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "department",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "job_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "job_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "requirements",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "match_score",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "match_points",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "resume_version",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "applied_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "interview_stage",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "resume_texts": {
+     "rows": 29,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "position_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "target_position",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "version_name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "full_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "highlights",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "matched_keywords",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "file_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "match_score",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "docx_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "job_id",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "companies": {
+     "rows": 41,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "job_ammo": {
+     "rows": 96,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "application_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "kind",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "rel_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "resume_files": {
+     "rows": 304,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "rel_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "company",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "position",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "version_date",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "ext",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "size",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "sha256",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "indexed_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    }
+   }
+  },
+  "pool.db": {
+   "tables": {
+    "content_cache": {
+     "rows": 84450,
+     "desc": "推荐内容池缓存：抓来的候选内容",
+     "columns": [
+      {
+       "name": "bvid",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "up_name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "up_mid",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "duration",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic_key",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "style_key",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "franchise_key",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "cover_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "view_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "like_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "favorite_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "collect_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "comment_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "share_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "danmaku_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "reply_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "retweet_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "bookmark_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "relevance_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "relevance_reason",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "pool_expression",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "pool_topic_label",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "candidate_tier",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "discovered_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "last_scored_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "notification_sent",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "notified_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "pool_status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "recommended_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "feedback_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "feedback_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "body_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_keyword_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "topic_group",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "delight_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "delight_reason",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "delight_hook",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "delight_notified",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "delight_notified_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "content_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_platform",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "author_name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "quality_score",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "quality_reason",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "recommendations": {
+     "rows": 158796,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "bvid",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "expression",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "presented",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "feedback",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "feedback_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "feedback_note",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "presented_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "feedback_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "clicked_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "user_feedback": {
+     "rows": 2,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "bvid",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "action",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_platform",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic_group",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "body_text",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "xhs_observed_urls": {
+     "rows": 6797,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "page_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "observed_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "enriched",
+       "type": "INTEGER",
+       "note": ""
+      }
+     ]
+    }
+   }
+  },
+  "knowledge.db": {
+   "tables": {
+    "content_insights_reports": {
+     "rows": 3,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "report_json",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "entities": {
+     "rows": 774,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "article_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "first_seen_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_updated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "metadata",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "entity_relations": {
+     "rows": 4712,
+     "desc": "",
+     "columns": [
+      {
+       "name": "entity_id_a",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "entity_id_b",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "relation_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "confidence",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "co_occur",
+       "type": "INTEGER",
+       "note": ""
+      }
+     ]
+    },
+    "insight_reports": {
+     "rows": 9,
+     "desc": "",
+     "columns": [
+      {
+       "name": "report_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "period_start",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "period_end",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "window_days",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "report_json",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "knowledge_backlinks": {
+     "rows": 0,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_site",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "target_concept",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "target_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "target_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "context_snippet",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "knowledge_cards": {
+     "rows": 1551,
+     "desc": "知识卡片库",
+     "columns": [
+      {
+       "name": "card_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "card_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "front",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "back",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "difficulty",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "quality",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "ease_factor",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "interval_days",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "repetitions",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "next_review",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "last_reviewed",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "knowledge_concepts": {
+     "rows": 0,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "concept",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "concept_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_site",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_article_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "source_article_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "context_snippet",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "knowledge_graph": {
+     "rows": 6,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "generated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "graph_json",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    },
+    "learning_paths": {
+     "rows": 2,
+     "desc": "",
+     "columns": [
+      {
+       "name": "path_id",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "steps_json",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "progress",
+       "type": "REAL",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "total_estimated_minutes",
+       "type": "INTEGER",
+       "note": ""
+      }
+     ]
+    },
+    "topic_items": {
+     "rows": 3099,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "topic_id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "content_key",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "title",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_platform",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "cover_url",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "summary",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "topic_label",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "collected_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "topics": {
+     "rows": 10,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "name",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "slug",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "description",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "keywords",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "platforms",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "item_count",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "updated_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      },
+      {
+       "name": "last_collected_at",
+       "type": "TIMESTAMP",
+       "note": ""
+      }
+     ]
+    },
+    "kb_documents": {
+     "rows": 698,
+     "desc": "",
+     "columns": [
+      {
+       "name": "id",
+       "type": "INTEGER",
+       "note": ""
+      },
+      {
+       "name": "topic",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "category",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "chapter",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "content",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "tags",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "source_path",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "doc_type",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "updated",
+       "type": "TEXT",
+       "note": ""
+      },
+      {
+       "name": "created_at",
+       "type": "TEXT",
+       "note": ""
+      }
+     ]
+    }
+   }
+  }
+ }
+}
