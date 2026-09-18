@@ -45,8 +45,8 @@ from openbiliclaw.travel.md_parser import (  # noqa: E402
     parse_document,
 )
 
-DEFAULT_DB = PROJECT_ROOT / "data" / "travel.db"
-DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "travel"
+DEFAULT_DB = PROJECT_ROOT / "10_旅游" / "travel.db"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "10_旅游"
 
 OPTIONAL_SECTIONS = ("expenses", "checklist", "trip")
 

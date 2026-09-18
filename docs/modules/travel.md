@@ -14,9 +14,13 @@
 
 | 来源 | 位置 | 充当什么角色 |
 |---|---|---|
-| `data/travel.db` | SQLite（8 张表） | **派生视图 + 独有可变状态**（清单勾选、身份证号） |
-| `data/travel/*.md` | Markdown（10 篇） | **内容真值源**（「最终定稿」那一篇定全局） |
-| `data/travel/ctrip-ticket-crawler/*.json` | 爬虫产物 | 机票比价（实时低价 vs 心理价位） |
+| `10_旅游/travel.db` | SQLite（8 张表） | **派生视图 + 独有可变状态**（清单勾选、身份证号） |
+| `10_旅游/*.md` | Markdown（10 篇） | **内容真值源**（「最终定稿」那一篇定全局） |
+| `10_旅游/ctrip-ticket-crawler/*.json` | 爬虫产物 | 机票比价（实时低价 vs 心理价位） |
+
+> 2026-09-18 起数据目录从 `data/travel/` 迁至项目根 `10_旅游/`（编号工作区，
+> 与 `01_`~`09_` 口径一致，个人旅行资料不入 git）。`TravelConfig` 默认值与
+> `scripts/travel/build_travel_db.py` 默认常量均已同步。
 
 ---
 
@@ -42,8 +46,8 @@
 
 ```toml
 [travel]
-data_path    = "data/travel"                                  # md 目录，禁止留空
-db_path      = "data/travel.db"
+data_path    = "10_旅游"                                       # md 目录，禁止留空
+db_path      = "10_旅游/travel.db"
 budget_doc   = "新疆旅行预算.md"
 flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 ```
@@ -85,7 +89,7 @@ flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 .venv/bin/python scripts/travel/build_travel_db.py --apply
 
 # 换源 / 换库 / 换行程
-.venv/bin/python scripts/travel/build_travel_db.py --md data/travel/xxx.md --db /tmp/t.db --trip-id 1
+.venv/bin/python scripts/travel/build_travel_db.py --md 10_旅游/xxx.md --db /tmp/t.db --trip-id 1
 
 # 范围控制
 .venv/bin/python scripts/travel/build_travel_db.py --only hotels
@@ -99,8 +103,8 @@ flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 
 | 参数 | 默认 | 作用 |
 |---|---|---|
-| `--md` | `data/travel` 下首个名字含「定稿」的 md | 源 Markdown |
-| `--db` | `data/travel.db` | 目标库 |
+| `--md` | `10_旅游` 下首个名字含「定稿」的 md | 源 Markdown |
+| `--db` | `10_旅游/travel.db` | 目标库 |
 | `--trip-id` | `trips` 里 id 最小的 | 写到哪个行程（**不自动新建**） |
 | `--mode` | `dry-run` | `apply` 才真写 |
 | `--only` | — | 只同步这几张表（可重复） |
@@ -191,7 +195,7 @@ node 可直接 `require`，测试用 `node -e` 真跑断言，**不用 grep 源�
 
 ---
 
-## 7. Schema（`data/travel.db`）
+## 7. Schema（`10_旅游/travel.db`）
 
 ```
 trips         id, title, destination, start_date, end_date, people_count, status, budget, notes

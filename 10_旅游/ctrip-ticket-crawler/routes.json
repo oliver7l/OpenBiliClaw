@@ -1,0 +1,11 @@
+{
+  "routes": [
+    {"dep": "CKG", "arr": "YTY"}
+  ],
+  "interval_minutes": 60,
+  "days": 7,
+  "start_offset": 0,
+  "include_transfer": false,
+  "include_shared": false,
+  "db": "flights.db"
+}

@@ -548,10 +548,10 @@ satisfaction_filter_enabled = true
 
 [travel]
 # 旅行预算模块：指向存放预算文档和机票爬虫结果的目录。
-# 相对路径按项目根解析；留空会回退到内置默认值 data/travel（不再退化成 404）。
-data_path = "data/travel"
+# 相对路径按项目根解析；留空会回退到内置默认值 10_旅游（不再退化成 404）。
+data_path = "10_旅游"
 # SQLite 行程库。相对路径同样按项目根解析。
-db_path = "data/travel.db"
+db_path = "10_旅游/travel.db"
 # 预算文档文件名（相对 data_path）
 budget_doc = "新疆旅行预算.md"
 # 机票实时价格 JSON（相对 data_path）

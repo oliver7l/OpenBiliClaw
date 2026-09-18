@@ -731,8 +731,8 @@ class TravelConfig:
       ``_project_root()/"data"/"travel.db"``，改数据目录时会静默读错库。
     """
 
-    data_path: str = "data/travel"
-    db_path: str = "data/travel.db"
+    data_path: str = "10_旅游"
+    db_path: str = "10_旅游/travel.db"
     budget_doc: str = "新疆旅行预算.md"
     flights_json: str = "ctrip-ticket-crawler/our_routes_results.json"
 

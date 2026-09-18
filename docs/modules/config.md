@@ -605,13 +605,15 @@ download_dir = ""
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
-| `data_path` | string | `""` | 旅行数据目录；留空则 travel tab 显示"未配置数据目录" |
+| `data_path` | string | `"10_旅游"` | 旅行数据目录；留空则 travel tab 显示"未配置数据目录" |
+| `db_path` | string | `"10_旅游/travel.db"` | 行程 SQLite 库（相对项目根） |
 | `budget_doc` | string | `"新疆旅行预算.md"` | 预算文档文件名（相对 `data_path`） |
 | `flights_json` | string | `"ctrip-ticket-crawler/our_routes_results.json"` | 机票实时价格 JSON（相对 `data_path`） |
 
 ```toml
 [travel]
-data_path = "data/travel"
+data_path = "10_旅游"
+db_path = "10_旅游/travel.db"
 budget_doc = "新疆旅行预算.md"
 flights_json = "ctrip-ticket-crawler/our_routes_results.json"
 ```
