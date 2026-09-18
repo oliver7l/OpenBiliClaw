@@ -1,7 +1,7 @@
 # 乐仔成长相册模块（lezai）
 
 > **真值源铁律**：照片数据（原图、识别模型、分类目录）的真值源在外部
-> 源库（夸克网盘「乐仔相片库」），本模块只是**发布视图**。不要在本项目里
+> 源库（项目内 `08_乐仔相册/乐仔相片库`，2026-09-18 自 030-夸克网盘迁入），本模块只是**发布视图**。不要在本项目里
 > 改照片/分类——要改就改源库，再同步过来。
 
 ---
@@ -36,7 +36,7 @@
 | 模块代码 | `src/openbiliclaw/lezai/` | `paths.py`（锚点）+ `sync.py`（同步）+ `__main__.py`（CLI） |
 | 页面资产 | `src/openbiliclaw/web/lezai/` | index.html 等 7 个轻量文件，**随包入 git** |
 | 缩略图 | `src/openbiliclaw/web/lezai/thumbs/` | 个人照片数据，**.gitignore 排除**（同 `web/clone/sites/` 先例） |
-| 外部源库 | `/Volumes/固态硬盘1T/002-探索项目/030-夸克网盘/乐仔相片库/` | 真值源；可用 `OBC_LEZAI_SOURCE_DIR` 环境变量覆盖 |
+| 外部源库 | `/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/08_乐仔相册/乐仔相片库/` | 真值源；可用 `OBC_LEZAI_SOURCE_DIR` 环境变量覆盖 |
 
 ## 3. 同步流程（源库更新后）
 

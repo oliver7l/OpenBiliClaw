@@ -1,9 +1,10 @@
 """乐仔模块路径锚点。
 
-铁律对齐：项目内路径一律走显式锚点，不用 ``Path("data/...")`` 相对猜测。
+铁律对齐：项目内路径一律走显式锚点，不写 CWD 相对的数据路径（换个启动
+目录就会静默读写到另一个库）。
 - 包内页面资产：``src/openbiliclaw/web/lezai/``（随包分发，thumbs 子目录
   是个人照片数据，已在 .gitignore 排除——与 ``web/clone/sites/`` 同款先例）；
-- 外部源库：夸克网盘「乐仔相片库」目录，可用环境变量
+- 外部源库：项目内 08_乐仔相册/乐仔相片库（2026-09 自 030-夸克网盘迁入），可用环境变量
   ``OBC_LEZAI_SOURCE_DIR`` 覆盖（换盘/换机时不用改代码）。
 """
 
@@ -17,7 +18,7 @@ _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 
 # 源库默认位置（外部真值源；照片识别模型、分类目录、缩略图都在这里）
 _DEFAULT_SOURCE_DIR = Path(
-    "/Volumes/固态硬盘1T/002-探索项目/030-夸克网盘/乐仔相片库"
+    "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/08_乐仔相册/乐仔相片库"
 )
 
 _SOURCE_DIR_ENV = "OBC_LEZAI_SOURCE_DIR"
