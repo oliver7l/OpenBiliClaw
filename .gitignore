@@ -168,3 +168,10 @@ miniprogram-album/utils/config.js
 #   · 12_开源项目研究/oss_research.db(+ .bak)——派生数据，已由 *.db / *.db.bak* 规则忽略
 #   · 12_开源项目研究/scripts/backfill.py ——种子回填脚本（代码），保持入库跟踪
 # 故此处不做整目录忽略，避免误伤 backfill.py。
+
+# 根级杂项产物（2026-09-18 清理盘点时补）
+#   · 简历库打包备份（8.2MB，个人求职资料，同 /简历库/ 口径）
+#   · 下载残留的空归档、WorkBuddy 会话元数据文件
+/简历库_backup_*.tar.gz
+/master.tar.gz
+/.wbapp_*.genie
