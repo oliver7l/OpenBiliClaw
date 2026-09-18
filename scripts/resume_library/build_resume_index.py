@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""扫描 简历库/ 与 求职知识库 内全部简历相关文件，重建 data/resume.db 索引。
+"""扫描 简历库/、求职知识库 与 项目根岗位工作区 内全部简历相关文件，重建 data/resume.db 索引。
+
+岗位工作区：项目根 `NN_<公司>[-<岗位>]/`（自动发现，见 JOB_WORKSPACES），
+简历在其 `03_简历版本/` 下分层（现役 / 开发版本 / 快照 / 投递版 / 归档）。
 
 用途：简历资产统一台账——任何投递前先查这里，避免改错散落副本。
 运行：.venv/bin/python scripts/resume_library/build_resume_index.py
@@ -20,11 +23,34 @@ SKIP_DIRS = {"awesome-material-master", ".workbuddy", "node_modules", ".venv", "
 RESUME_PAT = re.compile(r"简历|resume|童力", re.IGNORECASE)
 LIB = "简历库"  # 2026-09-14 上移至项目根
 
+# ── 岗位工作区自动发现 ─────────────────────────────────────────
+# 2026-09-16 拍板：重要岗位一律在项目根建独立工作区；2026-09-17 统一加两位编号前缀
+# （01_腾讯WXG-推荐投放算法 / 02_阿里ICBU-AI算法专家 / 03_万声科技 / 04_比亚迪）。
+# 这里**自动发现**，新增或改名岗位无需再改脚本；只认「像岗位工作区」的目录
+# （含 03_简历版本 或 00_简历版本管理规范.md），避免误扫其他带编号前缀的目录。
+WS_PREFIX = re.compile(r"^\d{2}_")
+WS_MARKERS = ("03_简历版本", "00_简历版本管理规范.md")
+
+
+def job_workspaces():
+    out = []
+    for name in sorted(os.listdir(ROOT)):
+        p = os.path.join(ROOT, name)
+        if not (WS_PREFIX.match(name) and os.path.isdir(p)):
+            continue
+        if any(os.path.exists(os.path.join(p, m)) for m in WS_MARKERS):
+            out.append(name)
+    return out
+
+
+JOB_WORKSPACES = job_workspaces()
+
 # (扫描根, rel_path 基准)：简历库文件 rel 相对项目根，库外文件 rel 相对 求职知识库
-SCAN_ROOTS = [
+BASE_SCAN_ROOTS = [
     (os.path.join(ROOT, LIB), ROOT),
     (KB, KB),
 ]
+SCAN_ROOTS = BASE_SCAN_ROOTS + [(os.path.join(ROOT, w), ROOT) for w in JOB_WORKSPACES]
 
 CATEGORIES = [
     (f"{LIB}/00_事实源/", "事实源", "现役"),
@@ -35,6 +61,25 @@ CATEGORIES = [
     (f"{LIB}/35_解码文本/", "解码文本", "档案"),
     (f"{LIB}/90_污染备份_20260913/", "污染备份", "弃用勿投"),
 ]
+
+# 岗位工作区内部（六段式）分层规则；rel_path 含 `NN_` 前缀，前缀匹配取最具体者优先
+WS_LAYERS = [
+    ("00_简历版本管理规范.md", "规范文档", "参考"),
+    ("03_简历版本/现役/", "岗位定制版", "现役"),
+    ("03_简历版本/开发版本/", "开发版本", "在编"),
+    ("03_简历版本/快照/", "版本快照", "冻结"),
+    ("03_简历版本/投递版", "投递留存", "档案"),   # 投递导出留档（PDF，无 md 源）
+    ("03_简历版本/归档", "归档", "停用"),
+    ("01_原始情报/", "原始情报", "参考"),
+    ("02_提取与分析/", "分析文档", "参考"),
+    ("04_重难点专题/", "专题文档", "参考"),
+    ("05_面试临场/", "临场材料", "参考"),
+    ("06_背诵材料/", "背诵材料", "参考"),
+    ("07_沟通录音/", "沟通录音", "参考"),
+    ("08_入职资料/", "入职资料", "参考"),
+]
+for _ws in JOB_WORKSPACES:
+    CATEGORIES += [(f"{_ws}/{tail}", cat, status) for tail, cat, status in WS_LAYERS]
 
 # 童力-公司-岗位描述-地点/日期 的文件名尽力解析
 NAME_PAT = re.compile(

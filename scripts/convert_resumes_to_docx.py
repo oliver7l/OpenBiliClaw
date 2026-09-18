@@ -10,7 +10,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 PROJECT_ROOT = Path("/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw")
 RESUME_DIR = PROJECT_ROOT / "求职知识库" / "03_岗位弹药库" / "定制简历"
 OUTPUT_DIR = RESUME_DIR / "Word版"
-OUTPUT_DIR.mkdir(exist_ok=True)
+# ⚠️ WorkBuddy 沙箱下 mkdir(exist_ok=True) 对已存在目录会假崩 PermissionError(EEXIST)，
+# 必须用先判断再建的安全写法（见项目记忆 2026-09 通用坑）。
+if not OUTPUT_DIR.exists():
+    OUTPUT_DIR.mkdir(parents=True)
 
 
 def add_run_with_bold(paragraph, text, font_size=10.5):
