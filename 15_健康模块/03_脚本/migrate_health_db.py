@@ -14,7 +14,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parent.parent / "data"
+def _project_root() -> Path:
+    """向上找项目根锚点（pyproject.toml + src/openbiliclaw 同级）。
+
+    2026-09-18 脚本迁入 15_健康模块/03_脚本/ 后，不能再假设
+    ``Path(__file__).parent.parent`` 是项目根（那是根锚点反模式）。
+    """
+    marker = Path(__file__).resolve().parent
+    for _ in range(6):
+        if (marker / "pyproject.toml").exists() and (marker / "src" / "openbiliclaw").is_dir():
+            return marker
+        marker = marker.parent
+    raise RuntimeError("未找到项目根锚点（pyproject.toml + src/openbiliclaw）")
+
+
+DATA = _project_root() / "data"
 #: 2026-09-16 奥卡姆瘦身：删掉了 4 个零数据的实体表（allergies / vitals /
 #: immunizations / insights）——需要时再加回来，表清单必须与
 #: ``health/store.py`` 的 `_SCHEMA_SQL` 保持一致。
