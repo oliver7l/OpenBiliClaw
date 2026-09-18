@@ -1,0 +1,28 @@
+<!-- 乐仔相册 · 大图查看 -->
+<view class="vp" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd">
+  <image
+    class="big"
+    src="{{url}}"
+    mode="aspectFit"
+    bindtap="onTap"
+    bindlongpress="onSave"
+    bindload="onImgLoad"
+    binderror="onImgError"
+  ></image>
+
+  <view class="spin" wx:if="{{loading}}">
+    <text>载入中…</text>
+  </view>
+
+  <block wx:if="{{barVisible}}">
+    <view class="topbar">
+      <text class="label">{{label}}</text>
+      <text class="pos">{{pos}} / {{count}}</text>
+    </view>
+
+    <view class="bottombar">
+      <text class="date">{{date}}</text>
+      <view class="btn" catchtap="onSave">保存到相册</view>
+    </view>
+  </block>
+</view>

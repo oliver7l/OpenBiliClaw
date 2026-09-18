@@ -1,0 +1,95 @@
+/* 乐仔相册 · 相册墙样式 */
+
+.page {
+  min-height: 100vh;
+  background: #0f1115;
+}
+
+/* ── 月份快捷条 ───────────────────────────────────────── */
+.months {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  white-space: nowrap;
+  background: rgba(15, 17, 21, 0.96);
+  padding: 12rpx 16rpx;
+  border-bottom: 1rpx solid #22262e;
+}
+
+.mchip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 116rpx;
+  padding: 10rpx 18rpx;
+  margin-right: 12rpx;
+  border-radius: 14rpx;
+  background: #1b1f27;
+  color: #9aa3af;
+}
+
+.mchip.on {
+  background: #3b6fd4;
+  color: #ffffff;
+}
+
+.mlabel {
+  font-size: 26rpx;
+  line-height: 34rpx;
+}
+
+.mcount {
+  font-size: 20rpx;
+  line-height: 26rpx;
+  opacity: 0.75;
+}
+
+/* ── 当前月信息 ───────────────────────────────────────── */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 24rpx 20rpx 12rpx;
+}
+
+.htitle {
+  font-size: 38rpx;
+  font-weight: 600;
+  color: #e8eaed;
+}
+
+.hsub {
+  font-size: 24rpx;
+  color: #6b7280;
+}
+
+/* ── 照片墙（3 列正方形） ─────────────────────────────── */
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 6rpx;
+}
+
+.cell {
+  width: 246rpx;
+  height: 246rpx;
+  padding: 3rpx;
+  box-sizing: border-box;
+}
+
+.ph {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 8rpx;
+  background: #1b1f27;
+}
+
+/* ── 底部状态 ─────────────────────────────────────────── */
+.foot {
+  padding: 36rpx 20rpx 60rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #5b6270;
+}

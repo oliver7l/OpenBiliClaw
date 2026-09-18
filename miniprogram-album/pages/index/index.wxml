@@ -1,0 +1,40 @@
+<!-- 乐仔相册 · 相册墙 -->
+<view class="page">
+  <!-- 月份快捷条 -->
+  <scroll-view class="months" scroll-x enable-flex show-scrollbar="{{false}}">
+    <view
+      wx:for="{{months}}"
+      wx:key="gi"
+      class="mchip {{item.gi === activeGi ? 'on' : ''}}"
+      data-gi="{{item.gi}}"
+      bindtap="onMonthTap"
+    >
+      <text class="mlabel">{{item.label}}</text>
+      <text class="mcount">{{item.count}}</text>
+    </view>
+  </scroll-view>
+
+  <!-- 当前月信息 -->
+  <view class="head">
+    <text class="htitle">{{curLabel}}</text>
+    <text class="hsub">{{monthTotal}} 张 · 已加载 {{shown}}</text>
+  </view>
+
+  <!-- 照片墙 -->
+  <view class="grid">
+    <view
+      class="cell"
+      wx:for="{{list}}"
+      wx:key="i"
+      data-i="{{item.i}}"
+      bindtap="onOpen"
+    >
+      <image class="ph" src="{{item.t}}" mode="aspectFill" lazy-load></image>
+    </view>
+  </view>
+
+  <view class="foot">
+    <text wx:if="{{done}}">— 本月到底了 · 共 {{total}} 张 · 数据 {{generated}} —</text>
+    <text wx:else>上拉加载更多（{{shown}} / {{monthTotal}}）</text>
+  </view>
+</view>
