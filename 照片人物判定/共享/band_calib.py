@@ -53,15 +53,23 @@ MIN_N, MAX_ERR = 48, 0
 # ---------------------------------------------------------------------------
 EVID = {
     "乐仔": dict(
-        thr=4.79, deepest=(1948, 4.79), n_judged=126, n_err=0, found_break=False,
-        bands=["243-335", "337-774", "775-1948",
+        thr=0.17, deepest=(3750, 0.17), n_judged=174, n_err=0, found_break=False,
+        lib_thr={"09": 4.79},
+        bands=["243-335", "337-774", "775-1948", "2001-3542", "3543-3750",
                "lib08 内 129-176 / 301-1175", "lib09 top18（配 08 锚点）", "top12 参照"],
-        note="08 库内部下探到 1175 名（分数 4.81）仍全对；09 库 top18 配锚点后判对。"
-             "未触到崩塌点，阈值停在已验深度。"),
+        note="第 8 轮再降到 0.17（第 3543~3750 名新验 24/24 全对，距 z>0 边界 3772 仅 22 张）。"
+             "**09 班级库单列保持 4.79** —— 15 条人眼负样本全部在 09"
+             "（raw −5.4~+2.2，同班孩子），09 内部正负分数重叠，域归一化救不了，只能靠高阈值。"
+             "07/08/18 三库零负样本。第 08 轮发货护栏：<45px 小脸不发货。"),
     "艳艳": dict(
-        thr=2.74, deepest=(786, 2.74), n_judged=96, n_err=0, found_break=False,
-        bands=["47-141", "141-394", "395-786", "18 归档 24 张（验名字归属）"],
-        note="两种造型（戴细框眼镜 / 无眼镜黄衣长发）经 18 归档确认同属一人 ⇒ 非造型模板。"),
+        thr=0.17, deepest=(1123, 0.17), n_judged=131, n_err=0, found_break=False,
+        bands=["47-141", "141-394", "395-786", "801-1123", "1124-1134 末段（不降级依据）"],
+        note="第 7 轮降到 0.17（第 801~1123 名新验 24/24 全对，几乎触到 z>0 边界 1134 张）。"
+             "第 8 轮验末段 1124-1134：3 对 1 存疑(16px)，r1127 疑年长面容且 18 归档在'妈妈'名下"
+             " ⇒ **不降到 0**，维持 0.17（收益仅 11 张，风险不值）。"
+             "两种造型（戴细框眼镜 / 无眼镜黄衣长发）经 18 归档确认同属一人。"
+             "⚠️ 人眼金标里 07/08 各有 1 张 raw 负分的正样本（p5=−7.45），是照片级口径错位"
+             "（人眼判的脸≠照片级最高分脸），不是模型错；0.17 之上判读全对。"),
     "我": dict(
         thr=0.0, deepest=(418, -0.24), n_judged=96, n_err=0, found_break=False,
         bands=["47-141", "141-348", "349-418"],
@@ -97,12 +105,14 @@ def main():
 
     d = np.load(NPZ, allow_pickle=True)
     ck = d["ck"].astype(str)
+    lib = d["lib"].astype(str)
     det = d["det"].astype(np.float32)
     box = d["box"].astype(np.float32)
     keep = (det >= 0.60) & (np.minimum(box[:, 2], box[:, 3]) >= 10)
     # keep 必须同时套到**每一个**按行对齐的数组上：只套 ck/特征、忘了 det/box，
     # 会在 ens_score_one 里炸出"34066 vs 38009"这种看不出病因的维度错误（第 06 轮踩过）。
     ck, det, box = ck[keep], det[keep], box[keep]
+    lib = lib[keep]
     mbf = EM.l2n(d["mbf"].astype(np.float32))[keep]
     r50 = EM.l2n(d["r50"].astype(np.float32))[keep]
     feats = {"mbf": mbf, "r50": r50, "fused": EM.l2n(np.hstack([mbf, r50]))}
@@ -138,8 +148,16 @@ def main():
         for i, c in enumerate(ck):
             if c not in best or z[i] > best[c]:
                 best[c] = float(z[i])
-        vals = np.array(list(best.values()))
-        n_new = int((vals >= e["thr"]).sum())
+        # 分库阈值：lib_thr 指定某库用不同阈值（如乐仔 09 用高阈值防同班误报），
+        # 其余库用全局 thr。跨库重复 ck 是同一张照片，lib 取该 ck 任一脸的库（首个）。
+        lt = e.get("lib_thr", {})
+        ck_lib = {}
+        for i, c in enumerate(ck):
+            if c not in ck_lib:
+                ck_lib[c] = lib[i]
+        vals = np.array([best[c] for c in best])
+        thr_per = np.array([lt.get(ck_lib[c], e["thr"]) for c in best])
+        n_new = int((vals >= thr_per).sum())
         n_old = len(tags.get(p, ()))
         flag = "" if ok else "  ⛔未过闸门"
         print(f"{p:<6}{n_old:>8}{n_new:>8}{n_new / max(1, n_old):>6.1f}x"
@@ -148,12 +166,15 @@ def main():
         if not ok:
             continue
         covered.add(p)
-        out[p] = dict(thr=e["thr"], source="eye_band_20260919",
-                      deepest_rank=n_new, deepest_score=e["thr"],
-                      n_judged=e["n_judged"], n_err=e["n_err"],
-                      n_err_excluded=e.get("excluded_bad", 0),
-                      n_photos_old=n_old, n_photos_new=n_new,
-                      found_break=e["found_break"], bands=e["bands"], note=e["note"])
+        rec = dict(thr=e["thr"], source="eye_band_20260919",
+                   deepest_rank=n_new, deepest_score=e["thr"],
+                   n_judged=e["n_judged"], n_err=e["n_err"],
+                   n_err_excluded=e.get("excluded_bad", 0),
+                   n_photos_old=n_old, n_photos_new=n_new,
+                   found_break=e["found_break"], bands=e["bands"], note=e["note"])
+        if lt:
+            rec["lib_thr"] = lt
+        out[p] = rec
 
     if a.show:
         print("\n（--show：未落盘）")

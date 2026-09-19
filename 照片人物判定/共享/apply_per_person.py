@@ -44,6 +44,9 @@ ARB_PAIRS = [("乐仔", "七月")]
 
 MIN_DET = 0.60
 MIN_SIDE_ALL = 10
+MIN_SIDE_SHIP = 45   # 发货护栏：<45px 的脸人眼不可判（本项目硬纪律"<45px 不定案"），
+                     # 模型再自信也永远无法复核，且小脸嵌入质量差 ⇒ 不发货。
+                     # 第 07 轮实测发货里有 13px 的脸（乐仔 99 张 / 我 23 张 <45px）。
 DEFAULT_LEVEL = "normal"
 SHOW_N = 10          # 每人展示的命中数
 SHOW_EDGE = 8        # 每人展示的边界数
@@ -466,6 +469,7 @@ def main():
     # 与「合影豁免」那次事故的区别：那边是把**反证主动豁免**（拆刹车），
     #   这边是把**验证样本扩大**（加刹车）——放宽的是我们已有证据的范围，不是证据本身。
     band_path = f"{ROOT}/照片人物判定/_audit/分档阈值.json"
+    band_lib_thr = {}      # p -> {lib: thr}，分库覆盖（第 07 轮新增）
     if os.path.exists(band_path) and not args.no_band:
         band = json.load(open(band_path, encoding="utf-8"))
         for p, m in models.items():
@@ -488,6 +492,12 @@ def main():
                 m.setdefault("metrics", {})["calib_band"] = b
             else:
                 log(f"  · 分档未放宽 {p:<8}（分档 {b['thr']:.3f} ≥ 现行 {cur:.3f}）")
+            # 分库覆盖独立于全局放宽生效（即使全局没放宽，09 也可以单列更严）
+            blt = b.get("lib_thr") or {}
+            if blt:
+                band_lib_thr[p] = {str(k): float(v) for k, v in blt.items()}
+                log(f"  ↳ 分库覆盖 {p:<8} {blt}"
+                    f"（依据：负样本集中库内正负重叠，见 diag_snorm 消融）")
     else:
         log("（未用人眼分档阈值）")
 
@@ -503,11 +513,21 @@ def main():
     is09 = np.array([ck_lib.get(ck) == "09" for ck in cks])
     face_hit = {}
     for p in models:
+        # 逐脸生效阈值 = 全局 thr，再被 分库覆盖（band lib_thr）和 09strict 依次覆盖。
+        # 为什么分库：同一身份在不同来源库分数分布整体错开（第 06/07 轮：乐仔 08 库
+        # 98.7% z>0 / 09 库 1.7%，且 15 条人眼负样本全在 09）⇒ 09 单列高阈值，
+        # 其余库用已验证的低阈值。域归一化（S-norm/Z-norm）消融显示 09 内部正负
+        # 分数本就重叠，归一化救不了类间相似，只能靠阈值（_audit/_snorm_eval.json）。
+        thr_face = np.full(len(cks), float(thr[p]), dtype=np.float64)
+        for L, t in band_lib_thr.get(p, {}).items():
+            thr_face[[ck_lib.get(c) == L for c in cks]] = t
         t09 = models[p]["thresholds"].get("09strict")
         if t09 is not None:
-            face_hit[p] = np.where(is09, prob[p] >= t09, prob[p] >= thr[p])
-        else:
-            face_hit[p] = prob[p] >= thr[p]
+            thr_face[is09] = t09        # 09strict 优先级最高（STRICT09 成员）
+        # 发货护栏：小脸（<45px）不参与发货判定。注意是在**脸级**拦，
+        # 不是照片级 —— 同一张照片里若有更大的脸过阈值，标签仍会发出。
+        side_face = np.minimum(np.asarray(box)[:, 2], np.asarray(box)[:, 3])
+        face_hit[p] = (prob[p] >= thr_face) & (side_face >= MIN_SIDE_SHIP)
 
     # ---- 配对仲裁：全库最相似的一对（乐仔↔七月，余弦 0.626）同时命中时只留分高者 ----
     # 为什么必要：两张脸都过阈值说明不了身份，只有"互相比较"才给得出答案；
