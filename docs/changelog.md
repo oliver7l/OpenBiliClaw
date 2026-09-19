@@ -4,6 +4,20 @@
 
 ---
 
+## docs: 补全 4 个缺文档模块页（eval / synthesis / rag / topics）（2026-09-19）
+
+模块盘点收尾：为有代码但缺独立模块文档的 4 个包补写文档（按 AGENTS.md 统一模板：
+概述 → 已实现功能表 → 公开 API → 配置 → 设计决策 → 关联）：
+
+- `docs/modules/eval.md` — self-iteration 评估框架（personae / 多维打分 / PromptOptimizer / OptimizationLoop / 报告）。
+- `docs/modules/synthesis.md` — 跨模块 LLM 增量合成（版本化存储 + Web 路由）。
+- `docs/modules/rag.md` — 阅读库检索增强（`articles.content_text` 语义 top-k）。
+- `docs/modules/topics.md` — 专题导出 + 融合草稿 + 去重 + 全局索引。
+
+并在 `docs/index.md` 模块导航表登记 4 行。此前确认 `core` / `cache` / `reading` 已有对应文档，无需补。
+
+---
+
 ## docs: 重制 soul / discovery 架构图并修正导航（2026-09-19）
 
 模块盘点进一步核实：**soul 与 discovery 并非"散落"，而是已抽取为独立包迁移**：

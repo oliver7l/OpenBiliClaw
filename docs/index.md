@@ -46,6 +46,10 @@
 | 灵魂引擎 | [modules/soul.md](modules/soul.md) | `packages/obc-soul/obc_soul/`（engine / pipeline / analyzers / profile / overrides）+ `src/openbiliclaw/memory/manager.py`（五层记忆持久化）+ `src/openbiliclaw/cli/_cmd_soul.py` | ✅ 独立包 obc-soul（从 `src/openbiliclaw/soul/` 迁出） |
 | 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `packages/obc-discovery/obc_discovery/`（engine / strategies / candidate_pool / candidate_pipeline）+ `src/openbiliclaw/runtime/*producer.py`（多源拉取）+ `src/openbiliclaw/eval/`（评估） | ✅ 独立包 obc-discovery（从 `src/openbiliclaw/discovery/` 迁出） |
 | 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |
+| 智能评估框架 | [modules/eval.md](modules/eval.md) | `src/openbiliclaw/eval/` | ✅ self-iteration 评估：personae / 多维打分 / 参数优化 / 训练循环 |
+| 迭代合成引擎 | [modules/synthesis.md](modules/synthesis.md) | `src/openbiliclaw/synthesis/` | ✅ 跨模块 LLM 增量合成 + 版本化存储 + Web 路由 |
+| 阅读库 RAG | [modules/rag.md](modules/rag.md) | `src/openbiliclaw/rag/` | ✅ `articles.content_text` 检索（ollama bge-m3 / 语义 top-k） |
+| 话题导出 | [modules/topics.md](modules/topics.md) | `src/openbiliclaw/topics/` + `scripts/export_topics.py` | ✅ 专题导出 + 融合草稿 + 去重 + 全局索引 |
 | 存储层 | [modules/storage.md](modules/storage.md) | `src/openbiliclaw/storage/` | ✅ SQLite schema + discovery_candidates 待评估池 + pool readiness 计数 |
 | 阅读库正文回补 | [modules/refill.md](modules/refill.md) | `src/openbiliclaw/refill/` | ✅ M1–M5 全部落地：中央队列 + 6 通道 + Scheduler + 归档收口 |
 | 二创/下载项目统一管理 | [vendor-policy.md](vendor-policy.md) | `scripts/vendor_manage.py` + `vendor-registry.json` | ✅ 独立 git + 主仓忽略 + 注册表登记；70 项已登记，7 项打「本地修改」标 |
