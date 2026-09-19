@@ -120,7 +120,7 @@ pm2: openbiliclaw-api
 | **「阅读库」** | ① `content.db.articles`（9 万条，桌面「阅读库」标签页）② 主库 `read_archive`（108 条，"已读库"）③ 主库 `conversation_archive`（140 条，对话归档）④ 主库 `notes`（**2 条**，两侧都没 UI） | 四个都有人叫「阅读库」。**默认指 ①**（唯一有量的那个）。**2026-09-15 已拍板收敛到 ①**：②④ 迁入后下线，③ 语义不同（对话归档）保留独立 |
 | **「前端」** | ① `web/desktop/`（现役桌面端，2.2 万行）② `web/js/`（旧版单页，1 万行，入口 `index.html` → `js/app.js`）③ `web/<mini-app>/index.html` 单文件小页面（audit / cards / contradictions / entity-browser / gap-analysis / knowledge-graph / embed / setup）＋移动端 `/m` | **新功能一律进 ①（desktop）**；② 是 legacy，只修不扩；③ 各自独立、互不引用 |
 | **`/api/health`** | ① 精确路径 `/api/health` = **系统探针**（服务活着吗） ② 前缀 `/api/health/*` = **医疗档案**（35 条） | 同一个词两个含义，且探针在 `app.py` 里、档案在 `health/` 包里 |
-| **「health」** | ① `health/` 包 = 医疗档案 ② `scripts/health/91160_check_slots.py` = 挂号号源监控 | **两者零代码关系**，只是名字都叫 health |
+| **「health」** | ① `health/` 包 = 医疗档案 ② `15_健康模块/03_脚本/91160_check_slots.py` = 挂号号源监控（2026-09-18 自 `scripts/health/` 迁入） | **两者零代码关系**，只是名字都叫 health |
 | **「事件」** | ① `events.db`（独立库，行为事件主存） ② 主库里的 `events` 表（历史遗留） | 名字相同，先看代码连的是哪个库 |
 | **「记忆」** | ① `memory/` 包 = 事件持久化 ② `diary/memory_system.py` + `advanced_memory.py` = 日记的六层记忆 ③ `obc_soul` 里的 core memory = 画像 | 三套「记忆」互不相干 |
 | **「面试」** | A=岗位备战（`interview/job/`） B=题目研习（`study/`） C=复盘（`review/`） | 说到「面试接口」必须问是 A/B/C 哪个域 |

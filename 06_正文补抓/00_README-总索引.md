@@ -14,6 +14,7 @@
 │   ├── backfill_xhs_tokens.py # 小红书 token 桥接（自己的 Cookie，极低频！）
 │   └── refill_via_getnote.py  # 得到大脑通道（配额型 1000/天）
 ├── 03_文档/
+- **开发计划（待排期）**：`03_文档/Cumora借鉴-补抓系统改造开发计划.md` —— 借鉴 Cumora 三机制：①原子认领（articles.claim_status + RETURNING 原子锁 + 租约，P0）②小模型分诊（规则先行+500条试点，误杀率>2%收紧，P1）③新鲜度门控（上游签名 HOLD+confirm 放行，P2）。排期：等 CLIP 收尾+A-1 上线后开工，约 2 天。
 │   └── 任务总览.md            ← 详细文档：缺口统计/通道细节/关键事实/变更日志
 └── 04_体检报告/               ← 每日体检日报存档（YYYY-MM-DD.txt）
 ```

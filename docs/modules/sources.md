@@ -21,6 +21,7 @@
 | douyin | `dy_tasks.py`、`douyin_direct.py`、`douyin_plugin_search.py`、`douyin_signature.py`（XBogusSigner:15）、`douyin_auth.py` | `DyTaskQueue`；plugin_search 供 runtime/douyin_producer.py |
 | xhs | `xhs_tasks.py`（`XhsTaskQueue`:188、`XhsCreatorStore`:461）、`xhs_keyword_gen.py:56`（LLM 生成关键词） | 扩展上报 observed-urls 入池 |
 | zhihu | `zhihu_tasks.py`（`ZhihuTaskQueue`） | zhihu 发现项 → DiscoveredContent |
+| linuxdo | `linuxdo_adapter.py`（`LinuxdoAdapter`）、`linuxdo_tasks.py`（`LinuxdoTaskQueue`）、`linuxdo_producer.py`、`task_result_protocol.py` | `fetch-linuxdo` CLI 直连 Discourse JSON 抓正文入 `articles`；`capture-linuxdo` CLI 走扩展通道（`related`+`capture_body` → `task-result` → `upsert_article`）入 `articles`；producer 线走扩展任务 → `content_cache` |
 | youtube | `yt_tasks.py`（`YtTaskQueue`）、`youtube_adapter.py`（yt-dlp + cookie） | content_cache |
 | x/twitter | `x_tasks.py`（`XCreatorStore`）、`x_client.py`、`x_auth.py`（`resolve_x_cookie`:54） | `twitter_adapter.py` |
 | hupu / v2ex / toutiao / weibo | `url_processors/*_processor.py` + `runtime/*_feed_producer.py` | 如 hupu_feed_producer 写 `content_cache`(:33) |
@@ -47,7 +48,7 @@
 ## 4. 配置与凭据
 
 - 配置：`config.py:606` `SourcesConfig`，各平台段 douyin:461 / youtube:479 / twitter:496 / zhihu:518 / bilibili:586 / douban:593
-- Cookie：环境变量 `OPENBILICLAW_{DOUYIN,X,DOUBAN}_COOKIE`（config.py:471/509/602）；B 站 cookie 直接存 config `[bilibili].cookie`（:249）
+- Cookie：环境变量 `OPENBILICLAW_{DOUYIN,X,DOUBAN}_COOKIE`（config.py:471/509/602）；B 站 cookie 直接存 config `[bilibili].cookie`（:249）。Linux.do 适配器经 `OPENBILICLAW_LINUXDO_COOKIE` 读登录 cookie（无独立 data 文件，按需从浏览器复制）
 - 凭据视图：`/api/sources/credentials`（source_routes.py:2278）
 
 ## 5. 已知技术债（2026-09-15 摸底）

@@ -14,7 +14,7 @@
 | API 层 | 25 条路径 / 54 个操作（RESTful），**单一来源** `register_health_routes(app, ctx)` | `api/health_routes.py`（888 行） |
 | 周期记录 | 独立的经期/周期事件记录（`cycle_records` 表，存 `data/cycle.db`） | `cycle/store.py` |
 | 前端页面 | 桌面内嵌健康档案管理页面（11 个标签页，`healthPage` 视图） | `web/desktop/assets/js/health-app.js` |
-| 挂号监控 | ⚠️ `scripts/health/91160_check_slots.py` 是**挂号号源监控**，与本模块**无代码关系**，仅同名 | `scripts/health/` |
+| 挂号监控 | ⚠️ `15_健康模块/03_脚本/91160_check_slots.py`（2026-09-18 自 `scripts/health/` 迁入，旧路径留软链接）是**挂号号源监控**，与本模块**无代码关系**，仅同名 | `15_健康模块/03_脚本/` |
 
 > ⚠️ **命名澄清**：精确路径 `GET /api/health` 是**系统探针**（`app.py` 内联，判断服务存活），
 > 与本模块的前缀 `/api/health/*`（医疗档案）**不是同一回事**——两者只是共用前缀。
@@ -28,8 +28,8 @@
 > （无损）、删掉对应端点与前端标签页，`store.py` 2,253 → 1,861 行、`models.py`
 > 987 → 816 行、`service.py` 636 → 438 行、路由 68 → 54 个操作。
 > **要加回来**：从 git 历史取回 `models.py` / `store.py` / `health_routes.py` 的对应段
-> （DDL 会被 `_SCHEMA_SQL` 自动建表），再把 `scripts/migrate_health_db.py` 的
-> `HEALTH_TABLES` 加回去即可。
+> （DDL 会被 `_SCHEMA_SQL` 自动建表），再把 `15_健康模块/03_脚本/migrate_health_db.py`
+> （2026-09-18 自 `scripts/` 迁入，旧路径留软链接）的 `HEALTH_TABLES` 加回去即可。
 
 
 > **API 单一来源说明（2026-09-11 修正）**：健康 API **只在 `api/health_routes.py` 中定义**，由 `api/_route_registry.py` 统一注册。历史上 `api/app.py` 曾内联 13 条只读列表路由作为临时兜底，且因构造 `HealthService(database=...)` 读的是主库中已拆空的 `health_` 空壳表（0 行），页面一直显示空数据 —— 该内联段已于 2026-09-11 删除。
