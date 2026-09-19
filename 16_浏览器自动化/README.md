@@ -74,8 +74,8 @@ cd /Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw
 - `upsert_article` 命中已存在行时不更新 author、tags 仅在空时覆盖 → 脚本会补写一次。
 - 2026-09-19 实测：小红书笔记从 0 补到 1895 字。
 
-**低密度定时回填（PM2 cron_restart，不占 Trae Work 会话）**
-- 用 **PM2**（`ecosystem.xhs-backfill.config.js`，`cron_restart "5 */2 * * *"`）每 2 小时 :05 触发 + 脚本内随机憩志 0-30 分钟打散触发点，全天约 12 条、节奏极慢防风控。日志 `data/backfill_xiaohongshu.log` + `~/Library/Logs/xhs-backfill.{out,err}.log`。
-- `backfill.py` 用 `ORDER BY RANDOM()` 随机挑待补条目，避免卡在单条过期 token 上；防假命中守卫会拒收失效页。
-- 常用命令：`pm2 logs xhs-backfill` / `pm2 restart xhs-backfill` / `pm2 save`（进程列表已存 `dump.pm2`）。
-- **坑**：1) 脚本用 `__file__` 定位仓库根，不依赖 cwd。2) 曾试 LaunchAgent 与 crontab 均失败——守护进程上下文（cron/launchd）在 TCC 下**无权限写外接盘 `固态硬盘1T` 中文路径**，`Operation not permitted` / `exit 78 EX_CONFIG`。PM2 常驻进程由用户会话拉起、继承用户权限，实测可正常写 `data/` 并入阅读库。3) 开机自启需 `sudo pm2 startup`（见下），未执行该步则重启后需手动 `pm2 resurrect`。
+**低密度定时回填（已由 refill 取代，脚本归档）**
+- 原 `backfill.py`（+ `ecosystem.xhs-backfill.config.js` / `xhs_backfill.sh`）的 PM2 进程 `xhs-backfill` 已于 2026-09-19
+  删除，改由回补模块 `refill` 统一调度（`openbiliclaw-refill`，小红书写正文走 search_click/direct 通道）。
+- 旧脚本不删，`git mv` 归档到 `06_正文补抓/archive/`：`backfill_xhs.py`、`ecosystem.xhs-backfill.config.js`、`xhs_backfill.sh`。
+- 原「LaunchAgent/crontab 在 TCC 下无权限写外接盘中文路径」的坑述保留供参考（见上一步经验）。

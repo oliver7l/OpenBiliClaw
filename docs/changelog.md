@@ -4,6 +4,20 @@
 
 ---
 
+## refill 收尾：旧 xhs-backfill 线归档（2026-09-19）
+
+`16_浏览器自动化/backfill.py`（小红书低密度回填）的 PM2 进程 `xhs-backfill` 此前已删、改由
+`openbiliclaw-refill` 统一调度。本此把该线 3 个孤儿文件 `git mv` 归档到 `06_正文补抓/archive/`
+（不删除，可回退），并更新 `16_浏览器自动化/README.md`：
+
+- `backfill.py` → `06_正文补抓/archive/backfill_xhs.py`
+- `ecosystem.xhs-backfill.config.js` / `xhs_backfill.sh` → `06_正文补抓/archive/`
+- 保留仍在用的 `web_capture.py` / `linuxdo_capture.py` / `weread_collect.py` 等。
+- fetch_hub 排查结论：为**活的手动工具**（任意 URL→UnifiedDoc + 归档草稿，14 单测全过），
+  无阅读库导入/迁移脚本依赖，与 refill 互补 → **保留**不改。
+
+---
+
 ## refill 全平台配额：让各平台回补全量跑起来（2026-09-19）
 
 refill 通道层（M3 youtube/getnote、M4 bilibili/zhihu）已就绪，此前配额仅默认调度小红书。
