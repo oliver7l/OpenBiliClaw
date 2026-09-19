@@ -67,15 +67,24 @@ EVID = {
         bands=["47-141", "141-348", "349-418"],
         note="z>0 共 403 张，已验到 418；阈值取 logit=0（不采信 0 以下）。"),
     "七月": dict(
-        thr=0.09, deepest=(374, 0.09), n_judged=96, n_err=0, found_break=True,
-        bands=["23-115", "117-278", "279-394"],
-        note="**已看到崩塌点**：374 名(0.09)仍是本人，379 名(-0.46)起出现泳镜小孩/成年男性/男孩。"
-             "z>0 共 374 张 ⇒ 模型自报边界与实测崩塌点几乎重合。"),
+        thr=0.09, deepest=(374, 0.09), n_judged=120, n_err=0, found_break=True,
+        excluded_bad=0,
+        bands=["23-115", "117-278", "279-394", "发货 bottom24（0.09 档）"],
+        note="**已看到崩塌点**：379 名(-0.46)起出现泳镜小孩/成年男性/男孩（三条都已用"
+             " --dump-meta 拿路径核原图确认，非格号错位）。"
+             "⚠️ **已撤回**：底档复核时我曾判 r10(0.79)/r19(1.59) 是误报，"
+             "逐张核原图后证伪 —— r19 是「两个小孩躺滑梯」、紫外套女孩正是七月；"
+             "r10 是「我抱着的粉衣女孩」，照片**含**七月 ⇒ 照片级标签正确。"
+             "错因是我在 6 列拼图上把邻格图记到了错名次。阈值保持 0.09。"),
     "爸爸": dict(
-        thr=0.12, deepest=(363, 0.12), n_judged=95, n_err=0, found_break=True,
-        bands=["24-118", "118-301", "303-372"],
-        note="**已看到崩塌点**：363 名(0.12)仍是本人，366 名(-0.18)起是更年轻男性(疑我)/名言图。"
-             "z>0 共 364 张 ⇒ 与实测崩塌点吻合。"),
+        thr=0.12, deepest=(363, 0.12), n_judged=119, n_err=0, found_break=True,
+        excluded_bad=0,
+        bands=["24-118", "118-301", "303-372", "发货 bottom24（0.12 档）"],
+        note="**已看到崩塌点**：366 名(-0.18)起是更年轻男性/名言图。"
+             "⚠️ **已撤回**：底档复核时我判 r8(0.50) 是「马云视频截图」误报，"
+             "用 --dump-meta 核对路径后证伪（那格实为漂流照）；"
+             "r356(0.48) 是九十年代老照片，属 18/爸爸 归档，非明显误报。"
+             "**教训：底档'疑似误报'必须走路径核原图，拼图格号不可信。**"),
 }
 
 
@@ -134,13 +143,15 @@ def main():
         n_old = len(tags.get(p, ()))
         flag = "" if ok else "  ⛔未过闸门"
         print(f"{p:<6}{n_old:>8}{n_new:>8}{n_new / max(1, n_old):>6.1f}x"
-              f"{e['thr']:>9.3f}   #{e['deepest'][0]}({e['deepest'][1]}){flag}")
+              f"{e['thr']:>9.3f}   #{n_new}(≥{e['thr']})"
+              f"  判读{e['n_judged']}张/错{e['n_err']} 剔除{e.get('excluded_bad', 0)}{flag}")
         if not ok:
             continue
         covered.add(p)
         out[p] = dict(thr=e["thr"], source="eye_band_20260919",
-                      deepest_rank=e["deepest"][0], deepest_score=e["deepest"][1],
+                      deepest_rank=n_new, deepest_score=e["thr"],
                       n_judged=e["n_judged"], n_err=e["n_err"],
+                      n_err_excluded=e.get("excluded_bad", 0),
                       n_photos_old=n_old, n_photos_new=n_new,
                       found_break=e["found_break"], bands=e["bands"], note=e["note"])
 

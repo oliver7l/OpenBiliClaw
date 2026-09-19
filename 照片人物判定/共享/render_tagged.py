@@ -42,7 +42,7 @@ ENS_PKL = f"{ROOT}/照片人物判定/per_person_ens.pkl"
 OUTDIR = f"{ROOT}/照片人物判定/_audit"
 DIMS_CACHE = f"{OUTDIR}/_dims.json"
 
-from audit import crop_face, make_sheet  # noqa: E402
+from audit import crop_face, crop_ctx, make_sheet  # noqa: E402
 import ens_models as EM                  # noqa: E402
 
 ALIAS = {"乐仔小时候": "乐仔"}
@@ -86,6 +86,14 @@ def main():
     ap.add_argument("--cols", type=int, default=6)
     ap.add_argument("--size", type=int, default=260)
     ap.add_argument("-o", "--out", default=None)
+    ap.add_argument("--dump-meta", default=None,
+                    help="把本表每一格的 (名次, content_key, 分数, 物理路径) 落成 JSON。"
+                         "为什么要：图上看不清/两次渲染对不上时，靠**逐格路径**去核对原文件，"
+                         "比对着缩略图猜可靠得多（第 06 轮在'马云截图到底是哪一格'上卡过）。")
+    ap.add_argument("--ctx", action="store_true",
+                    help="画**原图 + 红框标出模型选中的脸**，而不是裁脸。"
+                         "用于分清「模型选错了脸」与「邻座成人被 50%% padding 带进画面」"
+                         "——裁图模式下这两种看起来一模一样（第 06 轮被卡住过）。")
     ap.add_argument("--emit-verdicts", default=None,
                     help="把本批渲染的脸**落盘成人眼金标 jsonl**（默认 verdict=1），"
                          "键=(ck,cx,cy) 跨重扫可吸附；训练与标定都可复用")
@@ -209,7 +217,7 @@ def main():
         if not p or not os.path.exists(p):
             nmiss += 1
             continue
-        im = crop_face(p, box[i], size=a.size)
+        im = (crop_ctx if a.ctx else crop_face)(p, box[i], size=a.size)
         if im is None:
             nmiss += 1
             continue
@@ -230,7 +238,7 @@ def main():
         p = paths.get(c)
         if not p or not os.path.exists(p):
             continue
-        im = crop_face(p, box[i], size=a.size)
+        im = (crop_ctx if a.ctx else crop_face)(p, box[i], size=a.size)
         if im is None:
             continue
         anchor_items.append((im, f"★锚{k + 1} p={zc:.2f} 18:"
@@ -295,6 +303,13 @@ def main():
         print(f"→ 人眼金标 {len(meta)} 条（正 {npos} / 负 {nneg} / 存疑 {nq}）→ {a.emit_verdicts}"
               f"（分数 {sc.min():.3f}~{sc.max():.3f}，最低5%分位={np.quantile(sc, 0.05):.3f}"
               f"，新读尺寸 {n_read}）")
+
+    if a.dump_meta:
+        json.dump([dict(rank=m["rank"], ck=m["ck"], photo_score=m["photo_score"],
+                        face_score=m["face_score"], side=m["side"], who18=m["who18"],
+                        path=m["path"]) for m in meta],
+                  open(a.dump_meta, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        print(f"→ 元数据 {len(meta)} 条 → {a.dump_meta}")
 
     print("分数区间：照片级 "
           f"{min(m['photo_score'] for m in meta):.3f}~{max(m['photo_score'] for m in meta):.3f}"

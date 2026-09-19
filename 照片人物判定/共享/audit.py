@@ -99,6 +99,31 @@ def crop_face(path, box, size=280, pad=0.5):
     return Image.fromarray(cv2.cvtColor(c, cv2.COLOR_BGR2RGB))
 
 
+def crop_ctx(path, box, size=420, thick_ratio=0.0025):
+    """**原图 + 红框标出模型选中的那张脸**（不裁）。
+
+    为什么必须有这个模式：`crop_face` 带 50% padding，一张小脸旁边的成人会挤进画面
+    —— 于是"我看到一个成年男性"既可能是**模型选错了脸**，也可能只是**邻座被裁剪带进来**。
+    第 06 轮在 七月/爸爸 的 bottom 档上正是被这个歧义卡住（p=0.79 那张到底是
+    "把成年男性判成七月" 还是 "七月被抱起、成人在旁边"）。
+    看原图 + 框能一眼分开这两种情况。
+    ⚠️ 同样禁止 exif_transpose（检测坐标用的是原始方向）。"""
+    img = imread_any(path)
+    if img is None:
+        return None
+    H, W = img.shape[:2]
+    x, y, w, h = box
+    t = max(2, int(max(W, H) * thick_ratio))
+    cv2.rectangle(img, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 255), t)
+    s = size / max(H, W)
+    nw, nh = max(1, int(W * s)), max(1, int(H * s))
+    im2 = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
+    canvas = np.full((size, size, 3), 24, np.uint8)
+    y0, x0 = (size - nh) // 2, (size - nw) // 2
+    canvas[y0:y0 + nh, x0:x0 + nw] = im2
+    return Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+
+
 def make_sheet(items, cols, out, title=""):
     """items: [(PIL.Image, caption)]。编号画在左上角，大号白字+黑描边，保证可读。"""
     S = items[0][0].size[0]

@@ -59,6 +59,11 @@ KIDS = {"乐仔", "乐仔小时候", "七月"}
 STRICT09 = {"艳艳", "妈妈", "我", "七月", "爸爸", "乐仔小时候"}
 FPR09 = 0.0003
 N_HOME_RANDOM = 3000
+# 人眼分档阈值的准入门槛（判读张数下限 / 允许判错数）。
+# 为什么设闸门：第 05 轮那次事故（乐仔阈值 5.661 → −5.085、写库 12194 条）的根因不是
+# "放宽阈值"本身，而是**放宽没有任何证据支持**。分档阈值的全部正当性来自"我判读过这些名次"，
+# 所以没有判读记录就一律拒用，宁可退回保守阈值。
+BAND_MIN_N = 48
 
 
 def sigmoid(z):
@@ -353,6 +358,12 @@ def main():
                          "第 04 轮实测 `妈妈` 的归档里没有一张本人脸（身份纯度 0%），"
                          "其正样本实际是乐仔 ⇒ 发出来的标签是挂着妈妈名字的乐仔。"
                          "要放行必须自己确认锚点已修好（_audit/身份锚点.json）")
+    ap.add_argument("--no-band", action="store_true",
+                    help="不用人眼分档实测阈值（_audit/分档阈值.json）。"
+                         "⚠️ 默认启用且优先级最高，因为它是唯一**逐档出图、我亲手判读**的阈值："
+                         "金标 5% 分位被自己的取样名次封顶（循环），archive 对配角身份失效，"
+                         "只有分档阈值能真正抬召回。闸门：判读张数 ≥" + str(BAND_MIN_N)
+                         + " 且 0 错，否则拒用。")
     args = ap.parse_args()
 
     def log(*a):
@@ -444,6 +455,41 @@ def main():
                 log(f"  · 金标未放宽 {p:<8}（金标 {g['thr']:.3f} ≥ archive {cur:.3f}）")
     else:
         log("（未用人眼金标第二档）")
+
+    # ---- 人眼分档实测阈值（第 06 轮新增，优先级最高）----
+    # 为什么必须有这一档（第 05 轮遗留的结构性缺陷）：
+    #   archive 阈值 = 按归档冲突率扫出来的位置；金标阈值 = **已发货批次分数的最低 5% 分位**。
+    #   两者的取样都发生在 top-N 之内 ⇒ 金标阈值**永远不可能低于取样名次**，是循环的，
+    #   召回被自己的取样点封顶。实测后果：七月只发 22 张，而归档口径下它前 200 名有 89 张确证。
+    # 分档阈值的不同之处：它不是算出来的，是**逐档出图、由我判读**的，并配三类独立证据
+    #   （来源库 / 18 归属 / 同框伙伴，见 diag_band_evidence.py）。
+    # 与「合影豁免」那次事故的区别：那边是把**反证主动豁免**（拆刹车），
+    #   这边是把**验证样本扩大**（加刹车）——放宽的是我们已有证据的范围，不是证据本身。
+    band_path = f"{ROOT}/照片人物判定/_audit/分档阈值.json"
+    if os.path.exists(band_path) and not args.no_band:
+        band = json.load(open(band_path, encoding="utf-8"))
+        for p, m in models.items():
+            b = band.get(p)
+            if not isinstance(b, dict) or "thr" not in b:
+                continue
+            n, err = int(b.get("n_judged", 0)), int(b.get("n_err", 99))
+            if n < BAND_MIN_N or err > 0:
+                log(f"  ⛔ 分档阈值被拒 {p:<8}（判读 {n} 张 / 判错 {err} 张，"
+                    f"闸门要求 ≥{BAND_MIN_N} 张且 0 错）")
+                continue
+            cur = float(m["thresholds"]["normal"])
+            if b["thr"] < cur - 1e-6:
+                log(f"  ↓ 分档放宽 {p:<8} {cur:.3f} → {b['thr']:.3f}"
+                    f"（人眼判读 {n} 张 0 错；最深验证 #{b.get('deepest_rank')}"
+                    f" @ {b.get('deepest_score')}）")
+                m["thresholds"] = {"strict": round(b["thr"] + 3.0, 4),
+                                   "normal": round(b["thr"], 4),
+                                   "loose": round(b["thr"] - 3.0, 4)}
+                m.setdefault("metrics", {})["calib_band"] = b
+            else:
+                log(f"  · 分档未放宽 {p:<8}（分档 {b['thr']:.3f} ≥ 现行 {cur:.3f}）")
+    else:
+        log("（未用人眼分档阈值）")
 
     thr = {p: m["thresholds"][args.level] for p, m in models.items()}
 
