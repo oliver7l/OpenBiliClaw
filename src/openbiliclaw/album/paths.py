@@ -59,3 +59,14 @@ def heic_preview_dir() -> Path:
 def original_photos_dir() -> Path:
     """返回源库根（``/album/full`` 挂载源，原图按月目录存放）。"""
     return source_library_dir()
+
+
+def originals_flat_dir() -> Path:
+    """返回平铺原图目录（``/album/full`` 实际挂载源）。
+
+    2026-09 分月整理已回滚：原图以**平铺**方式存放在
+    ``_整理前_硬链接快照/``（文件名即原始名，无月份子目录）。
+    ``original_photos_dir()`` 下的月目录已不存在——继续把月目录路径
+    当挂载源会让所有 ``/album/full/<ym>/<name>`` 404（2026-09-19 实测）。
+    """
+    return source_library_dir() / "_整理前_硬链接快照"

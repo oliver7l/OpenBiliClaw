@@ -292,7 +292,7 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
     # 门禁——后端经 frpc 直通公网，非 /api 前缀默认免密，裸挂等于把 5206
     # 张家庭照片发布到互联网。
     from openbiliclaw.album.paths import heic_preview_dir as _album_heic_dir
-    from openbiliclaw.album.paths import original_photos_dir as _album_full_dir
+    from openbiliclaw.album.paths import originals_flat_dir as _album_full_dir
     from openbiliclaw.album.paths import thumbs_dir as _album_thumbs_dir
     from openbiliclaw.album.paths import web_assets_dir as _album_web_dir
 

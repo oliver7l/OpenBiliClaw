@@ -201,3 +201,11 @@ miniprogram-album/utils/config.js
 /_归档/
 #   · 03_万声科技 内嵌的 GitHub 仓库存档（外来仓库，作 gitlink 会污染本仓；保留其面试文档，仅排除归档仓）
 03_万声科技/**/GitHub仓库存档/
+# WorkBuddy 自动化备份（含个人日程，不入库）
+/21_WorkBuddy多账号/automations_backup/
+# 公开相册人脸分组索引（含家人姓名+CDN 签名 key，未成年人 PII 绝不入库）
+src/openbiliclaw/web/public_album/people.json
+src/openbiliclaw/web/public_album/people/
+# 简历成品二进制（md 真值源入库，docx/pdf 由脚本生成不入库）
+14_微信小店-微信电商/03_简历版本/**/*.docx
+14_微信小店-微信电商/03_简历版本/**/*.pdf
