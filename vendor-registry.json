@@ -26,7 +26,7 @@
   "03_万声科技/01_原始情报/二面面试官李立/GitHub仓库存档/machine-learning-algorithms": {
     "upstream": "",
     "remote": "https://github.com/algorithmdog/machine-learning-algorithms.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "09_QQ相册/模型工作台/qq-zone": {
@@ -38,13 +38,13 @@
   "12_开源项目研究/references/EHR-django": {
     "upstream": "",
     "remote": "https://github.com/MohsinRazaKhanSipra/EHR-django.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "12_开源项目研究/references/HealthCare-Management-System": {
     "upstream": "",
     "remote": "https://github.com/MrAnayDongre/HealthCare-Management-System.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "12_开源项目研究/references/LycheeMem": {
@@ -134,7 +134,7 @@
   "12_开源项目研究/references/ctrip-ticket-crawler": {
     "upstream": "",
     "remote": "https://github.com/Yybrook/ctrip-ticket-crawler.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "12_开源项目研究/references/deep-memory": {
@@ -362,7 +362,7 @@
   "15_mobile": {
     "upstream": "",
     "remote": "https://github.com/whiteguo233/OpenBiliClaw-mobile.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "mule-cli": {
@@ -392,7 +392,7 @@
   "二创/ChatLab": {
     "upstream": "",
     "remote": "https://github.com/oliver7l/ChatLab-private.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   },
   "二创/StarMapAI": {
@@ -416,7 +416,7 @@
   "二创/xinli-test": {
     "upstream": "",
     "remote": "https://github.com/tanxue0118/xinli-test.git",
-    "note": "",
+    "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
     "updated": "2026-09-19"
   }
 }

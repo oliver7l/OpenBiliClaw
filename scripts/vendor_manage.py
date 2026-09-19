@@ -177,9 +177,30 @@ def cmd_bulk() -> int:
     return 0
 
 
+def cmd_tag() -> int:
+    """给有未提交本地改动的仓库打标（note 置为「已本地修改」），标注「改动在子仓提交」。
+    纯改注册表，不动任何仓库内容。"""
+    reg = load_registry()
+    tagged = 0
+    for p in scan_repos():
+        if repo_info(p).get("dirty"):
+            key = p.as_posix()
+            entry = reg.get(key, {})
+            if not isinstance(entry, dict):
+                entry = {}
+            entry = dict(entry)
+            entry["note"] = "已本地修改（改动在子仓提交，主仓未跟踪）"
+            entry["updated"] = __import__("datetime").date.today().isoformat()
+            reg[key] = entry
+            tagged += 1
+    save_registry(reg)
+    print(f"已打标 {tagged} 个有本地改动的仓库")
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
-    if not args or args[0] not in ("scan", "register", "list", "status", "bulk"):
+    if not args or args[0] not in ("scan", "register", "list", "status", "bulk", "tag"):
         print(__doc__)
         return 2
     cmd = args[0]
@@ -189,6 +210,8 @@ def main() -> int:
         return cmd_list()
     if cmd == "bulk":
         return cmd_bulk()
+    if cmd == "tag":
+        return cmd_tag()
     if cmd == "status":
         if len(args) < 2:
             print("usage: vendor_manage.py status <path>")
