@@ -108,7 +108,8 @@ def load_faces():
     feats = {"mbf": Xm, "r50": Xr, "fused": l2n(np.hstack([Xm, Xr]))}
     # AdaFace 第三通道（第 9 轮）：键对齐（box 是 list of tuples，函数内自转 ndarray）。
     # apply 端允许零向量兜底（理论 0 缺口，缺了会告警而不是静默）。
-    feats["ada"] = EM.ada_join(cks, box)
+    import ens_models as _EM   # EM 在 predict_ens 里才是模块级别名，这里局部导入
+    feats["ada"] = _EM.ada_join(cks, box)
     return (np.array(rid), np.array(cks, dtype=object), box, np.array(pch),
             feats, path_of, np.array(detv, dtype=np.float32))
 
@@ -549,14 +550,15 @@ def main():
             f"判给{x} {int(drop_y.sum())} / 判给{y} {int(drop_x.sum())}")
 
     # ---- 照片级聚合：一张照片只要有一张脸过阈值就算命中 ----
-    ck_best = {p: defaultdict(lambda: 0.0) for p in models}
+    # ⚠️ 不能用 defaultdict(0.0) 初值 + ">" 比较：阈值档为负分时（艳艳 v2=-3.68），
+    # 命中脸的**负分数永远写不进初值 0.0**，标签成员不变但存储分变成假 0.000，
+    # 契约自检 535 张"不一致"、bottom/top 排序全被污染（第 9 轮实测踩中）。
+    ck_best = {p: {} for p in models}
     for p in models:
         for i in np.where(face_hit[p])[0]:
             ck = cks[i]
-            if prob[p][i] > ck_best[p][ck]:
+            if ck not in ck_best[p] or prob[p][i] > ck_best[p][ck]:
                 ck_best[p][ck] = float(prob[p][i])
-    for p in models:
-        ck_best[p] = dict(ck_best[p])
 
     log(f"\n=== 判定结果（阈值档位 {args.level}）===")
     log(f"{'人':<10}{'阈值':>8}{'命中照片':>10}{'命中脸':>9}{'其中18已归档':>14}")

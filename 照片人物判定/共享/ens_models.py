@@ -49,23 +49,36 @@ def ada_join(cks, box, strict=False):
             "adaface/scrfd npz 行序不一致（先查产线）"
         _ab = _s["box"].astype(np.float64)
         _idx = {}
+        _byck = {}
         for i in range(len(_d["ck"])):
             b = _ab[i]
-            _idx[(str(_d["ck"][i]), round(float(b[0]), 1), round(float(b[1]), 1),
-                  round(float(b[2]), 1), round(float(b[3]), 1))] = i
-        _ADA_CACHE = (_d["emb"].astype(np.float32), _idx)
-    EMB, IDX = _ADA_CACHE
+            _idx.setdefault((str(_d["ck"][i]), int(round(float(b[0]) * 10)),
+                             int(round(float(b[1]) * 10)), int(round(float(b[2]) * 10)),
+                             int(round(float(b[3]) * 10))), []).append(i)
+            _byck.setdefault(str(_d["ck"][i]), []).append(i)
+        _ADA_CACHE = (_d["emb"].astype(np.float32), _ab, _idx, _byck)
+    EMB, AB, IDX, BYCK = _ADA_CACHE
     B = np.asarray(box, dtype=np.float64)
     out = np.zeros((len(cks), EMB.shape[1]), dtype=np.float32)
     miss = []
     for i in range(len(cks)):
         b = B[i]
-        j = IDX.get((str(cks[i]), round(float(b[0]), 1), round(float(b[1]), 1),
-                     round(float(b[2]), 1), round(float(b[3]), 1)))
-        if j is None:
-            miss.append(i)
+        cands = IDX.get((str(cks[i]), int(round(float(b[0]) * 10)),
+                         int(round(float(b[1]) * 10)), int(round(float(b[2]) * 10)),
+                         int(round(float(b[3]) * 10))))
+        if cands:
+            out[i] = EMB[cands[0]]
             continue
-        out[i] = EMB[j]
+        # 同 ck 内最近邻兜底：DB REAL 与 npz float32 在 .x5 边界会差 0.05，
+        # 精确键失配 ≠ 行不存在（第 9 轮实测 16/34066 行）。同 ck 内脸通常唯一。
+        rows = BYCK.get(str(cks[i]), [])
+        if rows:
+            d = AB[rows] - b[None, :]
+            j = rows[int(np.argmin((d * d).sum(axis=1)))]
+            if (np.abs(AB[j] - b)).max() <= 0.51:
+                out[i] = EMB[j]
+                continue
+        miss.append(i)
     if miss:
         msg = f"ada_join 未匹配 {len(miss)}/{len(cks)} 行（例 {miss[:3]}）"
         if strict:
@@ -192,7 +205,10 @@ def score(m, X):
 
 
 def base_specs():
-    """(名字, 特征key, 工厂)。名字会进 pickle，改名等于作废已训练模型。"""
+    """(名字, 特征key, 工厂)。名字会进 pickle，改名等于作废已训练模型。
+    环境变量 OBC_NO_ADA=1 时剔除 ada 子模型 —— 供"同监督、无 ada"的对照训练，
+    用来隔离第三通道的真实贡献（第 9 轮对照实验）。"""
+    import os as _os
     from sklearn.linear_model import LogisticRegression
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.neighbors import KNeighborsClassifier
@@ -214,6 +230,8 @@ def base_specs():
          lambda d: KNeighborsClassifier(n_neighbors=5, metric="cosine")),
         ("MLP/fused", "fused", lambda d: TorchMLP(d, (256, 64))),
     ]
+    if _os.environ.get("OBC_NO_ADA") == "1":
+        S = [s for s in S if "/ada" not in s[0]]
     return S
 
 
