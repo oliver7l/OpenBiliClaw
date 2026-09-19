@@ -38,7 +38,8 @@
     "upstream": "",
     "remote": "https://github.com/qinjintian/qq-zone.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "12_开源项目研究/references/EHR-django": {
     "upstream": "",
@@ -457,30 +458,35 @@
     "upstream": "",
     "remote": "https://github.com/oliver7l/ChatLab-private.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "二创/StarMapAI": {
     "upstream": "",
     "remote": "https://github.com/oliver7l/starmap-ai-extension.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "二创/pileax": {
     "upstream": "",
     "remote": "https://github.com/oliver7l/pileax.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "二创/xhs_refill/MediaCrawler": {
     "upstream": "",
     "remote": "https://github.com/NanmiCoder/MediaCrawler.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "二创/xinli-test": {
     "upstream": "",
     "remote": "https://github.com/tanxue0118/xinli-test.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   }
 }
