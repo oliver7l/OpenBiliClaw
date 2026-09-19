@@ -47,7 +47,8 @@
 | 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `src/openbiliclaw/discovery/` | ✅ v0.3.x 多源 + 统一待评估池 + 跨源跨轮 topic 配额 |
 | 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |
 | 存储层 | [modules/storage.md](modules/storage.md) | `src/openbiliclaw/storage/` | ✅ SQLite schema + discovery_candidates 待评估池 + pool readiness 计数 |
-| 阅读库正文回补 | [modules/refill.md](modules/refill.md) | `src/openbiliclaw/refill/` | ✅ M1–M4 全部通道已交付（中央队列 + Scheduler + 六个通道）；旧脚本归档为运维交接 |
+| 阅读库正文回补 | [modules/refill.md](modules/refill.md) | `src/openbiliclaw/refill/` | ✅ M1–M5 全部落地：中央队列 + 6 通道 + Scheduler + 归档收口 |
+| 二创/下载项目统一管理 | [vendor-policy.md](vendor-policy.md) | `scripts/vendor_manage.py` + `vendor-registry.json` | ✅ 独立 git + 主仓忽略 + 注册表登记；70 项已登记，7 项打「本地修改」标 |
 | Knowledge Forge 知识锻造炉 | [modules/knowledge_forge.md](modules/knowledge_forge.md) | `src/openbiliclaw/knowledge_forge/` | ✅ v0.3.217 六管线 + 质量审计 + 知识图谱 + 自动补充 + 实体网络 774 / 共现 4,712 |
 | 灵魂管线架构 | [modules/soul-pipeline-architecture.md](modules/soul-pipeline-architecture.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
 | 浏览器插件 | [modules/extension.md](modules/extension.md) | `extension/` | ✅ 支持 B 站 + 小红书 + 抖音 + YouTube / X 任务桥、跨平台行为采集、扩展驱动 E2E 捕捉自检、Cookie 同步、自启动开关和降级配置修复 |

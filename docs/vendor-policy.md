@@ -1,42 +1,69 @@
-# 二创 / GitHub 下载项目统一管理约定（vendor-policy）
+# 二创 / GitHub 下载项目 · 统一管理机制（vendor-policy）
 
-> 场景：本仓库内嵌了一批「从 GitHub / B站 下载、你做过本地修改」的二创项目（`二创/*`、
-> `tools/*`、`03_万声科技/GitHub仓库存档/*`、`12_开源项目研究` 等）。这类项目最常见的坑：
-> 嵌套 `.git` 会被主仓当成 gitlink（污染、内容进不来）、改没改/上游在哪理不清、大文件混进主仓。
+> **一句话**：每个二创项目 = 一个**独立 git 仓库**，主仓只用 `.gitignore` 排除它、不在主仓管理历史；另用一份 `vendor-registry.json` 做全景登记，用 `scripts/vendor_manage.py` 统一扫描/登记/体检。
 
-## 核心约定（三件事）
+---
 
-1. **各二创项目保留独立 `.git`（独立仓库）**，你在它里面的修改提交到**它自己的仓库**，不改主仓。
-   - 未自带的下载项目可 `git init` / `git clone` 保持独立。
-2. **主仓 `.gitignore` 排除二创项目整目录**（避免 gitlink 污染）——例如 `tools/`、`19_统一相册库/`。
-   - 若其中有少量**代码脚本**想入库，用 `git add -f <具体 .py>` 精准收编（数据/模型/依赖仍忽略）。
-3. **在 `vendor-registry.json` 登记**每个二创：`{path, upstream, remote, note}`，作为「单一事实来源」。
+## 1. 为什么必须这样管
 
-## 工具
+仓库里嵌了大量「从 GitHub / B站 下载、你改过」的衍生项目（`二创/*`、`tools/*`、
+`03_万声科技/GitHub仓库存档/*`、`12_开源项目研究/references/*`、`18/19_*` 等，已识别 70+ 个）。
+直接 `git add` 它们会踩三个坑：
 
-`scripts/vendor_manage.py`：
+- **gitlink 污染**：目录里带 `.git`，主仓把它当子模块指针（内容进不来、还污染历史）。
+- **改没改 / remote 在哪理不清**：几十个项目散落各处，谁改过、上游是谁全靠记。
+- **大文件/密钥混入**：照片 116G、模型 767M、`.env` 密钥——一旦入库撑爆仓库或泄密。
+
+## 2. 核心三原则
+
+1. **独立 `.git`（独立仓库）**——二创项目的改动提交进它**自己的仓库**，主仓恒干净。
+2. **主仓 `.gitignore` 排除其整目录**——防 gitlink。若其中有少量**代码脚本**想入库，用
+   `git add -f <具体 .py>` 精准收编（数据/模型/依赖仍忽略）。
+3. **`vendor-registry.json` 登记**——`path / upstream / remote / note / updated` 作「单一事实来源」。
+
+## 3. 工具：`scripts/vendor_manage.py`
 
 ```bash
-python3 scripts/vendor_manage.py scan            # 全仓扫描嵌套 git 仓库并体检（改动数/提交数/remote）
-python3 scripts/vendor_manage.py register 二创/tvbox-web --upstream https://github.com/x/tvbox-web --note "改动说明"
-python3 scripts/vendor_manage.py list            # 展示注册表（叠加 scan 状态）
-python3 scripts/vendor_manage.py status <path>   # 单仓体检
+python3 scripts/vendor_manage.py scan          # 全仓扫描：哪些二创、改没改(*N)、remote
+python3 scripts/vendor_manage.py bulk          # 全仓批量登记到注册表
+python3 scripts/vendor_manage.py tag           # 有本地改动的仓库打「已本地修改」标
+python3 scripts/vendor_manage.py register <path> --upstream <URL> --note "用途"
+python3 scripts/vendor_manage.py list          # 看注册表（叠加 scan 状态）
+python3 scripts/vendor_manage.py status <path> # 单仓体检（json）
 ```
 
-`scan` 输出的 `R` 标记表示该路径已登记；`*N` 表示该二创有 N 项未提交的本地改动（提醒你回各自仓库提交）。
+`scan` 输出含义：`*N` = 该子仓有 N 项未提交本地改动；`-` = 干净；`R` = 已在注册表。
 
-## 归类建议
+## 4. 分类规则
 
-- **需要写历史/长期沿用/常改** → 保留独立 `.git` + 登记在注册表（`二创/`、`tools/`）。
-- **纯资料/他人仓库存档（只看不改）** → 整目录忽略即可，不登记（如 `03_万声科技/GitHub仓库存档`）。
-- **有保密性（.env / 密钥）或超大** → 整目录忽略、绝不入库（如 `tools/*/.env`、`19_统一相册库`）。
+| 类型 | 处置 | 例子 |
+|---|---|---|
+| 常用 / 常改 / 要写历史 | 独立 `.git` + 登记 + remote | `二创/*`、`tools/*` |
+| 有本地改动 | `tag` 打标，改动提交进子仓 | 7 个（ChatLab/xinli-test/EHR-django…）|
+| 纯他人仓库存档（只看不改）| 整目录忽略，可不登记 | `03_万声科技/GitHub仓库存档`、`12_开源项目研究/references/*` |
+| 含密钥 / 超大（照片/模型）| 整目录忽略，绝不入库 | `tools/*/.env`、`19_统一相册库`、`照片人物判定` |
+| 少量作者代码在数据目录里 | `git add -f` 收编代码，数据忽略 | `18_照片分组/*.py`、`19_统一相册库/tools/*.py` |
 
-## 新增一个二创的标准流程
+## 5. 新增一个二创的标准流程
 
 ```bash
-# 1) 下载或克隆到二创/<name>/
-git clone <upstream> "二创/<name>"          # 自带独立 .git
-# 2) 确保主仓不把它当 gitlink：主仓 .gitignore 加 <该目录>/
+# 1) 克隆到 二创/<name>/（自带独立 .git）
+git clone <upstream> "二创/<name>"
+# 2) 主仓 .gitignore 加一行：/<该目录>/（防 gitlink）
 # 3) 登记
-python3 scripts/vendor_manage.py register "二创/<name>" --upstream <URL> --note "用途/改动"
+python3 scripts/vendor_manage.py register "二创/<name>" --upstream <URL> --note "用途"
 ```
+
+之后你在它里面的改动，一律 `git -C 二创/<name> commit` 提交进它自己的仓库；主仓不看它。
+
+## 6. 与主仓数据/代码分流的衔接
+
+同一原则向下延伸到「大文件/纯数据」：`data/`、`logs/`、照片/模型目录靠 `.gitignore` 排除；
+作者脚本按「代码要提交」用 `-f` 收编进主仓。这样主仓只含**本仓库自己的代码 + 文档 + 数据索引**，
+二创项目与大数据一律在外且可追溯。
+
+## 7. 相关文件
+
+- 工具：`scripts/vendor_manage.py`
+- 登记表：`vendor-registry.json`（当前 70 项，7 项已打「本地修改」标）
+- 本机制：`docs/vendor-policy.md`

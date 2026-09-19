@@ -11,8 +11,10 @@
   - 在 vendor-registry.json 登记 {path, upstream, remote, note} 作为单一事实来源。
 
 用法：
-  python3 scripts/vendor_manage.py scan             # 全仓扫描嵌套 git 仓库并体检
-  python3 scripts/vendor_manage.py register <path>  # 登记（--upstream/--note）
+  python3 scripts/vendor_manage.py scan             # 全仓扫描嵌套 git 仓库并体检（改动数/提交数/remote）
+  python3 scripts/vendor_manage.py bulk             # 全仓批量登记到注册表（保留已有 upstream/note）
+  python3 scripts/vendor_manage.py tag              # 给有本地改动的仓库打「已本地修改」标
+  python3 scripts/vendor_manage.py register <path>  # 登记单个（--upstream/--note）
   python3 scripts/vendor_manage.py list             # 展示注册表（叠加 scan 状态）
   python3 scripts/vendor_manage.py status <path>    # 单仓体检
 """
