@@ -7,6 +7,10 @@
 
 set -euo pipefail
 
+# ELECTRON_RUN_AS_NODE=1 会让客户端以纯 Node 模式启动并报
+# "does not provide an export named 'BrowserWindow'"（从其它 Electron 应用内启动时易被继承）
+unset ELECTRON_RUN_AS_NODE || true
+
 APP_PATH="/Applications/TRAE SOLO CN.app"
 ELECTRON="$APP_PATH/Contents/MacOS/Electron"
 APP_RES="$APP_PATH/Contents/Resources/app"

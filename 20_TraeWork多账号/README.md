@@ -102,6 +102,9 @@ User-Agent: TRAE SOLO CN/1.107.1
 
 1. **Electron 直接启动秒退**：少传 `Resources/app` 参数 ⇒ `bad option: --user-data-dir=...`。
    曾导致 `开空白客户端.command` 一直没真正开过第二实例（输出重定向到 /dev/null 看不到报错）。
+2. **ELECTRON_RUN_AS_NODE 污染**：从其它 Electron 应用（如 WorkBuddy）的 shell 里启动客户端，
+   会被继承 `ELECTRON_RUN_AS_NODE=1`，客户端以纯 Node 模式启动并报
+   `does not provide an export named 'BrowserWindow'`。启动脚本一律先 `unset ELECTRON_RUN_AS_NODE`。
 2. **鉴权前缀**：`Bearer` 恒 1001；必须 `Cloud-IDE-JWT`。裸调加签接口任何 header 组合都过不了。
 3. **storage.json 单账号**：登新顶旧，不当时捕获即永久丢（合成可救回 token 未失效的）。
 4. **同名 app 抢目录**：双击 `TRAE SOLO CN 2.app` 不是多开。
@@ -112,12 +115,11 @@ User-Agent: TRAE SOLO CN/1.107.1
 
 ## 五、现状（2026-09-19）与未决问题
 
-- **6 账号 / 6 档案全部就位**：4 份捕获 + 2 份合成（`136****59`、`199****29`）。
-- **✅ 合成方案已实证**：第二实例（CN3）加载合成档案后，客户端主动重写了 storage.json
-  （9.2K→14.7K）且解密身份仍是 `136****59` —— 客户端接受了合成登录态；随后 capture 已把
-  该账号升级为"真捕获"档案。`199****29` 仍为合成态，切一次即可同样升级。
-- 两个新账号签到返回 9090（活动未激活），在客户端登录一次后应可签（`136****59` 现在已
-  在第二实例里处于登录态，可再跑 `twa_checkin.py all` 验证）。
+- **6 账号 / 6 档案全部就位且全部真捕获**：4 份来自主客户端/历史副本，2 份合成档案均通过
+  客户端实证（CN3 接受 `136****59`、CN4 接受 `199****29`，客户端主动重写 storage.json 且身份
+  不变），capture 后来源已标记为真捕获。**6 个账号签到全部成功**（新账号在客户端登录激活后
+  enable 变 true，累计各 +150）。
+- `199****29` 是纯免费号（usage_summary 为空、仅免费包），余额固定 0，已按此解析。
 - 助手 GUI（v0.1.3，Tauri/Rust）**源码工程缺失**，要改 GUI 得先找回/重建源码。
 
 ## 六、相关资料与原始位置

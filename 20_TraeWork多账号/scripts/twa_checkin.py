@@ -86,6 +86,14 @@ def snapshot_from_usage(j: dict) -> dict | None:
     us = j.get("usage_summary") or {}
     total, consumed = us.get("total_amount"), us.get("consumed_amount")
     if total is None:
+        if not us:
+            # 纯免费账号：usage_summary 为空、只有 charge_amount=0 的免费包 → 余额 0
+            return {
+                "credits": 0,
+                "unlimited": False,
+                "earliest_expiry_ms": None,
+                "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
         return None
     earliest = None
     now = datetime.now().timestamp()

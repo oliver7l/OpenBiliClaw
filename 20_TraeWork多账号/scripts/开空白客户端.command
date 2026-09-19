@@ -32,6 +32,9 @@ echo "  主客户端 TRAE SOLO CN 的数据目录不受影响"
 echo
 # 注意：直接跑 Electron 二进制必须把 Resources/app 作为第一个参数传进去，
 # 否则它会报 "bad option: --user-data-dir=..." 秒退（2026-09-19 实测踩坑）。
+# 另外 ELECTRON_RUN_AS_NODE=1 会让客户端以纯 Node 模式启动并报
+# "does not provide an export named 'BrowserWindow'"，必须显式去掉。
+unset ELECTRON_RUN_AS_NODE
 "$APP" "$RES" "--user-data-dir=$DATA" --no-sandbox >/dev/null 2>&1 &
 
 echo "已在后台启动，等它开出窗口后用新账号登录即可。"
