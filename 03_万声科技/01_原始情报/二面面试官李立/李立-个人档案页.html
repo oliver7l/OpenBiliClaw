@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>李立 · 个人档案页（AlgorithmDog）</title>
+<style>
+  :root{
+    --ink:#1c2330; --sub:#5a6472; --line:#e3e7ee; --bg:#f6f7fa; --card:#ffffff;
+    --accent:#0f62fe; --accent2:#c2410c; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+    --chip-bg:#eef2f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.65}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+  header.hero{background:linear-gradient(135deg,#10203a 0%,#1d3a63 60%,#24507f 100%);
+    color:#fff;border-radius:16px;padding:30px 34px;position:relative;overflow:hidden}
+  header.hero::after{content:"ALGORITHMDOG";position:absolute;right:-10px;bottom:-26px;
+    font-size:96px;font-weight:800;letter-spacing:2px;color:rgba(255,255,255,.05);white-space:nowrap}
+  .hero h1{margin:0;font-size:30px;letter-spacing:1px}
+  .hero .sub{margin-top:6px;font-size:15px;color:#c9d6ea}
+  .hero .tags{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .hero .tag{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);
+    padding:3px 12px;border-radius:999px;font-size:13px}
+  .identity{margin-top:16px;font-size:13.5px;color:#e6eefb;background:rgba(255,255,255,.08);
+    border-left:3px solid #7fb0ff;padding:10px 14px;border-radius:0 8px 8px 0;position:relative;z-index:1}
+  section{margin-top:26px}
+  h2{font-size:19px;margin:0 0 14px;padding-left:12px;border-left:4px solid var(--accent)}
+  h2 .en{font-size:12px;color:var(--sub);font-weight:400;margin-left:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h3{margin:0 0 8px;font-size:15px}
+  .kv{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .kv:last-child{border-bottom:none}
+  .kv .k{flex:0 0 84px;color:var(--sub)}
+  .kv .v{flex:1}
+  .chip{display:inline-block;background:var(--chip-bg);border:1px solid var(--line);
+    border-radius:6px;padding:1px 8px;font-size:12px;margin:2px 2px;white-space:nowrap}
+  .chip.g{color:var(--ok);border-color:#bbe5c8;background:#f0faf3}
+  .chip.o{color:var(--warn);border-color:#f0d9b0;background:#fdf7ee}
+  .chip.r{color:var(--bad);border-color:#f0c4c4;background:#fdf2f2}
+  .chip.b{color:var(--accent);border-color:#c9defc;background:#f0f6ff}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:13.5px;
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f0f3f8;font-weight:600;font-size:13px}
+  tr:last-child td{border-bottom:none}
+  td small{color:var(--sub)}
+  /* 时间线 */
+  .timeline{position:relative;margin-left:10px;padding-left:22px;border-left:2px solid var(--line)}
+  .tl-item{position:relative;margin-bottom:16px}
+  .tl-item::before{content:"";position:absolute;left:-29px;top:6px;width:12px;height:12px;
+    border-radius:50%;background:#fff;border:3px solid var(--accent)}
+  .tl-item.ghost::before{border-color:#b7c2d0;border-style:dashed}
+  .tl-year{font-weight:700;font-size:13.5px;color:var(--accent)}
+  .tl-item.ghost .tl-year{color:var(--warn)}
+  .tl-body{font-size:14px}
+  .tl-body small{color:var(--sub)}
+  .quote{background:#fffdf5;border:1px solid #f0e6c8;border-left:4px solid #d4a72c;
+    border-radius:0 10px 10px 0;padding:12px 16px;font-size:14.5px;color:#4a4030;margin:10px 0}
+  .quote .src{display:block;margin-top:6px;font-size:12px;color:var(--sub)}
+  .warn-box{background:#fdf2f2;border:1px solid #f0c4c4;border-radius:10px;padding:12px 16px;font-size:14px;margin-top:10px}
+  .good-box{background:#f0faf3;border:1px solid #bbe5c8;border-radius:10px;padding:12px 16px;font-size:14px;margin-top:10px}
+  ol li,ul li{margin:4px 0;font-size:14px}
+  .foot{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:12.5px;color:var(--sub)}
+  .barchart .bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
+  .barchart .bar .name{flex:0 0 130px}
+  .barchart .bar .track{flex:1;background:#eef1f6;border-radius:6px;height:14px;overflow:hidden}
+  .barchart .bar .fill{height:100%;background:linear-gradient(90deg,#3b82f6,#0f62fe);border-radius:6px}
+  @media print{ body{background:#fff} header.hero{border-radius:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>李立 <span style="font-weight:400;font-size:18px;opacity:.85">· AlgorithmDog</span></h1>
+  <div class="sub">万声音乐二面面试官 ｜ 前腾讯 IEG 专家研究员 ｜ 强化学习 / 推荐系统 / AI 音乐</div>
+  <div class="tags">
+    <span class="tag">北大计算机博士</span><span class="tag">导师 王厚峰</span><span class="tag">本科疑武汉大学 2007 级</span>
+    <span class="tag">1987 年生</span><span class="tag">坐标深圳</span><span class="tag">有娃 / 文艺 / 冷幽默</span>
+  </div>
+  <div class="identity">
+    <b>身份链（已闭环）</b>：李立 = AlgorithmDog。铁证三条：① 老博客关于页自署真名"李立"；② 公众号头像与微信头像同款（白底红船桨）；③ GitHub 双账号提交署名 <code>li.l@pku.edu.cn</code>（北大邮箱）+ <code>lili1987mail@gmail.com</code>（1987）。本页面汇总 2026-09-18 全天六轮搜集成果，置信度分级标注。
+  </div>
+</header>
+
+<!-- ============ 基本档案 ============ -->
+<section>
+  <h2>基本档案 <span class="en">PROFILE</span></h2>
+  <div class="grid">
+    <div class="card">
+      <h3>👤 身份与履历</h3>
+      <div class="kv"><span class="k">真名</span><span class="v">李立 <span class="chip g">实锤</span></span></div>
+      <div class="kv"><span class="k">出生</span><span class="v">1987 年 <span class="chip g">实锤（gmail 邮箱+微信）</span></span></div>
+      <div class="kv"><span class="k">现职</span><span class="v">万声音乐（AllSaints Music），疑似推荐算法负责人 <span class="chip o">高置信推断</span></span></div>
+      <div class="kv"><span class="k">前职</span><span class="v">腾讯 IEG 增值服务部 · 专家研究员 <span class="chip g">实锤（QCon 2020 官方）</span></span></div>
+      <div class="kv"><span class="k">中间站</span><span class="v">荣耀（Aaron 传闻，时间线兼容） <span class="chip r">待求证</span></span></div>
+      <div class="kv"><span class="k">坐标</span><span class="v">深圳（GitHub 自填 + 台风朋友圈） <span class="chip g">实锤</span></span></div>
+      <div class="kv"><span class="k">微信</span><span class="v">昵称 lietal，微信号 <b>llietal</b>；头像白底红船桨 <span class="chip g">实锤</span></span></div>
+    </div>
+    <div class="card">
+      <h3>🎓 教育背景</h3>
+      <div class="kv"><span class="k">博士</span><span class="v">北京大学 计算机系 <span class="chip g">实锤</span></span></div>
+      <div class="kv"><span class="k">导师</span><span class="v">王厚峰（北大教授，计算语言学/机器学习） <span class="chip g">实锤（arXiv 合著）</span></span></div>
+      <div class="kv"><span class="k">博士课题</span><span class="v">超多标签分类的标签不平衡（一作论文 arXiv:1604.01304） <span class="chip g">实锤</span></span></div>
+      <div class="kv"><span class="k">本科</span><span class="v">疑似武汉大学 2007 级（微博 UID 前缀 whu2007+学号） <span class="chip r">推断待验证</span></span></div>
+      <div class="kv"><span class="k">进修</span><span class="v">视频号「学霸中的学渣生活」有毕业礼袍画面——近年疑似重新进修并毕业 <span class="chip o">待求证</span></span></div>
+    </div>
+    <div class="card">
+      <h3>🧭 研究与技术地图</h3>
+      <div class="kv"><span class="k">精神原点</span><span class="v">强化学习 / 非完全信息博弈 AI（RoomAI）</span></div>
+      <div class="kv"><span class="k">工业主线</span><span class="v">推荐系统（游戏增值/音乐），提出"阶段 0→10"方法论</span></div>
+      <div class="kv"><span class="k">学术原点</span><span class="v">多标签分类 / 标签不平衡 / 表示学习</span></div>
+      <div class="kv"><span class="k">当前阵地</span><span class="v">AI 音乐生成（万声自研大模型已接入 OPPO）</span></div>
+      <div class="kv"><span class="k">持续跟进</span><span class="v">LLM/Agent 评估（2025-09 fork unsloth；2026-08 还在转 Agent 评估文）</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 时间线 ============ -->
+<section>
+  <h2>人生与技术时间线 <span class="en">TIMELINE</span></h2>
+  <div class="card" style="padding:20px 22px">
+    <div class="timeline">
+      <div class="tl-item"><span class="tl-year">1987</span><div class="tl-body">出生（lili1987mail 自证）</div></div>
+      <div class="tl-item ghost"><span class="tl-year">2007（推断）</span><div class="tl-body">疑入武汉大学本科 <small>（微博 UID whu200731500231）</small></div></div>
+      <div class="tl-item"><span class="tl-year">~2011–2016</span><div class="tl-body">北京大学计算机系攻读博士，师从王厚峰；方向为超多标签分类的标签不平衡；2015 年 GitHub 上已有论文复现仓库</div></div>
+      <div class="tl-item"><span class="tl-year">2015–2016</span><div class="tl-body">入职腾讯 IEG（增值服务部）；fork tensorflow/clashjs；PHP 博客插件 wechat-reward <small>（博客 WordPress 时代）</small></div></div>
+      <div class="tl-item"><span class="tl-year">2016-04</span><div class="tl-body">博士论文挂 arXiv（RMLS）</div></div>
+      <div class="tl-item"><span class="tl-year">2016-08</span><div class="tl-body">公众号 + 个人博客强化学习系列八讲连更，配套 GitHub 仓库（现为 270★）；教学代码+secret 习题教学法成型</div></div>
+      <div class="tl-item"><span class="tl-year">2016-12</span><div class="tl-body">多标记学习研究代码开源（42★）+ Akka 四部曲（Scala，代码里藏 +1s 梗）</div></div>
+      <div class="tl-item"><span class="tl-year">2017-05</span><div class="tl-body">RoomAI 开源（非完全信息博弈 AI 工具包，pip 可装，76 fork）；微博账号当年仍有活动</div></div>
+      <div class="tl-item"><span class="tl-year">2017–2019</span><div class="tl-body">棋牌 AI / 博弈叙事期；博客持续更新（Wayback 存 272 页）；B站注册空壳号未使用</div></div>
+      <div class="tl-item"><span class="tl-year">2020-12</span><div class="tl-body">QCon 深圳演讲《深度学习和大数据系统融合的思考和应用》，当场判"大数据上训 DL"为 dead direction <small>（五年后被 K8S+GPU 路线完全验证）</small></div></div>
+      <div class="tl-item"><span class="tl-year">2020–2022</span><div class="tl-body">IEG 专家研究员期；2020 仍合并 GitHub 陌生 PR；2022 更新 C++ 学习仓库</div></div>
+      <div class="tl-item ghost"><span class="tl-year">2020底–2025（推断）</span><div class="tl-body">荣耀（传闻）→ 万声音乐，任推荐算法负责人 <small>（与《推荐系统从0到1到10》"老李"处境同构）</small></div></div>
+      <div class="tl-item"><span class="tl-year">2025-09</span><div class="tl-body">fork unsloth（LLM 高效微调库）——跟进大模型微调</div></div>
+      <div class="tl-item"><span class="tl-year">2026</span><div class="tl-body">公众号 74 篇存档（AI 时代评论/推荐/Agent）；3 月《推荐系统从 0 到 1 到 10》；现在万声音乐，本次二面面试官</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 人物画像 ============ -->
+<section>
+  <h2>人物画像（74 篇公众号 + 5 仓库代码精读结论） <span class="en">PORTRAIT</span></h2>
+  <div class="grid">
+    <div class="card">
+      <h3>七条代码级印证</h3>
+      <ul>
+        <li><b>第一性原理 = 全手写</b>：五个仓库零框架依赖，Q-learning/IRL/GMM/正态 CDF 全部从数学原式写起——只信自己推过的东西</li>
+        <li><b>教学者人格</b>：每个仓库都是博客的"实验台"，<code>secret/</code> 目录是留给读者的习题，测试写手推值</li>
+        <li><b>冷幽默跨媒介稳定</b>："+1s 众筹""腾讯第一网红是我去""老师也得查查书"写进 Scala 教学代码</li>
+        <li><b>研究者实验纪律</b>：全程 seed、单变量对照实验、手算值单元测试、交叉验证脚本化</li>
+        <li><b>坦诚不装</b>：空壳文件照样提交（maxent 1 行、麻将 1 行、Model Zoo 空标题）</li>
+        <li><b>反炒作人格</b>：QCon 敢判热门方向 dead direction；公众号持续拆 AI 泡沫</li>
+        <li><b>精神底色</b>：博客关于页"青春年少之时，没有能力做自己喜欢做的事。经过努力有能力了，青春早已远去"</li>
+      </ul>
+      <div class="quote">"青春年少之时，没有能力做自己喜欢做的事。经过努力有能力了，青春早已远去。人生遗憾莫过于此。"<span class="src">—— algorithmdog.com《关于作者》（Wayback 存档原文）</span></div>
+    </div>
+    <div class="card">
+      <h3>生活侧写（微信朋友圈/视频号）</h3>
+      <ul>
+        <li>晒娃型（朋友圈封面=小孩推青蛙椅）；置顶一幅油画（船上人像，文艺向）</li>
+        <li>深圳台风雨配文"原来有台风秽土重生啊！！！"——二次元梗、说话轻松</li>
+        <li>鹅厂前同事圈密集（转发"提前退休 1 年了"并评论）</li>
+        <li>视频号「学霸中的学渣生活」：校园草坪+毕业礼袍 → 自嘲式命名</li>
+      </ul>
+      <h3 style="margin-top:14px">沟通适配</h3>
+      <ul>
+        <li>信息摄入偏<b>长文与论文</b>，不刷知乎/小红书/短视频</li>
+        <li>反感名词轰炸与吹牛；<b>引用具体实现细节提问比恭维有效十倍</b></li>
+        <li>接受幽默感，但内容必须扎实</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 平台足迹 ============ -->
+<section>
+  <h2>全平台足迹（两轮排查，2026-09-18） <span class="en">FOOTPRINT</span></h2>
+  <table>
+    <tr><th style="width:120px">平台</th><th>状态</th><th>明细 / 证据</th></tr>
+    <tr><td><b>公众号</b></td><td><span class="chip g">主阵地</span></td><td>AlgorithmDog（注册地福建），已存档 <b>74 篇</b>全文（weread 通道），简介"任职大厂算法负责人多年"</td></tr>
+    <tr><td><b>GitHub</b></td><td><span class="chip g">主阵地</span></td><td>双账号实锤：<b>algorithmdog</b>（18 仓库，profile: Tencent/ShenZhen）+ <b>WonderSimiliar</b>（RoomAI）。已克隆 5 仓库精读，270★/42★/10★ 各一</td></tr>
+    <tr><td><b>腾讯云社区</b></td><td><span class="chip g">已归档</span></td><td>20 篇技术文（另"算法一只狗"为他人 leo，已证伪排除）</td></tr>
+    <tr><td><b>个人博客</b></td><td><span class="chip r">域名已死</span></td><td>algorithmdog.com 被抢注为垃圾站；<b>Wayback 存 272 真实页面可整站恢复</b>（含遗传算法五部曲、概率统计系列、RL 之九 DQN 等公众号外内容）；CSDN u012972513 有大量转载可作补充源</td></tr>
+    <tr><td><b>微博</b></td><td><span class="chip o">已定位待验证</span></td><td>weibo.com/<b>whu200731500231</b>（2017 年存档存活；UID 前缀是本科推断的唯一来源）</td></tr>
+    <tr><td><b>arXiv</b></td><td><span class="chip g">实锤</span></td><td>1604.01304 一作（Li Li + 王厚峰），提交账号即本人</td></tr>
+    <tr><td><b>B站</b></td><td><span class="chip o">空壳</span></td><td>UID 456853249，0 视频 2 粉，注册未用</td></tr>
+    <tr><td><b>抖音</b></td><td><span class="chip">无</span></td><td>登录态站内搜用户 AlgorithmDog，20 结果全为泛 "Algorithm" 重名号，无本人（2026-09-18 AgentLimb 实测）</td></tr>
+    <tr><td>知乎 / 小红书 / 掘金 / OSCHINA / SegmentFault / 简书</td><td><span class="chip">无</span></td><td>CLI 与站内限定搜索均零命中（对照测试排除 API 失效）</td></tr>
+    <tr><td>领英</td><td><span class="chip o">未定论</span></td><td>Google 侧 <code>site:linkedin.com/in "AlgorithmDog"</code> 零命中；站内搜撞登录墙待登录后验证（搜 AlgorithmDog 或 "Li Li"+Tencent IEG）</td></tr>
+  </table>
+</section>
+
+<!-- ============ 内容版图 ============ -->
+<section>
+  <h2>内容版图 <span class="en">CONTENT MAP</span></h2>
+  <div class="card barchart">
+    <div class="bar"><span class="name">公众号文章</span><div class="track"><div class="fill" style="width:100%"></div></div><span>74 篇（存档）</span></div>
+    <div class="bar"><span class="name">博客 Wayback</span><div class="track"><div class="fill" style="width:55%"></div></div><span>272 页（可恢复为约数十篇）</span></div>
+    <div class="bar"><span class="name">腾讯云社区</span><div class="track"><div class="fill" style="width:27%"></div></div><span>20 篇（存档）</span></div>
+    <div class="bar"><span class="name">GitHub 自有仓库</span><div class="track"><div class="fill" style="width:31%"></div></div><span>9 个（+9 fork），4500 行已精读</span></div>
+    <div class="bar"><span class="name">学术论文</span><div class="track"><div class="fill" style="width:3%"></div></div><span>arXiv:1604.01304 一作</span></div>
+    <div class="bar"><span class="name">QCon 演讲</span><div class="track"><div class="fill" style="width:3%"></div></div><span>2020 深圳 + InfoQ 专访（存档）</span></div>
+  </div>
+</section>
+
+<!-- ============ 应用层 ============ -->
+<section>
+  <h2>面试 / 饭局应用 <span class="en">PLAYBOOK</span></h2>
+  <div class="good-box">
+    <b>✅ 打法（已验证有效的话题线）</b>
+    <ol>
+      <li><b>用他的"阶段论"说母语</b>：推荐系统 0=不做、1=DeepFM 跑通闭环、10=粗排/MMoE/AI Infra——再接 OPPO 冷启动从 0 到 1 的实战，正中其痛点（他大概率就是万声推荐负责人，"老李"处境即他自己）</li>
+      <li><b>当面肯定他 2020 年的预判</b>："K8S+GPU 成标配，您当年 dead direction 的判断被完全验证了"——比夸他厉害有效十倍</li>
+      <li><b>安全深水区</b>：逆向强化学习 max-margin 建模、多标签不平衡（他有论文）、RoomAI 信息隔离架构、遗传算法（公众号外系列）</li>
+      <li><b>生活话题好接</b>：孩子、油画、二次元梗均可自然聊</li>
+    </ol>
+  </div>
+  <div class="warn-box">
+    <b>⚠️ 风险与禁区</b>
+    <ul>
+      <li>他是深度内容创作者+实验纪律苛刻的人：<b>吹牛必被识破</b>，数字口径按真值表</li>
+      <li>不碰：直接吹 270★ 仓库（廉价）、空泛夸奖、未证实就提荣耀那段</li>
+      <li>披露纪律：不报其他公司名，标准答"几个流程在走，没到 offer"</li>
+    </ul>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>📋 饭局可求证清单</h3>
+    <ol>
+      <li>轨迹是否为 腾讯 IEG → 荣耀 → 万声？到万声多久、管什么场景（内置音乐推荐？）</li>
+      <li>本科是否武汉大学（微博 whu2007 线索）？近年视频号进修读的是什么？</li>
+      <li>万声推荐团队规模与其"阶段"自评；AI 音乐大模型与推荐线的分工</li>
+      <li>腾讯云"后台策略工程师"认证 8 月仍在发文——离职时间点</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ 素材索引 ============ -->
+<section>
+  <h2>素材索引 <span class="en">SOURCES</span></h2>
+  <table>
+    <tr><th>文件</th><th>内容</th></tr>
+    <tr><td><code>00_档案总编-20260918.md</code></td><td>身份链闭环、QCon 深挖、微信画像、万声公司侧情报</td></tr>
+    <tr><td><code>公众号文章存档-weread/</code>（74 篇 md）</td><td>公众号全文 + 列表 JSON</td></tr>
+    <tr><td><code>公众号文章精读-人物画像-20260918.md</code></td><td>74 篇逐篇精读（4 代理分时段）</td></tr>
+    <tr><td><code>GitHub仓库存档/</code> + <code>GitHub仓库精读-人物画像-20260918.md</code></td><td>5 仓库克隆 + 4500 行代码精读</td></tr>
+    <tr><td><code>平台足迹-20260918.md</code> / <code>平台足迹-其他平台排查-20260918.md</code></td><td>两轮全平台排查（含 Wayback 272 页清单、微博/arXiv 新证据）</td></tr>
+    <tr><td><code>文章存档-*</code>（腾讯云 20 篇 / QCon 专访 / 单篇存档）</td><td>腾讯云社区与深度专访全文</td></tr>
+  </table>
+</section>
+
+<div class="foot">
+  生成于 2026-09-18 18:07 ｜ 数据截至本轮排查 ｜ 置信度标注：实锤（多重交叉）/ 高置信推断 / 待验证 ｜ 后续可做：Wayback 博客整站恢复（272 页，需走代理）
+</div>
+
+</div>
+</body>
+</html>

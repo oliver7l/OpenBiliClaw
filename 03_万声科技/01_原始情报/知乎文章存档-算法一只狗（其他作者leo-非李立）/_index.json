@@ -1,0 +1,1604 @@
+[
+ {
+  "id": "108625608",
+  "title": "机器学习——线性回归",
+  "url": "https://zhuanlan.zhihu.com/p/108625608",
+  "created": "2020-02-23 16:04:48",
+  "voteup": 3,
+  "file": "2020-02-23_机器学习——线性回归.md",
+  "excerpt": "1.代价函数（cost function）1.1 代价函数图像 上图两个坐标表示参数 和 ，它们是动态变化的。通常使用contour figure（等高线线）来描述上面的3D图像： 在右图的等高线中，每个圆圈上面的点的值是一致的。当前红色点处于参数 对应于左图的直线，但这时候的直线没有很好拟合数据。2.gradient descent（梯度下降）微积分：calculus导数：derivatives"
+ },
+ {
+  "id": "108818902",
+  "title": "利用Transformer生成弹幕",
+  "url": "https://zhuanlan.zhihu.com/p/108818902",
+  "created": "2020-02-24 15:10:42",
+  "voteup": 4,
+  "file": "2020-02-24_利用Transformer生成弹幕.md",
+  "excerpt": "1.前言最近研究了Transformer模型，主要参考了github里面对Transformer的实现，其代码为： https://http://github.com/Kyubyong/transformer而我自己实现的弹幕生成代码的github地址为： https://http://github.com/llq20133100095/transformer_barrages2.模型原理2.1 "
+ },
+ {
+  "id": "109045510",
+  "title": "机器学习——逻辑斯特回归（包含梯度下降推导）",
+  "url": "https://zhuanlan.zhihu.com/p/109045510",
+  "created": "2020-02-25 16:05:29",
+  "voteup": 62,
+  "file": "2020-02-25_机器学习——逻辑斯特回归（包含梯度下降推导）.md",
+  "excerpt": "1. 前言在之前已经简单阐述了“线性回归”模型，具体的介绍地址为： https://http://blog.csdn.net/qq_30232405/article/details/104153928这种简单的线性回归在拟合复杂模型的时候，会出现拟合能力不足的情况。 例如下图已经存在的数据： 横坐标表示：tumor size（肿瘤大小），用$x$表示。 - 横坐标：malignant（恶行肿瘤），"
+ },
+ {
+  "id": "110082534",
+  "title": "矩阵的特征分解（推导+手算+python计算+对称矩阵的特征分解性质）",
+  "url": "https://zhuanlan.zhihu.com/p/110082534",
+  "created": "2020-03-01 11:33:40",
+  "voteup": 73,
+  "file": "2020-03-01_矩阵的特征分解（推导+手算+python计算+对称矩阵的特征分解性质）.md",
+  "excerpt": "﻿ 1. 前言最近几天一直在学习矩阵的知识，恶补了特征分解和SVD算法，发现网上很多资料都是不全的，所以想记录一下这里面的特征分解推导过程。 要学会矩阵的特征分解，可以提前看矩阵的一些基础知识： https://http://blog.csdn.net/qq_30232405/article/details/1045882932.矩阵的进阶知识2.1 特征分解（谱分解）=&gt;只可以用在方阵上2"
+ },
+ {
+  "id": "110805571",
+  "title": "奇异值分解（SVD）推导（从条件推理+反向证明+与特征分解的关系）",
+  "url": "https://zhuanlan.zhihu.com/p/110805571",
+  "created": "2020-03-04 15:23:03",
+  "voteup": 29,
+  "file": "2020-03-04_奇异值分解（SVD）推导（从条件推理+反向证明+与特征分解的关系）.md",
+  "excerpt": "1. 前言最近几天一直在学习矩阵的知识，恶补了特征分解和SVD算法，发现网上很多资料都是不全的，所以想记录一下这里面的特征分解推导过程+奇异值分解（SVD）推导过程 要看懂下面的方法，可以提前看 矩阵的一些基础知识： https://http://blog.csdn.net/qq_30232405/article/details/104588293 特征分解的具体推导过程可以参考： https:/"
+ },
+ {
+  "id": "111767255",
+  "title": "机器学习——过拟合问题（线性回归+逻辑斯特回归的正则化推导）",
+  "url": "https://zhuanlan.zhihu.com/p/111767255",
+  "created": "2020-03-08 19:41:23",
+  "voteup": 5,
+  "file": "2020-03-08_机器学习——过拟合问题（线性回归+逻辑斯特回归的正则化推导）.md",
+  "excerpt": "1.前言 前面已经推导过线性回归和逻辑斯特回归的梯度下降算法。 线性回归的梯度下降算法：https://http://zhuanlan.zhihu.com/p/108625608逻辑斯特回归的梯度下降算法：https://http://zhuanlan.zhihu.com/p/109045510它们各自的梯度下降算法公式为： 线性回归： 逻辑斯特回归：  其中 为sigmoid函数2.过拟合问题及"
+ },
+ {
+  "id": "118053385",
+  "title": "【论文解读】BERT和ALBERT",
+  "url": "https://zhuanlan.zhihu.com/p/118053385",
+  "created": "2020-03-27 09:36:33",
+  "voteup": 14,
+  "file": "2020-03-27_【论文解读】BERT和ALBERT.md",
+  "excerpt": "1.前言最近重新阅读了BERT和ALBERT文章，所以写下自己的一些感悟。这两篇文章都是Google发出来的。其中BERT是2018年，在Transformer的基础上进行扩展；而ALBERT发表在2020年ICLR上，它是基础BERT来进行改进。 BERT论文ALBERT论文2. BERTBERT全称是 Bidirectional Encoder Representations from Tra"
+ },
+ {
+  "id": "124757409",
+  "title": "利用Tensorflow使用BERT模型+输出句向量和字符向量",
+  "url": "https://zhuanlan.zhihu.com/p/124757409",
+  "created": "2020-04-04 11:15:42",
+  "voteup": 14,
+  "file": "2020-04-04_利用Tensorflow使用BERT模型+输出句向量和字符向量.md",
+  "excerpt": "1.前言 最近想着如何利用tensorflow调用BERT模型，发现其源码已经有比较详细的调用代码，具体的链接如下： https://http://github.com/google-research/bert/blob/master/predicting_movie_reviews_with_bert_on_tf_hub.ipynb因此结合上面的例子，主要来构造调用BERT模型。 2.BERT模"
+ },
+ {
+  "id": "132400462",
+  "title": "BERT in tweet_sentiment_extraction",
+  "url": "https://zhuanlan.zhihu.com/p/132400462",
+  "created": "2020-04-17 11:02:47",
+  "voteup": 1,
+  "file": "2020-04-17_BERT_in_tweet_sentiment_extraction.md",
+  "excerpt": "Tweet-sentiment-extraction Tweet sentiment extraction是kaggle的一个比赛，这个代码主要是想尝试利用BERT模型实现词语抽取。 其比赛链接： https://www.kaggle.com/c/tweet-sentiment-extraction/ 我自己实现的项目实现代码在：https://http://github.com/llq20133"
+ },
+ {
+  "id": "134599876",
+  "title": "使用BERT的两层encoder实现tweet sentiment extraction",
+  "url": "https://zhuanlan.zhihu.com/p/134599876",
+  "created": "2020-04-22 16:55:35",
+  "voteup": 4,
+  "file": "2020-04-22_使用BERT的两层encoder实现tweet_sentiment_extraction.md",
+  "excerpt": "使用BERT的两层encoder实现tweet sentiment extractionTweet sentiment extraction是kaggle的一个比赛，这个代码主要是想尝试利用BERT模型实现词语抽取。 其比赛链接： https://www.kaggle.com/c/tweet-sentiment-extraction/我在上一篇文章中初步实现了一个以bert为基础的模型，其文章为："
+ },
+ {
+  "id": "137222913",
+  "title": "使用transformers和tensorflow2.0跑bert模型",
+  "url": "https://zhuanlan.zhihu.com/p/137222913",
+  "created": "2020-04-29 15:57:12",
+  "voteup": 18,
+  "file": "2020-04-29_使用transformers和tensorflow2.0跑bert模型.md",
+  "excerpt": "1.前言前面两篇文章其实已经详细介绍了bert在kaggle比赛tweet_sentiment_extraction的作用，但是该比赛是基于tensorflow2.0版本的，因此需要把代码进行转换。前面的两篇文章如下链接： https://http://zhuanlan.zhihu.com/p/132400462https://http://zhuanlan.zhihu.com/p/1345998"
+ },
+ {
+  "id": "139779541",
+  "title": "kaggle比赛tweet_sentiment_extraction，带你上0.71分数",
+  "url": "https://zhuanlan.zhihu.com/p/139779541",
+  "created": "2020-05-11 22:01:02",
+  "voteup": 17,
+  "file": "2020-05-11_kaggle比赛tweet_sentiment_extraction，带你上0.71分数.md",
+  "excerpt": "1.前言在这个比赛已经折腾了1个多月了，终于分数有点上升。在LB分数榜上可以取得 0.71的分数，模型主要用到Roberta模型。主要使用的技术如下： focal loss：解决类别不平衡问题 adversarial training：对抗训练 Roberta：基础模型 learing schedule：控制每次迭代的学习率，使用了warmup操作和指数下降操作。get_best_start_en"
+ },
+ {
+  "id": "153525261",
+  "title": "stacking in tensorflow2.0：Roberta集成",
+  "url": "https://zhuanlan.zhihu.com/p/153525261",
+  "created": "2020-07-02 22:28:07",
+  "voteup": 0,
+  "file": "2020-07-02_stacking_in_tensorflow2.0：Roberta集成.md",
+  "excerpt": "1.前言使用stacking方法，提升tweet sentiment的抽取效果。其stacking代码如下： https://http://github.com/llq20133100095/tweet_sentiment_extraction/blob/other_mission2/thinking/ensamble/roberta-adversarial-dropout_0.715_en.ip"
+ },
+ {
+  "id": "158780496",
+  "title": "Relation Classification in TAC40",
+  "url": "https://zhuanlan.zhihu.com/p/158780496",
+  "created": "2020-07-11 20:00:05",
+  "voteup": 0,
+  "file": "2020-07-11_Relation_Classification_in_TAC40.md",
+  "excerpt": "1.背景用roberta模型，来进行关系分类，主要用到的数据集为TAC40关系分类数据集。 直接使用transformers导入roberta模型。 同时使用TPU分布式计算，加快模型训练速度。 具体的代码地址为： relation_classification_kbp2.Requirementtransformerstensorflow 2.0numpysklearn3.代码分析3.1 TPU设"
+ },
+ {
+  "id": "245781247",
+  "title": "﻿pandas中使用tqdm",
+  "url": "https://zhuanlan.zhihu.com/p/245781247",
+  "created": "2020-09-15 18:01:18",
+  "voteup": 1,
+  "file": "2020-09-15_﻿pandas中使用tqdm.md",
+  "excerpt": "一般使用python的tqdm，可以查看到处理数据的进度，但是如果想要把tqdm应用到pandas中，则需要改变一下用法。 同样需要先导入tqdm模块： from tqdm import tqdm使用tqdm.pandas，同时input_data为Dataframe结构，因此需要使用input_data.progress_apply来实现apply操作： def get_feature(inpu"
+ },
+ {
+  "id": "258898869",
+  "title": "kaggle：Tweet Sentiment Extraction，提升分数的几种主要方法",
+  "url": "https://zhuanlan.zhihu.com/p/258898869",
+  "created": "2020-09-24 17:21:30",
+  "voteup": 1,
+  "file": "2020-09-24_kaggle：Tweet_Sentiment_Extraction，提升分数的几种主要方法.md",
+  "excerpt": "﻿1.背景 这次分享的是kaggle比赛Tweet Sentiment Extraction的第13名次的方法，作者主要用针对数据集进行前置处理或者是后置处理，具体原文： https://www.http://kaggle.com/c/tweet-sentiment-extraction/discussion/1595052.主要方法2.1 Roberta Model这次比赛，大部分都是用了Rob"
+ },
+ {
+  "id": "264407771",
+  "title": "分析游戏中的金钱交易：Multi-view Attention Networks",
+  "url": "https://zhuanlan.zhihu.com/p/264407771",
+  "created": "2020-10-10 17:30:59",
+  "voteup": 1,
+  "file": "2020-10-10_分析游戏中的金钱交易：Multi-view_Attention_Networks.md",
+  "excerpt": "1.摘要 论文：MVAN: Multi-view attention networks for real money trading detection in online games 里分析了在网游中存在的真实金钱交易行为。（Real money trading）这种交易行为，用真实世界的货币交换虚拟世界中的资产，导致游戏经济的不平衡和贫富不均。论文中主要提出了一种新的模型MVAN（Multi-"
+ },
+ {
+  "id": "349509932",
+  "title": "transformers在ctr中的应用",
+  "url": "https://zhuanlan.zhihu.com/p/349509932",
+  "created": "2021-02-05 16:52:22",
+  "voteup": 30,
+  "file": "2021-02-05_transformers在ctr中的应用.md",
+  "excerpt": "1.背景目前Transformers及其衍生的各种模型（包括Bert，Roberta等）在NLP领域上大放异彩。不仅仅在NLP领域上，在CTR预估上，这些模型能够有效针对画像特征进行分类，从而有效学习高阶交互特征，提升CTR预估效果。同时CTR预估往往存在文本信息，因此也可以使用Transformers等模型来挖掘词语之前的关系。 CTR预估：旨在预测用户是否会点击所推荐的广告和商品，它通常会运用"
+ },
+ {
+  "id": "380322897",
+  "title": "tensorflow 2.0减少内存占用：稀疏矩阵输入",
+  "url": "https://zhuanlan.zhihu.com/p/380322897",
+  "created": "2021-06-13 11:20:47",
+  "voteup": 6,
+  "file": "2021-06-13_tensorflow_2.0减少内存占用：稀疏矩阵输入.md",
+  "excerpt": "1.背景最近在做模型训练，发现在导入大量数据时，由于要进行预处理（concat和reshape操作等），导致内存会占满，使得程序出错。由于输入数据存在大量的稀疏情况，想着能不能输入数据时利用稀疏矩阵进行保存，然后输入到模型中进行训练。 2.稀疏矩阵输入构造python中scipy.sparse模块，能够有效的对输入数据进行稀疏化存储。但缺点在于稀疏矩阵必定只有两维的操作，但一般图片分类设置到多个维"
+ },
+ {
+  "id": "397782916",
+  "title": "从苏炳添的学术论文中，看看如何写论文",
+  "url": "https://zhuanlan.zhihu.com/p/397782916",
+  "created": "2021-08-09 10:25:33",
+  "voteup": 2,
+  "file": "2021-08-09_从苏炳添的学术论文中，看看如何写论文.md",
+  "excerpt": "1.前言东京奥运会开始了一段时间了，截止到2021年8月3日，中国在金牌榜上的排名稳居第一。而就在前几天，我国短跑名将苏炳添在半决赛以 9秒83的成绩刷新亚洲纪录。成为首位闯入奥运会男子百米决赛的中国运动员，也是电计时代第一个跑进百米决赛的黄种人、亚洲人。 不仅如此，同时还是暨南大学的教授。因此今天我们来探究一下苏炳添所写的论文，看看有什么我们可以借鉴的地方。 在知网中查询其论文，共发了6篇文章，"
+ },
+ {
+  "id": "399831403",
+  "title": "小米发布会机器狗CyberDog「铁蛋」正式亮相",
+  "url": "https://zhuanlan.zhihu.com/p/399831403",
+  "created": "2021-08-14 20:35:32",
+  "voteup": 3,
+  "file": "2021-08-14_小米发布会机器狗CyberDog「铁蛋」正式亮相.md",
+  "excerpt": "﻿8月10日是小米的新品发布会，雷军除了协新的MIX 4亮相之外，还发布了小米的第一款机器狗CyberDog，中文名叫 “铁蛋”。之所以取这么大众的名字，原因是因为小米内部希望它比较命硬，能够使得这个项目成功。1 .正式亮相在发布会上，雷军演示以下几个场景： 随着音乐跳舞： 与观众打招呼：这里有个有趣的地方在于，它能够自动识别观众的位置，然后站立起来打招呼。 帅帅的后空翻 最后，雷军在演示中伸手摸"
+ },
+ {
+  "id": "418204789",
+  "title": "翻译模型：小数据集处理",
+  "url": "https://zhuanlan.zhihu.com/p/418204789",
+  "created": "2021-10-07 18:51:11",
+  "voteup": 1,
+  "file": "2021-10-07_翻译模型：小数据集处理.md",
+  "excerpt": "1.背景最近在研究翻译模型中，小数据集的问题，看了几篇有代表性的文章，因此分享一下。 总所周知，一个成功的翻译模型，需要大量的语料，让模型能够有效学习到两个语种之间的内在联系。但针对小数据集的翻译模型，除了数据集过少导致模型不能够提取重要特征之外，还使得模型在效果降低，不能成熟应用到工业界中。 前人的这个小数据集的问题，包括了以下几种方法： 迁移学习对偶学习Meta-Learning（元学习）多任"
+ },
+ {
+  "id": "421846257",
+  "title": "翻译：SmFace: Pre-training Encoder and Decoder with a Semantic Interface for Neural Machine Translation",
+  "url": "https://zhuanlan.zhihu.com/p/421846257",
+  "created": "2021-10-15 15:28:38",
+  "voteup": 0,
+  "file": "2021-10-15_翻译：SmFace_Pre-training_Encoder_and_Decoder_with_a_Semantic_Interface_for_Neural_.md",
+  "excerpt": "1.背景 这篇文章是北航和亚洲微软研究院共同发表的。目前主流的NLP任务，都需要先预训练模型，例如Bert和ALBert。本文章也主要集中在机器翻译（NMT）上的预训练任务。 本文指出，以前的预训练任务，并没有训练encoder和decoder之间的 cross-attention，这会导致在fine-tuning阶段并没有巨大的提升。针对预训练任务上，cross-attention的训练，本文提"
+ },
+ {
+  "id": "424369165",
+  "title": "从代码上解析Meta-learning",
+  "url": "https://zhuanlan.zhihu.com/p/424369165",
+  "created": "2021-10-22 11:41:32",
+  "voteup": 28,
+  "file": "2021-10-22_从代码上解析Meta-learning.md",
+  "excerpt": "1.背景meta-learning区别于pretraining，它主要通过多个task来学习不同任务之间的内在联系，通俗点说，也即是通过多个任务来学习共同的参数。 举个例子，人类在进行分类的时候，由于见过太多东西了，且已经学过太多东西的分类了。那么我们可能只需每个物体一张照片，就可以对物体做到很多的区分了，那么人是怎么根据少量的图片就能学习到如此好的成果呢？ 显然 ，我们已经掌握了各种用于图片分类"
+ },
+ {
+  "id": "438700550",
+  "title": "【芭芭农场】简单快速自动操作手机：Hamibot",
+  "url": "https://zhuanlan.zhihu.com/p/438700550",
+  "created": "2021-11-28 15:25:09",
+  "voteup": 10,
+  "file": "2021-11-28_【芭芭农场】简单快速自动操作手机：Hamibot.md",
+  "excerpt": "1.背景自动化操作手机的脚本开发软件有挺多的，包括按键精灵，触摸精灵，Autojs等软件。 最近因为想开发一个能够自动刷 芭芭农场的脚本，对比了多个免费的软件，最后选定Hamibot进行开发。基于Hamibot软件开发优点： - 代码开发简单：已经集成了多种控件的函数操作，使用JS语言，几行代码就可以实现自动化操作手机； - 手机调试简单：不需要利用USB连接电脑，在开发的时候，可以自己在网页上调"
+ },
+ {
+  "id": "453357892",
+  "title": "强化学习在推荐系统中的环境模拟器构建",
+  "url": "https://zhuanlan.zhihu.com/p/453357892",
+  "created": "2022-01-04 23:33:19",
+  "voteup": 22,
+  "file": "2022-01-04_强化学习在推荐系统中的环境模拟器构建.md",
+  "excerpt": "1.背景在推荐系统中，使用强化学习方法有几个不足的地方： 1）要使用用户实时数据进行奖励反馈，来训练强化学习模型。其中最有效的办法是把模型直接部署到线上，然后进行A/B test来产生真实数据。但是，这个过程往往需要较长的周期，同时如果要部署模型到线上，需要耗费巨大的工程，这一步针对算法工程师来说是不太友好的。 2）如果推荐模型在部署线上前没有训练好，这会导致线上实时数据效果差，从而也会导致在强化"
+ },
+ {
+  "id": "460785046",
+  "title": "《开端》最后的大结局到底是怎么样的呢？从数据分析中看网友猜测",
+  "url": "https://zhuanlan.zhihu.com/p/460785046",
+  "created": "2022-01-22 21:25:40",
+  "voteup": 1,
+  "file": "2022-01-22_《开端》最后的大结局到底是怎么样的呢？从数据分析中看网友猜测.md",
+  "excerpt": "﻿ 1.《开端》最近大火的《开端》让不少小伙伴着迷。这部剧主要讲述的是大学生 李诗情和游戏架构师肖鹤云，在45路公交车被炸毁的当天不断循环，之后为了保护车上乘客的安全，携手阻止公交车爆炸，并找出爆炸人同时寻找凶手真正的作案动机的故事。电视剧已经播放到了13集，还有两集才大结局，但是大部分观众已经迫不及待地想要看到电视剧最后两集的结局。 目前网友也在各大平台上对《开端》这部剧的结局进行了讨论。为了能"
+ },
+ {
+  "id": "468509038",
+  "title": "GAN模型调参",
+  "url": "https://zhuanlan.zhihu.com/p/468509038",
+  "created": "2022-02-17 10:56:12",
+  "voteup": 14,
+  "file": "2022-02-17_GAN模型调参.md",
+  "excerpt": "GAN在提出之后，一直很火。但是其存在诸多的难点，首先难以平衡G（生成器）和D（判别器）之间的训练，同时容易造成模型坍塌。因此在训练GAN时会很难。 1.软标签和noise标签这一点在训练判别器时极为重要。使用硬标签（非 1 即 0）几乎会在早期就摧毁所有的学习进程，导致判别器的损失迅速趋近于 0。可以采用一个 0-0.1 之间的随机数来代表「标签 0」（真实数据），并使用一个 0.9-1 之间的"
+ },
+ {
+  "id": "475442735",
+  "title": "optuna在深度学习上自动调参",
+  "url": "https://zhuanlan.zhihu.com/p/475442735",
+  "created": "2022-03-03 19:47:36",
+  "voteup": 6,
+  "file": "2022-03-03_optuna在深度学习上自动调参.md",
+  "excerpt": "1.背景最近在烦恼怎么对深度学习进行调参，发现在optuna上可以实现。 optuna可以和主流的机器学习框架进行融合，然后进行调参。同时调参后，还有查看结果对比的功能。 2.安装直接使用pip进行安装: pip install optuna3.在tensorflow上使用首先看一下官方案例： import tensorflow as tf import optuna # 1. Define an"
+ },
+ {
+  "id": "492728422",
+  "title": "Dota2英雄死亡预测",
+  "url": "https://zhuanlan.zhihu.com/p/492728422",
+  "created": "2022-04-03 21:59:44",
+  "voteup": 1,
+  "file": "2022-04-03_Dota2英雄死亡预测.md",
+  "excerpt": "﻿ 今天要阅读的论文《Time to Die: Death Prediction in Dota 2 usingDeep Learning》。论文中能够预测10个英雄中，在下5秒窗口下死亡概率。 在这里插入图片描述 1.背景目前MOBA类游戏风靡全球，同时这种竞技类游戏的比赛也越来越受广大观众的喜爱。但是试图预测MOBA类游戏中的比赛发生情况，目前还是很少有类似论文。 然而，主播和观众一般会对游戏"
+ },
+ {
+  "id": "493372959",
+  "title": "Github Copilot抄袭风波",
+  "url": "https://zhuanlan.zhihu.com/p/493372959",
+  "created": "2022-04-05 16:41:25",
+  "voteup": 0,
+  "file": "2022-04-05_Github_Copilot抄袭风波.md",
+  "excerpt": "﻿2021年，Github和OpenAI合作，基于 GPT-3模型推出了可以代码自动编码的插件：github copilot。简单来说， copilot就像是你的助手一样，帮助你把枯燥重复的代码进行补全，而你仅仅需要把核心部分代码进行编写就可以了，这样在开发效率上会提高，同时辅助你减少写bug的过程。1.安装在vscode软件中，找到github copilot进行安装： 在这里插入图片描述 因为"
+ },
+ {
+  "id": "495513900",
+  "title": "多模态逆天图片生成，OpenAI又一力作：DALL·E 2",
+  "url": "https://zhuanlan.zhihu.com/p/495513900",
+  "created": "2022-04-09 09:12:56",
+  "voteup": 11,
+  "file": "2022-04-09_多模态逆天图片生成，OpenAI又一力作：DALL·E_2.md",
+  "excerpt": "1.DALL . E 2：集艺术之大成还记得2021年刷爆AI圈的DALL·E，它是基于文本token来生成超现实主义的图像，比如下面的 牛油果形状的椅子。 最近，OpenAI基于其1.0版本进行了升级，发布了DALL·E 2。该版本除了可以像1.0版本一样，从自然语言的描述中创建逼真的图像和艺术，还可以： 对现有生成的图片进行二次创作：添加和删除元素的阴影,反射,和纹理。 根据现有图片进行风格迁"
+ },
+ {
+  "id": "499727438",
+  "title": "程序员必备：头发去除魔法",
+  "url": "https://zhuanlan.zhihu.com/p/499727438",
+  "created": "2022-04-16 18:24:19",
+  "voteup": 0,
+  "file": "2022-04-16_程序员必备：头发去除魔法.md",
+  "excerpt": "﻿ 说起程序员我们这个群体，除了给人的印象是春夏秋冬穿 格子衫之外，就只剩下那后移的发际线成为办公室中那一道道靓丽的风景线： 每每在学习的时候，都感到从头开始的冷。 一个稀疏的发型，往往是资深工程师的象征： 所以说， 头发越疏，责任越大。这不，浙江大学和腾讯游戏智能图形创新技术联合实验室联合发表了帮程序员们一部到位秃发得更彻底的算法。 论文： 《HairMapper: Removing Hair "
+ },
+ {
+  "id": "507816383",
+  "title": "PowerToys：让你的windows电脑高级起来",
+  "url": "https://zhuanlan.zhihu.com/p/507816383",
+  "created": "2022-04-30 19:47:12",
+  "voteup": 1,
+  "file": "2022-04-30_PowerToys：让你的windows电脑高级起来.md",
+  "excerpt": "﻿PowerToys 如果你在日常工作中，需要频繁切换窗口，同时对快速搜索有要求，可以试试这款微软出品的PowerToys Microsoft PowerToys 是一组实用工具，可帮助高级用户调整和简化其 Windows 体验，从而提高工作效率。 安装登陆网站： https://http://docs.microsoft.com/zh-cn/windows/powertoys/点击安装按钮： 始"
+ },
+ {
+  "id": "517787857",
+  "title": "ACL2021：预训练模型（5篇）",
+  "url": "https://zhuanlan.zhihu.com/p/517787857",
+  "created": "2022-05-21 12:01:05",
+  "voteup": 2,
+  "file": "2022-05-21_ACL2021：预训练模型（5篇）.md",
+  "excerpt": "1. How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models本文主要针对在预训练模型中，单语言（monolingual）模型与多语言（Multilingual）模型之间的性能比较。为了进行控制变量，作者在相同的数据上，利用了单语言的分词器和多语言的分词器，训练了新的单语言模"
+ },
+ {
+  "id": "521168480",
+  "title": "程序员养生之道",
+  "url": "https://zhuanlan.zhihu.com/p/521168480",
+  "created": "2022-05-28 11:26:05",
+  "voteup": 0,
+  "file": "2022-05-28_程序员养生之道.md",
+  "excerpt": "程序员养生之道 最近在github上爆火的《程序员延寿指南》，狂澜16.3K星，大受欢迎。 该代码仓库指出，如果能够按照作者罗列的来做，能够降低66.67%的死亡率，增加20年的寿命。 作者首先定义了一个叫“ACM（全因死亡率）”的指标，并把KPI设定为“如何稳健地活得更久 ”。从三个方面论证了其养生之道：输入：每天摄入的食物输出：包含运动、睡眠等上下文：你的体重也即是说，只要根据作者这三个方面的"
+ },
+ {
+  "id": "522381808",
+  "title": "文本图像生成：谷歌Imagen硬杠OpenAI的DALL.E 2",
+  "url": "https://zhuanlan.zhihu.com/p/522381808",
+  "created": "2022-05-31 09:49:06",
+  "voteup": 5,
+  "file": "2022-05-31_文本图像生成：谷歌Imagen硬杠OpenAI的DALL.E_2.md",
+  "excerpt": "1.Imagen：文本到图像生成 还记得4月初刷爆AI圈的DALL.E 2吗？该AI算法能够从自然语言的描述中创建逼真的图像，还可以对现有的图片进行二次创作，生成高像素的图片： 但仅仅过了一个多月，谷歌推出了Imagen直接硬杠DALL.E 2。我们看一下这两个选手在统一命题下生成的图片效果： | 盘旋牛绑架外星人（作图是Imagen，右图是DALL.E 2） 从生成的结果上说，两位AI选手各有千"
+ },
+ {
+  "id": "526126843",
+  "title": "教你从入门到放弃的烂代码",
+  "url": "https://zhuanlan.zhihu.com/p/526126843",
+  "created": "2022-06-08 20:38:11",
+  "voteup": 2,
+  "file": "2022-06-08_教你从入门到放弃的烂代码.md",
+  "excerpt": "GitHub上有个特别的项目，主要是教授你如何写出一个”让人窒息“的代码。这样在别人接手你的项目代码时，可以充分恶心一下他。 这个项目截止到目前为止，已经有2.5K的星星数。看来很多人都在努力学习，如何写出令人狗血不止的亮眼代码了。 该项目一共提供了19个准则，项目地址如下，读者们可以根据自己的实际情况看看自己是否有中招了。 https://http://github.com/trekhleb/s"
+ },
+ {
+  "id": "527522415",
+  "title": "让游戏AI学会开挂",
+  "url": "https://zhuanlan.zhihu.com/p/527522415",
+  "created": "2022-06-11 22:36:44",
+  "voteup": 1,
+  "file": "2022-06-11_让游戏AI学会开挂.md",
+  "excerpt": "在大型竞技电子游戏中，越来越多的研究人员开始让AI学习人类高手的操作。一般来说，利用强化学习等训练方法，使用大量数据集训练模型，让AI在即使战斗中学会执行下一步的操作。除了模仿人类行为外，一些研究员还让AI去学会预测哪里有敌方单位，和当前的死亡概率等。这不就是广大网友熟悉的 “全图视野挂”吗？ 这样一来，AI甚至能预测你的当前位置，同时预测你的死亡概率。想象一下，当你遇到对面能够预测你的下一步时，"
+ },
+ {
+  "id": "532506731",
+  "title": "定制你的宠物桌面",
+  "url": "https://zhuanlan.zhihu.com/p/532506731",
+  "created": "2022-06-22 23:31:18",
+  "voteup": 4,
+  "file": "2022-06-22_定制你的宠物桌面.md",
+  "excerpt": "最近想要做一个自己独一无二的桌面宠物，可以直接使用python来自己订制。属于一个小项目，这个教程主要包含几个步骤： 1. 准备需要的动图素材 2. 规划自己需要的功能 3.使用python的PyQt5订制功能 在这个教程中，我主要实现了桌面宠物的几个功能： 每隔一段时间切换动图素材+文字点击宠物时有额外动作“故事大会”功能：跟宠物聊天，进行文本生成“休息一下”功能：隔一个小时提醒你休息功能 这里"
+ },
+ {
+  "id": "533634168",
+  "title": "工作摸鱼秘籍",
+  "url": "https://zhuanlan.zhihu.com/p/533634168",
+  "created": "2022-06-25 13:06:25",
+  "voteup": 0,
+  "file": "2022-06-25_工作摸鱼秘籍.md",
+  "excerpt": "这篇文章主要教你在工作的时候，“ 正确摸鱼”的小妙招，主要工具是我们很常用到的编辑器“vscode”。在vscode中，很多开发者制作了专门用来摸鱼的插件，可以让我们偷偷避过老板们的耳目。 在这里插入图片描述 1.小霸王这款插件能够让你在开发之余放松身心，享受到童年的乐趣。通过边玩游戏边写代码，提升我们的开发效率。 在这里插入图片描述 里面的游戏都是我们小时候耳熟能详的：马里奥、坦克大战、魂斗罗。"
+ },
+ {
+  "id": "536735680",
+  "title": "让AI玩《我的世界》",
+  "url": "https://zhuanlan.zhihu.com/p/536735680",
+  "created": "2022-07-02 16:04:48",
+  "voteup": 54,
+  "file": "2022-07-02_让AI玩《我的世界》.md",
+  "excerpt": "﻿我们都知道，《我的世界》（MC）是一款 沙盒开放世界游戏，玩家可以根据自己的想象，建造出完全属于自己的世界。它着重于让玩家探索，并可以与环境物品进行交互，使得玩家在游戏中有极大的自由度和开放度。在以往的例子中，AI能在MOBA类游戏和即时战略游戏中超越专业选手，例如腾讯在王者荣耀训练出来的“ 绝悟AI”： 在这里插入图片描述 DeepMind在星际争霸中训练出来的“ AlphaStar”： 在这"
+ },
+ {
+  "id": "540142701",
+  "title": "构建你的第一个强化学习AI智能体（微信“跳一跳”）",
+  "url": "https://zhuanlan.zhihu.com/p/540142701",
+  "created": "2022-07-11 21:21:31",
+  "voteup": 8,
+  "file": "2022-07-11_构建你的第一个强化学习AI智能体（微信“跳一跳”）.md",
+  "excerpt": "最近在学习一些关于强化学习的知识。当然仅仅学习理论知识还是不够的，还是需要从实际案例上进行出发，利用强化学习搭建自己的AI智能体。 一般来说，强化学习第一个案例都是用“ cartpole”，也即是在一个平衡木上保持木杆不下落： cartpole 但是这个案例一般离我们生活比较远，因此本入门案例使用了微信“跳一跳”作为强化学习的目标。 在本案例中，大体框架如下： 实现“跳一跳”环境交互实现强化学习算"
+ },
+ {
+  "id": "541280861",
+  "title": "Copilot要收费了？",
+  "url": "https://zhuanlan.zhihu.com/p/541280861",
+  "created": "2022-07-13 21:52:34",
+  "voteup": 1,
+  "file": "2022-07-13_Copilot要收费了？.md",
+  "excerpt": "用copilot好几个月了，在敲代码的时候，它往往能够很神奇的预测自己下一行代码的写法。有了它之后，自己写代码的效率也高起来。 但是一觉醒来，就收到了通知说“今后不再免费”了。而且免费截止日期仅仅到8月22日。看了一下具体的收费标准，一个月要$10，而包年的话则需要$100。 收费 看到这里，如果还想继续使用的可以通过 银联+Visa双币信用卡来进行支付。支付完成后就可以安装到自己的代码编辑器中，"
+ },
+ {
+  "id": "544166967",
+  "title": "tensorflow加速",
+  "url": "https://zhuanlan.zhihu.com/p/544166967",
+  "created": "2022-07-20 21:40:14",
+  "voteup": 1,
+  "file": "2022-07-20_tensorflow加速.md",
+  "excerpt": "1. 构造TFRecord文件TFrecord文件是tensorflow用来快速读取大文件的一种二进制格式，使用这种格式可以较为轻松的迁移到不同的系统上进行快速训练。 具体流程： 构造TFRecord文件：tf.io.TFRecordWriter(record_file)读取TFRecord文件：tf.data.TFRecordDataset1.2 构造TFRecord文件TFRecord文件中多"
+ },
+ {
+  "id": "548467223",
+  "title": "NLP范式新变化：Prompt",
+  "url": "https://zhuanlan.zhihu.com/p/548467223",
+  "created": "2022-08-01 10:39:53",
+  "voteup": 6,
+  "file": "2022-08-01_NLP范式新变化：Prompt.md",
+  "excerpt": "1.Prompt简介最近，NLP上又开发出了一种新的范式：Prompt。它通过定义模板来提醒下游任务模型学习的特定目标，在更少的更新参数场景下达到了和fine-tuning方法一样的效果。 具体可以看一下这篇综述文章： 《Pre-train, Prompt, and Predict: A Systematic Survey of Prompting Methods in Natural Langu"
+ },
+ {
+  "id": "550705038",
+  "title": "NLP第四范式：连续性Prompt",
+  "url": "https://zhuanlan.zhihu.com/p/550705038",
+  "created": "2022-08-06 21:59:48",
+  "voteup": 10,
+  "file": "2022-08-06_NLP第四范式：连续性Prompt.md",
+  "excerpt": "前面一篇文章主要讲到NLP领域上的四种演变范式，同时引入了第四范式“Prompt”的概念。具体可以会看这里： withYou：NLP范式新变化：PromptPrompt不仅仅使用特定的模板构建输入，同时也能够使用连续性Prompt进行输入。下面介绍两篇连续性领域的Prompt论文。 《GPT Understands, Too》 1.摘要在自然语言理解（NLU）任务上，GPT模型一般来说效果不怎么好"
+ },
+ {
+  "id": "553416661",
+  "title": "一个AI玩遍多个游戏",
+  "url": "https://zhuanlan.zhihu.com/p/553416661",
+  "created": "2022-08-13 16:58:16",
+  "voteup": 9,
+  "file": "2022-08-13_一个AI玩遍多个游戏.md",
+  "excerpt": "之前，我曾经介绍过很多在游戏圈比较出名的AI智能体。这些AI智能体往往能在MOBA类游戏和即时战略游戏中超越专业选手，例如腾讯在王者荣耀训练出来的“ 绝悟AI”： DeepMind在星际争霸中训练出来的“ AlphaStar”： 还有我曾经写过的一篇《我的世界》的AI智能体： withYou：构建你的第一个强化学习AI智能体（微信“跳一跳”）这其中，OpenAI利用玩家视频来学习，训练出超大的预训"
+ },
+ {
+  "id": "555990578",
+  "title": "如何看待小米先于马斯克发布的人形机器人CyberOne？",
+  "url": "https://zhuanlan.zhihu.com/p/555990578",
+  "created": "2022-08-20 18:58:36",
+  "voteup": 0,
+  "file": "2022-08-20_如何看待小米先于马斯克发布的人形机器人CyberOne？.md",
+  "excerpt": "小米在8月11日晚除了正常发布手机外，还发布了一款名叫：CyberOne的人形机器人。那么怎么看待小米人形机器人呢？我截取了一些网友的回答。 一些网友认为，目前的小米的这款人形机器人 属于一次“秀肌肉”： image.png 还有一些网友认为，小米的这次人形机器人目前虽然不实用，但是迭代多几个版本，那他们就能够解放生产力，代替人类做一些重复枯燥的事情： image.png 小米的这款人形机器人一出"
+ },
+ {
+  "id": "558552887",
+  "title": "自动代码Copilot背后的模型",
+  "url": "https://zhuanlan.zhihu.com/p/558552887",
+  "created": "2022-08-27 21:02:17",
+  "voteup": 13,
+  "file": "2022-08-27_自动代码Copilot背后的模型.md",
+  "excerpt": "之前，我已经介绍过Github发布的自动代码Copilot的使用方法，感兴趣的可以看这篇文章： Copilot要收费了？今天主要介绍一下github copilot中主要用到的代码生成框架 Codex。它主要是由Github和OpenAI联合开发的模型框架，具体链接如下：https://http://openai.com/blog/openai-codex/?utm_campaign=Connec"
+ },
+ {
+  "id": "560993908",
+  "title": "你的视频背景太假了？",
+  "url": "https://zhuanlan.zhihu.com/p/560993908",
+  "created": "2022-09-03 22:22:43",
+  "voteup": 4,
+  "file": "2022-09-03_你的视频背景太假了？.md",
+  "excerpt": "最近相信大家都被一个二创梗刷爆短视频：“你这背景太假了！”。视频中是一位主播“疆域阿力木”在直播时，被网友质疑背景太假，因此他发布了自证清白的视频。 https://www.zhihu.com/video/1549521183443402752但这个视频发布后，再次被网友“二次创作”。由于其搞笑的体质被网友抠出来做到各种视频中，从此引发相关话题也冲上热搜。网友把他P到上天入地，无所不能。 比如：上"
+ },
+ {
+  "id": "564474054",
+  "title": "火爆艺术圈的文本图像生成是什么？",
+  "url": "https://zhuanlan.zhihu.com/p/564474054",
+  "created": "2022-09-14 22:07:16",
+  "voteup": 3,
+  "file": "2022-09-14_火爆艺术圈的文本图像生成是什么？.md",
+  "excerpt": "最近文本生成图像AI又火爆了起来，并且频频上热搜，在知乎热榜上都会看到相关的问题出现：  游戏设计师利用AI工具作画拿到一等奖：说的是美国的一位画师利用AI工具进行作画，并拿到了一等奖，从而惹来了大量的争议 由于AI图像生成软件Midjorunery的爆火，导致大量的日本画师纷纷进行抵制 而伴随着Stable Diffusion，DALLE-2，Imagen等AI文本图像生成模型的出现，作画这个行"
+ },
+ {
+  "id": "566893665",
+  "title": "拥有1750亿参数的聊天机器人BlenderBot3",
+  "url": "https://zhuanlan.zhihu.com/p/566893665",
+  "created": "2022-09-21 23:42:36",
+  "voteup": 0,
+  "file": "2022-09-21_拥有1750亿参数的聊天机器人BlenderBot3.md",
+  "excerpt": "最近Meta已经放出了BlenderBot3聊天机器人测试页面，但仅限于美国本土进行测试和交互： 一经发布，能多网友就开始和这个最强机器人进行聊天，诞生了啼笑皆非的对话。 比如这个网友，询问对扎克伯格的看法。而该机器人不喜欢他，并认为“ 他是一个恐怖的人” 还有的网友发现，BB3也在努力 宣传自家公司，并称自己已经买了Meta的股票： BlenderBot3聊天机器人拥有 1750亿参数量级。在构"
+ },
+ {
+  "id": "567811010",
+  "title": "一个好用的扩散模型包：Diffusers",
+  "url": "https://zhuanlan.zhihu.com/p/567811010",
+  "created": "2022-09-24 18:45:25",
+  "voteup": 41,
+  "file": "2022-09-24_一个好用的扩散模型包：Diffusers.md",
+  "excerpt": "1.前言最近文本生成图像AI太过于火爆，导致频频上热搜。 游戏设计师利用AI工具作画拿到一等奖：说的是美国的一位画师利用AI工具进行作画，并拿到了一等奖，从而惹来了大量的争议 由于AI图像生成软件Midjorunery的爆火，导致大量的日本画师纷纷进行抵制 而且我之前也写过很多类似的文本生成图像模型，像Imagen和Dall.E2，都是我之前介绍过的作品： 算法一只狗：文本图像生成：谷歌Image"
+ },
+ {
+  "id": "574511187",
+  "title": "短视频模型Imagen Video：艺术和3D建模大师",
+  "url": "https://zhuanlan.zhihu.com/p/574511187",
+  "created": "2022-10-17 20:01:03",
+  "voteup": 0,
+  "file": "2022-10-17_短视频模型Imagen_Video：艺术和3D建模大师.md",
+  "excerpt": "看到Imagen这个字眼，那不是前阵子很火的文本图像生成圈的一个模型吗？这不，谷歌在10月份基于这个模型的基础上，发布了能够生成短视频的 Imagen Video模型。Imagen Video，是基于文本条件生成视频的模型。给定相应的文本提示，在基于“视频生成模型”和“交错时空视频流超分辨率模型”，Imagen Video能够生成高清晰度的视频。 在论文中，主要描述了如何构建一个高清晰度的文本视频"
+ },
+ {
+  "id": "576302201",
+  "title": "AI图片生成：构建自己的绘画网站",
+  "url": "https://zhuanlan.zhihu.com/p/576302201",
+  "created": "2022-10-22 23:24:31",
+  "voteup": 11,
+  "file": "2022-10-22_AI图片生成：构建自己的绘画网站.md",
+  "excerpt": "1.NovelAI魔法最近NovelAI在二次元AI生成圈也火了一把，它能够生成你的各种不一样的老婆： 同时，由于在生成图片的时候需要输入各种各样的prompt模板，因此被网友戏称为”魔法咒语“。同时还延伸出了不同的法术prompt解析网站： 法术解析 image.png 魔咒百科： 最初，NovelAI是一个自动生成小说的网站： 但是它使用的Stable Diffusion模型被泄露了，导致普通"
+ },
+ {
+  "id": "578746874",
+  "title": "一句话生成更长视频",
+  "url": "https://zhuanlan.zhihu.com/p/578746874",
+  "created": "2022-10-30 16:58:23",
+  "voteup": 2,
+  "file": "2022-10-30_一句话生成更长视频.md",
+  "excerpt": "前段时间，我曾经介绍过Imagen Video模型。它能够在输入一句话中，生成5~6秒的视频。而且由于采用了“空间高分辨率模型”和“时域高分辨率模型”的级联模型，它能够清晰度在1280×768的高清视频。具体的介绍可以回看我之前写的文章： 算法一只狗：短视频模型Imagen Video：艺术和3D建模大师虽然Imagen Video模型，能够生成高清晰度的短视频，但是仅仅只有5秒左右的时间，因此实"
+ },
+ {
+  "id": "583842111",
+  "title": "国内外免费的AI作图软件",
+  "url": "https://zhuanlan.zhihu.com/p/583842111",
+  "created": "2022-11-16 10:03:00",
+  "voteup": 13,
+  "file": "2022-11-16_国内外免费的AI作图软件.md",
+  "excerpt": "1.一键AI绘画一键AI绘画 - 一款专业的AI绘画生成软件操作很简单的一个AI绘画软件，只需要输入关键词进行描述，就可以随机生成多张图片，小白也能轻松上手。 可以生成精致的人像图片： 风格多样的场景画面，写实的、有氛围感的、未来科技感的等等： 优点：提供多个AI绘画模型，可以生成不同风格的图片一次能生成多张图片，效率高生成的图片完全原创，可以直接使用支持输入多个关键词进行描述，描述越完整，图片细"
+ },
+ {
+  "id": "585912719",
+  "title": "AI自我进化，学会自己写代码了！",
+  "url": "https://zhuanlan.zhihu.com/p/585912719",
+  "created": "2022-11-23 10:33:52",
+  "voteup": 16,
+  "file": "2022-11-23_AI自我进化，学会自己写代码了！.md",
+  "excerpt": "在之前我写过自动生成代码的工具Copilot，它是由Github根据大量的仓库代码进行预训练生成的。如果感兴趣可以具体看回我之前写过的文章。里面由包括安装、使用方法等。 Github Copilot抄袭风波由于Copilot已经需要收费， 因此为了找到更加合理（免费好用）的生成代码工具，帮助我把重复枯燥的代码进行补全。最近又使用了几个类似的工具，下面是我根据这些工具的一些使用体验。 PS：更多详细"
+ },
+ {
+  "id": "586952621",
+  "title": "AI预测世界杯2022冠军之路",
+  "url": "https://zhuanlan.zhihu.com/p/586952621",
+  "created": "2022-11-26 18:59:10",
+  "voteup": 2,
+  "file": "2022-11-26_AI预测世界杯2022冠军之路.md",
+  "excerpt": "最近世界杯正在打得火热，同时各个小组的排位赛也打得如火如荼。因此想着能不能用历年以来的世界杯成绩来模拟预测今年的夺冠球队呢？ 恰好，在Kaggle官网上，有两份数据可以使用： 国际大赛上，从1872年到2022年的足球比赛数据：包含主客队的信息、举办地方等。从1992到2022年中，每个国家的排名成绩因此我们可以利用这两份数据进行数据分析。在模型中，利用随机森林进行预测，可以得到具体的模型结果。 "
+ },
+ {
+  "id": "589544263",
+  "title": "AI绘图：Stable Diffusion 2.0它来了！",
+  "url": "https://zhuanlan.zhihu.com/p/589544263",
+  "created": "2022-12-06 10:03:51",
+  "voteup": 1,
+  "file": "2022-12-06_AI绘图：Stable_Diffusion_2.0它来了！.md",
+  "excerpt": "自从Stable Diffusion 1.0模型发布以来，“AI文本图片生成”真正的变成普通人也能使用的技术。 同时各种国内外AI绘图软件，也不断频繁更新，像比较出名的 文心一格，盗梦师，6open等生成工具，生成的图片已经达到了以假乱真的地步。想看详细介绍的，可以回看这篇文章： 算法一只狗：国内外免费的AI作图软件而在这次Stable Diffusion 2.0的发布中，有几个比较重要的更新。 "
+ },
+ {
+  "id": "594073972",
+  "title": "阿根廷夺冠了！纪念我的青春~",
+  "url": "https://zhuanlan.zhihu.com/p/594073972",
+  "created": "2022-12-24 18:07:01",
+  "voteup": 20,
+  "file": "2022-12-24_阿根廷夺冠了！纪念我的青春~.md",
+  "excerpt": "我真正第一次看世界杯的时候，是14年还在读大学的日子。 记忆里，也是在大学宿舍中熬夜看的比赛。刚刚是大二，那时候的身体觉得熬夜挺简单的，只要第二天睡上一觉就可以了。 那时候没有特别明确支持的球队，主要还是看巴西，阿根廷，葡萄牙的比赛。说是看球队，其实还是看球队里的球星，像内马尔、梅西、C罗、保利尼奥（广州恒大名宿）、小马哥（华夏幸福名宿）等球员。 记忆里的14年说实话，在14年的比赛中，给我留下印"
+ },
+ {
+  "id": "596026996",
+  "title": "ChatGPT背后的模型",
+  "url": "https://zhuanlan.zhihu.com/p/596026996",
+  "created": "2023-01-02 16:46:24",
+  "voteup": 1,
+  "file": "2023-01-02_ChatGPT背后的模型.md",
+  "excerpt": "InstructGPT语言模型，是一个比 GPT-3 更善于遵循用户意图，同时使用通过我们的对齐研究开发的技术使它们更真实、毒性更小。InstructGPT 模型循环迭代的过程当中，加入了人类反馈进行训练。 比如下面的例子：几句话向6岁的孩子解析登月 可以看到，GPT-3模型的回答需要分开多个句子进行解析，这样的回答并不像人类。而InstructGPT模型的回答，在逻辑和语义通顺上，更加偏向于人类"
+ },
+ {
+  "id": "598593439",
+  "title": "AI调BUG？AI构建浏览器？人工智能又整新活了",
+  "url": "https://zhuanlan.zhihu.com/p/598593439",
+  "created": "2023-01-13 10:44:08",
+  "voteup": 0,
+  "file": "2023-01-13_AI调BUG？AI构建浏览器？人工智能又整新活了.md",
+  "excerpt": "公众号：算法一只狗Web4浏览器自从ChatGPT大火之后，似乎让搜索巨头谷歌有了危机感。那么是否有朝一日，ChatGPT真的能替换谷歌成为搜索引擎巨头呢？ 这不，有人就基于ChatGPT，做出了一个真实的浏览器出来。 具体的，其项目地址如下： https://http://github.com/jbilcke/web4由于该项目目前处于试验阶段，因此需要自己又OpenAI账号，然后配置API才可"
+ },
+ {
+  "id": "602599504",
+  "title": "AI杀疯！2022下半年有趣的AI算法",
+  "url": "https://zhuanlan.zhihu.com/p/602599504",
+  "created": "2023-02-01 17:02:45",
+  "voteup": 13,
+  "file": "2023-02-01_AI杀疯！2022下半年有趣的AI算法.md",
+  "excerpt": "公众号：算法一只狗 上一次，我发布了“2022年上半年有趣的AI算法”，受到很多人的关注。因此这期接着带来2022下半年里出现的有趣好玩的AI算法。第一个，艺术和3D建模大师 https://http://mp.weixin.qq.com/s/ZcUytUSDt8E3t83PZE54Bw第二个，一句话生成更长视频 https://http://mp.weixin.qq.com/s/a4_kGy_M"
+ },
+ {
+  "id": "609588878",
+  "title": "进化神速~用AI生成真人图片和视频！",
+  "url": "https://zhuanlan.zhihu.com/p/609588878",
+  "created": "2023-02-26 16:50:43",
+  "voteup": 67,
+  "file": "2023-02-26_进化神速~用AI生成真人图片和视频！.md",
+  "excerpt": "公众号：算法一只狗0.一键AI绘画一键AI绘画 - 一款专业的AI绘画生成软件这是一款通过人工算术技术智能生成AI绘画的软件，它能够以最简单的方法生成出精美的画作，并且该AI绘画工具生成的速度快，提供的风格类型也多。 我们只需打开软件，点击界面的【AI绘画】功能，在【画面描述】中输入所需的画作关键词，接着根据关键词选择一款模型，再设置好尺寸及数量，最后按生成按钮就可快速得到精美的作品啦~ 以下是我"
+ },
+ {
+  "id": "614160061",
+  "title": "ChatGPT的接口开放后，一起来看看有哪些有趣好玩的应用",
+  "url": "https://zhuanlan.zhihu.com/p/614160061",
+  "created": "2023-03-15 13:33:25",
+  "voteup": 17,
+  "file": "2023-03-15_ChatGPT的接口开放后，一起来看看有哪些有趣好玩的应用.md",
+  "excerpt": "公众号：算法一只狗自从openai开放了ChatGPT接口之后，一些开发者开始利用这个接口进行私人订制。因此本文找了几个好玩的应用，帮助大家开发一下思路。 订制真人对话系统近期我就在huggingface网站上看到了利用ChatGPT和Whisper语音识别，来制作真人对话系统的。 各位如果感兴起可以上这个网站上体验一下： https://http://huggingface.co/spaces/"
+ },
+ {
+  "id": "618591519",
+  "title": "手把手教学！搭建一个AI图片、视频网站",
+  "url": "https://zhuanlan.zhihu.com/p/618591519",
+  "created": "2023-03-31 20:04:12",
+  "voteup": 34,
+  "file": "2023-03-31_手把手教学！搭建一个AI图片、视频网站.md",
+  "excerpt": "在上一年，Stable Diffusion模型发布以来，“AI文本图片生成”真正的变成普通人也能使用的技术。 但是最近一些网友利用网上的真人图片，不断喂给模型进行自主学习。其训练出来的效果已经可以做到以假乱真，你甚至不知道哪些图片是AI生成的还是真人拍出来的。 为了给广大读者造福利，这篇文章从零开始，教你如何搭建自己的真人AI网站。 1.搭建你自己的AI网站之前我写过一篇文章，在自己本地可以部署可"
+ },
+ {
+  "id": "618857751",
+  "title": "GPT4详解_你感兴趣的点都在这里",
+  "url": "https://zhuanlan.zhihu.com/p/618857751",
+  "created": "2023-04-02 12:27:09",
+  "voteup": 4,
+  "file": "2023-04-02_GPT4详解_你感兴趣的点都在这里.md",
+  "excerpt": "公众号：算法一只狗GPT4是一个大型的多模态模型，虽然在许多现实世界场景中的能力不如人类，但在各种专业和学术基准上表现出人类水平的表现。 例如，它通过模拟律师考试，分数在应试者的前 10% 左右；相比之下，GPT-3.5 的得分在倒数 10% 左右。OpenAI花了 6 个月的时间，使用对抗性测试程序和 ChatGPT 的经验教训迭代调整 GPT-4，从而在真实性、可控性和拒绝超出回答边界方面取得"
+ },
+ {
+  "id": "622057163",
+  "title": "一切都可以进行分割：Segment Anything",
+  "url": "https://zhuanlan.zhihu.com/p/622057163",
+  "created": "2023-04-14 23:06:41",
+  "voteup": 3,
+  "file": "2023-04-14_一切都可以进行分割：Segment_Anything.md",
+  "excerpt": "公众号：算法一只狗沉静许久的CV圈，被Meta发布的SAM模型给炸出圈来。 发布的新模型，宣称能够“剪切”任何的图像。它可以对不熟悉的物体和图像进行零样本泛化，而无需额外的训练，就可以识别任意的图像。 读者可以自己亲身试一下，具体的使用demo 网址如下： https://http://segment-anything.com/demo 从官方放出的demo来看，只需要通过鼠标点击对应的物体，就可"
+ },
+ {
+  "id": "625152404",
+  "title": "手把手教学！部署MiniGPT4模型",
+  "url": "https://zhuanlan.zhihu.com/p/625152404",
+  "created": "2023-04-26 18:01:44",
+  "voteup": 27,
+  "file": "2023-04-26_手把手教学！部署MiniGPT4模型.md",
+  "excerpt": "在今年的3月份的时候，OpenAI公布了自己的GPT4模型。其中对比GPT3模型来说，最主要的优势在于它是一个多模态模型。在输入图片的时候可以让GPT4理解图片的信息内容。 官网上给了很多具体的例子，像它能够理解图片的笑话： 用一个VGA连接器去给手机充电 或者能知道整幅图的不寻常地方： OpenAI花了 6 个月的时间，使用对抗性测试程序和 ChatGPT 的经验教训迭代调整 GPT-4，从而在"
+ },
+ {
+  "id": "631789645",
+  "title": "GPT4All运行在你的CPU上",
+  "url": "https://zhuanlan.zhihu.com/p/631789645",
+  "created": "2023-05-24 12:06:31",
+  "voteup": 2,
+  "file": "2023-05-24_GPT4All运行在你的CPU上.md",
+  "excerpt": "公众号：算法一只狗看到这个标题，你肯定以为我在吹牛了。我们都知道，单单ChatGPT模型的参数量级就在1750亿左右，而GPT4预估在上万亿了。对于这种大模型，每次训练都要花费大量的时间和算力，而且在推理的时候，更是需要运行在GPU上进行结果输出。 而这个项目，就是致力于使用小模型不断的逼近大模型的效果。 但是由于目前GPT4模型没有开源代码，那为啥这个项目又称为GPT4呢？本质上，它利用了Met"
+ },
+ {
+  "id": "633378080",
+  "title": "用GPT4玩《我的世界》",
+  "url": "https://zhuanlan.zhihu.com/p/633378080",
+  "created": "2023-05-30 16:07:56",
+  "voteup": 3,
+  "file": "2023-05-30_用GPT4玩《我的世界》.md",
+  "excerpt": "公众号：算法一只狗在上一年的时候，我曾经写过一篇关于《我的世界》的强化学习AI文章。感兴趣的读者可以看看这篇文章： 算法一只狗：让AI玩《我的世界》在之前的强化学习AI中， OpenAI利用《我的世界》的玩家视频来学习，训练出超大的预训练模型VPT。 但是在之前的智能体中，往往需要训练一个模型，利用强化学习或者监督学习的方法来提升智能体的效果。 而英伟达这一次直接利用LLM大模型，构造出了Voya"
+ },
+ {
+  "id": "635020921",
+  "title": "ControlNet重大更新：仅需文本就能调节图像细节",
+  "url": "https://zhuanlan.zhihu.com/p/635020921",
+  "created": "2023-06-06 12:03:24",
+  "voteup": 9,
+  "file": "2023-06-06_ControlNet重大更新：仅需文本就能调节图像细节.md",
+  "excerpt": "公众号：算法一只狗我们知道，在stable diffusion中，ControlNet主要是用来控制图像中物体的姿态。 在5月份的时候，ControlNet迎来了重大更新，新更新的功能叫 “reference-only”，它不需要任何的控制模型，只需要在文本提示词的指导下，调节图像的细节。这就相当于让软件自己学会了PS，我们只需要在旁边给指导提示词就可以了。不得不感叹一句，AI终于学会自己P图了 "
+ },
+ {
+  "id": "638992401",
+  "title": "ControlNet生成视频方法：Mov2Mov插件（第一期）",
+  "url": "https://zhuanlan.zhihu.com/p/638992401",
+  "created": "2023-06-23 10:26:44",
+  "voteup": 8,
+  "file": "2023-06-23_ControlNet生成视频方法：Mov2Mov插件（第一期）.md",
+  "excerpt": "公众号：算法一只狗ControlNet本质上不是用来生成视频的，而是对于图像进行细节优化，又或者对任务进行姿态控制等等。可以参考我上周写的一篇文章，里面有具体介绍的方法： 算法一只狗：ControlNet重大更新：仅需文本就能调节图像细节但是聪明的你肯定想到，既然ControlNet可以进行图像的控制，那么我们也就可以把图片进行叠加，一帧一帧的把图片生成出来后再还原就可以形成视频了。 1.安装Mo"
+ },
+ {
+  "id": "638992879",
+  "title": "AI解决生成视频“闪烁”问题",
+  "url": "https://zhuanlan.zhihu.com/p/638992879",
+  "created": "2023-06-23 10:28:58",
+  "voteup": 10,
+  "file": "2023-06-23_AI解决生成视频“闪烁”问题.md",
+  "excerpt": "在上一期中，我曾经介绍了用ControlNet结合Mov2Mov插件生成新的视频。虽然它能够快速的对视频中的人物进行转换，但是还存在难以解决的闪烁问题。 算法一只狗：ControlNet生成视频方法：Mov2Mov插件（第一期） 造成闪烁的原因很简单，是因为AI是一帧一帧生成图片然后再合成的，所有每张图片本质上不太连贯，最后就会造成视频闪烁的出现。 但是这个难题近期被 南洋理工大学的团队很好的解决"
+ },
+ {
+  "id": "641632799",
+  "title": "ChatGLM重大更新：性能更加强大且节省显存",
+  "url": "https://zhuanlan.zhihu.com/p/641632799",
+  "created": "2023-07-05 14:30:13",
+  "voteup": 2,
+  "file": "2023-07-05_ChatGLM重大更新：性能更加强大且节省显存.md",
+  "excerpt": "公众号：算法一只狗目前在开源大模型中，比较有名的是Meta的LLAMA模型系列和清华的ChatGLM模型。其中特别是在中文领域上，ChatGLM模型经过中文问答和对话的优化，更加符合中文使用者的偏好回答。 经过一段时间的迭代，ChatGLM模型引来了重大更新。新推出的2代版本叫ChatGLM2模型。它保留了初代模型的优秀特性，并引入了新的优点。 首先其表现出更加强大的性能：全面超越第一代模型，在多"
+ },
+ {
+  "id": "642481981",
+  "title": "GPT4开放API和Code Interpreter！如何利用它们来提升你的工作效率",
+  "url": "https://zhuanlan.zhihu.com/p/642481981",
+  "created": "2023-07-09 21:25:14",
+  "voteup": 2,
+  "file": "2023-07-09_GPT4开放API和Code_Interpreter！如何利用它们来提升你的工作效率.md",
+  "excerpt": "公众号：算法一只狗目前，OpenAI官方网站已经开启了GPT4 API接口的调用。也就是说，现在不仅仅个人或者企业可以用到GPT3.5接口，而且也可以不用申请就可以用到GPT4模型了。 在公布开放API的同时，OpenAI同时也公布了Code Interpreter插件面向所有ChatGPT Plus用户开放，这个插件可能使得数据分析变得更加简单，包括可以进行视频编辑、数据可视化和音乐分析，并为不"
+ },
+ {
+  "id": "643809759",
+  "title": "详解Claude2：一个免费好用的ChatGPT平替产品",
+  "url": "https://zhuanlan.zhihu.com/p/643809759",
+  "created": "2023-07-15 21:42:42",
+  "voteup": 6,
+  "file": "2023-07-15_详解Claude2：一个免费好用的ChatGPT平替产品.md",
+  "excerpt": "公众号：算法一只狗还记得上星期OpenAI终于公布了GPT4 API接口和Code Interpreter插件，这一波的开放让大量用户体会到AI最新模型的强大能力。详情可以回看我之前写的文章： 算法一只狗：GPT4开放API和Code Interpreter！如何利用它们来提升你的工作效率看到AI大模型大有OpenAI统一天下的趋势，各大厂商终于还是坐不住了。这不， Anthropic推出了Cha"
+ },
+ {
+  "id": "645369133",
+  "title": "激发你的图像灵感",
+  "url": "https://zhuanlan.zhihu.com/p/645369133",
+  "created": "2023-07-23 16:24:02",
+  "voteup": 0,
+  "file": "2023-07-23_激发你的图像灵感.md",
+  "excerpt": "找到你的Midjourney图像灵感我们都知道，Midjourney是一种先进的AI工具，可以生成图像。为了帮助用户找到创作灵感，一些社区或平台已经构建出一个成熟的资源和信息。 Midjourney Showcase：这是一个社区驱动的平台，用户可以在其中分享和发现由Midjourney生成的图像。 Midjourney Reddit：是一个专门用于共享使用 Midjourney 创建的图像的 R"
+ },
+ {
+  "id": "646450111",
+  "title": "与你的创建的虚拟角色对话",
+  "url": "https://zhuanlan.zhihu.com/p/646450111",
+  "created": "2023-07-28 10:09:45",
+  "voteup": 5,
+  "file": "2023-07-28_与你的创建的虚拟角色对话.md",
+  "excerpt": "公众号：算法一只狗Harpy Ai Chat：与你的虚拟角色对话Harpy AI Chat是一个独特的人工智能平台，可以让用户与虚拟角色进行角色扮演。用户可以与自己喜欢的电影明星或动画英雄进行互动，并可以通过机器学习的潜力为这些角色赋予生命。 与其他AI聊天机器人不同的是，Harpy AI Chat提供了更个性化的角色扮演体验，并提供了广泛的SFW和NSFW互动体验。该平台可以免费访问，并通过简单"
+ },
+ {
+  "id": "647770985",
+  "title": "主流开源大模型的回答体验",
+  "url": "https://zhuanlan.zhihu.com/p/647770985",
+  "created": "2023-08-03 15:47:20",
+  "voteup": 0,
+  "file": "2023-08-03_主流开源大模型的回答体验.md",
+  "excerpt": "公众号：算法一只狗最近开源大模型迭代速度真的是越来越快了，特别是META最近又开源了新的LLAMA2模型，使得开源社会蓬勃发展 。 因此本文主要总结了几个主流的开源大模型，并简单分享自己的一些使用体验，帮助各位初学者更快的使用这些大模型。 模型项目地址标签LLAMA-2https://http://github.com/facebookresearch/llamaMeta开源大模型ChatGLM2"
+ },
+ {
+  "id": "648358009",
+  "title": "通义千问7B模型测评",
+  "url": "https://zhuanlan.zhihu.com/p/648358009",
+  "created": "2023-08-06 21:59:11",
+  "voteup": 3,
+  "file": "2023-08-06_通义千问7B模型测评.md",
+  "excerpt": "之前我曾经测评过几个比较主流的7B模型，包括LLAMA2、ChatGLM2和Alpaca模型，详情可以看回我之前的文章。 算法一只狗：主流开源大模型的回答体验模型项目地址标签LLAMA-2https://http://github.com/facebookresearch/llamaMeta开源大模型ChatGLM2-6Bhttps://http://github.com/THUDM/ChatGL"
+ },
+ {
+  "id": "648425215",
+  "title": "简单上手~用Stable Diffusion实现“妙鸭”相机的写真照",
+  "url": "https://zhuanlan.zhihu.com/p/648425215",
+  "created": "2023-08-07 10:32:30",
+  "voteup": 3,
+  "file": "2023-08-07_简单上手~用Stable_Diffusion实现“妙鸭”相机的写真照.md",
+  "excerpt": "公众号：算法一只狗上周，一款应用火遍了朋友圈。这款应用便是“妙鸭”相机，它以简单的操作步骤，就可以帮你生成自己的精修写真照片。 用户只需要上传21张图片，在1个小时内就可以制作完美的写真照片了。 看到这里，你可以想到这款应用很像以前的一键换脸技术。但是以前的换脸工具，不能够生成这么逼真的图片，只能是一眼就看到是假的图片。 但最近半年，得益于AIGC的发展，特别是midjourney和stable "
+ },
+ {
+  "id": "649129530",
+  "title": "GPTBot：OpenAI开发的网络爬虫工具",
+  "url": "https://zhuanlan.zhihu.com/p/649129530",
+  "created": "2023-08-10 10:33:05",
+  "voteup": 2,
+  "file": "2023-08-10_GPTBot：OpenAI开发的网络爬虫工具.md",
+  "excerpt": "GPTBot：OpenAI开发的网络爬虫工具GPTBot是由OpenAI开发的网络爬虫工具，使用它可以从互联网上采集高质量的文本数据，采集到的数据用于训练GPT4或者GPT5的语言模型。GPTBot主要选择自由访问的网页，避免收集个人身份信息，并遵守OpenAI的政策和道德标准，确保采集的信息具有高品质且符合安全和责任的要求。 同时OpenAI公布了能够检测或者避免GPTBot爬取你网站的内容。比"
+ },
+ {
+  "id": "649971951",
+  "title": "挑战不写一行代码！基于ChatGPT搭建自己的AI新闻总结工具",
+  "url": "https://zhuanlan.zhihu.com/p/649971951",
+  "created": "2023-08-14 17:30:31",
+  "voteup": 2,
+  "file": "2023-08-14_挑战不写一行代码！基于ChatGPT搭建自己的AI新闻总结工具.md",
+  "excerpt": "公众号：算法一只狗ChatGPT在生活中应用得最多的能力，当然要数其总结文章的能力。因此我们也不妨可以直接利用ChatGPT来实现一个自动AI新闻总结工具，把自己感兴趣的文章让它直接帮你总结。让ChatGPT快速帮你提炼要点，总结不同文章内容。 前期准备首先你当然需要有一个具体的ChatGPT账号，怎么申请可以看这篇文章： ChatGPT它还能玩出什么花来？ 如果实在申请不了，也可以去某宝买一个账"
+ },
+ {
+  "id": "652897276",
+  "title": "整理了16篇文章，让你零基础入门！带你快速上手大语言模型ChatGPT",
+  "url": "https://zhuanlan.zhihu.com/p/652897276",
+  "created": "2023-08-28 20:15:05",
+  "voteup": 4,
+  "file": "2023-08-28_整理了16篇文章，让你零基础入门！带你快速上手大语言模型ChatGPT.md",
+  "excerpt": "关注我公众号“算法一只狗”，回复“*大模型资料*”，立刻免费拿取全部的文章近半年以来，大语言模型盛出不穷，特别是ChatGPT和GPT4出来之后，各家厂商就一直在大模型领域上内卷。本着白嫖大模型的想法，我这半年多以来，也一直在关注这个领域， 因此特别整理了我之前写的关于大语言模型的文章，主要围绕着OpenAI的GPT3.5和GPT4来展开。本文整理的资料架构主要如下， 主要分为四大板块，希望能够为"
+ },
+ {
+  "id": "653674637",
+  "title": "手把手教学！生成不同风格的视频",
+  "url": "https://zhuanlan.zhihu.com/p/653674637",
+  "created": "2023-09-01 10:36:33",
+  "voteup": 4,
+  "file": "2023-09-01_手把手教学！生成不同风格的视频.md",
+  "excerpt": "公众号：算法一只狗还记得我之前曾经介绍过的一个模型Rerender，这个AI模型能够有效的解决视频生成中“闪烁”问题。 可以看到，生成的视频很丝滑，而且人物的动作衔接的很连贯。但是Rerender模型一直没有公开开源代码。 好消息是，来自香港科技大学的学生，也很好的解决了视频生成的“闪烁”问题，而且可以任意转换图片风格。同时他们将代码进行开源，可以自己进行操作。 他们发布的模型称为CoDeF。那我"
+ },
+ {
+  "id": "657167558",
+  "title": "大模型Claude升级Pro版本",
+  "url": "https://zhuanlan.zhihu.com/p/657167558",
+  "created": "2023-09-19 15:30:26",
+  "voteup": 2,
+  "file": "2023-09-19_大模型Claude升级Pro版本.md",
+  "excerpt": "公众号：算法一只狗之前我曾经详细介绍过ChatGPT最强平替模型“Claude2”，它是由 Anthropic公司推出的本身具有文档对话能力的大模型。而且最重要的是该软件免费申请，只要有账号就可以直接免费使用。 对于很多用户的使用体验来说，Claude2和ChatGPT一样，也是一个大语言模型，对比于ChatGPT来说，有以下几个主要的优点： 免费注册使用（这里需要魔法上网）Claude2支持10"
+ },
+ {
+  "id": "658983565",
+  "title": "生成错觉化图片！AI在玩一种很新的东西",
+  "url": "https://zhuanlan.zhihu.com/p/658983565",
+  "created": "2023-09-28 21:13:19",
+  "voteup": 4,
+  "file": "2023-09-28_生成错觉化图片！AI在玩一种很新的东西.md",
+  "excerpt": "公众号：算法一只狗这次AI绘画生成又一次火出圈了，原因很简单，有人利用简单的光影图片作为底图，生成了一种“另类”的图片形式： 从全局图来看，它是一种简单的风景照片，但是细看又会发现其蕴含着4*4的格子。 截止到目前为止，该推特已经超过70万人查看。已经有很多人开始在网上找对应的教程，想要体验一下。 错落有致的视觉图基于网友的脑洞，不同的错觉化图片不断涌现出来。 比如圆形光影图 + 建筑可以做出有意"
+ },
+ {
+  "id": "658984158",
+  "title": "OpenAI放出王炸文生图模型升级版",
+  "url": "https://zhuanlan.zhihu.com/p/658984158",
+  "created": "2023-09-29 15:47:22",
+  "voteup": 0,
+  "file": "2023-09-29_OpenAI放出王炸文生图模型升级版.md",
+  "excerpt": "公众号：算法一只狗在Stable Diffusion和Midjourney没有火出圈的时候，真正把“文本图像生成”的领域玩出花来的还是要数OpenAI的DALL·E模型。 尽管OpenAI在上一年的4月份就已经发布了 DALL·E 2，但是在使用体验上并没有后来的Stable Diffusion和Midjourney好用，导致真正使用的人很少。很显然，能做出ChatGPT这种伟大产品的公司来说，肯"
+ },
+ {
+  "id": "660060281",
+  "title": "ChatGPT终于接上视觉能力",
+  "url": "https://zhuanlan.zhihu.com/p/660060281",
+  "created": "2023-10-08 11:39:57",
+  "voteup": 2,
+  "file": "2023-10-08_ChatGPT终于接上视觉能力.md",
+  "excerpt": "公众号：算法一只狗9月末得时候，OpenAI终于宣布要在ChatGPT上接入视觉功能了。跳票了大半年的图像功能终于是要上了。 本来在今年的3月末的时候，OpenAI就演示了GPT4在多模态上的非凡能力。它能够根据你输入的图片进行有效的回答。 在现场演示的时候，我们见识到了 GPT-4 对文本和图像的处理能力，但一直以来，这种功能普通用户都无法使用。 因此多模态一直是ChatGPT缺乏的一种能力。这"
+ },
+ {
+  "id": "664045734",
+  "title": "AI也可以玩精灵宝可梦了！",
+  "url": "https://zhuanlan.zhihu.com/p/664045734",
+  "created": "2023-10-30 10:32:05",
+  "voteup": 2,
+  "file": "2023-10-30_AI也可以玩精灵宝可梦了！.md",
+  "excerpt": "公众号：算法一只狗相信很多人童年都玩过《宝可梦》游戏，在这个游戏里面，我们会扮演玩家一路闯关，打赢8个道馆并挑战四大天王，最后获得冠军的梦想。 游戏的主要玩法就是收服宝可梦，然后一路对战升级。小时候总使幻想着宝可梦能够根据对手，来进行自主战斗。 这不，有国外玩家在宝可梦游戏中花费5年训练AI。 并且AI在游戏中玩了两万多局游戏 在一开始的时候，这个AI只能够乱按各种按钮，并且不懂得如何捕捉宝可梦和"
+ },
+ {
+  "id": "665819378",
+  "title": "ChatGLM第三代发布！集成了Code Interpreter和图文问答。",
+  "url": "https://zhuanlan.zhihu.com/p/665819378",
+  "created": "2023-11-08 23:34:16",
+  "voteup": 2,
+  "file": "2023-11-08_ChatGLM第三代发布！集成了Code_Interpreter和图文问答。.md",
+  "excerpt": "公众号：算法一只狗随着ChatGPT带来的AI大模型潮流的发展，国内各家大公司都是卯足力气发布自家的大模型。自今年3月份以来，百度发布了文心一言，并在近期发布了文心一言APP。4月份则是阿里发布的通义千问，同时近期也发布了多模态通义千问Qwen-Chat。而此后国内大模型就一直百花齐放，因此又被网友称为“百模大战”。 虽然“百模大战”已经然很多网友感觉到了疲劳。主要原因在于： 利用现有的榜单进行刷"
+ },
+ {
+  "id": "667255789",
+  "title": "GPTS全网刷屏！定制增长速度指数增长",
+  "url": "https://zhuanlan.zhihu.com/p/667255789",
+  "created": "2023-11-16 21:37:28",
+  "voteup": 0,
+  "file": "2023-11-16_GPTS全网刷屏！定制增长速度指数增长.md",
+  "excerpt": "公众号：算法一只狗还记的上周OpenAI刚刚举行完开发者大会，在大会上主要公布了三个事情： 新版本的GPT-4 Turbo：更强大、更便宜且支持128K新的助手API：让开发者更轻松地基于GPT构建辅助AI应用平台中新的多模态功能：包括视觉、图像创作（DALL·E 3）和文本到语音（TTS）GPT-4 Turbo支持更长的128K上下文GPT-4 Turbo是GPT-4的升级版，具有更强的能力。其"
+ },
+ {
+  "id": "668523173",
+  "title": "20s上手！文本生成3D模型",
+  "url": "https://zhuanlan.zhihu.com/p/668523173",
+  "created": "2023-11-24 09:52:49",
+  "voteup": 1,
+  "file": "2023-11-24_20s上手！文本生成3D模型.md",
+  "excerpt": "公众号：算法一只狗硅谷初创公司Luma AI发布了一款名为Genie的Discord机器人，用于生成文本到3D内容，为游戏开发、虚拟制作和艺术创作带来变革。用户只需输入文本指令，Genie即可在20秒内生成四个简单的3D模型，并支持进一步改进以获得更高分辨率和准确结果。 Genie的优势在于： Luma AI专注于将AI技术与3D内容相结合。Genie是一款Discord机器人，用于生成文本到3D"
+ },
+ {
+  "id": "669129847",
+  "title": "起猛了！自动驾驶可以聊天了",
+  "url": "https://zhuanlan.zhihu.com/p/669129847",
+  "created": "2023-11-27 22:45:26",
+  "voteup": 1,
+  "file": "2023-11-27_起猛了！自动驾驶可以聊天了.md",
+  "excerpt": "公众号：算法一只狗一直以来，深度学习模型对于研究者来说是一种“黑盒”模型，我们一般很难分析模型的到底学习到了什么东西，只知道它能够应用于特定的领域。 对比于自动驾驶领域来看，一个黑盒状态的模型，是很难让人放心去使用的，这是因为如果汽车出现事故后往往难以解释，且排查难度较大。因此，在自动驾驶中获得一个能够让人解释清楚的模型尤为重要。 这不，创业公司Wayve使用了LLM模型，构造出了LINGO-1模"
+ },
+ {
+  "id": "671431719",
+  "title": "小白教学！几个步骤入门AI动画视频制作",
+  "url": "https://zhuanlan.zhihu.com/p/671431719",
+  "created": "2023-12-10 16:11:33",
+  "voteup": 6,
+  "file": "2023-12-10_小白教学！几个步骤入门AI动画视频制作.md",
+  "excerpt": "要介绍动画生成，先让大家来看看我生成的动画视频： https://www.zhihu.com/video/1717214163372298240上面的视频我只用了不到2小时的时间就可以制作完成了。可以快速的在几分钟内， 利用动画和AI配音讲述一个完整的故事《家人们谁懂呀我遇到下头男了》。本质上就是利用最近火爆的文本生成视频工具PIKA，然后配上相应的文案制作而成的。 其中需要用到以下几个工具 视频"
+ },
+ {
+  "id": "674126576",
+  "title": "小白如何入门AI视频生成？这里总结了近一年的算法和工具",
+  "url": "https://zhuanlan.zhihu.com/p/674126576",
+  "created": "2023-12-25 20:51:55",
+  "voteup": 7,
+  "file": "2023-12-25_小白如何入门AI视频生成？这里总结了近一年的算法和工具.md",
+  "excerpt": "公众号：算法一只狗最近文本视频生成领域太火了，因此总结了今年以来的一些相关算法和使用的工具，给大家参考一下 1.目前的文本视频生成算法或工具 NameTags官方网站是否可用Phenaki谷歌发布的新模型，能够根据200个词语，生成2分钟以上的视频。https://phenaki.video/#center否Imagen Video谷歌发布的模型，生成高清短视频https://imagen.res"
+ },
+ {
+  "id": "675594974",
+  "title": "如何拥有属于自己的苹果高管照",
+  "url": "https://zhuanlan.zhihu.com/p/675594974",
+  "created": "2024-01-02 09:59:26",
+  "voteup": 2,
+  "file": "2024-01-02_如何拥有属于自己的苹果高管照.md",
+  "excerpt": "公众号：算法一只狗前段时间，苹果高管照突然火了起来。特别是在小红书，有人询问如何拍出一个好看的苹果高管照片，其帖子的热度已经有150w的阅读量。 那问什么这种话题会突然火了起来，其根本原因在于很多人其实想拥有一个好看的证件照。 在我们的印象中，证件照不是白底就是蓝底，而且加上P过的图片，显得格外假。因此很多人都觉得自己的证件照特别难看。 但是反观我们去苹果官网看到的高管证件照，他们的证件拍得很有质"
+ },
+ {
+  "id": "677191722",
+  "title": "2023年，AI爆发的一年",
+  "url": "https://zhuanlan.zhihu.com/p/677191722",
+  "created": "2024-01-11 10:26:19",
+  "voteup": 1,
+  "file": "2024-01-11_2023年，AI爆发的一年.md",
+  "excerpt": "公众号：算法一只狗今年以来，AI呈爆发式发展。在文本生成的领域，涌现出以ChatGPT为代表的生成式大模型。而在文本图像生成方面，有高度自定义的Stable Diffusion，和简单易用上手的Midjournery。多模态领域更是百花齐放，从GPT4的发布，到国内各大厂商的多模态模型，都证明这个领域具有极大的潜力。而在近期，视频生成领域有了爆发的可能性，众多免费可用的模型开源出来，像比较出名的P"
+ },
+ {
+  "id": "677417401",
+  "title": "GPT Store上线，普通人需要了解什么？",
+  "url": "https://zhuanlan.zhihu.com/p/677417401",
+  "created": "2024-01-12 10:32:33",
+  "voteup": 1,
+  "file": "2024-01-12_GPT_Store上线，普通人需要了解什么？.md",
+  "excerpt": "公众号：算法一只狗一觉醒来，就被GPT Store上线刷屏朋友圈了。感觉再不学习，好像就要落后了，因此这篇文章主要简单介绍一些GPT Store是什么？让普通人也能跟上这股AI潮流。 GPT Store是什么？GPT Store一直被OpenAI寄语厚望，其一经上线，就被外界称为“苹果时刻”。GPT Store作为应用商店的存在，本身的目标就是把各种各样类型的GPT应用集合起来，以其方便不同用户使"
+ },
+ {
+  "id": "680407364",
+  "title": "我部署了一个的阿里云大模型[让照片跳舞]",
+  "url": "https://zhuanlan.zhihu.com/p/680407364",
+  "created": "2024-01-29 16:39:33",
+  "voteup": 2,
+  "file": "2024-01-29_我部署了一个的阿里云大模型[让照片跳舞].md",
+  "excerpt": "公众号：算法一只狗前段时间，在朋友圈里肯定很多人都刷过模型的“科目三”视频 从视频中可以看到，虽然一眼能看出来是AI生成的，但是其效果已经很逼真。 但是让很多人想不到的是，这个跳舞视频是从一张图片生成而来的。 而这个视频就是通过阿里的“通义千问”软件生成的。在APP中，它提供了十几种舞蹈供大众选择进行生成。 这种工具为什么能够火遍全网呢？其根本原因在于： 使用门槛较低：仅仅简单上传一张图片即可体验"
+ },
+ {
+  "id": "682461683",
+  "title": "世界模型来了？OpenAI发布文生视频Sora爆炸出圈",
+  "url": "https://zhuanlan.zhihu.com/p/682461683",
+  "created": "2024-02-16 22:02:31",
+  "voteup": 1,
+  "file": "2024-02-16_世界模型来了？OpenAI发布文生视频Sora爆炸出圈.md",
+  "excerpt": "公众号：算法一只狗春节准备过完，OpenAI发布了震撼科技圈的文生视频模型Sora。它出圈的地方就在于， 能够把原来生成的几秒视频硬生生拔高到可以生成1分钟左右的视频。 不仅如此，各种媒体还称其为 ”世界模型“，因为它能够模拟复杂场景，生成符合人类感官的视频。比如下面这个例子： 在东京街头，一位时髦的女士穿梭在充满温暖霓虹灯光和动感城市标志的街道上。 从多个大V的观点来看，这次OpenAI发布的S"
+ },
+ {
+  "id": "683931695",
+  "title": "一句话，让你的GPTS控制国内上百个应用",
+  "url": "https://zhuanlan.zhihu.com/p/683931695",
+  "created": "2024-02-26 11:00:27",
+  "voteup": 3,
+  "file": "2024-02-26_一句话，让你的GPTS控制国内上百个应用.md",
+  "excerpt": "公众号：算法一只狗一句话，就可以让GPT帮你自动化操作各种应用，想想是不是很神奇，但是如今确实能够有效实现。 比如我制作了一个GPTs应用： 让GPT帮我首先总结公众号文章，然后发送到我的手机上。只需要一两句话的事情就可以了 上面的功能是原生ChatGPT做不了的，但是我们却可以自定义创建一个GPTs，来实现这些功能。并且全程并不需要任何代码。 还没有了解什么是GPTs，或者想要自己制作一个简单的"
+ },
+ {
+  "id": "684638589",
+  "title": "Stable Diffusion 3.0优化了什么？",
+  "url": "https://zhuanlan.zhihu.com/p/684638589",
+  "created": "2024-02-29 19:57:52",
+  "voteup": 27,
+  "file": "2024-02-29_Stable_Diffusion_3.0优化了什么？.md",
+  "excerpt": "公众号：算法一只狗自从Stable Diffusion模型发布以来，“AI文本图片生成”真正的变成普通人也能使用的技术。 同时各种国内外AI绘图软件，也不断频繁更新，像比较出名的 文心一格，盗梦师，6open等生成工具，生成的图片已经达到了以假乱真的地步。想看详细介绍的，可以回看这篇文章： 国内外的免费AI作图工具在大众千呼万唤下，Stable Diffusion 3.0终于来了，并且开放了等待名"
+ },
+ {
+  "id": "685976746",
+  "title": "Claude3要超越GPT4了吗？",
+  "url": "https://zhuanlan.zhihu.com/p/685976746",
+  "created": "2024-03-08 15:23:58",
+  "voteup": 4,
+  "file": "2024-03-08_Claude3要超越GPT4了吗？.md",
+  "excerpt": "Claude 3版本发布，像是一夜之间就要颠覆目前大模型的格局。本着好奇的心态，让我们来看看Claude 3到底优化了什么地方？ 首先如果我们直接打开claude网站，其实已经直接可以用Claude 3 Sonnet版本： 但要使用最强大的Opus版本，则需要升级，一个月20美元（价格和OpenAI的GPT-4一致）。有钱的读者，可以感兴趣冲一波试试水。 Claude 3还放出了长达42页的技术文"
+ },
+ {
+  "id": "688405998",
+  "title": "手把手教学！简单上手“AI复活”技术",
+  "url": "https://zhuanlan.zhihu.com/p/688405998",
+  "created": "2024-03-22 13:23:08",
+  "voteup": 10,
+  "file": "2024-03-22_手把手教学！简单上手“AI复活”技术.md",
+  "excerpt": "公众号：算法一只狗随着AI不断的发展，最近关于“AI复活逝者”的相关新闻上了热搜。像是商汤利用这些技术，成功复活了汤晓鸥老师。 它以数字人的形式，出现在了商汤的年会上，并成功复刻出汤老师的表情和语气，用其幽默的语言，来了一场“跨越时空”的脱口秀表演。 另一方面，AI复活技术本质上能够让在世的人看到已经逝去的亲人，让他们对亲人的思念得到寄托。 这让我回想起了“流浪地球2”中，图恒宇一直想复活他车祸去"
+ },
+ {
+  "id": "691358796",
+  "title": "OpenAI上线重绘功能，让ChatGPT帮你重新P图",
+  "url": "https://zhuanlan.zhihu.com/p/691358796",
+  "created": "2024-04-08 19:21:43",
+  "voteup": 3,
+  "file": "2024-04-08_OpenAI上线重绘功能，让ChatGPT帮你重新P图.md",
+  "excerpt": "公众号：算法一只狗2024年4月份了，有谁还记得OpenAI在当初发布Dalle 2的时候，出现了可以基于现有图片进行重绘的功能 例如在下面图中，旋转一个位置放置火烈鸟： 但是这个功能，一直在ChatGPT上体验不到。在网友千呼万唤下，Dalle的重绘功能终于上线了，只需要懂动鼠标，把需要修改的部分进行涂绘，输入prompt后就可以修改图片任意细节 并且这个功能不仅仅电脑端可用，手机端也已经集成了"
+ },
+ {
+  "id": "691395312",
+  "title": "Suno公司开源的文生语音工具Bark，让你秒变音乐人",
+  "url": "https://zhuanlan.zhihu.com/p/691395312",
+  "created": "2024-04-09 10:17:37",
+  "voteup": 4,
+  "file": "2024-04-09_Suno公司开源的文生语音工具Bark，让你秒变音乐人.md",
+  "excerpt": "公众号：算法一只狗最近几天，一直在被Suno生成的AI声音刷屏了，它本质上就是利用AI算法学习大量的音乐作品，然后根据用户输入的提示词重新生成新的音乐。 目前的最新版本已经发布了V3，这个版本在前一版本的基础上增加了更多的音乐风格和流派，同时加强了对提示词的依从性，减少了幻觉问题。其优点在于： 不需要学习任何乐理知识，就可以创作属于自己的音乐支持更多样化的风格和流派基于生成的音乐可以不断进行调整，"
+ },
+ {
+  "id": "692532821",
+  "title": "不止于看懂，AI如何重塑视频解读？",
+  "url": "https://zhuanlan.zhihu.com/p/692532821",
+  "created": "2024-04-15 12:04:32",
+  "voteup": 3,
+  "file": "2024-04-15_不止于看懂，AI如何重塑视频解读？.md",
+  "excerpt": "公众号：算法一只狗自从Sora引爆视频生成领域之后，视频等多模态领域的研究和应用已经取得了显著的进展，并且俨然成为AI大模型的未来发展趋势。 AI视频的生成，在另一方面也要求AI能够读懂视频中的内容，才能够有效地针对不同内容生成结果。因此，AI视频理解成为另一个至关重要的领域，如同一位聪明的大脑，解析着视觉世界的奥秘。 本文主要介绍两个比较重要的视频理解模型，分别为GPT4Video和MiniGP"
+ },
+ {
+  "id": "694515854",
+  "title": "Llama 3发布，开源社区迎来自己的GPT4模型了吗？",
+  "url": "https://zhuanlan.zhihu.com/p/694515854",
+  "created": "2024-04-25 16:11:00",
+  "voteup": 2,
+  "file": "2024-04-25_Llama_3发布，开源社区迎来自己的GPT4模型了吗？.md",
+  "excerpt": "公众号：算法一只狗Meta终于发布Llama 3开源模型，开源社区终于要迎来自己的GPT-4模型了吗？ 那到底Llama 3优化了什么地方？真的会有这么强的能力，可以追上GPT4吗？因此，本文初体验了一下Llama 3的能力，带大家深入了解一下新的Llama模型 在线使用目前想要体验Llama 3模型，有两个网址，一个是Meta自己官方的网址，另一个是huggingchat搭载。 Meta网址 h"
+ },
+ {
+  "id": "695423831",
+  "title": "手把手教学，AI漫画小说频道制作",
+  "url": "https://zhuanlan.zhihu.com/p/695423831",
+  "created": "2024-04-30 11:41:10",
+  "voteup": 9,
+  "file": "2024-04-30_手把手教学，AI漫画小说频道制作.md",
+  "excerpt": "公众号：算法一只狗最近看到很多短视频，在使用AI制作漫画小说视频的播放量都挺高的，已经有上百万的播放量 但是这种技术实现起来本质上是不难的，只需要善用这几个工具，就可以从一个小白变成漫画视频制作大神： chatgpt：用来生成分镜、生成图片 pika：把图片制作成动图 剪映：AI配音和制作视频先来看看我制作的视频怎么样 https://www.zhihu.com/video/17686058328"
+ },
+ {
+  "id": "697662570",
+  "title": "OpenAI发布新版大模型，效果提升在哪里？",
+  "url": "https://zhuanlan.zhihu.com/p/697662570",
+  "created": "2024-05-14 13:30:58",
+  "voteup": 1,
+  "file": "2024-05-14_OpenAI发布新版大模型，效果提升在哪里？.md",
+  "excerpt": "公众号：算法一只狗凌晨的时候，迎来了Openai春季发布会，整场的重点主要围绕这几个方面： 新版本GPT-4o发布：支持语音、文字、图像、视频等多模态大模型，相当于把多种模态实现了端到端的整体迅雷 实时语音功能提升明显：其中在新版本模型中，它的实时语音对话最为惊艳，能够识别人的情绪、语气和语调，能够真实感觉到像是在和一个真人在对话。 新版本模型将免费提供给用户使用实时语音功能效果提升明显整场发布会"
+ },
+ {
+  "id": "700230359",
+  "title": "两大模型评估，GPT-4o和Gemini 1.5 pro到底选择哪个？",
+  "url": "https://zhuanlan.zhihu.com/p/700230359",
+  "created": "2024-05-28 10:21:22",
+  "voteup": 2,
+  "file": "2024-05-28_两大模型评估，GPT-4o和Gemini_1.5_pro到底选择哪个？.md",
+  "excerpt": "公众号：算法一只狗在上周，GPT-4o和Gemini 1.5 pro模型同时发布，上一期内容已经介绍过GPT-4o模型的一些能力。有兴趣的读者可以回看这篇文章： OpenAI发布新版大模型，效果提升在哪里？那么针对这两个模型，普通用户到底选择哪个呢？这篇文章主要从多个不同的问题，测试一下两个大模型的回答，来评估一下他们的一些效果。 首先先来介绍一下Gemini 1.5 pro的一些特性。 1.Ge"
+ },
+ {
+  "id": "701829950",
+  "title": "一文带你快速了解腾讯元宝",
+  "url": "https://zhuanlan.zhihu.com/p/701829950",
+  "created": "2024-06-05 17:56:08",
+  "voteup": 9,
+  "file": "2024-06-05_一文带你快速了解腾讯元宝.md",
+  "excerpt": "公众号：算法一只狗5月30日，腾讯宣布腾讯元宝APP正式上线，而这个元宝则是基于之前腾讯混元大模型，可以看到该模型已经更新到1.7.8版本了。 具体腾讯元宝有什么功能呢？这篇文章带你快速了解一下 元宝基础功能进入元宝首页，可以看到比较明显的三个入口：新闻快讯、每日一问、网页总结 其中夜间快讯可以快速读取最新消息： 也能够快速爬取某个网页的信息： 特色功能：公众号搜索文章工具公众号中的文章的内容往往"
+ },
+ {
+  "id": "702916369",
+  "title": "手把手教你如何开一个AI炒股公司",
+  "url": "https://zhuanlan.zhihu.com/p/702916369",
+  "created": "2024-06-12 12:53:35",
+  "voteup": 0,
+  "file": "2024-06-12_手把手教你如何开一个AI炒股公司.md",
+  "excerpt": "公众号：算法一只狗AI发展至今，已经在各个领域产生了深远的影响。特别是大模型的发展，让我们可以做到多个AI协同，共同完成一件事，从而有效提供工作效率。 一个典型的场景在于，可以简单利用AI进行炒股，让每个AI固定一种角色，然后分析给定的股票公司。而且AI可以全年365天无休的帮你分析，你只需要出点电费就可以了。真是资本家看了落泪 这个AI炒股公司主要配备了三个员工，每个员工有不同的设定技能： - "
+ },
+ {
+  "id": "703790864",
+  "title": "开源的Stable Diffusion 3 Medium效果如何？",
+  "url": "https://zhuanlan.zhihu.com/p/703790864",
+  "created": "2024-06-17 10:43:04",
+  "voteup": 1,
+  "file": "2024-06-17_开源的Stable_Diffusion_3_Medium效果如何？.md",
+  "excerpt": "公众号：算法一只狗在2月份的时候，Stable Diffusion 3曾经公布过其强大的能力，由于其在细节生成上更加可控，不少人就一直期待着这个模型的开源。 这不，在大众千呼万唤下，目前网上已经可以下载Stable Diffusion 3 Medium免费开源模型。 具体说来，这次开源的版本属于Stable Diffusion 3 Medium，其具有20亿参数量级，有以下几个特性： 模型变得更大"
+ },
+ {
+  "id": "706594762",
+  "title": "2024年热门开源大模型总结",
+  "url": "https://zhuanlan.zhihu.com/p/706594762",
+  "created": "2024-07-02 14:18:18",
+  "voteup": 14,
+  "file": "2024-07-02_2024年热门开源大模型总结.md",
+  "excerpt": "公众号：算法一只狗最近，国内外开源大模型一直受到研究者的关注，但是种类比较繁多，就单单今年开源的大模型就有10+以上。 因此很多读者可能不知道应该选择哪一个大模型，所以这篇文章从模型评测、初步体验和部署等方面，总结了4个比较常用的开源大模型特点。 开源模型上下文大小开源参数量标签模型或代码下载LLama3128K8B、70BMetahttps://http://huggingface.co/met"
+ },
+ {
+  "id": "707346905",
+  "title": "AI预测欧洲杯和美洲杯，有没有搞头？",
+  "url": "https://zhuanlan.zhihu.com/p/707346905",
+  "created": "2024-07-06 10:24:06",
+  "voteup": 3,
+  "file": "2024-07-06_AI预测欧洲杯和美洲杯，有没有搞头？.md",
+  "excerpt": "首先来看一下这个视频，视频中是我最新做的一个AI大模型足球预测 https://www.zhihu.com/video/1792865656091320320 算法一条狗还记得在2022世界杯的时候，我做了一个可以预测两支队伍概率的模型： 那时候受到了很多人的观看。这不欧洲杯和美洲杯已经进行了一段时间了，我结合大模型做了一个实时预测队伍胜率的AI。 这个AI分析大师可以在coze商店上找到，只要搜"
+ },
+ {
+  "id": "13199485092",
+  "title": "OpenAI深夜上线Sora，宣告其王者归来",
+  "url": "https://zhuanlan.zhihu.com/p/13199485092",
+  "created": "2024-12-17 23:11:54",
+  "voteup": 0,
+  "file": "2024-12-17_OpenAI深夜上线Sora，宣告其王者归来.md",
+  "excerpt": "从最初的年初到现在，过去了200多天的时间，OpenAI的Sora终于赶在年底正式发布了。在刚刚发布的时候，就惊艳了所有人，终于能够上手体验一番。 Sora一经上线，网页火爆到卡住了。目前已经停止所有新用户注册。 为什么这么久才出Sora，猜测是因为需要不断优化Sora的速度，所以今天上线的被称为Sora Tubo版本。 这个新版本肯定相比于原版有更快的速度，同时它能生成任意长宽比的视频，分辨率从"
+ },
+ {
+  "id": "1905564023463839524",
+  "title": "中国版Cursor实战： 利用「CodeBuddy」 快速制作智能股票筛选器",
+  "url": "https://zhuanlan.zhihu.com/p/1905564023463839524",
+  "created": "2025-05-13 10:08:21",
+  "voteup": 1,
+  "file": "2025-05-13_中国版Cursor实战：_利用「CodeBuddy」_快速制作智能股票筛选器.md",
+  "excerpt": "这次 CodeBuddy 迎来了一次大的更新，包括下面 5 个具体的不同场景 添加描述Craft 智能体：自然语言驱动的代码生成与重构Craft 是 CodeBuddy 的核心智能体，支持通过自然语言指令进行多文件代码生成、修改和重构。无论是创建新项目、重构旧代码，还是生成可执行应用，Craft 都能高效完成。 MCP 市场：插件化的智能能力扩展CodeBuddy 集成了 MCP（Model-Pl"
+ },
+ {
+  "id": "1960665359137875243",
+  "title": "手把手教学，我用Sora2制作了一个“灌篮高手”名场面视频",
+  "url": "https://zhuanlan.zhihu.com/p/1960665359137875243",
+  "created": "2025-10-13 20:22:51",
+  "voteup": 2,
+  "file": "2025-10-13_手把手教学，我用Sora2制作了一个“灌篮高手”名场面视频.md",
+  "excerpt": "OpenAI在国庆期间，正式推出了Sora 2。它不仅能生成高质量画面，还能同步生成音频、对白、环境音效，甚至精确匹配唇形。 于是，我在国庆期节，用 Sora2 还原了动画“灌篮高手”的名场面 在介绍我怎么制作之前，先来简单介绍这一次 Sora2 的主要内容。 回想起当初Sora发布的时候，真的是震惊四座。但是经过1年多以来的发展，其他视频生成模型慢慢的追上来了。而当初的Sora已经明显滞后于该领"
+ },
+ {
+  "id": "1968050474210009231",
+  "title": "视频还在一个个生成？这套方法3分钟就能跑完10条",
+  "url": "https://zhuanlan.zhihu.com/p/1968050474210009231",
+  "created": "2025-11-01 20:28:43",
+  "voteup": 2,
+  "file": "2025-11-01_视频还在一个个生成？这套方法3分钟就能跑完10条.md",
+  "excerpt": "随着 AIGC 技术的迅猛发展，视频生成正逐渐从“单次创作”走向“批量生产”。Sora2 作为最新一代文本生成视频模型，具备了极强的理解与生成能力，只需一句描述即可生成高质量的视频内容。然而，在实际使用中，若每次都手动输入 prompt、等待生成、再手动保存结果，效率极低，尤其在需要批量测试或创作多个短视频的场景下 因此，这篇文章通过 Coze 的工作流系统，将Sora2 视频生成 + 飞书表格存"
+ },
+ {
+  "id": "2006116811054264778",
+  "title": "DeepSeek 新模型上线实测：1M 上下文背后，是进化还是取舍",
+  "url": "https://zhuanlan.zhihu.com/p/2006116811054264778",
+  "created": "2026-02-14 21:52:02",
+  "voteup": 4,
+  "file": "2026-02-14_DeepSeek_新模型上线实测：1M_上下文背后，是进化还是取舍.md",
+  "excerpt": "DeepSeek 新模型上线实测：1M 上下文背后，是进化还是取舍？ 最近在DeepSeek官网上，上线了一个新的版本，这个版本或为V4正式发布前的最终灰度测试阶段。 具体就是在 11 日左右，部分用户在使用DeepSeek应用程序时收到系统推送的版本更新通知。此次应用程序更新至1.7.4版本后，用户可率先体验DeepSeek最新研发的大语言模型。 这次升级主要包含以下几个重要的更新点： 模型上下"
+ },
+ {
+  "id": "2006158188647556227",
+  "title": "豆包 2.0 全面进化：从对话模型走向系统级 AI 能力",
+  "url": "https://zhuanlan.zhihu.com/p/2006158188647556227",
+  "created": "2026-02-15 00:10:17",
+  "voteup": 2,
+  "file": "2026-02-15_豆包_2.0_全面进化：从对话模型走向系统级_AI_能力.md",
+  "excerpt": "豆包大模型 Seed-2.0 正式发布，带来哪些新功能和体验升级？ 这个春节，各家大模型都在密集的发布最新的版本。而这一次，字节拿出了自家最新的大模型豆包大模型 Seed-2.0（Doubao-Seed-2.0），它作为豆包系列自 2024 年以来首次的大版本跨代升级，在基础能力、多模态理解、Agent 执行力、推理与代码编写等多维度带来了显著的新功能和体验提升。 从官网的介绍来看，Seed2.0"
+ },
+ {
+  "id": "2006781686277485165",
+  "title": "从 OpenClaw 到 AI 女友：手把手教你打造专属数字伴侣",
+  "url": "https://zhuanlan.zhihu.com/p/2006781686277485165",
+  "created": "2026-02-16 17:28:07",
+  "voteup": 2,
+  "file": "2026-02-16_从_OpenClaw_到_AI_女友：手把手教你打造专属数字伴侣.md",
+  "excerpt": "最近，Clawdbot真的太火了，在各个新闻榜单上都有它的身影。 这里先做一下简单的科普：Clawdbot的名字经历了三次变更，第一次叫做 ClawdBot，后来因为名字跟 Claude 太过相似，被 CLaude 告侵权，遂改名 MoltBot 。但是后来在改名过程中遭遇域名和社交账号被抢注，甚至出坑同名加密货币割韭菜的情况，导致名称传播受阻。 最终定名为： OpenClaw。所以，名字经历先后"
+ },
+ {
+  "id": "2006870118865593000",
+  "title": "OpenClaw 之父加入 OpenAI：理想主义退场，Agent 入口战争开始",
+  "url": "https://zhuanlan.zhihu.com/p/2006870118865593000",
+  "created": "2026-02-16 23:19:23",
+  "voteup": 0,
+  "file": "2026-02-16_OpenClaw_之父加入_OpenAI：理想主义退场，Agent_入口战争开始.md",
+  "excerpt": "可能很多人的第一反应，是一个“理想主义者投靠资本”，但反过来想想，确实是Peter在OpenClaw，在热度最高点做出的最优选择。 OpenClaw 不是一直强调 Open 吗？现在加入 OpenAI，不就成了“CloseClaw”？ 情绪可以理解，但如果把情绪放一边，这件事其实非常现实。 Peter 在公开信里说得很直白：他可以把 OpenClaw 做成一家大公司，但那对他不再有吸引力。他已经创"
+ },
+ {
+  "id": "2007584073414096768",
+  "title": "Qwen3.5开源：从参数竞赛到 Agent 时代的拐点",
+  "url": "https://zhuanlan.zhihu.com/p/2007584073414096768",
+  "created": "2026-02-18 22:35:52",
+  "voteup": 0,
+  "file": "2026-02-18_Qwen3.5开源：从参数竞赛到_Agent_时代的拐点.md",
+  "excerpt": "千问团队真的不亏为国产“源神”之光，春节期间直接放出最强的Qwen3.5模型，而且已经发布就开源。目前可以看到开源出来的模型是Qwen3.5-397B-A17B，参数量级在397B。 那么这一次，Qwen3.5模型可以概括成以下几个亮点。 模型亮点第一个亮点，是在混合专家架构下的超高效率Qwen3.5 目前最大版本为 Qwen3.5-397B-A17B，总参数约 3970 亿，但是每次推理只激活约"
+ },
+ {
+  "id": "2007962920747815623",
+  "title": "10分钟打造你的AI选股系统：OpenClaw每日自动筛选5支潜力股",
+  "url": "https://zhuanlan.zhihu.com/p/2007962920747815623",
+  "created": "2026-02-19 23:42:44",
+  "voteup": 108,
+  "file": "2026-02-19_10分钟打造你的AI选股系统：OpenClaw每日自动筛选5支潜力股.md",
+  "excerpt": "过去几年，量化机构和高频基金拥有的是数据优势与系统优势。而现在，借助 OpenClaw这样的 Agent 框架，加上实时行情 API 和自动化调度能力，普通个人也可以在 10 分钟内搭建一个“专属股票分析系统”。这篇文章，会手把手带你完成这件事：从服务器部署，到 QQ 机器人接入；从股票分析 Agent 人设设计，到实时数据打通；最后，实现每天自动筛选 5 支潜力股。 不需要写复杂代码。不需要专业"
+ },
+ {
+  "id": "2008671745092120877",
+  "title": "Gemini 3.1 Pro 登顶背后：效率、稳定性与工程化能力的全面升级",
+  "url": "https://zhuanlan.zhihu.com/p/2008671745092120877",
+  "created": "2026-02-21 22:38:02",
+  "voteup": 3,
+  "file": "2026-02-21_Gemini_3.1_Pro_登顶背后：效率、稳定性与工程化能力的全面升级.md",
+  "excerpt": "Gemini 3.1 pro它来了，它在 Gemini 3 系列的基础上，核心推理方面实现了飞跃。相比上一代版本，这次升级并不是简单的参数堆叠，他在“推理深度、长上下文、多模态融合与Agent能力”等几个方向上做了进一步的升级 从2月20日开始，Pro用户就可以使用到谷歌的这一个最新最强的模型 从artificialanalysis网站对它的评分来看，综合评分取得了最高的分数，达到了57分，从之前"
+ },
+ {
+  "id": "2010815471662958015",
+  "title": "Nano Banana 2：速度、质量与世界知识融合的图像生成新拐点",
+  "url": "https://zhuanlan.zhihu.com/p/2010815471662958015",
+  "created": "2026-02-27 20:36:22",
+  "voteup": 1,
+  "file": "2026-02-27_Nano_Banana_2：速度、质量与世界知识融合的图像生成新拐点.md",
+  "excerpt": "Nano Banana 2发布 谷歌最新的 Nano Banana 2（即 Gemini 3.1 Flash Image） 发布啦，相比前代感觉亮点确实不少。 快速总结起来就是 1）生成速度的明显提升，由于它是基于 Gemini Flash 架构，对比起一代来看的话效率提升幅度很大 2）支持4K分辨率，生成的图像清晰度、光影效果与材质表现更出色。 3）有更加强悍的世界知识能力，模型能结合 即时网页"
+ },
+ {
+  "id": "2011487981429620909",
+  "title": "从 0 到 1：用 OpenClaw 搭建可量化的美股盘前分析和量化指标 Agent",
+  "url": "https://zhuanlan.zhihu.com/p/2011487981429620909",
+  "created": "2026-03-01 17:09:06",
+  "voteup": 0,
+  "file": "2026-03-01_从_0_到_1：用_OpenClaw_搭建可量化的美股盘前分析和量化指标_Agent.md",
+  "excerpt": "过去几年，美股的信息密度变得越来越夸张：宏观数据、财报季、地缘政治、降息预期、板块轮动、社媒情绪……任何一个变量的轻微扰动，都可能在盘前就把走势的“剧本”改写一遍。对于普通投资者来说，真正困难的从来不是“找不到信息”，而是信息太多、太碎、太快——你刚看完一条新闻，再翻两张K线，顺手查几个指标，十几分钟过去了，结论却依旧停留在“感觉这票还行/不太行”。 更麻烦的是，很多所谓的“盘前建议”要么只讲故事"
+ },
+ {
+  "id": "2013243853419864679",
+  "title": "GPT-5.4凌晨发布：最强“干活型”模型来了，Agent能力全面进化凌晨",
+  "url": "https://zhuanlan.zhihu.com/p/2013243853419864679",
+  "created": "2026-03-06 13:25:54",
+  "voteup": 0,
+  "file": "2026-03-06_GPT-5.4凌晨发布：最强“干活型”模型来了，Agent能力全面进化凌晨.md",
+  "excerpt": "GPT-5.4凌晨发布：最强“干活型”模型来了，Agent能力全面进化 凌晨2点的时候，GPT-5.4直接发布。目前在ChatGPT、API和Codex上都能够直接使用 从官方定位看，OpenAI 这次把 GPT-5.4 明确打成“ professional work”模型，并同步提供 GPT-5.4 Thinking 和 GPT-5.4 Pro。在 ChatGPT 里，GPT-5.4 Think"
+ },
+ {
+  "id": "2014430362978246995",
+  "title": "GPT-5.4初步体验：一个真正面向工作流的大模型出现了",
+  "url": "https://zhuanlan.zhihu.com/p/2014430362978246995",
+  "created": "2026-03-09 20:02:47",
+  "voteup": 1,
+  "file": "2026-03-09_GPT-5.4初步体验：一个真正面向工作流的大模型出现了.md",
+  "excerpt": "GPT-5.4初步体验：一个真正面向工作流的大模型出现了 凌晨2点的时候，GPT-5.4直接发布。目前在ChatGPT、API和Codex上都能够直接使用 从官方定位看，OpenAI 这次把 GPT-5.4 明确打成“ professional work”模型，并同步提供 GPT-5.4 Thinking 和 GPT-5.4 Pro。在 ChatGPT 里，GPT-5.4 Thinking 已经取"
+ },
+ {
+  "id": "2016879309869047892",
+  "title": "一站式接入小红书：我用 Openclaw 跑通了从写稿到发布的全流程",
+  "url": "https://zhuanlan.zhihu.com/p/2016879309869047892",
+  "created": "2026-03-16 14:12:44",
+  "voteup": 3,
+  "file": "2026-03-16_一站式接入小红书：我用_Openclaw_跑通了从写稿到发布的全流程.md",
+  "excerpt": "一站式接入小红书：我用 Openclaw 跑通了从写稿到发布的全流程 以前做小红书内容，最麻烦的其实不是“写一篇文章”，而是那一整套又碎又杂的流程。 你要先想选题，再定人设，再写文案，再找配图，最后还得自己打开平台一点点发布。 如果只是偶尔发一篇还好，但只要你想稳定更新，很快就会发现，真正消耗精力的并不是创作本身，而是这些重复、零散、机械的动作。 所以我最近一直在折腾一件事：能不能把“小红书内容生"
+ },
+ {
+  "id": "2017603881048229261",
+  "title": "装上 QClaw 后，发现它真不只是“微信版小龙虾”",
+  "url": "https://zhuanlan.zhihu.com/p/2017603881048229261",
+  "created": "2026-03-18 14:11:11",
+  "voteup": 15,
+  "file": "2026-03-18_装上_QClaw_后，发现它真不只是“微信版小龙虾”.md",
+  "excerpt": "装上 QClaw 后，发现它真不只是“微信版小龙虾” 这段时间，QClaw 的讨论度越来越高。 很多人第一反应都是： 这不就是接入了微信的 OpenClaw 吗？但我自己实际装下来、用了一轮之后，感觉事情没那么简单。如果只看表面，QClaw 确实可以概括成一句话： “小白友好版 OpenClaw”。可如果你真的把原版 OpenClaw 删掉，重新装一个纯净的 QClaw，再完整跑一遍流程，就会发现"
+ },
+ {
+  "id": "2018102422879368230",
+  "title": "从 MiMo-V2-Pro 到 Omni、TTS，小米这次把 Agent 时代的牌摊开了",
+  "url": "https://zhuanlan.zhihu.com/p/2018102422879368230",
+  "created": "2026-03-19 23:12:10",
+  "voteup": 2,
+  "file": "2026-03-19_从_MiMo-V2-Pro_到_Omni、TTS，小米这次把_Agent_时代的牌摊开了.md",
+  "excerpt": "从 MiMo-V2-Pro 到 Omni、TTS，小米这次把 Agent 时代的牌摊开了 上周，一款名为Hunter Alpha的神秘大模型正式发布。该模型自上线伊始便展现出卓越性能，首周调用量即达到0.666万亿Token，在全球大模型应用排名中位列第七，引发了科技业界对其研发主体的广泛关注。最新数据显示，截至本周，Hunter Alpha已连续多日蝉联日活跃度排行榜首位。 之前就有很多人猜测，"
+ },
+ {
+  "id": "2020884594795259672",
+  "title": "把龙虾接入真实行情之后，我发现它真的开始“能干活”了",
+  "url": "https://zhuanlan.zhihu.com/p/2020884594795259672",
+  "created": "2026-03-27 15:27:26",
+  "voteup": 13,
+  "file": "2026-03-27_把龙虾接入真实行情之后，我发现它真的开始“能干活”了.md",
+  "excerpt": "用我的龙虾进行股价分析和回测 很多人现在养龙虾，第一反应还是拿它写写文案、查查资料、跑跑代码。 但如果只是停留在“对话助手”这个层面，其实还远远没有发挥出它真正的价值。 我最近一直在想一件事： 能不能把龙虾真正接到一个具体场景里，让它不只是会说，而是真的能做事。比如在股票分析这个场景中，普通人最常见的几个需求其实很明确：看实时行情、分析技术指标、给出交易思路，甚至直接把策略丢给它做历史回测，看看这"
+ },
+ {
+  "id": "2022440247321994235",
+  "title": "LongCat-Next 架构拆解：原生离散多模态，正在重写统一多模态模型范式",
+  "url": "https://zhuanlan.zhihu.com/p/2022440247321994235",
+  "created": "2026-03-31 22:29:16",
+  "voteup": 0,
+  "file": "2026-03-31_LongCat-Next_架构拆解：原生离散多模态，正在重写统一多模态模型范式.md",
+  "excerpt": "如何评价美团的LongCat-Next模型？我看下来，LongCat-Next 的整体架构可以概括成三个优点： 原生离散多模态、单一自回归骨干、模态专属 tokenizer/detokenizer。它抛弃了传统的“LLM + 视觉塔 + 语音塔 + 扩散头”那种拼接式路线，把文本、图像、音频都尽量离散成同一种 token 范式，然后统一塞进一个 next-token prediction 框架里做"
+ },
+ {
+  "id": "2023528332562559111",
+  "title": "Gemma 4 正式发布：Google 开源大模型的一次全面升级",
+  "url": "https://zhuanlan.zhihu.com/p/2023528332562559111",
+  "created": "2026-04-03 22:32:35",
+  "voteup": 0,
+  "file": "2026-04-03_Gemma_4_正式发布：Google_开源大模型的一次全面升级.md",
+  "excerpt": "时隔一年，新版本的Gemma终于发布了。 官方把这一次的版本进行了全面的升级，试图把 多模态、长上下文、函数调用、结构化输出、Agent 工作流适配、本地与边缘部署 这些今天真正决定可用性的能力，一次性补齐。因此谷歌把它称为目前“最强的 Gemma 开放模型”，并在发布当天同步接入了 Hugging Face、vLLM、llama.cpp、MLX、Ollama、NVIDIA NIM 等一整套主流生"
+ },
+ {
+  "id": "2023895826838078690",
+  "title": "离职的同事，没有消失，只是住进了服务器里",
+  "url": "https://zhuanlan.zhihu.com/p/2023895826838078690",
+  "created": "2026-04-04 22:53:07",
+  "voteup": 1,
+  "file": "2026-04-04_离职的同事，没有消失，只是住进了服务器里.md",
+  "excerpt": "最近，一个github仓库突然出现，而且仅仅几天的时间，其star数量就达到了7K 这就是&#34;同事.skill&#34;，一个可以把你的同事的所有信息转换成各种各样的skill。这个仓库在开头以比较搞笑的口吻道出了真相： 你的同事跳槽了，留下大量的文档没人维护？ 你的实习生离职了，只留下空荡的工位和烂尾的项目？ 你的导师毕业了，带走了所有的经验和上下文? 你的搭档转岗了，熟悉的默契一夜之间归"
+ },
+ {
+  "id": "2025168709631635510",
+  "title": "DeepSeek 悄悄上线专家模式：不是终极形态，但可能是产品成熟的开始",
+  "url": "https://zhuanlan.zhihu.com/p/2025168709631635510",
+  "created": "2026-04-08 11:16:02",
+  "voteup": 2,
+  "file": "2026-04-08_DeepSeek_悄悄上线专家模式：不是终极形态，但可能是产品成熟的开始.md",
+  "excerpt": "DeepSeek 悄悄上线专家模式：不是终极形态，但可能是产品成熟的开始 DeepSeek悄悄在网页端搞了个大动作——输入框上方多了两个图标，一个闪电，一个钻石，分别对应「快速模式」和「专家模式」。没有发布会，没有官方博客，甚至一条推文都没有，就这么静默上线了。 可以看到专家模式（钻石图标）不支持上传文件，但支持深度思考和智能搜索。 快速模式延续了此前版本的功能，适合日常问答、快速获取信息、临时灵"
+ },
+ {
+  "id": "2025697891302350919",
+  "title": "强到不敢公开：Anthropic Mythos Preview，可能是大模型史上的分水岭",
+  "url": "https://zhuanlan.zhihu.com/p/2025697891302350919",
+  "created": "2026-04-09 22:14:05",
+  "voteup": 2,
+  "file": "2026-04-09_强到不敢公开：Anthropic_Mythos_Preview，可能是大模型史上的分水岭.md",
+  "excerpt": "Claude Mythos Preview无疑是AI发展史上的一个关键节点。它既是技术上的巨大飞跃，也因其潜在风险与前所未有的发布方式，为我们敲响了警钟。 最近几天，好像各大媒体都一直在宣传Anthropic 的Mythos很强，强大到研究人员都不敢开放出来让人使用。 &#34;CC之父&#34;Boris Cherny对此作出了精辟评价：&#34;Mythos系统功能极为强大&#34; 从Ant"
+ },
+ {
+  "id": "2026434075607545093",
+  "title": "爱马仕Agent来了，小龙虾真的危险了吗？",
+  "url": "https://zhuanlan.zhihu.com/p/2026434075607545093",
+  "created": "2026-04-11 22:59:37",
+  "voteup": 8,
+  "file": "2026-04-11_爱马仕Agent来了，小龙虾真的危险了吗？.md",
+  "excerpt": "最近Hermes Agent这个词语突然之间火爆起来。而且在短时间内github星星数达到了恐怖的56k 很多人都在说，龙虾危险了！毕竟这次的Hermes Agent主打的就是能够不断记忆，不断自我迭代。用过龙虾很多人都知道， 它像个记性不太好的工具人同事——每次开会都要从头对齐一遍需求，上回说好的流程下回又忘了。你刚教会它怎么查数据库，换个聊天窗口它就一脸茫然地问：“咱们第一步干啥来着？”这种“"
+ },
+ {
+  "id": "2028265253402682018",
+  "title": "Claude Opus 4.7 发布：更像一个真正能干活的模型了",
+  "url": "https://zhuanlan.zhihu.com/p/2028265253402682018",
+  "created": "2026-04-17 00:15:27",
+  "voteup": 0,
+  "file": "2026-04-17_Claude_Opus_4.7_发布：更像一个真正能干活的模型了.md",
+  "excerpt": "Claude Opus 4.7 发布：更像一个真正能干活的模型了 Opus 4.7终于发布了。官方把它定位为“目前能力最强的通用可用模型”，重点强化了 编码、Agent 长程任务、视觉、多步复杂工作流、记忆相关任务。 虽然这一次模型升级了，但是价格很公道。新版本的价格维持在与 Opus 4.6 相同的 输入每百万 token 5 美元、输出每百万 token 25 美元。Opus 4.7 发布时同"
+ },
+ {
+  "id": "2028984338948073417",
+  "title": "AI 说“稳稳地接住你”，到底是在理解你，还是在迎合你？",
+  "url": "https://zhuanlan.zhihu.com/p/2028984338948073417",
+  "created": "2026-04-18 23:53:18",
+  "voteup": 1,
+  "file": "2026-04-18_AI_说“稳稳地接住你”，到底是在理解你，还是在迎合你？.md",
+  "excerpt": "AI 说的「稳稳地接住你」到底是什么意思？最近这个词语，确实经常出现在我的大模型对话当中。比如我刚刚抱怨完了一句：你上面的执行有问题，大模型立马就给我回了一句：你说得对，是我的问题 有时候，我甚至会怀疑，屏幕对面那个东西到底是在帮你解决问题，还是在给你做一场低成本心理按摩。 这种心理按摩式的回答，其实对于我们来说是有点太官方，太标准了。它已经不是一句正常人会自然说出口的话，而是一种高度工业化的情绪"
+ },
+ {
+  "id": "2030444043981808192",
+  "title": "GPT-Image-2 实测：它正在把生图模型带到一个新阶段",
+  "url": "https://zhuanlan.zhihu.com/p/2030444043981808192",
+  "created": "2026-04-23 00:33:17",
+  "voteup": 1,
+  "file": "2026-04-23_GPT-Image-2_实测：它正在把生图模型带到一个新阶段.md",
+  "excerpt": "首先先来看看模型整体得分情况。 OpenAI 再度取得重大突破。其最新研发成果 GPT - Image - 2 在文生图 Arena 评测中荣登榜首，领先第二名 Nano Banana 2 高达 242 分。 图像编辑功能表现优异，在同类产品中位列第一 下面是它官方介绍的视频， https://www.zhihu.com/video/2030444181596975419中文文字Nano Bana"
+ },
+ {
+  "id": "2030787692879930966",
+  "title": "腾讯混元 Hy3 preview 上手实测：这次终于不只是“能发”，而是真的能用了",
+  "url": "https://zhuanlan.zhihu.com/p/2030787692879930966",
+  "created": "2026-04-23 23:18:46",
+  "voteup": 0,
+  "file": "2026-04-23_腾讯混元_Hy3_preview_上手实测：这次终于不只是“能发”，而是真的能用了.md",
+  "excerpt": "腾讯混元 Hy3 preview 上手实测：这次终于不只是“能发”，而是真的能用了 就目前公开信息看， Hy3 preview 更像是腾讯这轮“混元重建”后的第一张能看的成绩单，从整体的性能来看它已经没有像以前那么拉了。目前已经接入元宝，官方对外给出的定位也很明确：不主打单点刷榜，而是主打实用性、性价比、长上下文、Agent 与代码能力。模型本身是 MoE 架构，总参数 295B、激活参数 21B"
+ },
+ {
+  "id": "2030977976515437334",
+  "title": "DeepSeek-V4来了：百万上下文不是噱头，而是下一代 Agent 的底座",
+  "url": "https://zhuanlan.zhihu.com/p/2030977976515437334",
+  "created": "2026-04-24 11:54:50",
+  "voteup": 2,
+  "file": "2026-04-24_DeepSeek-V4来了：百万上下文不是噱头，而是下一代_Agent_的底座.md",
+  "excerpt": "DeepSeek-V4来了：百万上下文不是噱头，而是下一代 Agent 的底座 千呼万唤，DeepSeek-V4终于出来了。从整体来看，V4版本很明显围绕“超长上下文效率”重构出来的新架构。 这一次新的版本拥有百万字超长上下文，在 Agent 能力、世界知识和推理性能上均实现国内与开源领域的领先。模型按大小分为两个版本，两个版本的上下文长度都在1M。而且已经发布直接开源 Pro版本整体的参数量级在"
+ },
+ {
+  "id": "2033324607193740641",
+  "title": "DeepSeek终于能看图了：这次不只是识图，而是让模型学会“边指边想”",
+  "url": "https://zhuanlan.zhihu.com/p/2033324607193740641",
+  "created": "2026-04-30 23:19:38",
+  "voteup": 2,
+  "file": "2026-04-30_DeepSeek终于能看图了：这次不只是识图，而是让模型学会“边指边想”.md",
+  "excerpt": "DeepSeek终于补上了多模态能力了，这一次大众心心念念的识图能力也在慢慢灰度起来。 在模型能力上，同样在 800×800 图像输入下，DS模型平均分约 77.2%，高于 Gemini-3-Flash 的 76.5%，也高于 GPT-5.4 的 71.1%、Claude-Sonnet-4.6 的 68.1%、Qwen3-VL 的 65.3%。同时它的 token/KV cache 使用明显更低："
+ },
+ {
+  "id": "2034035206412293304",
+  "title": "从盯盘到写稿到查Bug，我的4个Agent已经开始替我上班了",
+  "url": "https://zhuanlan.zhihu.com/p/2034035206412293304",
+  "created": "2026-05-02 22:23:09",
+  "voteup": 3,
+  "file": "2026-05-02_从盯盘到写稿到查Bug，我的4个Agent已经开始替我上班了.md",
+  "excerpt": "从盯盘到写稿到查Bug，我的4个Agent已经开始替我上班了 最近我给自己搭了一套每天自动执行的 Agent 组合。它们不会彼此打架，也不会混乱串场，而是各自负责不同的任务：有的负责盯盘分析，有的负责追热点写内容，有的负责扫描代码找 Bug，还有的负责帮我整理微信里的工作信息，自动生成总结。它们就像是一个我的生活小助手，更像是一组已经分工明确、能够长期待命的数字员工。 股票分析大师：每天自动盯盘的"
+ },
+ {
+  "id": "2036425211973735778",
+  "title": "还在手动敲Prompt？千问新功能让你“随口一说”直接生成方案",
+  "url": "https://zhuanlan.zhihu.com/p/2036425211973735778",
+  "created": "2026-05-09 12:40:17",
+  "voteup": 0,
+  "file": "2026-05-09_还在手动敲Prompt？千问新功能让你“随口一说”直接生成方案.md",
+  "excerpt": "还在手动敲Prompt？千问新功能让你“随口一说”直接生成方案 千问PC端上线了一个AI 语音输入功能。用户可以通过快捷键在各类桌面应用中直接使用，而且不需要先切到千问客户端 它支持去语气词、纠错、格式化整理，还能基于上下文做智能回复，并直接执行创作、问答、翻译等指令。操作上也比较轻：Windows 可用右 Alt，Mac 可用右 Command，也支持自定义；双击快捷键可进入 AI 指令模式。 "
+ },
+ {
+  "id": "2037323356601594908",
+  "title": "DeepSeek-TUI：把 DeepSeek 变成终端里的编程Agent",
+  "url": "https://zhuanlan.zhihu.com/p/2037323356601594908",
+  "created": "2026-05-12 00:09:14",
+  "voteup": 0,
+  "file": "2026-05-12_DeepSeek-TUI：把_DeepSeek_变成终端里的编程Agent.md",
+  "excerpt": "最近 DeepSeek-TUI 这个项目挺火，它有点像是专门适配DeepSeek的Agent。让 DeepSeek 直接进入你的工作目录，读代码、改文件、执行命令、看 Git 状态、调用工具，甚至调度子 Agent 完成更复杂的开发任务。 它的官方地址在这里： GitHub 链接：https://http://github.com/Hmbown/DeepSeek-TUI/tree/main简单说，"
+ },
+ {
+  "id": "2038752478812955914",
+  "title": "我用 CodeBuddy + 腾讯文档，搭了一套自媒体内容生产工作流",
+  "url": "https://zhuanlan.zhihu.com/p/2038752478812955914",
+  "created": "2026-05-15 22:48:04",
+  "voteup": 2,
+  "file": "2026-05-15_我用_CodeBuddy_+_腾讯文档，搭了一套自媒体内容生产工作流.md",
+  "excerpt": "我用 CodeBuddy + 腾讯文档，搭了一套自媒体内容生产工作流 过去做自媒体内容，最麻烦的地方主要是前面的准备工作：资料散落在不同文档里，选题需要反复整理，内容框架要重新搭，写完还要总结、转成 PPT、同步进度。单看每一步都不难，但连在一起就很耗时间。 所以我最近尝试用 CodeBuddy + 腾讯文档 搭了一套更自动化的内容生产流程。腾讯文档负责承载工作区、资料、文章、表格和协作内容，Co"
+ },
+ {
+  "id": "2040217825248278290",
+  "title": "Gemini 3.5 Flash 泄露：每秒 1141 token，Google 这次想打穿“速度”？",
+  "url": "https://zhuanlan.zhihu.com/p/2040217825248278290",
+  "created": "2026-05-19 23:50:40",
+  "voteup": 0,
+  "file": "2026-05-19_Gemini_3.5_Flash_泄露：每秒_1141_token，Google_这次想打穿“速度”？.md",
+  "excerpt": "Gemini 3.5 Flash 泄露：每秒 1141 token，Google 这次想打穿“速度”？ Gemini 3.5 Flash 这波，有点快得不正常。 这两天，海外和中文 AI 社区开始流传一组疑似 Gemini 3.5 Flash 的实测数据。这一个新的Gemini并没有说能力很逆天，而是它的输出速度直接冲到了一个非常离谱的区间：有网友测到 900 tokens/s 左右，写代码场景甚"
+ },
+ {
+  "id": "2040799413942088870",
+  "title": "Gemini 3.5 Flash 泄露：每秒 1141 token，Google 这次想打穿“速度”？",
+  "url": "https://zhuanlan.zhihu.com/p/2040799413942088870",
+  "created": "2026-05-21 14:22:08",
+  "voteup": 2,
+  "file": "2026-05-21_Gemini_3.5_Flash_泄露：每秒_1141_token，Google_这次想打穿“速度”？.md",
+  "excerpt": "Gemini 3.5 Flash 这波，有点快得不正常。 有网友一直在测试Gemini 3.5 Flash 的速度。这一个新的Gemini并没有说能力很逆天，而是它的输出速度直接冲到了一个非常离谱的区间：有网友测到 900 tokens/s 左右，写代码场景甚至最高达到 1141 tokens/s。这个速度如果属实，就已经不是普通的小版本优化，而更像是 Google 在重新定义 Flash 模型的"
+ },
+ {
+  "id": "2043381382693524766",
+  "title": "AI 算了一遍 2026 世界杯：西班牙进决赛，巴西最终夺冠",
+  "url": "https://zhuanlan.zhihu.com/p/2043381382693524766",
+  "created": "2026-05-28 17:46:23",
+  "voteup": 0,
+  "file": "2026-05-28_AI_算了一遍_2026_世界杯：西班牙进决赛，巴西最终夺冠.md",
+  "excerpt": "随着 2026 世界杯越来越临近，大家最关心的问题也很直接：哪些球队能小组出线？哪些队会成为黑马？最后冠军又可能是谁？ 以前做这种预测，通常要靠专家经验、赔率变化、球队状态和球迷直觉。但现在有了 AI 和历史比赛数据，我们可以换一种方式来看世界杯：把过去一百多年国际足球比赛的数据整理出来，再结合 2026 世界杯的实际分组和对阵，让模型根据球队历史表现、近期状态、进攻能力、防守能力、赛事强度等信息"
+ },
+ {
+  "id": "2043662085779894941",
+  "title": "Claude Opus 4.8 发布：补上 4.7 的短板，押注 Agent 工作流",
+  "url": "https://zhuanlan.zhihu.com/p/2043662085779894941",
+  "created": "2026-05-29 11:57:09",
+  "voteup": 1,
+  "file": "2026-05-29_Claude_Opus_4.8_发布：补上_4.7_的短板，押注_Agent_工作流.md",
+  "excerpt": "Opus 4.7 是 2026 年 4 月 16 日发布，Opus 4.8 是 2026 年 5 月 28 日发布，中间大约 6 周。说实话，这种小版本更新速度这么快，只能说明Anthropic确实有点着急。最近GPT和Codex更新的速度有点快，抢了Anthropic很多的用户。而且大家发现Opus 4.7效果有点拉，所以Anthropic只能快速迭代一个新的版本。 Anthropic 官方其实"
+ },
+ {
+  "id": "2047356103286056476",
+  "title": "从 PPT 到 App：我用 Codex 跑了一遍 AI 开发流程",
+  "url": "https://zhuanlan.zhihu.com/p/2047356103286056476",
+  "created": "2026-06-08 16:41:51",
+  "voteup": 0,
+  "file": "2026-06-08_从_PPT_到_App：我用_Codex_跑了一遍_AI_开发流程.md",
+  "excerpt": "从 PPT 到 App：我用 Codex 跑了一遍 AI 开发流程 最近我明显感觉到，Codex 已经不只是一个“帮你写代码”的工具了。包括它已经可以操作你的电脑，浏览器等，我感觉使用起来已经很完善和成熟。它能调用插件生成 PPT，能做数据分析和模型预测，能开发网页，也能进一步尝试开发 App。 接下来，这次我主要试了几个比较典型的场景：PPT 生成、世界杯数据分析与预测、网页开发，以及更复杂一点"
+ },
+ {
+  "id": "2048044674078843997",
+  "title": "Claude Fable 5：最强模型，开始被“安全阀”包起",
+  "url": "https://zhuanlan.zhihu.com/p/2048044674078843997",
+  "created": "2026-06-10 14:12:05",
+  "voteup": 0,
+  "file": "2026-06-10_Claude_Fable_5：最强模型，开始被“安全阀”包起.md",
+  "excerpt": "Claude Fable 5：最强模型，开始被“安全阀”包起来 Claude模型王者归来了，就今天凌晨左右，Anthropic发布了新一代模型Fable 5。初看感觉怎么又发了一个新的模型。但其实这个Fable 5其实是把原本被认为“不适合公开释放”的 Mythos 级能力，第一次通过护栏机制下放给了普通用户。 那么Fable 5 到底是什么呢？简单理解，Fable 5 不是传统意义上的 Clau"
+ },
+ {
+  "id": "2049617233651951120",
+  "title": "GLM-5.2实测：国产模型终于打进 Opus 级工程区间",
+  "url": "https://zhuanlan.zhihu.com/p/2049617233651951120",
+  "created": "2026-06-14 22:21:40",
+  "voteup": 0,
+  "file": "2026-06-14_GLM-5.2实测：国产模型终于打进_Opus_级工程区间.md",
+  "excerpt": "GLM 5.2的出现，确实有点强，而且在coding能力上对标的是Claude Opus级别的模型。它其实有两个明显的优点： 第一， 1M 上下文终于可以达到可用的地步。官方文档已经给出 glm-5.2[1m] 的接入方式，并要求把 Claude Code 的自动压缩窗口配置到 1000000，这说明它直接面向大型代码仓、长会话、长链路 Agent 任务设计的。OpenClaw 配置里也写了 10"
+ },
+ {
+  "id": "2050729262047573149",
+  "title": "Loop 工程：Prompt 工程之后，Agent 时代的新分工",
+  "url": "https://zhuanlan.zhihu.com/p/2050729262047573149",
+  "created": "2026-06-17 23:59:32",
+  "voteup": 3,
+  "file": "2026-06-17_Loop_工程：Prompt_工程之后，Agent_时代的新分工.md",
+  "excerpt": "最近“Loop 工程”一词突然爆火起来。OpenClaw 作者 Peter 在社媒发帖，声称开发者不应该继续直接写 Prompt，而应该设计 Loop(循环) 来 Prompt Agent。这个帖子引发开发者热议，诞生了新的词汇 &#34;Loop 工程&#34; 与 &#34;Loop 工程师&#34; 等等。 这句话听起来有点像新概念包装，但它背后其实对应的是 AI 编程方式的一次真实变化。 "
+ },
+ {
+  "id": "2054342030239835309",
+  "title": "OpenAI 再次出手：GPT-5.6 贴脸对打 Claude，Agent 战争升级",
+  "url": "https://zhuanlan.zhihu.com/p/2054342030239835309",
+  "created": "2026-06-27 23:15:23",
+  "voteup": 1,
+  "file": "2026-06-27_OpenAI_再次出手：GPT-5.6_贴脸对打_Claude，Agent_战争升级.md",
+  "excerpt": "OpenAI 再次出手：GPT-5.6 贴脸对打 Claude，Agent 战争升级 从目前发布来看，GPT-5.6 还是 有限预览，并不是所有 ChatGPT 用户都能用。OpenAI 这次发布的是一个系列：Sol、Terra、Luna。Sol 是旗舰模型，Terra 是平衡性能和成本的中间档，Luna 是最快、最便宜的版本；预览阶段只面向少量可信合作伙伴和组织，通过 API 和 Codex 使"
+ },
+ {
+  "id": "2055366624534860627",
+  "title": "构建自己的第一个 Loop：让 AI Demo 从“像产品”变成“真产品”",
+  "url": "https://zhuanlan.zhihu.com/p/2055366624534860627",
+  "created": "2026-06-30 19:07:39",
+  "voteup": 1,
+  "file": "2026-06-30_构建自己的第一个_Loop：让_AI_Demo_从“像产品”变成“真产品”.md",
+  "excerpt": "构建自己的第一个 Loop：让 AI Demo 从“像产品”变成“真产品” 感觉现在人人都是一个coding大师了。现在让 AI 写一个网页、写一个小游戏、写一个 App Demo，已经不是什么稀奇事，主要问题在于写出来的东西是一个简易版，还是真的是一个可以跑起来的版本。 就像之前明星胡彦斌说自己一个月就能开发一个APP一样，普通人在这个时代只要有创意就能够立马实现自己的想法 很多 AI Demo"
+ },
+ {
+  "id": "2057993693768971102",
+  "title": "从评测到实测，混元 Hy3 这次真的进步明显",
+  "url": "https://zhuanlan.zhihu.com/p/2057993693768971102",
+  "created": "2026-07-08 01:06:30",
+  "voteup": 1,
+  "file": "2026-07-08_从评测到实测，混元_Hy3_这次真的进步明显.md",
+  "excerpt": "之前我曾经测试过Hy3 preview，它在多项评测数据中确实有明显的提升。从官方的评测数据来看，它的 横向来看，Hy3 已经进入第一梯队，目前比较强的地方在于： （1） BrowseComp 84.2，基本接近 GPT-5.5、Claude Opus 4.8，说明信息检索、复杂浏览、综合判断能力已经很强。（2） ClawEval 68.5，仅次于 Claude Opus 4.8 的 72.1，说"
+ },
+ {
+  "id": "2058947269274101220",
+  "title": "GPT-5.6 首发实测：更强、更便宜，还能直接把网站做上线",
+  "url": "https://zhuanlan.zhihu.com/p/2058947269274101220",
+  "created": "2026-07-10 16:50:53",
+  "voteup": 2,
+  "file": "2026-07-10_GPT-5.6_首发实测：更强、更便宜，还能直接把网站做上线.md",
+  "excerpt": "一觉醒来，就看到GPT-5.6真实发布了。Chatgpt和Codex真实合并，我更新了一下我的电脑codex之后，就看到合并通知。 应用左上角提供模式切换入口，用户可根据需要快速切换不同模式。 右下角就可以看到正式版本的5.6已经上线了： 模型能力OpenAI 这次发布的是一个系列： Sol、Terra、Luna。Sol 是旗舰模型，Terra 是平衡性能和成本的中间档，Luna 是最快、最便宜的"
+ },
+ {
+  "id": "2060747443063493082",
+  "title": "每场都买0:0，世界杯结束后能赚多少钱？",
+  "url": "https://zhuanlan.zhihu.com/p/2060747443063493082",
+  "created": "2026-07-15 15:28:03",
+  "voteup": 1,
+  "file": "2026-07-15_每场都买0_0，世界杯结束后能赚多少钱？.md",
+  "excerpt": "不知道大家有没有一种感觉，今年的世界杯好像冷门比较多。而且小组赛到淘汰赛，在常规时间中的平均比较多。比如首次征战大赛的佛得角，用一场震撼世界的表现改写了剧本，直接逼平了传统豪强西班牙。比赛中，佛得角的40岁门将沃齐尼亚，多次扑出西班牙的射门，成为全队的英雄。 而在淘汰赛阶段，同样也是佛得角逼平了卫冕冠军阿根廷 由于这届杯赛出现了太多的平均，所以我一直比较好奇：如果不猜胜负，只长期购买平局比分，到底"
+ },
+ {
+  "id": "2061587799304938015",
+  "title": "Kimi K3炸场：2.8万亿参数，开源模型杀进全球第一梯队",
+  "url": "https://zhuanlan.zhihu.com/p/2061587799304938015",
+  "created": "2026-07-17 23:07:43",
+  "voteup": 0,
+  "file": "2026-07-17_Kimi_K3炸场：2.8万亿参数，开源模型杀进全球第一梯队.md",
+  "excerpt": "Kimi K3直接整一个大招，而且是一个开源的万亿参数模型 从官方的榜单加上后续各个网友的评测来看，这个一次K3确实有点东西。它证明了，通过极度稀疏的 MoE、新型长上下文架构以及面向 Agent 的训练，可以把开放权重模型推进到全球第一梯队，部分编码和智能体任务已经能与顶级闭源模型正面对抗。 K3 是 MoE 模型，总参数达到 2.8T，但每次计算只会激活 896 个专家中的16个，并不是每生成"
+ },
+ {
+  "id": "2067731515023405084",
+  "title": "WorkBuddy打通腾讯文档后，AI终于能一起把事做完",
+  "url": "https://zhuanlan.zhihu.com/p/2067731515023405084",
+  "created": "2026-08-03 22:01:56",
+  "voteup": 1,
+  "file": "2026-08-03_WorkBuddy打通腾讯文档后，AI终于能一起把事做完.md",
+  "excerpt": "WorkBuddy又一次更新了，这次更新最值得关注的，它终于把腾讯文档等办公生态一起构建起来，使得AI 终于能真正进入日常办公的交付流程。 第一，WorkBuddy 生成的文件不再只是“生成完就结束”，现在可以直接在侧边栏继续修改。 第二，腾讯文档被带进了 WorkBuddy：同一份文档里，你可以和 AI 协作，也可以和同事协作，让内容不再停留在聊天框。最最重要的是，目前，HY3也还在免费期，完全"
+ },
+ {
+  "id": "2071602143807776344",
+  "title": "DeepSeek Harness 发布：Everything is a Plugin",
+  "url": "https://zhuanlan.zhihu.com/p/2071602143807776344",
+  "created": "2026-08-14 14:21:36",
+  "voteup": 2,
+  "file": "2026-08-14_DeepSeek_Harness_发布：Everything_is_a_Plugin.md",
+  "excerpt": "DeepSeek Harness终于发布了，官方地址在这里： https://www.http://deepseek.com/harness/ 其中它的Github仓库已经来到了62.9K星星数了，一经发布即开源。 安装方式也比较简单，只需要一行命令就可以安装。如果你自己嫌麻烦，也可以把这个命令发送给任意一个Agent帮你安装 成功之后可以看到挂载的网页弹出来，然后输入自己的API Key就可以了"
+ },
+ {
+  "id": "2072829103485498733",
+  "title": "全能 Agent 养成记：我用腾讯云 ASR × VITA × TTS，把一条口播视频变成内容包",
+  "url": "https://zhuanlan.zhihu.com/p/2072829103485498733",
+  "created": "2026-08-17 23:42:15",
+  "voteup": 1,
+  "file": "2026-08-17_全能_Agent_养成记：我用腾讯云_ASR_×_VITA_×_TTS，把一条口播视频变成内容包.md",
+  "excerpt": "全能 Agent 养成记：我用腾讯云 ASR × VITA × TTS，把一条口播视频变成内容包 做口播视频时，我经常陷入同一种重复劳动：先反复听素材、整理逐字稿，再回看画面找重点，最后才开始写摘要、标题和新的口播稿。一条视频往往只发布一次，但其中的文字、观点和画面信息，其实还能继续服务于公众号、短视频切片和音频摘要。 这次我没有把 Agent 当作“一键洗稿机”，而是尝试搭建一条内容再生产链路："
+ },
+ {
+  "id": "2074612571622135305",
+  "title": "DeepSeek-V4-Flash-Vision-Exp 实测：DeepSeek 终于给 Agent 装上了眼睛",
+  "url": "https://zhuanlan.zhihu.com/p/2074612571622135305",
+  "created": "2026-08-22 21:43:20",
+  "voteup": 1,
+  "file": "2026-08-22_DeepSeek-V4-Flash-Vision-Exp_实测：DeepSeek_终于给_Agent_装上了眼睛.md",
+  "excerpt": "DeepSeek 给 V4-Flash 补上了 Agent 最缺的一双“眼睛”，而且从首批结果看，这双眼睛并没有明显拖累原来的推理与 Coding 能力。首先就是最新的这个V4-Flash-Vision-Exp在多模态 Agent上确实的比V4-Flash要好，而且某些评测集上和Opus-4.8的效果差不多。 纯文本 Agent、推理、世界知识能力基本保持 V4-Flash 水平，而需要视觉理解的"
+ },
+ {
+  "id": "2076434455141663683",
+  "title": "GLM-5.3-Flash发布：旗舰能力，十分之一成本",
+  "url": "https://zhuanlan.zhihu.com/p/2076434455141663683",
+  "created": "2026-08-27 22:22:39",
+  "voteup": 1,
+  "file": "2026-08-27_GLM-5.3-Flash发布：旗舰能力，十分之一成本.md",
+  "excerpt": "GLM-5.3-Flash发布：旗舰能力，十分之一成本 智谱终于把开始把旗舰模型的能力，压进 Flash 级别的成本里。GLM-5.3-Flash 是 320B-A18B MoE，也就是总参数 320B，但每个 Token 实际只激活约 18B。官方明确说这是一个 重新训练的 Base Model，架构和训练方案都重新围绕效率设计，引入了：Sparse Attention + Linear Att"
+ },
+ {
+  "id": "2076815818369798398",
+  "title": "Hy4 Preview 实测：腾讯这次把大模型重点押在了 Agent 上",
+  "url": "https://zhuanlan.zhihu.com/p/2076815818369798398",
+  "created": "2026-08-28 23:38:14",
+  "voteup": 2,
+  "file": "2026-08-28_Hy4_Preview_实测：腾讯这次把大模型重点押在了_Agent_上.md",
+  "excerpt": "这一次，腾讯HY4确实真的上桌了，真正 进入国内开源旗舰第一梯队了。从官方的演示视频来看，效果确实可以，特别是在Coding Agent、工具调用、长任务执行和办公生产力。 先看模型本身，有明显的效果提升Hy4 preview 是一个 770B 总参数、49B 激活参数的 MoE，上下文直接做到 1M Token。相比 Hy3 的 295B / 21B / 256K，基本上是有一个成倍数的增加。目"
+ },
+ {
+  "id": "2078589622142224026",
+  "title": "Claude Fable 5.1 来了：Agent 暴涨、缓存降价，还有新的反蒸馏机制",
+  "url": "https://zhuanlan.zhihu.com/p/2078589622142224026",
+  "created": "2026-09-02 21:06:46",
+  "voteup": 1,
+  "file": "2026-09-02_Claude_Fable_5.1_来了：Agent_暴涨、缓存降价，还有新的反蒸馏机制.md",
+  "excerpt": "Claude Fable 5.1 来了：Agent 暴涨、缓存降价，还有新的反蒸馏机制 目前 Fable 5.1 是全面 GA（正式发布），Mythos 5.1 并没有全面开放。两者其实是同一个底层模型，Fable 5.1 面向普通用户和企业开放；Mythos 5.1 则使用更宽松的安全策略，目前主要通过 Project Glasswing 向经过审核的网络安全和生命科学机构开放。 这一次发布的新"
+ },
+ {
+  "id": "2079347765595870063",
+  "title": "GPT-6 Astra 发布：AGI 时代真的来了吗？OpenAI总裁都直接说GPT-6进入 AGI 时代了。这个是不是",
+  "url": "https://zhuanlan.zhihu.com/p/2079347765595870063",
+  "created": "2026-09-04 23:19:27",
+  "voteup": 0,
+  "file": "2026-09-04_GPT-6_Astra_发布：AGI_时代真的来了吗？OpenAI总裁都直接说GPT-6进入_AGI_时代了。这个是不是.md",
+  "excerpt": "GPT-6 Astra 发布：AGI 时代真的来了吗？ OpenAI总裁都直接说GPT-6进入 AGI 时代了。这个是不是有点太夸张。他在发布会上表示，自己认为“我们已经处于 AGI 时代”是一个合理判断，未来回看时，Astra 可能会被视为那个分界点；但是如果回看官方发布的模型效果来看，目前没有证据说它具有AGI的特征。 为什么 Astra 这次确实不太一样？最新的Astra 在 Agents&"
+ },
+ {
+  "id": "2081137381319746966",
+  "title": "GPT Image 2.5 发布：AI 生图开始真正进入生产力时代",
+  "url": "https://zhuanlan.zhihu.com/p/2081137381319746966",
+  "created": "2026-09-09 21:51:58",
+  "voteup": 4,
+  "file": "2026-09-09_GPT_Image_2.5_发布：AI_生图开始真正进入生产力时代.md",
+  "excerpt": "OpenAI 在 9 月 8 日正式发布 ChatGPT Images 2.5。相比 Images 2.0，官方重点其实就四个： 生成速度最高提升 50%、参考图人物/主体保持更好、局部编辑更精准、多轮编辑一致性明显增强。同时新增了 Sketch 草图输入、图片局部评论修改、Poster / Merch 等模板。 API 这次还拆成两个模型： 模型定位GPT-Image-2.5 Flare快速版，"
+ }
+]
