@@ -49,6 +49,16 @@ def do_switch(target_uid: str, meta: dict) -> None:
     print(f"  [3/3] 已重启，当前登录 = {phone}")
 
 
+def do_add_account() -> None:
+    """新账号收尾：先在客户端里登录过它，再跑这里 → 捕获档案 + 并入 accounts.json。"""
+    print("\n—— 新增账号收尾 ——")
+    print("前提：这个账号已经在本机某个 TRAE SOLO CN（含多开副本）里登录过一次。")
+    cmd_capture()
+    print()
+    subprocess.run([sys.executable, str(HERE / "twa_scan_accounts.py"), "--inject", "--update"],
+                   check=False)
+
+
 def main() -> None:
     while True:
         cur = current_uid_of(MAIN_STORAGE) if MAIN_STORAGE.exists() else None
@@ -59,6 +69,7 @@ def main() -> None:
             mark = "  ← 当前登录" if uid == cur else ""
             print(f"  {i}. {m.get('phone') or '-':<14} 来源={m.get('source_dir','?')}{mark}")
         print("  r. 重新捕获全部账号档案（多开副本还在时可刷新最新 token）")
+        print("  a. 新增账号收尾（已在客户端登录过新账号 → 捕获并入库，切换/签到才能认）")
         print("  q. 退出")
         try:
             choice = input("选择: ").strip().lower()
@@ -69,6 +80,9 @@ def main() -> None:
             return
         if choice == "r":
             cmd_capture()
+            continue
+        if choice == "a":
+            do_add_account()
             continue
         if choice.isdigit() and 1 <= int(choice) <= len(items):
             uid, m = items[int(choice) - 1]
