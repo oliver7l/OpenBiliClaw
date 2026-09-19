@@ -4,6 +4,20 @@
 
 ---
 
+## refill 全平台配额：让各平台回补全量跑起来（2026-09-19）
+
+refill 通道层（M3 youtube/getnote、M4 bilibili/zhihu）已就绪，此前配额仅默认调度小红书。
+本次给各平台显式配置配额，让回补真正全量参与运行：
+
+- `config.example.toml`：`[refill.quota]` 补齐 7 平台配额——`xiaohongshu/douyin/xiaoyuzhou` `per_cycle=1`，
+  `youtube/bilibili/zhihu/wechat` `per_cycle=2`（均刻意防风控压低）；并修正 `jitter_max_min`
+  原先被 TOML 归入 `[refill.quota]` 表（顶层读不到）的落位问题。
+- 本地 `config.toml`（不入库）：新增 `[refill]` + `[refill.quota]` 同款配额，PM2 `openbiliclaw-refill`
+  下一 cron 周期（每 2h :05）自动重读生效。
+- `docs/modules/config.md`：`[refill]` 配额表更新为全部 7 平台 + 通道顺序说明 + 关闭某平台的用法。
+
+---
+
 ## refill 模块 M5：架构/文档收尾（2026-09-19）
 
 把 refill 反映到架构与模块文档（AGENTS 文档强制规则）：

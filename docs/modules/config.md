@@ -577,23 +577,31 @@ cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"
 | `enabled` | bool | `true` | 回补模块总开关；`false` 时 `refill status` 仍可读现有队列，但 `refill run/schedule` 不调度 |
 | `db` | string | `"refill.db"` | 回补队列独立子库路径，相对 `data` 目录（即 `data/refill.db`）；支持绝对路径覆盖 |
 | `min_body_len` | int | `30` | 判定「抓到正文」的最小字数阈值（对齐旧脚本的 `>=30`） |
-| `quota` | table | `{xiaohongshu: {per_cycle=1, interval_min=120}}` | 每平台每轮配额与时隙：`per_cycle` 每轮补抓条数，`interval_min` 两轮最小间隔分钟 |
-| `jitter_max_min` | int | `30` | 首段随机憩志分钟上限（`refill schedule` 防风控） |
+| `quota` | table | 见下 `quota` 各平台 | 每平台每轮配额与时隙：`per_cycle` 每轮补抓条数，`interval_min` 两轮最小间隔分钟（仅 `per_cycle>0` 的平台参与调度） |
+| `jitter_max_min` | int | `30` | 首段随机憩志分钟上限（`refill schedule` 防风控）；**须放在 `[refill.quota]` 之前**，否则被 TOML 归入 quota 表、顶层读不到 |
 
 ```toml
 [refill]
 enabled = true
 db = "refill.db"
 min_body_len = 30
+jitter_max_min = 30
 [refill.quota]
 xiaohongshu = { per_cycle = 1, interval_min = 120 }
-jitter_max_min = 30
+youtube    = { per_cycle = 2, interval_min = 60 }
+bilibili   = { per_cycle = 2, interval_min = 60 }
+zhihu      = { per_cycle = 2, interval_min = 60 }
+wechat     = { per_cycle = 2, interval_min = 60 }
+douyin     = { per_cycle = 1, interval_min = 120 }
+xiaoyuzhou = { per_cycle = 1, interval_min = 120 }
 ```
 
-> 风控守恒：`xiaohongshu` 配额 `per_cycle=1` 是刻意压低的防风控设计，别按缺口数调大。
-> M4 已有 bilibili/zhihu 通道但仍**不默认调度**——要补某平台，在 `[refill.quota]` 按需加对应项
-> （如 `bilibili = { per_cycle = 6, interval_min = 60 }`、`zhihu = { per_cycle = 3, interval_min = 30 }`、
-> `youtube = { per_cycle = 8, interval_min = 60 }`、`douyin = { per_cycle = 2, interval_min = 120 }`）。
+> 风控守恒：各平台 `per_cycle` 均刻意压低（小红书/抖音/小宇宙 `1`，其余 `2`）防风控，
+> 别按缺口数调大。通道顺序见 `src/openbiliclaw/refill/channels/base.py` 的 `_DEFAULT_ROUTES`：
+> 小红书 `search_click→direct→getnote`；YouTube `ytdlp→getnote→direct`；B 站 `bili_cli→getnote→direct`；
+> 知乎 `zhihu_api→getnote→direct`；抖音 `getnote→direct`；微信 `direct→getnote`。
+> 要临时关某个平台回补：把它 `per_cycle` 设为 `0`（或删掉该项）即可，`refill run/schedule` 会跳过它。
+> 改完 `config.toml` 后，PM2 的 `openbiliclaw-refill` 在下一个 cron 周期（每 2 小时 :05）自动重读生效，无需手动重启。
 
 ### `[interview]`（v0.3.217+）
 

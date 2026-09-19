@@ -519,11 +519,18 @@ enabled = true
 db = "refill.db"
 # 判定「抓到正文」的最小字数阈值。
 min_body_len = 30
-# 每平台每轮补抓配额与时隙（分钟）；M2 先收口小红书（防风控，别按缺口数调大）。
+# 随机化首段憩志分钟上限（防风控）。注意要放在 [refill.quota] 之前，否则会落到 quota 表内。
+jitter_max_min = 30
+# 每平台每轮补抓配额与时隙（分钟）；防风控起见，别按缺口数调大。
+# 通道顺序见 src/openbiliclaw/refill/channels/base.py 的 _DEFAULT_ROUTES。
 [refill.quota]
 xiaohongshu = { per_cycle = 1, interval_min = 120 }
-# 随机化首段憩志分钟上限（防风控）。
-jitter_max_min = 30
+youtube    = { per_cycle = 2, interval_min = 60 }
+bilibili   = { per_cycle = 2, interval_min = 60 }
+zhihu      = { per_cycle = 2, interval_min = 60 }
+wechat     = { per_cycle = 2, interval_min = 60 }
+douyin     = { per_cycle = 1, interval_min = 120 }
+xiaoyuzhou = { per_cycle = 1, interval_min = 120 }
 
 [logging]
 # Console log level: DEBUG | INFO | WARNING | ERROR
