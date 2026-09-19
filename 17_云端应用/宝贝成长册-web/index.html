@@ -181,6 +181,18 @@
   #albumStatus{padding:40px 20px;text-align:center;color:var(--ink2);font-size:14px;line-height:1.7}
   @media (min-width:560px){ #albumGrid{grid-template-columns:repeat(4,1fr)} }
 
+  /* ---------- 家人：人物头像墙（Google Photos People 风格） ---------- */
+  .pp-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 10px;padding:26px 16px 34px}
+  .pp-card{display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;
+        animation:alIn .4s ease both}
+  .pp-card:active .pp-ava{transform:scale(.94)}
+  .pp-ava{width:92px;height:92px;border-radius:50%;overflow:hidden;background:#E8EAED;
+        box-shadow:0 2px 10px rgba(0,0,0,.14);transition:transform .15s}
+  .pp-ava img{width:100%;height:100%;object-fit:cover;display:block}
+  .pp-name{font-size:14.5px;font-weight:500;color:var(--ink)}
+  .pp-count{font-size:11.5px;color:var(--ink2);margin-top:-4px}
+  @media (min-width:560px){ .pp-wrap{grid-template-columns:repeat(5,1fr)} }
+
   /* ---------- 相册查看器（Google Photos：纯黑沉浸 + 顶部工具条） ---------- */
   #albumLightbox{position:fixed;inset:0;background:#000;z-index:100;
         display:flex;align-items:center;justify-content:center;touch-action:pan-y}
@@ -381,6 +393,13 @@
   </div>
 
   <!-- 相册（来自 8420 后端的乐仔相册） -->
+  <!-- 家人：人脸识别人物墙 -->
+  <div id="viewPeople" class="hidden" style="padding:0 0 8px">
+    <div class="al-total" id="ppMeta">家人 · 人脸识别自动归类</div>
+    <div id="ppStatus" style="display:block;padding:28px 16px;text-align:center;color:var(--ink2);font-size:14px">正在打开…</div>
+    <div class="pp-wrap" id="ppWrap"></div>
+  </div>
+
   <div id="viewAlbum" style="padding:0 0 8px">
     <div class="al-chips" id="albumMonths"></div>
     <div class="al-total" id="albumMeta"></div>
@@ -473,6 +492,10 @@
     <button class="on" data-v="viewAlbum" onclick="go('viewAlbum',this)">
       <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></span>
       <span class="nav-lb">相册</span>
+    </button>
+    <button data-v="viewPeople" onclick="go('viewPeople',this)">
+      <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
+      <span class="nav-lb">家人</span>
     </button>
     <button data-v="viewRandom" onclick="go('viewRandom',this)">
       <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg></span>
@@ -1009,10 +1032,12 @@ function downloadReport(){
 
 /* ================= 导航 ================= */
 function go(viewId, btn){
-  ['viewFeed','viewPost','viewReport','viewKids','viewImport','viewAlbum','viewRandom'].forEach(v=>$(v).classList.toggle('hidden', v!==viewId));
+  if(viewId !== 'viewAlbum' && viewId !== 'viewPeople' && alPerson) ppClose(); // 离开相册侧时退出人物模式
+  ['viewFeed','viewPost','viewReport','viewKids','viewImport','viewAlbum','viewPeople','viewRandom'].forEach(v=>$(v).classList.toggle('hidden', v!==viewId));
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b===btn));
-  $('gpTitle').textContent = viewId==='viewRandom' ? '随机回忆' : '相册';
-  if(viewId==='viewAlbum' && !alManifest) loadAlbum(false);
+  $('gpTitle').textContent = viewId==='viewRandom' ? '随机回忆' : (viewId==='viewPeople' ? '家人' : '相册');
+  if(viewId==='viewAlbum' && !alPerson && !alManifest) loadAlbum(false);
+  if(viewId==='viewPeople') loadPeople();
   if(viewId==='viewRandom') rndStart(); else rndStop();
 }
 
@@ -1100,7 +1125,7 @@ function alPickMonth(ym){
   if(chip) chip.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
 
   const info = man.months.find(x => x.m === ym);
-  $('alCurMonth').textContent = fmtYm(ym);
+  $('alCurMonth').textContent = (alPerson ? alPerson + ' · ' : '') + fmtYm(ym);
   $('alCurCount').textContent = info ? info.count + ' 张' : '';
 
   const grid = $('albumGrid');
@@ -1246,6 +1271,83 @@ document.addEventListener('keydown', e => {
     if(Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) alLbStep(dx < 0 ? 1 : -1);
   }, { passive:true });
 })();
+
+/* ---------- 家人：人物墙 + 人物模式（复用相册网格/灯箱） ---------- */
+let peopleData = null, peopleLoading = null;
+let alPerson = null;                 // 非空 = 相册视图处于人物模式
+let alSavedManifest = null, alSavedYm = null;
+
+async function loadPeople(){
+  if(peopleData){ ppRender(); return; }
+  if(peopleLoading) return peopleLoading;
+  peopleLoading = (async()=>{
+    try{
+      peopleData = await fetchJson(ALBUM_BASE + 'people.json');
+      ppRender();
+    }catch(e){
+      const s = $('ppStatus'); s.style.display='block';
+      s.textContent = '⚠️ 暂时打不开：' + e.message;
+    }
+  })();
+  try{ await peopleLoading; } finally{ peopleLoading = null; }
+}
+
+function ppRender(){
+  const wrap = $('ppWrap');
+  $('ppStatus').style.display = 'none';
+  wrap.innerHTML = peopleData.people.map((p, i) => `
+    <div class="pp-card" style="animation-delay:${Math.min(i*45,300)}ms" onclick="ppOpen('${esc(p.p)}')">
+      <div class="pp-ava"><img loading="lazy" src="${p.c||''}" alt=""></div>
+      <div class="pp-name">${esc(p.p)}</div>
+      <div class="pp-count">${p.count} 张</div>
+    </div>`).join('');
+}
+
+async function ppOpen(name){
+  const p = peopleData.people.find(x => x.p === name); if(!p) return;
+  let doc;
+  try{ doc = await fetchJson(ALBUM_BASE + 'people/' + encodeURIComponent(name) + '.json'); }
+  catch(e){ toast('打开失败：' + e.message); return; }
+  if(!doc.months.length){ toast(name + ' 暂无照片'); return; }
+
+  alSavedManifest = alManifest; alSavedYm = window._albumStayYm;
+  alPerson = name;
+  // 人物模式 = 换上虚拟 manifest + 月份预填缓存（人物 JSON 一次全带，切月零请求）
+  alManifest = { base:peopleData.base, total:p.count,
+                 months: doc.months.map(m => ({ m:m.m, count:m.i.length })) };
+  alMonthCache.clear();
+  doc.months.forEach(m => alMonthCache.set(m.m, m.i));
+
+  const months = $('albumMonths');
+  months.innerHTML =
+    `<button class="achip" data-back="1">‹ 家人</button>` +
+    doc.months.map(m => `<button class="achip" data-m="${esc(m.m)}">${esc(fmtYm(m.m))} <span>${m.i.length}</span></button>`).join('');
+  months.querySelector('[data-back]').addEventListener('click', ppClose);
+  months.querySelectorAll('.achip[data-m]').forEach(b => b.addEventListener('click', () => alPickMonth(b.dataset.m)));
+
+  $('albumMeta').textContent = '共 ' + p.count + ' 张 · 人脸识别自动归类 · 可能有个别误识别';
+  go('viewAlbum', document.querySelector('nav button[data-v=viewAlbum]'));
+  alPickMonth(doc.months[doc.months.length-1].m);
+}
+
+function ppClose(){
+  if(!alPerson) return;
+  alPerson = null;
+  alMonthCache.clear();
+  if(!alSavedManifest){                       // 人物模式先进、相册还没加载过
+    alManifest = null;
+    loadAlbum(false);
+    return;
+  }
+  alManifest = alSavedManifest; alSavedManifest = null;
+  const months = $('albumMonths');
+  months.innerHTML = alManifest.months.map(m =>
+    `<button class="achip" data-m="${esc(m.m)}">${esc(fmtYm(m.m))} <span>${m.count}</span></button>`).join('');
+  months.querySelectorAll('.achip').forEach(b => b.addEventListener('click', () => alPickMonth(b.dataset.m)));
+  $('albumMeta').textContent = alManifest.total + ' 张照片 · ' + alManifest.months.length + ' 个月 · 家里相册实时同步';
+  alPickMonth(alSavedYm || alManifest.months[alManifest.months.length-1].m);
+  alSavedYm = null;
+}
 
 /* ---------- 随机回看：按月加权随机 + 双层交叉淡入 + 自动循环 ---------- */
 const RND_INTERVAL = 4500;                    // 自动切换间隔 ms
