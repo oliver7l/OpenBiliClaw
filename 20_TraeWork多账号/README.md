@@ -82,7 +82,8 @@ User-Agent: TRAE SOLO CN/1.107.1
 日常切账号                          切换Trae账号.command（菜单数字键，r=重捕获）
 新账号只有浏览器 token、切不了        一键自动收尾.command（synth→verify→checkin 一条龙）
 新账号走客户端登录（验证码）          开空白客户端.command 登录 → 捕获新账号.command
-以后登录即自动入库                   自动捕获守护.command（15s 扫描，双击由你的终端常驻）
+以后登录即自动入库                   安装守护开机自启.command（装一次，登录自启+崩溃拉起）
+                                     （手动版：自动捕获守护.command，关终端即停）
 批量签到 + 刷余额快照                twa_checkin.py all（--dry-run 试跑；exit 1=有账号失败）
 批量多开/停实例管理                  traework-multi-open.sh（交互菜单，来自 1172 项目）
 ```
@@ -105,7 +106,7 @@ User-Agent: TRAE SOLO CN/1.107.1
 2. **ELECTRON_RUN_AS_NODE 污染**：从其它 Electron 应用（如 WorkBuddy）的 shell 里启动客户端，
    会被继承 `ELECTRON_RUN_AS_NODE=1`，客户端以纯 Node 模式启动并报
    `does not provide an export named 'BrowserWindow'`。启动脚本一律先 `unset ELECTRON_RUN_AS_NODE`。
-2. **鉴权前缀**：`Bearer` 恒 1001；必须 `Cloud-IDE-JWT`。裸调加签接口任何 header 组合都过不了。
+3. **鉴权前缀**：`Bearer` 恒 1001；必须 `Cloud-IDE-JWT`。裸调加签接口任何 header 组合都过不了。
 3. **storage.json 单账号**：登新顶旧，不当时捕获即永久丢（合成可救回 token 未失效的）。
 4. **同名 app 抢目录**：双击 `TRAE SOLO CN 2.app` 不是多开。
 5. **常驻进程必须由用户终端起**：AI 沙箱里 nohup/launchctl 起的守护活不过单次工具调用。
@@ -115,7 +116,24 @@ User-Agent: TRAE SOLO CN/1.107.1
 8. **实例存活检测要认准主进程**：孤儿 crashpad 残留进程的命令行也带 `--user-data-dir`，
    宽泛 `pgrep -f` 会误判「已在运行」而拒启新实例（已在 `开空白客户端.command` 修复）。
 
-## 五、现状（2026-09-19）与未决问题
+## 五、FAQ：点关闭为什么不缩到托盘？
+
+**TraeWorkAssistant（助手 GUI）**：没做这个功能。二进制里虽然带着 Tauri 的托盘库
+（tray-icon 0.24.2），但 App 从未创建托盘图标、也没拦截窗口关闭事件 ⇒ 点关闭 = 整个退出。
+要加必须改源码，而 **v0.1.3 源码工程缺失**（见下）。
+
+**workbuddy-switch 为什么可以**：同一个 Tauri 框架、同一个托盘库，但它的代码里显式写了
+「关闭窗口 → 阻止默认退出 → 隐藏窗口 + 托盘图标常驻」。这是**功能差异，不是框架差异**——
+托盘库谁都有，得自己写那几行启用逻辑。
+
+**TRAE SOLO CN 客户端**：「关窗缩托盘 + “{0} 仍在运行”通知」是 **Windows 专属模块**
+（`vs/code/electron-main/soloLiteWindowsTrayController`，文案“点击系统托盘图标可重新打开窗口，
+右键点击托盘图标可退出”就编在它里面，Windows 分支才生效）。macOS 上点关闭只是关窗口，
+App 留在 Dock（点 Dock 图标重开）；菜单栏那个托盘图标是另一个东西（`ICubeTrayService`，
+提供历史会话/新任务/设置/退出快捷入口），不承担「收纳窗口」职责。**无设置项可改**——
+这是客户端内置的平台差异，不是配置问题。
+
+## 六、现状（2026-09-19）与未决问题
 
 - **6 账号 / 6 档案全部就位且全部真捕获**：4 份来自主客户端/历史副本，2 份合成档案均通过
   客户端实证（CN3 接受 `136****59`、CN4 接受 `199****29`，客户端主动重写 storage.json 且身份
@@ -124,7 +142,7 @@ User-Agent: TRAE SOLO CN/1.107.1
 - `199****29` 是纯免费号（usage_summary 为空、仅免费包），余额固定 0，已按此解析。
 - 助手 GUI（v0.1.3，Tauri/Rust）**源码工程缺失**，要改 GUI 得先找回/重建源码。
 
-## 六、相关资料与原始位置
+## 七、相关资料与原始位置
 
 - 逆向长文：`docs/`（架构分析 / 六仓库对比 / 上游 v3 深度分析，复制自 12_开源项目研究）。
 - 研究仓库原件（未搬动）：
