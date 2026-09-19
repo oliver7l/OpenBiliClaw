@@ -43,8 +43,8 @@
 | 日记系统 | [modules/diary.md](modules/diary.md) | `src/openbiliclaw/diary/` | ✅ 完整日记记录 + AI 分析 + 多格式导入 + 桌面端页面；v2026-09-14 补多来源导入管线（`diary/sources/` + `scripts/import_diary.py`，苹果备忘录 / 有道云 / WPS）与 24 表文档 |
 | 笔记系统 | [modules/notes.md](modules/notes.md) | `src/openbiliclaw/notes/` | ✅ v0.3.201 视频转笔记管线 + FTS 搜索 + 已读库导入 + CLI/API |
 | 聊天记录分析系统 | [modules/chat_analysis.md](modules/chat_analysis.md) | `src/openbiliclaw/chat_analysis/` | ✅ 独立数据库，801 会话，360 万消息，832 分析片段，13 个 API 端点 |
-| 灵魂引擎 | [modules/soul.md](modules/soul.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
-| 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `src/openbiliclaw/discovery/` | ✅ v0.3.x 多源 + 统一待评估池 + 跨源跨轮 topic 配额 |
+| 灵魂引擎 | [modules/soul.md](modules/soul.md) | 无独立 `soul/` 包：`memory/manager.py` + `self_evolution/`（画像合成/兴趣漂移）+ `recommendation/delight.py` + `cli/_cmd_soul.py` | ⚠ 文档漂移：代码散落如上，非独立包 |
+| 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | 无独立 `discovery/` 包：多源 producers 在 `runtime/*producer.py`，评估在 `eval/`（evaluator / discovery_evaluator / optimizer），keyword 生成在 `runtime/keyword_planner.py`，待评估池在 `storage/_discovery_candidates_mixin.py` | ⚠ 文档漂移：代码散落如上，非独立包 |
 | 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |
 | 存储层 | [modules/storage.md](modules/storage.md) | `src/openbiliclaw/storage/` | ✅ SQLite schema + discovery_candidates 待评估池 + pool readiness 计数 |
 | 阅读库正文回补 | [modules/refill.md](modules/refill.md) | `src/openbiliclaw/refill/` | ✅ M1–M5 全部落地：中央队列 + 6 通道 + Scheduler + 归档收口 |

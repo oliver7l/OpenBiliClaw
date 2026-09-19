@@ -4,6 +4,17 @@
 
 ---
 
+## docs: 修正 soul / discovery 幽灵路径（2026-09-19）
+
+模块盘点发现 `docs/index.md` 导航表两行「对应代码」指向不存在的独立包
+`soul/`、`discovery/`（实际该两个目录在 `src/openbiliclaw/` 下不存在）。修正为真实散落结构：
+
+- 灵魂引擎 → `memory/manager.py` + `self_evolution/` + `recommendation/delight.py` + `cli/_cmd_soul.py`
+- 内容发现 → `runtime/*producer.py` + `eval/` + `runtime/keyword_planner.py` + `storage/_discovery_candidates_mixin.py`
+- 状态标 `⚠ 文档漂移`，避免后续误建空目录；`soul-pipeline-architecture.md` / `discovery-architecture.html` 的图文架构仍待后续对齐（未动）。
+
+---
+
 ## refill 全平台调度验证 + YouTube 环境约束记录（2026-09-19）
 
 验证 `openbiliclaw-refill` 全平台调度已健康：每 2 小时一轮（PM2 cron `5 */2 * * *`），
