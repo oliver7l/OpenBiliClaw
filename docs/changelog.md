@@ -4,14 +4,20 @@
 
 ---
 
-## docs: 修正 soul / discovery 幽灵路径（2026-09-19）
+## docs: 补齐 index.md 导航表缺失条目 + soul/discovery 幽灵路径修正（2026-09-19）
 
-模块盘点发现 `docs/index.md` 导航表两行「对应代码」指向不存在的独立包
-`soul/`、`discovery/`（实际该两个目录在 `src/openbiliclaw/` 下不存在）。修正为真实散落结构：
+模块盘点（代码包 ↔ 40 份模块文档 ↔ `docs/index.md` 导航表交叉比对）修正：
 
-- 灵魂引擎 → `memory/manager.py` + `self_evolution/` + `recommendation/delight.py` + `cli/_cmd_soul.py`
-- 内容发现 → `runtime/*producer.py` + `eval/` + `runtime/keyword_planner.py` + `storage/_discovery_candidates_mixin.py`
-- 状态标 `⚠ 文档漂移`，避免后续误建空目录；`soul-pipeline-architecture.md` / `discovery-architecture.html` 的图文架构仍待后续对齐（未动）。
+- **幽灵路径**：soul / discovery 两行「对应代码」指向不存在的独立包 `soul/`、`discovery/`
+  （该二目录在 `src/openbiliclaw/` 下不存在），改为真实散落结构并标 `⚠ 文档漂移`——
+  - 灵魂引擎 → `memory/manager.py` + `self_evolution/` + `recommendation/delight.py` + `cli/_cmd_soul.py`
+  - 内容发现 → `runtime/*producer.py` + `eval/` + `runtime/keyword_planner.py` + `storage/_discovery_candidates_mixin.py`
+- **导航表缺失项**：补 `album`（乐仔时间线相册）、`travel`（旅行预算）、`clone`（站点克隆）、
+  `saved_sync`（原文档列为 `—`）4 行，使其有独立文档也进导航。
+- **架构图漂移处理**：给 `soul-pipeline-architecture.md` / `soul-architecture.html` /
+  `discovery-architecture.html` 加「⛔ 已漂移」警示 banner（指向真实散落实现，
+  避免据此误建 `soul/` / `discovery/` 空包）；`index.md` 架构图描述同步标 `⚠ 已漂移`。
+- 保留代码区现状：三个架构文档作为**历史设计稿**保留未重绘，待后续按真实结构重制。
 
 ---
 

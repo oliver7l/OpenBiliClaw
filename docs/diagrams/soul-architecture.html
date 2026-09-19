@@ -78,6 +78,18 @@
     font-size: 14px;
   }
 
+  .arch-banner {
+    margin: 10px 0 18px;
+    padding: 10px 14px;
+    border: 1.5px solid #c2410c;
+    background: #fff7ed;
+    color: #7c2d12;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .arch-banner code { background: #ffedd5; border-color: #fed7aa; color: #7c2d12; }
+
   .stamp {
     margin-top: 10px;
     color: #7a8699;
@@ -275,6 +287,10 @@
 <main>
   <header>
     <h1>Soul 模块架构全景</h1>
+    <div class="arch-banner"><strong>⛔ 架构已漂移（2026-09-19 盘点）</strong>：图中源码无 <code>soul/</code> 包，
+      <code>src/openbiliclaw/</code> 下该目录不存在。灵魂画像真实实现散落在 <code>memory/manager.py</code>、
+      <code>self_evolution/</code>（画像合成/兴趣漂移/洞察）、<code>recommendation/delight.py</code>、
+      <code>cli/_cmd_soul.py</code>。本图为历史设计稿，代码落点以 <code>docs/index.md</code> 灵魂引擎行为准，修复前勿据此重建 <code>soul/</code>。</div>
     <p class="subtitle">这张图按当前源码梳理 Soul 的真实写回口：哪些输入会进入 ProfileUpdatePipeline，哪些后台 loop 会定时触发，哪些路径会完整 rebuild，哪些只是局部写回或读时覆盖。</p>
     <p class="stamp">docs/diagrams/soul-architecture.html · updated 2026-06-17 · source-aligned architecture map</p>
     <div class="legend" aria-label="图例">

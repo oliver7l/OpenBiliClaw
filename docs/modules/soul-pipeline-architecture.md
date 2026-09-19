@@ -1,5 +1,12 @@
 # OpenBiliClaw 用户画像管道架构文档
 
+> **⛔ 本架构描述已漂移（2026-09-19 盘点）**：下文引用的 `src/openbiliclaw/soul/*.py`
+> **不存在**，`src/openbiliclaw/` 下已无 `soul/` 包。灵魂画像的真实实现散落在：
+> `memory/manager.py`（五层记忆持久化）、`self_evolution/`（画像合成/兴趣漂移/洞察）、
+> `recommendation/delight.py`、`cli/_cmd_soul.py`。本文档保留为**历史设计稿**，
+> 供理解管道分层意图之用；实际代码落点以 `docs/index.md` 「灵魂引擎」行为准。
+> 修复代码区位置前不要据此重建 `soul/` 目录。
+
 ## 概述
 
 OpenBiliClaw 采用**五层记忆网络 + 五层洋葱模型**的双层架构，将原始行为数据转化为深层的分层用户理解。本文档描述了灵魂引擎（Soul Engine）中各核心模块的职责、接口边界和优化空间。

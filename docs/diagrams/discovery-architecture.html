@@ -15,6 +15,17 @@
   }
   h1 { color: #58a6ff; font-size: 28px; margin-bottom: 8px; }
   .subtitle { color: #8b949e; font-size: 14px; margin-bottom: 8px; }
+  .arch-banner {
+    margin: 10px 0 16px;
+    padding: 10px 14px;
+    border: 1.5px solid #f85149;
+    background: #1c0c0c;
+    color: #ffb4ad;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .arch-banner code { color: #ffdcd7; background: #3d1d1d; border-radius: 4px; padding: 1px 4px; }
   .stamp { color: #6e7681; font-size: 12px; margin-bottom: 32px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
   /* ── Layout ── */
@@ -83,6 +94,10 @@
 <body>
 
 <h1>Discovery 模块架构全景</h1>
+<div class="arch-banner"><strong>⛔ 架构已漂移（2026-09-19 盘点）</strong>：图中无独立 <code>discovery/</code> 包，<code>src/openbiliclaw/</code> 下该目录不存在。
+  内容发现逻辑真实散落在 <code>runtime/*producer.py</code>（多源拉取）、<code>eval/</code>（评估/优化）、
+  <code>runtime/keyword_planner.py</code>（keyword 生成）、<code>storage/_discovery_candidates_mixin.py</code>（待评估池）。
+  本图为历史设计稿，代码落点以 <code>docs/index.md</code> 内容发现行为准，修复前勿据此重建 <code>discovery/</code>。</div>
 <p class="subtitle">内容发现引擎 &mdash; 从用户画像到候选内容池的完整数据流（生产路径走真实 Bilibili API；MockClient 仅用于离线评估）</p>
 <p class="stamp">docs/diagrams/discovery-architecture.html &middot; 对齐 v0.3.97 (2026-05-31) 主干代码</p>
 

@@ -25,11 +25,11 @@
 
 ## 可视化架构图
 
-- [Soul 模块架构与流程图](diagrams/soul-architecture.html) — Soul 真实写回口、pipeline 输入边界、完整 rebuild 与局部写回路径
+- [Soul 模块架构与流程图](diagrams/soul-architecture.html) — ⚠ 已漂移（历史设计稿）：Soul 真实写回口、pipeline 输入边界、完整 rebuild 与局部写回路径
 - [Soul 更新变化流程图](diagrams/soul-update-flow.html) — 事件来源矩阵、分层路由、典型场景和专属名词注释
 - [Recommendation 模块架构与流程图](diagrams/recommendation-architecture.html) — 候选池 readiness、serve 热路径、PoolCurator、MMR 和反馈回流
 - [Web HTML 模块架构与流程图](diagrams/web-architecture.html) — `/web` 桌面端、`/m` 移动端、REST hydration、runtime-stream 和用户动作边界
-- [Discovery 模块架构图](diagrams/discovery-architecture.html) — 多源发现、刷新调度、评估优化和模块协议边界
+- [Discovery 模块架构图](diagrams/discovery-architecture.html) — ⚠ 已漂移（历史设计稿）：多源发现、刷新调度、评估优化和模块协议边界
 
 ## 模块文档
 
@@ -64,9 +64,12 @@
 | ed2k 下载管理 | [modules/ed2k.md](modules/ed2k.md) | `src/openbiliclaw/ed2k/` | ✅ v0.3.223 桌面「⬇ ed2k 下载」tab + `/api/ed2k/*` |
 | 健康管理 | [modules/health.md](modules/health.md) | `src/openbiliclaw/health/` + `api/health_routes.py` | ✅ 桌面内嵌 `healthPage` 12 标签页；68 条 `/api/health/*` 路由（单一来源 health_routes.py）；子库 `data/health.db` |
 | 周期记录 | [modules/cycle.md](modules/cycle.md) | `src/openbiliclaw/cycle/` | ✅ 独立小模块，`cycle_records` 表存 `data/cycle.db` |
+| 乐仔时间线相册 | [modules/album.md](modules/album.md) | `src/openbiliclaw/album/` + `src/openbiliclaw/lezai/` | ✅ 乐仔照片时间线相册，夸克网盘源库，5206 张按拍摄年月归档 |
+| 旅行预算 | [modules/travel.md](modules/travel.md) | `src/openbiliclaw/travel/` | ✅ 航班价格监测 + 预算总览 API |
+| 站点克隆系统 | [modules/clone.md](modules/clone.md) | `src/openbiliclaw/clone/` | ✅ 克隆站导入/管理/分类/本地预览，对标日记子系统的独立架构 |
 | 豆瓣书影音 | [modules/douban.md](modules/douban.md) | `src/openbiliclaw/douban/` | ✅ v0.3.226 桌面「📚 豆瓣」tab + `/api/douban/*` + 独立库 `data/douban.db` + 可选内容源 |
 | 周末怎么玩 | [modules/weekend.md](modules/weekend.md) | `src/openbiliclaw/weekend/` | ✅ v0.3.244 本地优先周末计划生成器：CLI `weekend` + `/api/weekend/*` + 周五主动推送 + `data/weekend.db` |
-| 已读库 / 收藏同步 | — | `src/openbiliclaw/saved_sync/` | ✅ 原生保存路由 + 身份契约（`adapters/` 死代码已移除） |
+| 已读库 / 收藏同步 | [modules/saved_sync.md](modules/saved_sync.md) | `src/openbiliclaw/saved_sync/` | ✅ 原生保存路由 + 身份契约（`adapters/` 死代码已移除） |
 
 ## 开发指南
 
