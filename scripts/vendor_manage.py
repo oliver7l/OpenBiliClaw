@@ -151,9 +151,35 @@ def cmd_list() -> int:
     return 0
 
 
+def cmd_bulk() -> int:
+    """把全仓扫描到的所有嵌套 git 仓库登记进注册表（保留已有 upstream/note，不覆盖）。"""
+    reg = load_registry()
+    repos = scan_repos()
+    added = 0
+    for p in repos:
+        key = p.as_posix()
+        existing = reg.get(key, {})
+        if isinstance(existing, str):  # 兼容旧字符串
+            existing = {}
+        info = repo_info(p)
+        if key not in reg or isinstance(reg[key], str):
+            reg[key] = {
+                "upstream": existing.get("upstream", ""),
+                "remote": info.get("remote", ""),
+                "note": existing.get("note", ""),
+                "updated": __import__("datetime").date.today().isoformat(),
+            }
+            added += 1
+    # 去掉占位的顶层 "note" 说明键（它是文档注释，不是项目）
+    reg.pop("note", None)
+    save_registry(reg)
+    print(f"已批量登记 {added} 个（共 {len(reg)} 项）到 vendor-registry.json")
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
-    if not args or args[0] not in ("scan", "register", "list", "status"):
+    if not args or args[0] not in ("scan", "register", "list", "status", "bulk"):
         print(__doc__)
         return 2
     cmd = args[0]
@@ -161,6 +187,8 @@ def main() -> int:
         return cmd_scan()
     if cmd == "list":
         return cmd_list()
+    if cmd == "bulk":
+        return cmd_bulk()
     if cmd == "status":
         if len(args) < 2:
             print("usage: vendor_manage.py status <path>")
