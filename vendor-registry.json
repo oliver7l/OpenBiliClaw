@@ -3,31 +3,36 @@
     "upstream": "",
     "remote": "https://github.com/algorithmdog/AkkaUsageLearner.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "03_万声科技/01_原始情报/二面面试官李立/GitHub仓库存档/Reinforcement_Learning_Blog": {
     "upstream": "",
     "remote": "https://github.com/algorithmdog/Reinforcement_Learning_Blog.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "03_万声科技/01_原始情报/二面面试官李立/GitHub仓库存档/Representation-based-Multilabel-Learning": {
     "upstream": "",
     "remote": "https://github.com/algorithmdog/Representation-based-Multilabel-Learning.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "03_万声科技/01_原始情报/二面面试官李立/GitHub仓库存档/RoomAI": {
     "upstream": "",
     "remote": "https://github.com/WonderSimiliar/RoomAI.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "03_万声科技/01_原始情报/二面面试官李立/GitHub仓库存档/machine-learning-algorithms": {
     "upstream": "",
     "remote": "https://github.com/algorithmdog/machine-learning-algorithms.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "09_QQ相册/模型工作台/qq-zone": {
     "upstream": "",
@@ -39,355 +44,414 @@
     "upstream": "",
     "remote": "https://github.com/MohsinRazaKhanSipra/EHR-django.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/HealthCare-Management-System": {
     "upstream": "",
     "remote": "https://github.com/MrAnayDongre/HealthCare-Management-System.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/LycheeMem": {
     "upstream": "",
     "remote": "https://github.com/LycheeMem/LycheeMem.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/MedSync-AI": {
     "upstream": "",
     "remote": "https://github.com/tirth-patel06/MedSync-AI.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/MyOwnDiaryRag": {
     "upstream": "",
     "remote": "https://github.com/hjyssg/MyOwnDiaryRag.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/Trae-Work-CN-Account-Manager": {
     "upstream": "",
     "remote": "https://github.com/xhrxgr/Trae-Work-CN-Account-Manager.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/TraeWorkAssistant-mac": {
     "upstream": "",
     "remote": "https://github.com/ailogk/TraeWorkAssistant-mac",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/WeRead-Agent": {
     "upstream": "",
     "remote": "https://github.com/WenWen610/WeRead-Agent.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/agent-interview-hub": {
     "upstream": "",
     "remote": "https://github.com/Zchary1106/agent-interview-hub.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/agent-memory-architecture": {
     "upstream": "",
     "remote": "https://github.com/ThatsR4d/agent-memory-architecture.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/anything-llm": {
     "upstream": "",
     "remote": "https://github.com/Mintplex-Labs/anything-llm.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/apple-notes-cli": {
     "upstream": "",
     "remote": "https://github.com/ingjieye/apple-notes-cli",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/awesome-weread": {
     "upstream": "",
     "remote": "https://github.com/BENZEMA216/awesome-weread.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/bili-video2book": {
     "upstream": "",
     "remote": "https://github.com/LINJIANG12/bili-video2book",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/brosis": {
     "upstream": "",
     "remote": "https://github.com/AllenBall/brosis",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/carl-weread": {
     "upstream": "",
     "remote": "https://github.com/LearnPrompt/carl-weread",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/ctrip-ticket-crawler": {
     "upstream": "",
     "remote": "https://github.com/Yybrook/ctrip-ticket-crawler.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/deep-memory": {
     "upstream": "",
     "remote": "https://github.com/kevintsai1202/deep-memory.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/Night-Journal": {
     "upstream": "",
     "remote": "https://github.com/Haaaiawd/Night-Journal.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/cube-diary": {
     "upstream": "",
     "remote": "https://github.com/HoPGoldy/cube-diary.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/journiv-app": {
     "upstream": "",
     "remote": "https://github.com/journiv/journiv-app.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/memex": {
     "upstream": "",
     "remote": "https://github.com/memex-lab/memex.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/nightDiary": {
     "upstream": "",
     "remote": "https://github.com/yemmmmi/nightDiary.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/diary-projects/nightly-journal": {
     "upstream": "",
     "remote": "https://github.com/damofer/nightly-journal.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/exercise-helper": {
     "upstream": "",
     "remote": "https://github.com/touchren/exercise-helper",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/interview-coach-skill": {
     "upstream": "",
     "remote": "https://github.com/wksudud/interview-coach-skill.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/khoj": {
     "upstream": "",
     "remote": "https://github.com/khoj-ai/khoj.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/lushu": {
     "upstream": "",
     "remote": "https://github.com/yangyang5214/lushu",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/markdown-rag-knowledgebase": {
     "upstream": "",
     "remote": "https://github.com/tayyub-ai/markdown-rag-knowledgebase.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/memos": {
     "upstream": "",
     "remote": "https://github.com/usememos/memos.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/my-interview": {
     "upstream": "",
     "remote": "https://github.com/H-Wren/my-interview.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/nightDiary": {
     "upstream": "",
     "remote": "https://github.com/yemmmmi/nightDiary.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-ai-tagger": {
     "upstream": "",
     "remote": "https://github.com/jaspermayone/obsidian-ai-tagger.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-auto-tagger": {
     "upstream": "",
     "remote": "https://github.com/undergroundpost/obsidian-auto-tagger.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-cli": {
     "upstream": "",
     "remote": "https://github.com/davidpp/obsidian-cli.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-curator": {
     "upstream": "",
     "remote": "https://github.com/onlelonely/obsidian-curator.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-second-brain": {
     "upstream": "",
     "remote": "https://github.com/eugeniughelbur/obsidian-second-brain.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-semantic-mcp": {
     "upstream": "",
     "remote": "https://github.com/artificemachine/obsidian-semantic-mcp.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/obsidian-vault-mcp": {
     "upstream": "",
     "remote": "https://github.com/jpoindexter/obsidian-vault-mcp.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/red": {
     "upstream": "",
     "remote": "https://github.com/exoticknight/red",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/reor": {
     "upstream": "",
     "remote": "https://github.com/reorproject/reor.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/sleep-memory": {
     "upstream": "",
     "remote": "https://github.com/Angela-letter/sleep-memory.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/trae-credential-reverse-engineering": {
     "upstream": "",
     "remote": "https://github.com/bluechonk/trae-credential-reverse-engineering.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/travel-price-advisor": {
     "upstream": "",
     "remote": "https://github.com/nzy-user/travel-price-advisor.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/wandao": {
     "upstream": "",
     "remote": "https://github.com/tllovesxs/wandao",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/weread-skill-api": {
     "upstream": "",
     "remote": "https://github.com/lucis-yg/weread-skill-api.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/weread-skill-desktop": {
     "upstream": "",
     "remote": "https://github.com/Duosl/weread-skill-desktop.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/wiki-mcp": {
     "upstream": "",
     "remote": "https://github.com/patchmyday/wiki-mcp.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/wiki-rag": {
     "upstream": "",
     "remote": "https://github.com/Puppp-hh/wiki-rag.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/wikitok": {
     "upstream": "",
     "remote": "https://github.com/IsaacGemal/wikitok",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/xiaoyuzhou-api": {
     "upstream": "",
     "remote": "https://github.com/ylw1997/xiaoyuzhou-api.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/xiaoyuzhou-mcp": {
     "upstream": "",
     "remote": "https://github.com/r266-tech/xiaoyuzhou-mcp",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/xiaoyuzhou_script_skill": {
     "upstream": "",
     "remote": "https://github.com/zdhgreat/xiaoyuzhou_script_skill.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "12_开源项目研究/references/youdaonote-pull": {
     "upstream": "",
     "remote": "https://github.com/2dot4/youdaonote-pull.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "research"
   },
   "15_mobile": {
     "upstream": "",
     "remote": "https://github.com/whiteguo233/OpenBiliClaw-mobile.git",
     "note": "已本地修改（改动在子仓提交，主仓未跟踪）",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "mule-cli": {
     "upstream": "",
     "remote": "https://github.com/dimix/mule-cli.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "tools/srt-whiteboard-animation": {
     "upstream": "",
     "remote": "https://github.com/geeklee/srt-whiteboard-animation.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "tools/wechat-download-api": {
     "upstream": "",
     "remote": "https://github.com/tmwgsicp/wechat-download-api.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "tools/wewe-rss": {
     "upstream": "",
     "remote": "https://github.com/cooderl/wewe-rss.git",
     "note": "",
-    "updated": "2026-09-19"
+    "updated": "2026-09-19",
+    "usage": "applied"
   },
   "二创/ChatLab": {
     "upstream": "",

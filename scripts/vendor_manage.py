@@ -94,17 +94,28 @@ def save_registry(reg: dict) -> None:
     )
 
 
+_USAGE_CHOICES = {"applied", "research", "archive", ""}
+
+
+def _infer_usage(path: str) -> str:
+    """按目录约定推断用途：reference/归档目录=调研(research)，其余不预设。
+    显式标注优先。"""
+    if "/references/" in path or "/GitHub仓库存档/" in path:
+        return "research"
+    return ""
+
+
 def cmd_scan() -> int:
     repos = scan_repos()
     reg = load_registry()
     print(f"扫描到 {len(repos)} 个嵌套 git 仓库：")
-    print(f"{'路径':<42}{'改动':<6}{'提交':<6}{'remote'}")
+    print(f"{'路径':<40}{'用途':<10}{'改动':<6}{'提交':<6}")
     for p in repos:
         info = repo_info(p)
+        meta = reg.get(info["path"], {})
         dirty = f"*{info['dirty_files']}" if info["dirty"] else "-"
-        tracked = "R" if info["path"] in reg else " "
-        print(f"{('R' if info['path'] in reg else ' ')} {info['path']:<40}{dirty:<6}"
-              f"{info['commits']:<6}{(info['remote'] or '-')[:50]}")
+        usage = meta.get("usage", "") if isinstance(meta, dict) else ""
+        print(f"{info['path']:<40}{(usage or '-')[:9]:<10}{dirty:<6}{info['commits']:<6}")
     return 0
 
 
@@ -118,7 +129,7 @@ def cmd_status(path: str) -> int:
     return 0
 
 
-def cmd_register(path: str, upstream: str, note: str) -> int:
+def cmd_register(path: str, upstream: str, note: str, usage: str) -> int:
     p = ROOT / path
     if not p.exists() or not _is_repo(p):
         print(f"{path}: 不是嵌套 git 仓库，无法登记")
@@ -127,13 +138,31 @@ def cmd_register(path: str, upstream: str, note: str) -> int:
     reg[path] = {
         "upstream": upstream,
         "note": note,
+        "usage": usage if usage else _infer_usage(path),
         "remote": repo_info(p).get("remote", ""),
         "updated": __import__("datetime").date.today().isoformat(),
     }
-    if note and not upstream:
-        reg[path]["note"] = note
     save_registry(reg)
     print(f"已登记 {path} → vendor-registry.json")
+    return 0
+
+
+def cmd_usage(path: str, value: str) -> int:
+    if value not in _USAGE_CHOICES:
+        print(f"usage 取值: applied(已应用) / research(调研) / archive(归档) / ''(清空)")
+        return 2
+    reg = load_registry()
+    key = path
+    if key not in reg:
+        if not (ROOT / key).exists() or not _is_repo(ROOT / key):
+            print(f"{path}: 未登记且不是嵌套 git 仓库；先 bulk 或 register")
+            return 1
+        reg[key] = {"upstream": "", "remote": repo_info(ROOT / key).get("remote", ""),
+                    "note": "", "updated": __import__("datetime").date.today().isoformat()}
+    reg[key]["usage"] = value
+    reg[key]["updated"] = __import__("datetime").date.today().isoformat()
+    save_registry(reg)
+    print(f"{path} → usage = {value or '(清空)'}")
     return 0
 
 
@@ -146,15 +175,17 @@ def cmd_list() -> int:
     print(f"注册表 {len(reg)} 项：")
     for key, meta in reg.items():
         present = "✓" if key in found else "✗(路径缺失)"
-        print(f"  [{present}] {key}")
-        print(f"      upstream: {meta.get('upstream') or '-'}")
-        if meta.get("note"):
+        usage = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
+        dirty_note = "本地改了" if (isinstance(meta, dict) and "本地" in (meta.get("note") or "")) else ""
+        tag = f" [{usage}]{('·' + dirty_note) if dirty_note else ''}" if (usage or dirty_note) else ""
+        print(f"  [{present}] {key}{tag}")
+        if isinstance(meta, dict) and meta.get("note") and "本地" not in (meta.get("note") or ""):
             print(f"      note    : {meta['note']}")
     return 0
 
 
 def cmd_bulk() -> int:
-    """把全仓扫描到的所有嵌套 git 仓库登记进注册表（保留已有 upstream/note，不覆盖）。"""
+    """全仓扫描批量登记（保留已有 upstream/note/usage，不覆盖）。"""
     reg = load_registry()
     repos = scan_repos()
     added = 0
@@ -164,18 +195,22 @@ def cmd_bulk() -> int:
         if isinstance(existing, str):  # 兼容旧字符串
             existing = {}
         info = repo_info(p)
+        infer = _infer_usage(key)
         if key not in reg or isinstance(reg[key], str):
             reg[key] = {
                 "upstream": existing.get("upstream", ""),
                 "remote": info.get("remote", ""),
                 "note": existing.get("note", ""),
+                "usage": existing.get("usage", "") or infer,
                 "updated": __import__("datetime").date.today().isoformat(),
             }
             added += 1
-    # 去掉占位的顶层 "note" 说明键（它是文档注释，不是项目）
+        elif isinstance(reg[key], dict) and not reg[key].get("usage") and infer:
+            reg[key]["usage"] = infer
+            reg[key]["updated"] = __import__("datetime").date.today().isoformat()
     reg.pop("note", None)
     save_registry(reg)
-    print(f"已批量登记 {added} 个（共 {len(reg)} 项）到 vendor-registry.json")
+    print(f"已批量登记 {added} 个（共 {len(reg)} 项）")
     return 0
 
 
@@ -202,7 +237,7 @@ def cmd_tag() -> int:
 
 def main() -> int:
     args = sys.argv[1:]
-    if not args or args[0] not in ("scan", "register", "list", "status", "bulk", "tag"):
+    if not args or args[0] not in ("scan", "register", "list", "status", "bulk", "tag", "usage"):
         print(__doc__)
         return 2
     cmd = args[0]
@@ -214,6 +249,11 @@ def main() -> int:
         return cmd_bulk()
     if cmd == "tag":
         return cmd_tag()
+    if cmd == "usage":
+        if len(args) < 3:
+            print("usage: vendor_manage.py usage <path> applied|research|archive|''")
+            return 2
+        return cmd_usage(args[1], args[2])
     if cmd == "status":
         if len(args) < 2:
             print("usage: vendor_manage.py status <path>")
@@ -221,16 +261,21 @@ def main() -> int:
         return cmd_status(args[1])
     if cmd == "register":
         if len(args) < 2:
-            print("usage: vendor_manage.py register <path> [--upstream URL] [--note ...]")
+            print("usage: vendor_manage.py register <path> [--upstream URL] [--usage applied|research|archive] [--note ...]")
             return 2
         path = args[1]
-        upstream, note = "", ""
+        upstream, note, usage = "", "", ""
         rest = args[2:]
         if "--upstream" in rest:
             upstream = rest[rest.index("--upstream") + 1]
+        if "--usage" in rest:
+            usage = rest[rest.index("--usage") + 1]
         if "--note" in rest:
             note = " ".join(rest[rest.index("--note") + 1:])
-        return cmd_register(path, upstream, note)
+        if usage and usage not in _USAGE_CHOICES:
+            print("usage 取值: applied(已应用) / research(调研) / archive(归档)")
+            return 2
+        return cmd_register(path, upstream, note, usage)
     return 2
 
 
