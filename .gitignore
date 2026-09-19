@@ -194,8 +194,10 @@ miniprogram-album/utils/config.js
 /照片人物判定/
 /18_照片分组/
 /tools/
-# 二创用途视图（机内软链入口，见 scripts/vendor_manage.py scan --usage；不入库）
-/_应用/
+# 二创用途视图（机内软链入口，见 scripts/vendor_manage.py scan --kind；不入库）
+/_自己的/
+/_二创/
 /_调研/
+/_归档/
 #   · 03_万声科技 内嵌的 GitHub 仓库存档（外来仓库，作 gitlink 会污染本仓；保留其面试文档，仅排除归档仓）
 03_万声科技/**/GitHub仓库存档/

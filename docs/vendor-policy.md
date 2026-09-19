@@ -33,14 +33,15 @@ python3 scripts/vendor_manage.py list          # 看注册表（叠加 scan 状�
 python3 scripts/vendor_manage.py status <path> # 单仓体检（json）
 ```
 
-> `usage` 二选三：**applied**（已应用/移植到本项目）· **research**（仅调研参考）· **archive**（归档）。
-> `register --usage` 可一并标注；`bulk` 会按目录自动把 `references/`、`GitHub仓库存档/` 标为 research。
+> `kind` 三类：**own**（你**自己的**项目/fork）· **derived**（**二创**：下载后改造用进本项目的第三方）·
+> **research**（仅**调研**参考）· **archive**（归档）。
+> `register --kind` 可一并标注；`bulk` 会按目录自动把 `references/`、`GitHub仓库存档/` 标为 research。
 
 `scan` 输出含义：`*N` = 该子仓有 N 项未提交本地改动；`-` = 干净；空白 = 未登记。
 
-> **按用途归类（不搬文件）**：`scan --usage applied|research` / `list --usage applied|research`
-> 一处看同类；另建了机内软链入口 `_应用/`（applied 9 个）与 `_调研/`（research 61 个）
-> 指向各项目（不动原目录/服务/仓库，已 gitignore 不入库）。
+> **按归属归类（不搬文件）**：`scan --kind own|derived|research` / `list --kind ...`
+> 一处看同类；另建了机内软链入口 `_自己的/`（own 4）、`_二创/`（derived 5）、
+> `_调研/`（research 61）指向各项目（不动原目录/服务/仓库，已 gitignore 不入库）。
 
 ## 4. 分类规则
 

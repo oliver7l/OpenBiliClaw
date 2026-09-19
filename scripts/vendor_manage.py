@@ -94,10 +94,10 @@ def save_registry(reg: dict) -> None:
     )
 
 
-_USAGE_CHOICES = {"applied", "research", "archive", ""}
+_USAGE_CHOICES = {"own", "derived", "research", "archive", ""}
 
 
-def _infer_usage(path: str) -> str:
+def _infer_kind(path: str) -> str:
     """按目录约定推断用途：reference/归档目录=调研(research)，其余不预设。
     显式标注优先。"""
     if "/references/" in path or "/GitHub仓库存档/" in path:
@@ -105,23 +105,23 @@ def _infer_usage(path: str) -> str:
     return ""
 
 
-def cmd_scan(usage: str = "") -> int:
+def cmd_scan(kind: str = "") -> int:
     repos = scan_repos()
     reg = load_registry()
-    if usage and usage not in _USAGE_CHOICES:
-        print("scan --usage 取值: applied / research / archive")
+    if kind and kind not in _USAGE_CHOICES:
+        print("scan --kind 取值: own / derived / research / archive")
         return 2
-    header = f"扫描到 {len(repos)} 个嵌套 git 仓库" + (f"（筛选: {usage}）" if usage else "") + "："
+    header = f"扫描到 {len(repos)} 个嵌套 git 仓库" + (f"（筛选: {kind}）" if kind else "") + "："
     print(header)
     print(f"{'路径':<40}{'用途':<10}{'改动':<6}{'提交':<6}")
     for p in repos:
         info = repo_info(p)
         meta = reg.get(info["path"], {})
-        cur_usage = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
-        if usage and cur_usage != usage:
+        cur_kind = str(meta.get("kind", "")) if isinstance(meta, dict) else ""
+        if kind and cur_kind != kind:
             continue
         dirty = f"*{info['dirty_files']}" if info["dirty"] else "-"
-        print(f"{info['path']:<40}{(cur_usage or '-')[:9]:<10}{dirty:<6}{info['commits']:<6}")
+        print(f"{info['path']:<40}{(cur_kind or '-')[:9]:<10}{dirty:<6}{info['commits']:<6}")
     return 0
 
 
@@ -135,7 +135,7 @@ def cmd_status(path: str) -> int:
     return 0
 
 
-def cmd_register(path: str, upstream: str, note: str, usage: str) -> int:
+def cmd_register(path: str, upstream: str, note: str, kind: str) -> int:
     p = ROOT / path
     if not p.exists() or not _is_repo(p):
         print(f"{path}: 不是嵌套 git 仓库，无法登记")
@@ -144,7 +144,7 @@ def cmd_register(path: str, upstream: str, note: str, usage: str) -> int:
     reg[path] = {
         "upstream": upstream,
         "note": note,
-        "usage": usage if usage else _infer_usage(path),
+        "kind": kind if kind else _infer_kind(path),
         "remote": repo_info(p).get("remote", ""),
         "updated": __import__("datetime").date.today().isoformat(),
     }
@@ -153,9 +153,9 @@ def cmd_register(path: str, upstream: str, note: str, usage: str) -> int:
     return 0
 
 
-def cmd_usage(path: str, value: str) -> int:
+def cmd_kind(path: str, value: str) -> int:
     if value not in _USAGE_CHOICES:
-        print(f"usage 取值: applied(已应用) / research(调研) / archive(归档) / ''(清空)")
+        print(f"kind 取值: own(自己的) / derived(二创) / research(调研) / archive(归档) / ''(清空)")
         return 2
     reg = load_registry()
     key = path
@@ -165,30 +165,30 @@ def cmd_usage(path: str, value: str) -> int:
             return 1
         reg[key] = {"upstream": "", "remote": repo_info(ROOT / key).get("remote", ""),
                     "note": "", "updated": __import__("datetime").date.today().isoformat()}
-    reg[key]["usage"] = value
+    reg[key]["kind"] = value
     reg[key]["updated"] = __import__("datetime").date.today().isoformat()
     save_registry(reg)
-    print(f"{path} → usage = {value or '(清空)'}")
+    print(f"{path} → kind = {value or '(清空)'}")
     return 0
 
 
-def cmd_list(usage: str = "") -> int:
+def cmd_list(kind: str = "") -> int:
     reg = load_registry()
     if not reg:
         print("（注册表为空。先 `scan` 看有哪些，再 `register <path>` 登记。）")
         return 0
-    if usage and usage not in _USAGE_CHOICES:
-        print("list --usage 取值: applied / research / archive")
+    if kind and kind not in _USAGE_CHOICES:
+        print("list --kind 取值: own / derived / research / archive")
         return 2
     found = {p.as_posix() for p in scan_repos()}
-    print(f"注册表 {len(reg)} 项：" + (f"（筛选: {usage}）" if usage else ""))
+    print(f"注册表 {len(reg)} 项：" + (f"（筛选: {kind}）" if kind else ""))
     for key, meta in reg.items():
-        if usage and str(meta.get("usage", "")) != usage:
+        if kind and str(meta.get("kind", "")) != kind:
             continue
         present = "✓" if key in found else "✗(路径缺失)"
-        usage_cur = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
+        kind_cur = str(meta.get("kind", "")) if isinstance(meta, dict) else ""
         dirty_note = "本地改了" if (isinstance(meta, dict) and "本地" in (meta.get("note") or "")) else ""
-        tag = f" [{usage_cur}]{('·' + dirty_note) if dirty_note else ''}" if (usage_cur or dirty_note) else ""
+        tag = f" [{kind_cur}]{('·' + dirty_note) if dirty_note else ''}" if (kind_cur or dirty_note) else ""
         print(f"  [{present}] {key}{tag}")
         if isinstance(meta, dict) and meta.get("note") and "本地" not in (meta.get("note") or ""):
             print(f"      note    : {meta['note']}")
@@ -196,7 +196,7 @@ def cmd_list(usage: str = "") -> int:
 
 
 def cmd_bulk() -> int:
-    """全仓扫描批量登记（保留已有 upstream/note/usage，不覆盖）。"""
+    """全仓扫描批量登记（保留已有 upstream/note/kind，不覆盖）。"""
     reg = load_registry()
     repos = scan_repos()
     added = 0
@@ -206,18 +206,18 @@ def cmd_bulk() -> int:
         if isinstance(existing, str):  # 兼容旧字符串
             existing = {}
         info = repo_info(p)
-        infer = _infer_usage(key)
+        infer = _infer_kind(key)
         if key not in reg or isinstance(reg[key], str):
             reg[key] = {
                 "upstream": existing.get("upstream", ""),
                 "remote": info.get("remote", ""),
                 "note": existing.get("note", ""),
-                "usage": existing.get("usage", "") or infer,
+                "kind": existing.get("kind", "") or infer,
                 "updated": __import__("datetime").date.today().isoformat(),
             }
             added += 1
-        elif isinstance(reg[key], dict) and not reg[key].get("usage") and infer:
-            reg[key]["usage"] = infer
+        elif isinstance(reg[key], dict) and not reg[key].get("kind") and infer:
+            reg[key]["kind"] = infer
             reg[key]["updated"] = __import__("datetime").date.today().isoformat()
     reg.pop("note", None)
     save_registry(reg)
@@ -254,46 +254,46 @@ def cmd_tag() -> int:
 
 def main() -> int:
     args = sys.argv[1:]
-    if not args or args[0] not in ("scan", "register", "list", "status", "bulk", "tag", "usage"):
+    if not args or args[0] not in ("scan", "register", "list", "status", "bulk", "tag", "kind"):
         print(__doc__)
         return 2
     cmd = args[0]
     if cmd == "scan":
-        u = _opt(args[1:], "--usage")
+        u = _opt(args[1:], "--kind")
         return cmd_scan(u)
     if cmd == "list":
-        return cmd_list(_opt(args[1:], "--usage"))
+        return cmd_list(_opt(args[1:], "--kind"))
     if cmd == "bulk":
         return cmd_bulk()
     if cmd == "tag":
         return cmd_tag()
-    if cmd == "usage":
+    if cmd == "kind":
         if len(args) < 3:
-            print("usage: vendor_manage.py usage <path> applied|research|archive|''")
+            print("kind: vendor_manage.py kind <path> own / derived|research|archive|''")
             return 2
-        return cmd_usage(args[1], args[2])
+        return cmd_kind(args[1], args[2])
     if cmd == "status":
         if len(args) < 2:
-            print("usage: vendor_manage.py status <path>")
+            print("kind: vendor_manage.py status <path>")
             return 2
         return cmd_status(args[1])
     if cmd == "register":
         if len(args) < 2:
-            print("usage: vendor_manage.py register <path> [--upstream URL] [--usage applied|research|archive] [--note ...]")
+            print("kind: vendor_manage.py register <path> [--upstream URL] [--kind own / derived|research|archive] [--note ...]")
             return 2
         path = args[1]
-        upstream, note, usage = "", "", ""
+        upstream, note, kind = "", "", ""
         rest = args[2:]
         if "--upstream" in rest:
             upstream = rest[rest.index("--upstream") + 1]
-        if "--usage" in rest:
-            usage = rest[rest.index("--usage") + 1]
+        if "--kind" in rest:
+            kind = rest[rest.index("--kind") + 1]
         if "--note" in rest:
             note = " ".join(rest[rest.index("--note") + 1:])
-        if usage and usage not in _USAGE_CHOICES:
-            print("usage 取值: applied(已应用) / research(调研) / archive(归档)")
+        if kind and kind not in _USAGE_CHOICES:
+            print("kind 取值: own(自己的) / derived(二创) / research(调研) / archive(归档)")
             return 2
-        return cmd_register(path, upstream, note, usage)
+        return cmd_register(path, upstream, note, kind)
     return 2
 
 
