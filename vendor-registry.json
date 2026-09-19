@@ -1,0 +1,3 @@
+{
+  "note": "二创/GitHub 下载项目登记表（单一事实来源）。用 scripts/vendor_manage.py register <path> --upstream URL --note ... 添加；scan/list 查看。约定见 docs/vendor-policy.md"
+}
