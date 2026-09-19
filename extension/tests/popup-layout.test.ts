@@ -14,6 +14,23 @@ test("popup header keeps compact status inline with brand row", () => {
   assert.doesNotMatch(popupMarkup, /id="statusText"/);
 });
 
+test("popup separates backend reachability from runtime stream reconnects", () => {
+  const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
+  const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
+  const streamBlock =
+    popupJs.match(/function connectRuntimeStream\(\) \{[\s\S]*?\n\}\n\nfunction renderActivityHistory/)?.[0] ??
+    "";
+
+  assert.match(popupJs, /createBackendConnectionCoordinator/);
+  assert.match(popupJs, /markHttpReachable\(\)/);
+  assert.match(popupJs, /markOffline\(\)/);
+  assert.match(streamBlock, /markStreamConnected\(\)/);
+  assert.match(streamBlock, /markStreamDisconnected\(\)/);
+  assert.doesNotMatch(streamBlock, /state\.online\s*=\s*false/);
+  assert.match(popupHtml, /\.status-badge\[data-tone="reconnecting"\]/);
+  assert.match(popupHtml, /\.status-dot\.reconnecting/);
+});
+
 test("popup header exposes a local mobile web QR entry", () => {
   const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
   const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
@@ -22,11 +39,12 @@ test("popup header exposes a local mobile web QR entry", () => {
     popupHtml.match(/<div id="mobileQrOverlay"[\s\S]*?<!-- ── Messages overlay ── -->/)?.[0] ?? "";
 
   assert.match(popupMarkup, /id="mobileQrButton"/);
-  assert.match(popupMarkup, /aria-label="显示移动端二维码"/);
+  assert.match(popupMarkup, /aria-label="手机版入口：显示移动端二维码"/);
   assert.match(popupMarkup, /id="mobileQrButton"[\s\S]*id="messagesButton"[\s\S]*id="settingsGear"/);
   assert.match(overlayMarkup, /id="mobileQrCode"/);
   assert.match(overlayMarkup, /id="mobileQrCopy"/);
   assert.match(overlayMarkup, /id="mobileQrOpen"/);
+  assert.match(overlayMarkup, /role="dialog" aria-modal="true" aria-labelledby="mobileQrTitle"/);
   assert.match(popupJs, /createQrSvgMarkup/);
   assert.doesNotMatch(popupHtml, /api\.qrserver|chart\.googleapis/);
 });
@@ -76,7 +94,8 @@ test("popup shows a GitHub-Buttons style Star button (icon + label + live count)
   // Click opens the repo (direct-star needs GitHub auth); count is fetched/cached.
   assert.match(popupJs, /STAR_REPO_URL\s*=\s*"https:\/\/github\.com\/whiteguo233\/OpenBiliClaw"/);
   assert.match(popupJs, /bindStarButton\(\);/);
-  assert.match(popupJs, /api\.github\.com\/repos\/\$\{STAR_REPO_SLUG\}/);
+  assert.match(popupJs, /fetchProjectStats\(\)/);
+  assert.doesNotMatch(popupJs, /api\.github\.com/);
   assert.match(popupJs, /loadStarCount/);
 });
 
@@ -153,7 +172,7 @@ test("recommend tab reserves a dedicated delight slot above the recommendation l
   assert.match(popupJs, /"看看"/);
   assert.match(popupJs, /"不感兴趣"/);
   assert.match(popupJs, /"聊一聊"/);
-  assert.match(popupJs, /"稍后看"/);
+  assert.match(popupJs, /"看过了，不再推荐"/);
 });
 
 test("recommendation cards use explicit editorial content sections", () => {
@@ -213,6 +232,7 @@ test("init empty-state keeps full height so its start button stays scroll-reacha
 test("settings tabs use stable compact panels", () => {
   const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
   const tabsBlock = popupHtml.match(/\.settings-tabs\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const settingsOverlayBlock = popupHtml.match(/\.settings-overlay\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const tabBlock = popupHtml.match(/\.settings-tab\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const activeTabBlock = popupHtml.match(/\.settings-tab\.is-active\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const panelBlock = popupHtml.match(/\.settings-panel\s*\{[\s\S]*?\}/)?.[0] ?? "";
@@ -220,7 +240,16 @@ test("settings tabs use stable compact panels", () => {
     popupHtml.match(/\.settings-panel\[hidden\]\s*\{[\s\S]*?\}/)?.[0] ?? "";
 
   assert.match(tabsBlock, /display:\s*grid;/);
-  assert.match(tabsBlock, /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(tabsBlock, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\);/);
+  // The overlay is a scrolling flex column. Without this, a long settings form
+  // collapses the tab strip and lets the following panel cover its buttons.
+  assert.match(tabsBlock, /flex-shrink:\s*0;/);
+  assert.match(tabsBlock, /overflow-x:\s*auto;/);
+  assert.match(settingsOverlayBlock, /overflow-x:\s*hidden;/);
+  assert.match(
+    popupHtml,
+    /@media \(max-width: 430px\) \{[\s\S]*?\.settings-tabs\s*\{[\s\S]*?grid-template-columns:\s*repeat\(6,\s*minmax\(92px,\s*1fr\)\);/,
+  );
   assert.match(tabBlock, /min-height:\s*36px;/);
   assert.match(tabBlock, /cursor:\s*pointer;/);
   assert.match(activeTabBlock, /background:/);
@@ -234,11 +263,36 @@ test("recommendation card layout reserves a media cover slot", () => {
   const previewBlock = popupHtml.match(/\.recommendation-preview\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const coverBlock = popupHtml.match(/\.recommendation-cover\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const coverImageBlock = popupHtml.match(/\.recommendation-cover img\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const textCardBlock = popupHtml.match(/\.recommendation-cover\.is-text-card\s*\{[\s\S]*?\}/)?.[0] ?? "";
 
   assert.match(previewBlock, /flex-direction:\s*column;/);
   assert.match(coverBlock, /aspect-ratio:\s*16\s*\/\s*9;/);
   assert.match(coverBlock, /width:\s*100%;/);
   assert.match(coverImageBlock, /object-fit:\s*cover;/);
+  assert.match(textCardBlock, /aspect-ratio:\s*auto;/);
+  assert.match(textCardBlock, /min-height:\s*124px;/);
+  assert.match(textCardBlock, /max-height:\s*180px;/);
+});
+
+test("delight banner keeps usable controls and text fallbacks at narrow popup widths", () => {
+  const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
+  const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
+  const thumbBlock = popupHtml.match(/\.delight-banner-thumb\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const kickerBlock = popupHtml.match(/\.delight-banner-kicker-line\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const navBlock = popupHtml.match(/\.delight-banner-nav\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const textThumbBlock = popupHtml.match(/\.delight-banner-thumb\.is-text-card\s*\{[\s\S]*?\}/)?.[0] ?? "";
+
+  assert.match(thumbBlock, /width:\s*clamp\(108px,\s*32vw,\s*136px\);/);
+  assert.match(kickerBlock, /flex-wrap:\s*wrap;/);
+  assert.match(navBlock, /width:\s*28px;/);
+  assert.match(navBlock, /height:\s*28px;/);
+  assert.match(navBlock, /flex:\s*0\s+0\s+28px;/);
+  assert.match(textThumbBlock, /aspect-ratio:\s*auto;/);
+  assert.match(popupJs, /delight\.body_text \|\| delight\.title/);
+  assert.doesNotMatch(popupJs, /row\.role = "button"/);
+  assert.match(popupJs, /const chevron = document\.createElement\("button"\)/);
+  assert.match(popupJs, /chevron\.setAttribute\("aria-expanded"/);
+  assert.match(popupJs, /event\.stopPropagation\(\);\s*toggleExpanded\(\);/);
 });
 
 test("saved cards reserve a thumbnail slot and load covers through the backend proxy", () => {
@@ -246,13 +300,21 @@ test("saved cards reserve a thumbnail slot and load covers through the backend p
   const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
   const coverBlock = popupHtml.match(/\.saved-card-cover\s*\{[\s\S]*?\}/)?.[0] ?? "";
   const coverImageBlock = popupHtml.match(/\.saved-card-cover img\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const fallbackBlock = popupHtml.match(/\.saved-card-cover\.is-fallback\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  const fallbackIconBlock = popupHtml.match(/\.saved-card-cover\.is-fallback svg\s*\{[\s\S]*?\}/)?.[0] ?? "";
 
   assert.match(coverBlock, /width:\s*84px;/);
   assert.match(coverBlock, /aspect-ratio:\s*16\s*\/\s*9;/);
   assert.match(coverBlock, /flex:\s*0\s+0\s+84px;/);
   assert.match(coverImageBlock, /object-fit:\s*cover;/);
+  assert.match(fallbackBlock, /display:\s*flex;/);
+  assert.match(fallbackBlock, /justify-content:\s*center;/);
+  assert.match(fallbackIconBlock, /width:\s*22px;/);
   assert.match(popupJs, /function buildSavedCardMedia/);
   assert.match(popupJs, /setProxyImageSrc\(image,\s*item\.cover_url\)/);
+  assert.match(popupJs, /image\.addEventListener\("error",\s*showFallback/);
+  assert.match(popupJs, /image\.complete\s*&&\s*image\.naturalWidth\s*===\s*0/);
+  assert.match(popupJs, /media\.innerHTML\s*=\s*HISTORY_IMAGE_ICON_SVG/);
   assert.match(popupJs, /body\.prepend\(media\)/);
 });
 
@@ -275,9 +337,35 @@ test("footer activity card keeps two lines and expandable history area", () => {
   assert.match(footerHintBlock, /font-weight:\s*700;/);
   assert.match(footerHeadlineBlock, /font-size:\s*11px;/);
   assert.match(footerHistoryBlock, /flex-direction:\s*column;/);
+  assert.match(footerHistoryBlock, /max-height:\s*clamp\(72px,\s*calc\(100dvh - 440px\),\s*360px\);/);
   assert.match(footerHintBlock, /padding-left:\s*22px;/);
   assert.match(successBlock, /background:/);
   assert.match(errorBlock, /background:/);
+});
+
+test("full-screen overlays isolate background focus and restore their triggers", () => {
+  const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
+  const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
+
+  for (const [overlayId, titleId] of [
+    ["mobileQrOverlay", "mobileQrTitle"],
+    ["messagesOverlay", "messagesTitle"],
+    ["settingsOverlay", "settingsTitle"],
+  ]) {
+    assert.match(
+      popupHtml,
+      new RegExp(`id="${overlayId}"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="${titleId}"`),
+    );
+  }
+  assert.match(popupJs, /function openPopupOverlay\(/);
+  assert.match(popupJs, /child\.inert = true;/);
+  assert.match(popupJs, /child\.setAttribute\("inert", ""\);/);
+  assert.match(popupJs, /child\.setAttribute\("aria-hidden", "true"\);/);
+  assert.match(popupJs, /function closePopupOverlay\(/);
+  assert.match(popupJs, /returnFocus\.focus\(\{ preventScroll: true \}\);/);
+  assert.match(popupJs, /function bindPopupOverlayKeyboard\(/);
+  assert.match(popupJs, /event\.key === "Escape"/);
+  assert.match(popupJs, /event\.key !== "Tab"/);
 });
 
 test("profile cognition cards reserve separate rows for context and explicit state", () => {

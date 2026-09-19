@@ -1,4 +1,6 @@
-export type E2EPlatform = "douyin" | "xiaohongshu" | "twitter";
+import type { NativeSaveAction, NativeSavePlatform } from "./native-save.ts";
+
+export type E2EPlatform = "douyin" | "xiaohongshu" | "twitter" | "reddit";
 
 export type E2EAction =
   | "snapshot"
@@ -22,6 +24,9 @@ export interface ExtensionE2ERuntimeEvent {
   actions?: Partial<Record<E2EPlatform, E2EAction[]>>;
   allow_state_changing?: boolean;
   timeout_seconds?: number;
+  native_save_authorization?: unknown;
+  native_save_execution_deadline_ms?: number;
+  native_save_callback_deadline_ms?: number;
 }
 
 export interface E2EActionExecutionResult {
@@ -54,6 +59,7 @@ export const E2E_PLATFORM_URLS: Record<E2EPlatform, string> = {
   douyin: "https://www.douyin.com/",
   xiaohongshu: "https://www.xiaohongshu.com/explore",
   twitter: "https://x.com/home",
+  reddit: "https://www.reddit.com/",
 };
 
 export const E2E_STATE_CHANGING_ACTIONS = new Set<E2EAction>([
@@ -64,7 +70,19 @@ export const E2E_STATE_CHANGING_ACTIONS = new Set<E2EAction>([
   "bookmark",
 ]);
 
-const E2E_PLATFORMS = new Set<E2EPlatform>(["douyin", "xiaohongshu", "twitter"]);
+/** Canonical, non-secret target labels accepted by the real native-save E2E gate. */
+export const NATIVE_SAVE_E2E_TARGETS: Readonly<
+  Record<NativeSavePlatform, Readonly<Record<NativeSaveAction, string>>>
+> = {
+  "youtube": { favorite: "OpenBiliClaw", watch_later: "YouTube Watch Later" },
+  "xiaohongshu": { favorite: "小红书收藏", watch_later: "小红书收藏" },
+  "douyin": { favorite: "抖音收藏", watch_later: "抖音收藏" },
+  "twitter": { favorite: "X Bookmarks", watch_later: "X Bookmarks" },
+  "zhihu": { favorite: "知乎收藏", watch_later: "知乎收藏" },
+  "reddit": { favorite: "Reddit Saved", watch_later: "Reddit Saved" },
+};
+
+const E2E_PLATFORMS = new Set<E2EPlatform>(["douyin", "xiaohongshu", "twitter", "reddit"]);
 const E2E_ACTIONS = new Set<E2EAction>([
   "snapshot",
   "scroll",
@@ -80,6 +98,7 @@ const E2E_DEFAULT_ACTIONS: Record<E2EPlatform, E2EAction[]> = {
   douyin: ["snapshot", "scroll", "click", "share"],
   xiaohongshu: ["snapshot", "scroll", "click", "share"],
   twitter: ["snapshot", "scroll", "click", "share"],
+  reddit: ["snapshot", "scroll", "click", "share"],
 };
 
 function isE2EPlatform(value: unknown): value is E2EPlatform {
@@ -107,7 +126,17 @@ export function isExtensionE2ERuntimeEvent(value: unknown): value is ExtensionE2
   if (event.type !== "extension_e2e_run") return false;
   if (typeof event.run_id !== "string" || event.run_id.trim() === "") return false;
   if (typeof event.token !== "string" || event.token.trim() === "") return false;
-  if (!Array.isArray(event.platforms) || event.platforms.length === 0) return false;
+  if (!Array.isArray(event.platforms)) return false;
+  if (event.platforms.length === 0 && event.native_save_authorization === undefined) return false;
+  if (event.platforms.length === 0) {
+    if (typeof event.native_save_execution_deadline_ms !== "number" ||
+      !Number.isFinite(event.native_save_execution_deadline_ms) ||
+      typeof event.native_save_callback_deadline_ms !== "number" ||
+      !Number.isFinite(event.native_save_callback_deadline_ms) ||
+      event.native_save_execution_deadline_ms >= event.native_save_callback_deadline_ms) {
+      return false;
+    }
+  }
   if (!event.platforms.every(isE2EPlatform)) return false;
   if (!hasValidActionsMap(event.actions)) return false;
   if (

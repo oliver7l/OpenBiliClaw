@@ -1,12 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { extractDouyinSearchItemsFromDocument } from "../src/content/dy/dom-extractor.ts";
+import {
+  extractDouyinSearchItemsFromDocument,
+  pickSearchScrollTarget,
+} from "../src/content/dy/dom-extractor.ts";
 
 class FakeElement {
   readonly textContent: string;
   readonly href: string;
   readonly src: string;
+  readonly className: string;
+  readonly childNodes: Array<{ nodeType: number; textContent: string }>;
   private readonly attrs: Record<string, string>;
   private readonly selectorMap: Record<string, FakeElement[]>;
   private readonly closestElement?: FakeElement;
@@ -15,6 +20,8 @@ class FakeElement {
     textContent?: string;
     href?: string;
     src?: string;
+    className?: string;
+    ownText?: string;
     attrs?: Record<string, string>;
     selectorMap?: Record<string, FakeElement[]>;
     closestElement?: FakeElement;
@@ -22,6 +29,9 @@ class FakeElement {
     this.textContent = opts.textContent ?? "";
     this.href = opts.href ?? "";
     this.src = opts.src ?? "";
+    this.className = opts.className ?? "";
+    const ownText = opts.ownText ?? opts.textContent ?? "";
+    this.childNodes = ownText ? [{ nodeType: 3, textContent: ownText }] : [];
     this.attrs = opts.attrs ?? {};
     this.selectorMap = opts.selectorMap ?? {};
     this.closestElement = opts.closestElement;
@@ -39,12 +49,15 @@ class FakeElement {
     if (selector.includes("[aria-label]")) {
       return this.selectorMap.metrics ?? [];
     }
+    if (selector === "span,div,p") return this.selectorMap.semantic ?? [];
+    if (selector === "span") return this.selectorMap.spans ?? [];
     return this.selectorMap[selector] ?? [];
   }
 
   getAttribute(name: string): string | null {
     if (name === "href") return this.href || this.attrs[name] || null;
     if (name === "src") return this.src || this.attrs[name] || null;
+    if (name === "class") return this.className || this.attrs[name] || null;
     return this.attrs[name] ?? null;
   }
 }
@@ -57,7 +70,9 @@ class FakeDocument {
   }
 
   querySelectorAll(selector: string): FakeElement[] {
-    if (selector === 'a[href*="/video/"]') return this.anchors;
+    if (selector.includes('[href*="/video/"]') || selector.includes("data-aweme-id")) {
+      return this.anchors;
+    }
     return [];
   }
 }
@@ -107,4 +122,121 @@ test("extractDouyinSearchItemsFromDocument reads visible metric chips", () => {
       share_count: 9,
     },
   ]);
+});
+
+test("extractDouyinSearchItemsFromDocument reads current jingxuan data-aweme cards", () => {
+  const hrefTarget = new FakeElement({
+    attrs: { href: "//www.douyin.com/video/7647302522265659834" },
+  });
+  const semanticTitle = new FakeElement({
+    textContent: "真实精选标题 #推荐",
+    ownText: "真实精选标题 #推荐",
+  });
+  const duration = new FakeElement({ textContent: "04:52", ownText: "04:52" });
+  const author = new FakeElement({ textContent: "@ 真实作者", ownText: "@" });
+  const card = new FakeElement({
+    selectorMap: {
+      '[href*="/video/"]': [hrefTarget],
+      semantic: [duration, semanticTitle],
+      spans: [author],
+    },
+  });
+  const target = new FakeElement({
+    attrs: { "data-aweme-id": "7647302522265659834" },
+    selectorMap: { '[href*="/video/"]': [hrefTarget] },
+    closestElement: card,
+  });
+  const dataOnlyDocument = {
+    querySelectorAll: (selector: string) =>
+      selector === 'a[href*="/video/"]' ? [] : [target],
+  } as unknown as Document;
+
+  assert.deepEqual(
+    extractDouyinSearchItemsFromDocument(
+      dataOnlyDocument,
+      "https://www.douyin.com/",
+      3,
+    ),
+    [],
+  );
+
+  const items = extractDouyinSearchItemsFromDocument(
+    dataOnlyDocument,
+    "https://www.douyin.com/",
+    3,
+    true,
+  );
+
+  assert.deepEqual(items, [
+    {
+      scope: "dy_search",
+      aweme_id: "7647302522265659834",
+      url: "https://www.douyin.com/video/7647302522265659834",
+      title: "真实精选标题 #推荐",
+      author: "真实作者",
+      author_sec_uid: "",
+      cover_url: "",
+    },
+  ]);
+});
+
+// ── pickSearchScrollTarget (inner scrollable container discovery) ────────
+
+interface FakeScrollNode {
+  overflowY: string;
+  scrollHeight: number;
+  clientHeight: number;
+  parentElement: FakeScrollNode | null;
+}
+
+function makeScrollNode(opts: {
+  overflowY?: string;
+  scrollHeight?: number;
+  clientHeight?: number;
+  parent?: FakeScrollNode | null;
+}): FakeScrollNode {
+  return {
+    overflowY: opts.overflowY ?? "visible",
+    scrollHeight: opts.scrollHeight ?? 0,
+    clientHeight: opts.clientHeight ?? 0,
+    parentElement: opts.parent ?? null,
+  };
+}
+
+function makeScrollDoc(anchor: FakeScrollNode | null): Document {
+  return {
+    querySelector: () => anchor,
+    defaultView: {
+      getComputedStyle: (el: FakeScrollNode) => ({ overflowY: el.overflowY }),
+    },
+  } as unknown as Document;
+}
+
+test("pickSearchScrollTarget finds the nearest scrollable ancestor", () => {
+  const scrollable = makeScrollNode({
+    overflowY: "auto",
+    scrollHeight: 2_000,
+    clientHeight: 800,
+  });
+  const wrapper = makeScrollNode({ overflowY: "visible", parent: scrollable });
+  const anchor = makeScrollNode({ parent: wrapper });
+
+  const target = pickSearchScrollTarget(makeScrollDoc(anchor));
+  assert.equal(target, scrollable as unknown as Element);
+});
+
+test("pickSearchScrollTarget skips overflow containers with no real overflow", () => {
+  // overflow-y auto but scrollHeight ~= clientHeight → not scrollable.
+  const flat = makeScrollNode({
+    overflowY: "auto",
+    scrollHeight: 802,
+    clientHeight: 800,
+  });
+  const anchor = makeScrollNode({ parent: flat });
+
+  assert.equal(pickSearchScrollTarget(makeScrollDoc(anchor)), null);
+});
+
+test("pickSearchScrollTarget returns null without a video anchor", () => {
+  assert.equal(pickSearchScrollTarget(makeScrollDoc(null)), null);
 });

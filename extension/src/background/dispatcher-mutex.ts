@@ -17,17 +17,25 @@
  *
  * Lives in its own module so both background dispatchers can share
  * one global variable inside the same service-worker process. No
- * persistence — the mutex resets when the service worker restarts,
- * which is correct: a SW restart kills any in-flight tabs anyway.
+ * persistence — the mutex resets when the service worker restarts. MV3 task
+ * tabs can outlive that restart, so later service-worker wiring must reconcile
+ * orphan task tabs before claiming fresh work.
  */
 
-let _holder: string | null = null;
-let _heldSince: number = 0;
+interface DispatcherMutexGlobals {
+  __OBC_DISPATCHER_MUTEX_HOLDER__?: string;
+  __OBC_DISPATCHER_MUTEX_HELD_SINCE__?: number;
+}
 
-const STALE_HOLD_TIMEOUT_MS = 6 * 60 * 1000; // 6 minutes — longer than
-// the longest plausible bootstrap (4 scopes × ~25s = 100s + slack).
-// If something holds the mutex past this window we assume the holder
-// crashed and forcibly release.
+function mutexGlobals(): DispatcherMutexGlobals {
+  return globalThis as DispatcherMutexGlobals;
+}
+
+const STALE_HOLD_TIMEOUT_MS = 36 * 60 * 1000;
+// Linux.do can legitimately hold the browser slot for up to ~29 minutes when
+// three personal scopes are paced conservatively. Keep stale eviction beyond
+// that task budget and its result grace; the durable source-task lease remains
+// the authority for replay after an actual crash.
 
 /**
  * Try to acquire the cross-source mutex for ``ownerLabel`` (e.g.
@@ -39,22 +47,26 @@ const STALE_HOLD_TIMEOUT_MS = 6 * 60 * 1000; // 6 minutes — longer than
  * to recover from crashed dispatchers.
  */
 export function tryAcquireDispatcherMutex(ownerLabel: string): boolean {
-  if (_holder !== null) {
-    if (Date.now() - _heldSince > STALE_HOLD_TIMEOUT_MS) {
+  const globals = mutexGlobals();
+  const holder = globals.__OBC_DISPATCHER_MUTEX_HOLDER__;
+  if (holder) {
+    const heldSince = globals.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ ?? 0;
+    if (Date.now() - heldSince > STALE_HOLD_TIMEOUT_MS) {
       // Stale hold — previous owner crashed without releasing.
       // eslint-disable-next-line no-console
       console.warn(
-        `[OpenBiliClaw] dispatcher-mutex: forcibly evicting stale holder ${_holder} (${
-          (Date.now() - _heldSince) / 1000
+        `[OpenBiliClaw] dispatcher-mutex: forcibly evicting stale holder ${holder} (${
+          (Date.now() - heldSince) / 1000
         }s old)`,
       );
-      _holder = null;
+      globals.__OBC_DISPATCHER_MUTEX_HOLDER__ = undefined;
+      globals.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ = undefined;
     } else {
       return false;
     }
   }
-  _holder = ownerLabel;
-  _heldSince = Date.now();
+  globals.__OBC_DISPATCHER_MUTEX_HOLDER__ = ownerLabel;
+  globals.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ = Date.now();
   return true;
 }
 
@@ -64,19 +76,21 @@ export function tryAcquireDispatcherMutex(ownerLabel: string): boolean {
  * from yanking the slot from under a healthy peer.
  */
 export function releaseDispatcherMutex(ownerLabel: string): void {
-  if (_holder === null) return;
-  if (_holder !== ownerLabel) {
+  const globals = mutexGlobals();
+  const holder = globals.__OBC_DISPATCHER_MUTEX_HOLDER__;
+  if (!holder) return;
+  if (holder !== ownerLabel) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[OpenBiliClaw] dispatcher-mutex: ${ownerLabel} tried to release a slot held by ${_holder} — ignoring`,
+      `[OpenBiliClaw] dispatcher-mutex: ${ownerLabel} tried to release a slot held by ${holder} — ignoring`,
     );
     return;
   }
-  _holder = null;
-  _heldSince = 0;
+  globals.__OBC_DISPATCHER_MUTEX_HOLDER__ = undefined;
+  globals.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ = undefined;
 }
 
 /** Diagnostic: who currently holds the slot, or null. */
 export function dispatcherMutexHolder(): string | null {
-  return _holder;
+  return mutexGlobals().__OBC_DISPATCHER_MUTEX_HOLDER__ ?? null;
 }

@@ -5,6 +5,7 @@
  */
 
 import type { ActionHint, PageType, PlatformAdapter } from "../types.js";
+import { queryParam } from "./search-query.ts";
 
 // 24-char hex note ids (e.g. "69dea966000000001a0280ad").
 const NOTE_ID_PATTERN = /\/(?:explore|discovery\/item|search_result)\/([0-9a-f]{24})/i;
@@ -21,6 +22,7 @@ const SEARCH_INPUT_SELECTOR =
   'input[placeholder*="搜索"], input[type="search"], .search-input input';
 
 export function detectXiaohongshuPageType(url: string): PageType {
+  if (/\/search_result\/[0-9a-f]{24}(?:[/?#]|$)/i.test(url)) return "note";
   if (url.includes("/search_result")) return "search";
   if (url.includes("/explore/") || url.includes("/discovery/item/")) return "note";
   if (url.includes("/user/profile/")) return "user";
@@ -55,11 +57,19 @@ function inferXiaohongshuActionType(hint: ActionHint): string | null {
 
 export const xiaohongshuAdapter: PlatformAdapter = {
   sourcePlatform: "xiaohongshu",
+  // The MAIN-world action tap (`main/xhs-action-tap.ts`) emits the
+  // authoritative like / favorite signal from the write endpoints and their
+  // withdrawals as retractions. The DOM click path must suppress all three so
+  // it never double-counts the tap nor records icon-button misfires. comment /
+  // share have no tap and keep flowing through the DOM.
+  tapAuthoritativeActions: new Set(["like", "favorite", "retraction"]),
   detectPageType: detectXiaohongshuPageType,
   extractContentId: extractNoteId,
+  extractSearchQuery: (url) => queryParam(url, "keyword"),
   cardSelector: CARD_SELECTOR,
   searchInputSelector: SEARCH_INPUT_SELECTOR,
   videoSelector: null,
+  dwellPageTypes: ["note"],
   inferActionType: inferXiaohongshuActionType,
   buildEventMetadata(url: string): Record<string, unknown> {
     return { note_id: extractNoteId(url) };

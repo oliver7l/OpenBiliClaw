@@ -36,6 +36,11 @@ import {
   readBootstrapScrollMetrics,
   type XhsBootstrapNote,
 } from "../src/content/xhs/bootstrap.ts";
+import {
+  classifyXhsLoginRequiredText,
+  classifyXhsRiskControlText,
+  detectXhsTaskLoginRequired,
+} from "../src/content/xhs/risk-control.ts";
 
 // We can't directly import task-executor.ts because it transitively
 // imports "./passive.js" which Node resolves differently from esbuild.
@@ -92,6 +97,97 @@ test("TaskResultPayload shape matches dispatcher expectations", () => {
   };
   assert.equal(emptyResult.status, "empty");
   assert.equal(emptyResult.urls.length, 0);
+
+  const rateLimitedResult = {
+    task_id: "t4",
+    urls: [] as string[],
+    status: "rate_limited" as const,
+    error: "xhs_rate_limited",
+  };
+  assert.equal(rateLimitedResult.status, "rate_limited");
+  assert.equal(rateLimitedResult.error, "xhs_rate_limited");
+});
+
+test("classifyXhsRiskControlText recognizes the security-verification popup", () => {
+  assert.deepEqual(
+    classifyXhsRiskControlText("安全验证\n请勿频繁操作，稍后重试\n问题反馈"),
+    {
+      error: "xhs_rate_limited",
+      reason: "security_verification",
+    },
+  );
+  assert.deepEqual(
+    classifyXhsRiskControlText("Too Many Requests (HTTP 429)"),
+    {
+      error: "xhs_rate_limited",
+      reason: "frequent_operation",
+    },
+  );
+});
+
+test("classifyXhsRiskControlText does not treat generic retry copy as a challenge", () => {
+  assert.equal(classifyXhsRiskControlText("网络开小差了，请稍后重试"), null);
+  assert.equal(classifyXhsRiskControlText("账号安全验证使用说明"), null);
+  assert.equal(classifyXhsRiskControlText("普通的小红书笔记内容"), null);
+});
+
+test("XHS login gate is distinct from risk control and ordinary login prose", () => {
+  assert.equal(classifyXhsLoginRequiredText("登录后查看搜索结果"), true);
+  assert.equal(classifyXhsLoginRequiredText("登录即可查看 Ta 的笔记"), true);
+  assert.equal(classifyXhsLoginRequiredText("登录探索更多内容"), false);
+  assert.equal(classifyXhsRiskControlText("登录后查看搜索结果"), null);
+});
+
+function loginGateDocument(
+  requiredSelector: string,
+  options: { visible?: boolean; input?: boolean } = {},
+): Document {
+  const visible = options.visible ?? true;
+  const element = {
+    hidden: false,
+    parentElement: null,
+    innerText: "登录",
+    textContent: "登录",
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({
+      width: visible ? 120 : 0,
+      height: visible ? 40 : 0,
+    }),
+    matches: (selector: string) =>
+      selector.includes(requiredSelector) ||
+      (Boolean(options.input) && selector.includes("input[type='tel']")),
+  } as unknown as HTMLElement;
+  return {
+    defaultView: {
+      getComputedStyle: () => ({
+        display: "block",
+        visibility: "visible",
+        opacity: "1",
+      }),
+    },
+    querySelectorAll: (selector: string) =>
+      selector.includes(requiredSelector) ? [element] : [],
+  } as unknown as Document;
+}
+
+test("detectXhsTaskLoginRequired recognizes the current visible sidebar login control", () => {
+  const doc = loginGateDocument(
+    ".side-bar .side-bar-component.login-btn button.login-btn",
+  );
+  assert.equal(detectXhsTaskLoginRequired(doc), true);
+});
+
+test("detectXhsTaskLoginRequired recognizes a phone input inside the current login modal", () => {
+  const doc = loginGateDocument(".login-container input[type='tel']", { input: true });
+  assert.equal(detectXhsTaskLoginRequired(doc), true);
+});
+
+test("detectXhsTaskLoginRequired ignores hidden sidebar login controls", () => {
+  const doc = loginGateDocument(
+    ".side-bar .side-bar-component.login-btn button.login-btn",
+    { visible: false },
+  );
+  assert.equal(detectXhsTaskLoginRequired(doc), false);
 });
 
 test("extractBootstrapNotesFromState maps saved liked and history groups", () => {
@@ -99,6 +195,7 @@ test("extractBootstrapNotesFromState maps saved liked and history groups", () =>
   const saved = {
     id: "saved-id",
     display_title: "saved",
+    create_time: 1783492200000,
     xsec_token: "saved-token",
     user: { nickname: "saved-author" },
     cover: { url: "https://example.com/saved.jpg" },
@@ -125,6 +222,7 @@ test("extractBootstrapNotesFromState maps saved liked and history groups", () =>
   assert.equal(notes.find((n) => n.title === "history")?.scope, "xhs_history");
   assert.equal(notes.find((n) => n.title === "saved")?.note_id, "saved-id");
   assert.equal(notes.find((n) => n.title === "saved")?.xsec_token, "saved-token");
+  assert.equal(notes.find((n) => n.title === "saved")?.published_at, 1783492200000);
 });
 
 test("extractBootstrapNotesFromState reads Xiaohongshu profile noteCard state shape", () => {
@@ -140,6 +238,7 @@ test("extractBootstrapNotesFromState reads Xiaohongshu profile noteCard state sh
                 xsecToken: "saved-xsec",
                 noteCard: {
                   displayTitle: "收藏标题",
+                  time: 1783492200000,
                   cover: { urlDefault: "https://example.com/saved-cover.jpg" },
                   user: { nickName: "收藏作者" },
                 },
@@ -171,6 +270,7 @@ test("extractBootstrapNotesFromState reads Xiaohongshu profile noteCard state sh
       author: note.author,
       cover_url: note.cover_url,
       xsec_token: note.xsec_token,
+      published_at: note.published_at,
     })),
     [
       {
@@ -180,6 +280,7 @@ test("extractBootstrapNotesFromState reads Xiaohongshu profile noteCard state sh
         author: "收藏作者",
         cover_url: "https://example.com/saved-cover.jpg",
         xsec_token: "saved-xsec",
+        published_at: 1783492200000,
       },
       {
         scope: "liked",
@@ -188,9 +289,11 @@ test("extractBootstrapNotesFromState reads Xiaohongshu profile noteCard state sh
         author: "赞过作者",
         cover_url: "https://example.com/liked-cover.jpg",
         xsec_token: "liked-xsec",
+        published_at: undefined,
       },
     ],
   );
+  assert.equal("published_at" in notes[1]!, false);
 });
 
 test("countBootstrapStateNotesByScope returns per-scope diagnostic counts", () => {

@@ -1,8 +1,14 @@
 import { normalizeRecommendation, normalizeSavedItem } from "./popup-helpers.js";
 import { getBackendBaseUrl } from "./popup-backend-config.js";
+import {
+  ensurePopupSession,
+  popupAuthenticatedFetch,
+} from "./popup-device-auth.js";
 
 export const CONFIG_CACHE_KEY = "openbiliclaw.config_cache";
+export const CONFIG_GET_TIMEOUT_MS = 12_000;
 export const CONFIG_PUT_TIMEOUT_MS = 60_000;
+export const CONTENT_HISTORY_READ_TIMEOUT_MS = 12_000;
 const HEALTH_SUCCESS_CACHE_TTL_MS = 3_000;
 const HEALTH_FAILURE_CACHE_TTL_MS = 1_000;
 
@@ -55,21 +61,42 @@ function withTimeout(signal, timeoutMs) {
   };
 }
 
+function awaitWithAbort(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason || abortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason || abortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(promise).then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
+}
+
 export async function requestJson(path, options = {}) {
-  const backendUrl = await getBackendBaseUrl();
   const { timeoutMs, signal, ...fetchOptions } = options;
   const timeout = withTimeout(signal, timeoutMs);
-  const requestOptions = { ...fetchOptions };
-  if (timeout.signal) {
-    requestOptions.signal = timeout.signal;
-  }
   try {
-    const response = await fetch(`${backendUrl}${path}`, requestOptions);
+    const fetchImpl = globalThis.fetch.bind(globalThis);
+    const backendUrl = await awaitWithAbort(getBackendBaseUrl(), timeout.signal);
+    const sessionToken = await awaitWithAbort(ensurePopupSession({
+      fetchImpl,
+      signal: timeout.signal,
+    }), timeout.signal);
+    const requestOptions = { ...fetchOptions };
+    if (timeout.signal) requestOptions.signal = timeout.signal;
+    const response = await awaitWithAbort(popupAuthenticatedFetch(
+      `${backendUrl}${path}`,
+      requestOptions,
+      fetchImpl,
+      { sessionToken, signal: timeout.signal },
+    ), timeout.signal);
     if (!response.ok) {
       let details = null;
       try {
-        details = await response.json();
-      } catch {
+        details = await awaitWithAbort(response.json(), timeout.signal);
+      } catch (error) {
+        if (timeout.signal?.aborted) throw error;
         details = null;
       }
       const error = new Error(`${path} request failed: ${response.status}`);
@@ -77,7 +104,7 @@ export async function requestJson(path, options = {}) {
       error.details = details;
       throw error;
     }
-    return response.json();
+    return await awaitWithAbort(response.json(), timeout.signal);
   } finally {
     timeout.cleanup();
   }
@@ -207,6 +234,10 @@ export async function fetchHealth() {
   return promise;
 }
 
+export async function fetchProjectStats() {
+  return requestJson("/project-stats", { method: "GET", timeoutMs: 6000 });
+}
+
 export function __resetPopupHealthCacheForTests() {
   healthCacheBaseUrl = "";
   healthCacheCheckedAt = 0;
@@ -215,17 +246,134 @@ export function __resetPopupHealthCacheForTests() {
   healthProbeInFlight = null;
 }
 
+// One-click embedding repair (v0.3.155+): POST asks the backend to
+// (re-)pull the configured Ollama embedding model; GET reports progress.
+// Returns {status, ...payload} — callers branch on status/error instead of
+// throwing, because each 409 flavor gets its own user-facing hint. A 404
+// status means an older backend without the route.
+export async function startEmbeddingRepair() {
+  const backendUrl = await getBackendBaseUrl();
+  try {
+    const response = await popupAuthenticatedFetch(`${backendUrl}/embedding/repair`, {
+      method: "POST",
+    });
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    return { status: response.status, ...payload };
+  } catch {
+    return { status: 0 };
+  }
+}
+
+// Progress of the in-flight (or last finished) repair; null when unreachable.
+export async function fetchEmbeddingRepairStatus() {
+  const backendUrl = await getBackendBaseUrl();
+  try {
+    const response = await popupAuthenticatedFetch(`${backendUrl}/embedding/repair`, {
+      method: "GET",
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchRecommendations() {
   const payload = await requestJson("/recommendations", { method: "GET" });
   return Array.isArray(payload.items) ? payload.items.map(normalizeRecommendation) : [];
+}
+
+/** Merge one opaque-cursor page without appending a canonical item twice. */
+export function reconcileContentHistoryPage({
+  items = [],
+  incomingItems = [],
+  incomingTotal = 0,
+  nextCursor = "",
+  hasMore = false,
+  append = false,
+} = {}) {
+  const current = Array.isArray(items) ? items : [];
+  const incoming = Array.isArray(incomingItems) ? incomingItems : [];
+  const normalizedTotal = Math.max(0, Number(incomingTotal) || 0);
+  const reasons = new Set();
+  const seen = new Set();
+  const merged = [];
+
+  const addItem = (item) => {
+    const itemKey = String(item?.item_key || "").trim();
+    if (!itemKey) {
+      reasons.add("missing_item_key");
+      return;
+    }
+    if (seen.has(itemKey)) {
+      reasons.add("duplicate_item_key");
+      return;
+    }
+    seen.add(itemKey);
+    merged.push(item);
+  };
+
+  if (append) current.forEach(addItem);
+  incoming.forEach(addItem);
+  const normalizedNextCursor = hasMore ? String(nextCursor || "").trim() : "";
+
+  return {
+    items: merged,
+    total: normalizedTotal,
+    nextCursor: normalizedNextCursor,
+    hasMore: Boolean(hasMore && normalizedNextCursor),
+    reasons: [...reasons],
+  };
+}
+
+export async function fetchContentHistory(category, limit = 12, cursorOrOffset = "") {
+  if (!["clicked", "shown", "removed"].includes(category)) {
+    throw new TypeError(`Unknown content history category: ${category}`);
+  }
+  const params = new URLSearchParams({
+    category,
+    limit: String(Math.max(1, Math.min(50, Math.floor(Number(limit) || 12)))),
+  });
+  // Cursor pagination is the current contract. Keep non-zero numeric offsets
+  // for older popup callers during migration, but never send cursor="": the
+  // backend rejects an empty opaque cursor instead of treating it as page one.
+  if (typeof cursorOrOffset === "number") {
+    const offset = Math.max(0, Math.floor(Number(cursorOrOffset) || 0));
+    if (offset > 0) params.set("offset", String(offset));
+  } else {
+    const cursor = String(cursorOrOffset || "").trim();
+    if (cursor) params.set("cursor", cursor);
+  }
+  const payload = await requestJson(`/content-history?${params}`, {
+    method: "GET",
+    timeoutMs: CONTENT_HISTORY_READ_TIMEOUT_MS,
+  });
+  return {
+    ...payload,
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    total: Math.max(0, Number(payload?.total) || 0),
+    has_more: payload?.has_more === true,
+    next_cursor: payload?.has_more === true ? String(payload?.next_cursor || "") : "",
+  };
 }
 
 export async function refreshRecommendations() {
   return requestJson("/recommendations/refresh", { method: "POST" });
 }
 
-export async function reshuffleRecommendations() {
-  const payload = await requestJson("/recommendations/reshuffle", { method: "POST" });
+export async function reshuffleRecommendations(excludedBvids = []) {
+  const payload = await requestJson("/recommendations/reshuffle", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ excluded_bvids: excludedBvids }),
+  });
   return {
     ...payload,
     items: Array.isArray(payload.items) ? payload.items.map(normalizeRecommendation) : [],
@@ -250,8 +398,16 @@ export async function fetchRuntimeStatus() {
   return requestJson("/runtime-status", { method: "GET" });
 }
 
+export async function fetchDiagnosticsAlerts({ limit = 50 } = {}) {
+  const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 500)) : 50;
+  return requestJson(`/diagnostics/alerts?limit=${boundedLimit}`, {
+    method: "GET",
+    timeoutMs: 12_000,
+  });
+}
+
 export async function fetchInitStatus() {
-  return requestJson("/init-status", { method: "GET" });
+  return requestJson("/init-status", { method: "GET", timeoutMs: 45000 });
 }
 
 export async function fetchXSourceStatus() {
@@ -262,22 +418,97 @@ export async function fetchSourcesStatus() {
   return requestJson("/sources/status", { method: "GET" });
 }
 
-export async function startInit({ force = false, sources } = {}) {
+export async function fetchV2exIdentity() {
+  return requestJson("/sources/v2ex/identity", { method: "GET", timeoutMs: 12_000 });
+}
+
+export async function acceptV2exBrowserIdentity(username) {
+  return requestJson("/sources/v2ex/identity", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: String(username || "").trim(), accept: true }),
+    timeoutMs: 12_000,
+  });
+}
+
+// The counterpart to fetchSourcesStatus: that one is polled and never goes out,
+// this one is an explicit user action and is the only place a platform gets
+// probed. Generous timeout because it really can reach the network — a B站 nav
+// probe or a 5s wait for this very extension to answer a heartbeat request.
+export async function verifySource(slug) {
+  return requestJson(`/sources/${encodeURIComponent(slug)}/verify`, {
+    method: "POST",
+    timeoutMs: 30_000,
+  });
+}
+
+export async function startInit({
+  force = false,
+  sources,
+  bangumiUsername = null,
+  bangumiToken = null,
+  githubUsername = null,
+  githubToken = null,
+  llmConcurrency = null,
+  initTimeoutMinutes = null,
+  // Accept snake_case keys for callers that build a raw request payload.
+  llm_concurrency: llmConcurrencyLegacy = null,
+  init_timeout_minutes: initTimeoutMinutesLegacy = null,
+} = {}) {
   const payload = { force };
+  const effectiveLlmConcurrency = llmConcurrency ?? llmConcurrencyLegacy;
+  if (Number.isFinite(Number(effectiveLlmConcurrency)) && Number(effectiveLlmConcurrency) >= 1) {
+    payload.llm_concurrency = Number(effectiveLlmConcurrency);
+  }
+  const effectiveInitTimeoutMinutes = initTimeoutMinutes ?? initTimeoutMinutesLegacy;
+  if (Number.isFinite(Number(effectiveInitTimeoutMinutes)) && Number(effectiveInitTimeoutMinutes) >= 1 && Number(effectiveInitTimeoutMinutes) <= 1440) {
+    payload.init_timeout_minutes = Number(effectiveInitTimeoutMinutes);
+  }
   // Only attach an explicit per-run platform selection when given; omitting it
   // lets the backend fall back to all config-enabled sources (legacy behaviour).
   if (Array.isArray(sources)) {
     payload.sources = sources;
   }
+  // Send source-scoped options only when the caller has one to send.
+  // `null`/`undefined` means "leave the configured value untouched" (the backend
+  // treats an omitted field as keep-existing); an empty username is a deliberate
+  // clear. Tokens remain write-only and are only sent when explicitly typed.
+  const sourceOptions = {};
+  if (Array.isArray(sources) && sources.includes("bangumi")) {
+    const bangumi = {};
+    if (bangumiUsername != null) {
+      bangumi.username = String(bangumiUsername).trim();
+    }
+    if (bangumiToken != null) {
+      bangumi.access_token = String(bangumiToken).trim();
+    }
+    if (Object.keys(bangumi).length > 0) {
+      sourceOptions.bangumi = bangumi;
+    }
+  }
+  if (Array.isArray(sources) && sources.includes("github")) {
+    const github = {};
+    if (githubUsername != null) {
+      github.username = String(githubUsername).trim();
+    }
+    if (githubToken != null) {
+      github.access_token = String(githubToken).trim();
+    }
+    if (Object.keys(github).length > 0) {
+      sourceOptions.github = github;
+    }
+  }
+  if (Object.keys(sourceOptions).length > 0) payload.source_options = sourceOptions;
   return requestJson("/init", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    timeoutMs: 60000,
   });
 }
 
 export async function cancelInit() {
-  return requestJson("/init/cancel", { method: "POST" });
+  return requestJson("/init/cancel", { method: "POST", timeoutMs: 15000 });
 }
 
 export async function fetchUpdateStatus() {
@@ -364,6 +595,56 @@ export async function fetchEditState() {
   return requestJson("/profile/edit-state", { method: "GET" });
 }
 
+const PENDING_REQUEST_IDS_KEY = "obc_pending_request_ids";
+const pendingRequestIds = new Map();
+let pendingRequestIdsReady = null;
+
+function newRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function loadPendingRequestIds() {
+  if (pendingRequestIdsReady) return pendingRequestIdsReady;
+  pendingRequestIdsReady = (async () => {
+    const items = await storageGet(PENDING_REQUEST_IDS_KEY);
+    const stored = items?.[PENDING_REQUEST_IDS_KEY];
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return;
+    Object.entries(stored).forEach(([key, value]) => {
+      if (typeof value === "string" && value) pendingRequestIds.set(key, value);
+    });
+  })();
+  return pendingRequestIdsReady;
+}
+
+async function persistPendingRequestIds() {
+  await storageSet({ [PENDING_REQUEST_IDS_KEY]: Object.fromEntries(pendingRequestIds) });
+}
+
+async function rememberPendingId(namespace, key) {
+  await loadPendingRequestIds();
+  const storageKey = `${namespace}:${key}`;
+  const existing = pendingRequestIds.get(storageKey);
+  if (existing) return existing;
+  const requestId = newRequestId();
+  pendingRequestIds.set(storageKey, requestId);
+  if (pendingRequestIds.size > 200) pendingRequestIds.delete(pendingRequestIds.keys().next().value);
+  await persistPendingRequestIds();
+  return requestId;
+}
+
+async function forgetPendingId(namespace, key) {
+  await loadPendingRequestIds();
+  pendingRequestIds.delete(`${namespace}:${key}`);
+  await persistPendingRequestIds();
+}
+
+function feedbackRequestKey(payload) {
+  return [payload.recommendation_id, payload.feedback_type, payload.note || ""].join("|");
+}
+
 export async function submitProfileEdit({ target, op, value = null, parent = "", weight = null }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 35_000);
@@ -380,32 +661,43 @@ export async function submitProfileEdit({ target, op, value = null, parent = "",
 }
 
 export async function submitFeedback(payload) {
-  return requestJson("/feedback", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const key = feedbackRequestKey(payload);
+  const request_id = payload.request_id || await rememberPendingId("feedback", key);
+  try {
+    const response = await requestJson("/feedback", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...payload, request_id }),
+    });
+    await forgetPendingId("feedback", key);
+    return response;
+  } catch (error) {
+    throw error;
+  }
 }
 
-/**
- * Confirm or reject a specific insight hypothesis. confirm → the hypothesis is
- * validated + its confidence raised; reject → unvalidated + confidence capped
- * low (soft-invalidated in recommendation scoring). Routes to
- * ``POST /api/insights/feedback``.
- *
- * @param {string} hypothesis
- * @param {"confirm" | "reject"} signal
- */
-export async function submitInsightFeedback(hypothesis, signal) {
-  return requestJson("/insights/feedback", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ hypothesis, signal }),
+export async function sendBehaviorEvents(events, { retryKey = "" } = {}) {
+  // Identity belongs to the concrete event instance, never to a similarity
+  // key. Mutating the caller-owned object preserves it when the same network
+  // request is retried, while two identical-looking actions remain distinct.
+  if (retryKey && events.length === 1 && !String(events[0]?.event_id || "").trim()) {
+    events[0].event_id = await rememberPendingId("behavior-command", retryKey);
+  }
+  events.forEach((event) => {
+    const existing = String(event?.event_id || "").trim();
+    event.event_id = existing || newRequestId();
   });
+  const response = await requestJson("/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ events }),
+  });
+  if (retryKey && Number(response?.accepted || 0) >= 1) {
+    await forgetPendingId("behavior-command", retryKey);
+  }
+  return response;
 }
 
 /**
@@ -425,14 +717,36 @@ export async function submitInsightFeedback(hypothesis, signal) {
  * @returns {Promise<boolean>} true if the click was reported successfully
  */
 export async function reportRecommendationClick(payload) {
+  const stableRecommendationId = payload.recommendation_id || "";
+  const stableContentId = String(payload.content_id || payload.bvid || "").trim();
+  let fallbackUrl = "";
+  if (!stableRecommendationId && !stableContentId) {
+    const rawUrl = String(payload.content_url || "").trim();
+    try {
+      const normalizedUrl = new URL(rawUrl);
+      normalizedUrl.hash = "";
+      fallbackUrl = normalizedUrl.toString();
+    } catch {
+      fallbackUrl = rawUrl;
+    }
+  }
+  const key = [
+    stableRecommendationId,
+    stableContentId || fallbackUrl,
+  ].join("|");
+  const request_id = payload.request_id || await rememberPendingId("recommendation-click", key);
   try {
     await requestJson("/recommendation-click", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        request_id,
+      }),
     });
+    await forgetPendingId("recommendation-click", key);
     return true;
   } catch (error) {
     // Best-effort reporting — do not disrupt the user's click.
@@ -464,9 +778,42 @@ export async function startChatTurn({
   scope = "chat",
   subjectId = "",
   subjectTitle = "",
+  replyToTurnId = "",
+  streaming = false,
   message,
 }) {
+  const payload = {
+    turn_id: turnId,
+    session,
+    scope,
+    subject_id: subjectId,
+    subject_title: subjectTitle,
+    message,
+    streaming,
+  };
+  if (replyToTurnId) payload.reply_to_turn_id = replyToTurnId;
   return requestJson("/chat/turns", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function streamChatTurn({
+  turnId = "",
+  message = "",
+  session = "popup",
+  scope = "chat",
+  subjectId = "",
+  subjectTitle = "",
+  replyToTurnId = "",
+  onPhase,
+  onToolCall,
+  onContent,
+  onDone,
+} = {}) {
+  const backendUrl = await getBackendBaseUrl();
+  const response = await globalThis.fetch(`${backendUrl}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -475,13 +822,69 @@ export async function startChatTurn({
       scope,
       subject_id: subjectId,
       subject_title: subjectTitle,
+      reply_to_turn_id: replyToTurnId,
       message,
     }),
   });
+  if (!response.ok) {
+    throw new Error(`chat stream failed: ${response.status}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "";
+  let currentData = "";
+  const dispatch = () => {
+    if (!currentEvent || !currentData) return;
+    try {
+      const data = JSON.parse(currentData);
+      if (currentEvent === "content" && typeof onContent === "function") {
+        onContent(String(data.delta || ""));
+      } else if (currentEvent === "tool_call" && typeof onToolCall === "function") {
+        onToolCall(data);
+      } else if (currentEvent === "done" && typeof onDone === "function") {
+        onDone(data);
+      } else if (currentEvent === "phase" && typeof onPhase === "function") {
+        onPhase(data);
+      }
+    } catch {
+      // Ignore malformed SSE lines; keep the stream alive.
+    }
+    currentEvent = "";
+    currentData = "";
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith("event:")) {
+        currentEvent = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        currentData = line.slice(5).trim();
+        dispatch();
+      }
+    }
+  }
 }
 
-export async function fetchChatTurn(turnId) {
-  return requestJson(`/chat/turns/${encodeURIComponent(turnId)}`, { method: "GET" });
+export async function fetchChatTurn(turnId, { signal, timeoutMs = 10_000 } = {}) {
+  return requestJson(`/chat/turns/${encodeURIComponent(turnId)}`, {
+    method: "GET",
+    signal,
+    timeoutMs,
+  });
+}
+
+export async function fetchChatContext(turnId, { signal, timeoutMs = 5_000 } = {}) {
+  return requestJson(`/chat/contexts/${encodeURIComponent(turnId)}`, {
+    method: "GET",
+    signal,
+    timeoutMs,
+  });
 }
 
 export async function fetchChatTurns({ session = "popup", scope = "", limit = 50 } = {}) {
@@ -492,6 +895,36 @@ export async function fetchChatTurns({ session = "popup", scope = "", limit = 50
     params.set("limit", String(Math.max(1, Math.floor(limit))));
   }
   return requestJson(`/chat/turns?${params.toString()}`, { method: "GET" });
+}
+
+export async function fetchPendingConfirmations({
+  countOnly = false,
+  session = "",
+} = {}) {
+  const params = new URLSearchParams();
+  if (countOnly) params.set("count_only", "1");
+  if (session) params.set("session", session);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return requestJson(`/chat/pending-confirmations${suffix}`, { method: "GET" });
+}
+
+export async function openPendingConfirmation(ref, { session = "popup", signal } = {}) {
+  return requestJson(`/chat/pending-confirmations/${encodeURIComponent(String(ref || ""))}/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session }),
+    signal,
+  });
+}
+
+export async function actOnChatCard(turnId, action, { signal } = {}) {
+  return requestJson(`/chat/cards/${encodeURIComponent(String(turnId || ""))}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+    signal,
+    timeoutMs: 60_000,
+  });
 }
 
 export async function respondToInterestProbe(domain, responseType, message = "") {
@@ -527,20 +960,27 @@ export async function respondToAvoidanceProbe(domain, responseType, message = ""
 export async function respondToDelight(bvid, responseType, title = "", message = "") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 35_000);
+  const durableReaction = ["like", "dislike", "dismiss"].includes(responseType);
+  const key = `${bvid}|${responseType}`;
+  const request_id = durableReaction
+    ? await rememberPendingId("delight-response", key)
+    : "";
   try {
-    return await requestJson("/delight/respond", {
+    const response = await requestJson("/delight/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bvid, response: responseType, title, message }),
+      body: JSON.stringify({ bvid, response: responseType, title, message, request_id }),
       signal: controller.signal,
     });
+    if (durableReaction) await forgetPendingId("delight-response", key);
+    return response;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function fetchConfig() {
-  const config = await requestJson("/config?reveal_keys=true", { method: "GET" });
+export async function fetchConfig(timeoutMs = CONFIG_GET_TIMEOUT_MS) {
+  const config = await requestJson("/config", { method: "GET", timeoutMs });
   await cacheConfigSnapshot(config);
   return config;
 }
@@ -558,21 +998,42 @@ export async function fetchSourceShareSuggestion(overrides = null) {
   return requestJson("/config/source-share-suggestion", { method: "GET" });
 }
 
-export async function probeConfigService(kind, config) {
+export async function probeConfigService(kind, config, instanceId = "") {
   return requestJson("/config/probe-service", {
     method: "POST",
-    timeoutMs: 35_000,
+    // Keep the popup alive beyond the backend's bounded 120s LLM cold-start
+    // probe window; otherwise the browser aborts a request the backend still
+    // legitimately owns.
+    timeoutMs: 125_000,
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ kind, config }),
+    body: JSON.stringify({
+      kind,
+      config,
+      ...(instanceId ? { instance_id: instanceId } : {}),
+    }),
   });
 }
 
-export async function updateConfig(data) {
+export async function discoverConfigModels(config, instanceId) {
+  return requestJson("/config/discover-models", {
+    method: "POST",
+    timeoutMs: 25_000,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      instance_id: String(instanceId || ""),
+      config,
+    }),
+  });
+}
+
+export async function updateConfig(data, timeoutMs = CONFIG_PUT_TIMEOUT_MS) {
   return requestJson("/config", {
     method: "PUT",
-    timeoutMs: CONFIG_PUT_TIMEOUT_MS,
+    timeoutMs,
     headers: {
       "Content-Type": "application/json",
     },
@@ -599,6 +1060,86 @@ export async function updateRuntimeToggle(name, value) {
 // fetches. A bounded timeout turns "hangs forever, button stuck disabled"
 // into a visible, retryable failure.
 const SAVED_MUTATION_TIMEOUT_MS = 10_000;
+const SAVED_READ_TIMEOUT_MS = 10_000;
+
+function savedListPath(listKind) {
+  if (listKind !== "favorite" && listKind !== "watch_later") {
+    throw new TypeError(`Unknown saved list: ${listKind}`);
+  }
+  return `/saved/${listKind}`;
+}
+
+/** Keep platform routing on the backend; clients only normalize identity fields. */
+export function normalizeSavedItemInput(item = {}) {
+  const sourcePlatform = String(item.source_platform || item.platform || "bilibili").trim();
+  const legacyId = String(item.bvid || "").trim();
+  const contentId = String(
+    item.content_id || (legacyId && !legacyId.includes(":") ? legacyId : ""),
+  ).trim();
+  return {
+    source_platform: sourcePlatform,
+    content_id: contentId,
+    content_url: String(item.content_url || item.url || "").trim(),
+    content_type: String(
+      item.content_type || (sourcePlatform === "bilibili" && contentId ? "video" : ""),
+    ).trim(),
+    title: String(item.title || "").trim(),
+    author_name: String(item.author_name || item.up_name || item.author || "").trim(),
+    cover_url: String(item.cover_url || "").trim(),
+    note: String(item.note || "").trim(),
+  };
+}
+
+export async function saveItem(listKind, item, timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(savedListPath(listKind), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(normalizeSavedItemInput(item)),
+    timeoutMs,
+  });
+}
+
+export async function removeSavedItem(listKind, itemKey, timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(`${savedListPath(listKind)}/remove`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item_key: String(itemKey || "").trim() }),
+    timeoutMs,
+  });
+}
+
+export async function fetchSavedItems(listKind, limit = 50, offset = 0, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  const payload = await requestJson(
+    `${savedListPath(listKind)}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+    { timeoutMs },
+  );
+  return {
+    ...payload,
+    items: Array.isArray(payload?.items) ? payload.items.map(normalizeSavedItem) : [],
+  };
+}
+
+export async function savedItemStatus(listKind, itemKey, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  const query = new URLSearchParams({ item_key: String(itemKey || "").trim() });
+  return requestJson(`${savedListPath(listKind)}/status?${query}`, { timeoutMs });
+}
+
+export async function syncSavedItems(listKind, itemKeys = [], timeoutMs = SAVED_MUTATION_TIMEOUT_MS) {
+  return requestJson(`${savedListPath(listKind)}/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      item_keys: Array.from(new Set(itemKeys.map((key) => String(key || "").trim()).filter(Boolean))),
+    }),
+    timeoutMs,
+  });
+}
+
+export async function pollSavedSyncTask(taskId, timeoutMs = SAVED_READ_TIMEOUT_MS) {
+  return requestJson(`/saved-sync/tasks/${encodeURIComponent(String(taskId || "").trim())}`, {
+    timeoutMs,
+  });
+}
 
 export async function addToWatchLater(bvid) {
   return requestJson("/watch-later", {
@@ -648,30 +1189,6 @@ export async function removeFromFavorite(bvid) {
 
 export async function favoriteStatus(bvid) {
   return requestJson(`/favorites/${encodeURIComponent(bvid)}`);
-}
-
-/**
- * Record a user feedback action (like/dislike/block_creator) for a content item.
- * Routes to ``POST /api/user-feedback``.
- *
- * Reuses the existing backend endpoint and ``insert_user_feedback`` DB method
- * which accepts arbitrary action strings — no server-side changes needed.
- *
- * @param {{
- *   bvid: string,
- *   action: string,
- *   source_platform?: string,
- *   title?: string,
- *   topic_group?: string,
- *   body_text?: string,
- * }} payload
- */
-export async function submitUserFeedback(payload) {
-  return requestJson("/user-feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
 }
 
 export async function fetchFavorites(limit = 50, offset = 0) {

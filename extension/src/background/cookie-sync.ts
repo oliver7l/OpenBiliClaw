@@ -17,11 +17,21 @@
  * Backend endpoints: POST /api/bilibili/cookie validates against Bilibili
  * nav before persisting; POST /api/sources/dy/cookie stores the browser
  * Douyin cookie for direct discovery smoke / recall; POST /api/sources/x/cookie
- * stores the browser X (Twitter) cookie for server-side cookie-replay discovery.
+ * stores the browser X (Twitter) cookie for server-side cookie-replay discovery;
+ * POST /api/sources/reddit/cookie stores the browser Reddit cookie in rdt-cli's
+ * credential store for command-backed Reddit discovery; POST
+ * /api/sources/xhs/login-state reports only whether xhs's web_session login
+ * cookie exists; POST /api/sources/zhihu/login-state does the same for Zhihu's
+ * z_c0 login cookie. Linux.do follows the same boolean-only channel for its
+ * authenticated `_t` cookie; the content executor separately confirms identity
+ * through `/session/current.json` before collecting personal scopes. V2EX
+ * reports only whether the A2 cookie name exists.
+ * None of these login-state endpoints receives raw cookie values.
  */
 
 // .ts extension: see service-worker.ts for the node:test resolver rationale.
 import { apiUrl } from "../shared/backend-endpoint.ts";
+import { authenticatedFetch } from "../shared/auth.ts";
 
 // Per-platform alarms: each site's retry cadence is independent, so a
 // douyin/x success can no longer reset a pending bilibili quick-retry back
@@ -29,6 +39,12 @@ import { apiUrl } from "../shared/backend-endpoint.ts";
 const BILI_COOKIE_SYNC_ALARM = "openbiliclaw-cookie-sync-bili";
 const DY_COOKIE_SYNC_ALARM = "openbiliclaw-cookie-sync-dy";
 const X_COOKIE_SYNC_ALARM = "openbiliclaw-cookie-sync-x";
+const REDDIT_COOKIE_SYNC_ALARM = "openbiliclaw-cookie-sync-reddit";
+const XHS_LOGIN_STATE_SYNC_ALARM = "openbiliclaw-cookie-sync-xhs";
+const ZHIHU_LOGIN_STATE_SYNC_ALARM = "openbiliclaw-cookie-sync-zhihu";
+const LINUXDO_LOGIN_STATE_SYNC_ALARM = "openbiliclaw-cookie-sync-linuxdo";
+const V2EX_LOGIN_STATE_SYNC_ALARM = "openbiliclaw-cookie-sync-v2ex";
+const WEIBO_LOGIN_STATE_SYNC_ALARM = "openbiliclaw-cookie-sync-weibo";
 // Pre-split shared alarm. chrome.alarms persist across extension updates,
 // so an old install can still fire this name once after upgrading.
 const LEGACY_COOKIE_SYNC_ALARM = "openbiliclaw-cookie-sync";
@@ -79,8 +95,25 @@ const IMPORTANT_DOUYIN_COOKIE_NAMES = [
 // (auth_token) and the CSRF token (ct0). Without either, twitter-cli calls
 // 401 immediately, so we don't bother pushing partial jars to the backend.
 const REQUIRED_X_COOKIE_NAMES = ["auth_token", "ct0"];
+const REQUIRED_REDDIT_COOKIE_NAMES = ["reddit_session"];
+const XHS_LOGIN_COOKIE_NAME = "web_session";
+const ZHIHU_LOGIN_COOKIE_NAME = "z_c0";
+const LINUXDO_LOGIN_COOKIE_NAME = "_t";
+const V2EX_LOGIN_COOKIE_NAME = "A2";
+// SUB is also issued to anonymous visitors and therefore is never sufficient
+// evidence of a logged-in account.  Require the account session pair instead.
+const WEIBO_LOGIN_COOKIE_NAMES = ["SUBP", "ALF"];
 
-type CookieSyncPlatform = "bilibili" | "douyin" | "x";
+type CookieSyncPlatform =
+  | "bilibili"
+  | "douyin"
+  | "x"
+  | "reddit"
+  | "xhs"
+  | "zhihu"
+  | "linuxdo"
+  | "v2ex"
+  | "weibo";
 
 const debounceTimers: Partial<Record<CookieSyncPlatform, ReturnType<typeof setTimeout>>> = {};
 let cookieSyncStarted = false;
@@ -110,6 +143,70 @@ function scheduleHourlyCookieSync(alarmName: string): void {
 }
 
 /**
+ * Safari's ``cookies.getAll`` domain filter historically matches the exact
+ * domain rather than all subdomains the way Chrome/Firefox do. Because the
+ * login cookies we need live on ``.bilibili.com`` / ``.douyin.com`` (the
+ * bare registrable domain with a leading dot, not the current host), relying
+ * on the domain filter can silently miss every session cookie on Safari.
+ *
+ * To keep one code path across browsers we read the full accessible jar
+ * with ``getAll({})`` and filter in JS with the same "domain or subdomain"
+ * rule Chrome documents. If a browser rejects the unfiltered call, fall
+ * back to one domain-filtered call per site so the sync still works.
+ */
+function stripLeadingDot(domain: string): string {
+  return domain.startsWith(".") ? domain.slice(1) : domain;
+}
+
+export function cookieDomainMatchesSite(cookieDomain: string, siteDomain: string): boolean {
+  const normalizedCookieDomain = stripLeadingDot(cookieDomain.toLowerCase());
+  const normalizedSiteDomain = stripLeadingDot(siteDomain.toLowerCase());
+  return (
+    normalizedCookieDomain === normalizedSiteDomain ||
+    normalizedCookieDomain.endsWith(`.${normalizedSiteDomain}`)
+  );
+}
+
+async function readCookiesForDomains(
+  siteDomains: string[],
+): Promise<chrome.cookies.Cookie[]> {
+  const chromeApi = getChromeApi();
+  if (!chromeApi?.cookies?.getAll) {
+    return [];
+  }
+  try {
+    const allCookies = await chromeApi.cookies.getAll({});
+    return allCookies.filter(
+      (cookie) =>
+        !cookie.domain ||
+        siteDomains.some((siteDomain) =>
+          cookieDomainMatchesSite(cookie.domain || "", siteDomain),
+        ),
+    );
+  } catch {
+    // Defensive fallback for engines that reject an unfiltered getAll.
+    const merged = new Map<string, chrome.cookies.Cookie>();
+    for (const siteDomain of siteDomains) {
+      try {
+        const cookies = await chromeApi.cookies.getAll({ domain: siteDomain });
+        for (const cookie of cookies) {
+          merged.set(`${cookie.domain}|${cookie.name}|${cookie.path}`, cookie);
+        }
+      } catch {
+        // Ignore a single failed domain filter and try the remaining sites.
+      }
+    }
+    return [...merged.values()].filter(
+      (cookie) =>
+        !cookie.domain ||
+        siteDomains.some((siteDomain) =>
+          cookieDomainMatchesSite(cookie.domain || "", siteDomain),
+        ),
+    );
+  }
+}
+
+/**
  * Read all bilibili.com cookies and return them as a single Cookie
  * header value (`SESSDATA=...; bili_jct=...; DedeUserID=...`).
  *
@@ -119,13 +216,7 @@ function scheduleHourlyCookieSync(alarmName: string): void {
  * round trip.
  */
 export async function readBilibiliCookieHeader(): Promise<string | null> {
-  const chromeApi = getChromeApi();
-  if (!chromeApi?.cookies?.getAll) {
-    return null;
-  }
-  // domain="bilibili.com" matches both the bare domain and any
-  // subdomain (passport.bilibili.com, www.bilibili.com, etc).
-  const cookies = await chromeApi.cookies.getAll({ domain: "bilibili.com" });
+  const cookies = await readCookiesForDomains(["bilibili.com"]);
   const have = new Set(cookies.map((c) => c.name));
   for (const required of REQUIRED_COOKIE_NAMES) {
     if (!have.has(required)) {
@@ -148,11 +239,7 @@ export async function readBilibiliCookieHeader(): Promise<string | null> {
  * of truth for whether the current jar can actually fetch candidates.
  */
 export async function readDouyinCookieHeader(): Promise<string | null> {
-  const chromeApi = getChromeApi();
-  if (!chromeApi?.cookies?.getAll) {
-    return null;
-  }
-  const cookies = (await chromeApi.cookies.getAll({ domain: "douyin.com" })).filter(
+  const cookies = (await readCookiesForDomains(["douyin.com"])).filter(
     (cookie) => cookie.name && cookie.value,
   );
   const have = new Set(cookies.map((c) => c.name));
@@ -171,11 +258,7 @@ export async function readDouyinCookieHeader(): Promise<string | null> {
  * required names so we never push a useless logged-out jar.
  */
 export async function readXCookieHeader(): Promise<string | null> {
-  const chromeApi = getChromeApi();
-  if (!chromeApi?.cookies?.getAll) {
-    return null;
-  }
-  const cookies = (await chromeApi.cookies.getAll({ domain: "x.com" })).filter(
+  const cookies = (await readCookiesForDomains(["x.com"])).filter(
     (cookie) => cookie.name && cookie.value,
   );
   const have = new Set(cookies.map((c) => c.name));
@@ -185,6 +268,77 @@ export async function readXCookieHeader(): Promise<string | null> {
     }
   }
   return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+}
+
+/**
+ * Read all reddit.com cookies and return them as a Cookie header.
+ *
+ * rdt-cli only requires `reddit_session` for read authenticated requests, but
+ * we send the full jar so later rdt capabilities (modhash / write-only paths)
+ * can use whatever the browser already has.
+ */
+export async function readRedditCookieHeader(): Promise<string | null> {
+  const cookies = (await readCookiesForDomains(["reddit.com"])).filter(
+    (cookie) => cookie.name && cookie.value,
+  );
+  const have = new Set(cookies.map((c) => c.name));
+  for (const required of REQUIRED_REDDIT_COOKIE_NAMES) {
+    if (!have.has(required)) {
+      return null;
+    }
+  }
+  return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+}
+
+/**
+ * Return whether the user is logged into xiaohongshu.com.
+ *
+ * XHS uses `web_session` as the logged-in session cookie. Device / guest
+ * cookies such as `a1` and `webId` are deliberately ignored because they are
+ * present when logged out.
+ */
+export async function readXhsLoginState(): Promise<boolean> {
+  const cookies = await readCookiesForDomains(["xiaohongshu.com"]);
+  return cookies.some(
+    (cookie) => cookie.name === XHS_LOGIN_COOKIE_NAME && String(cookie.value || "").trim() !== "",
+  );
+}
+
+/**
+ * Return whether the user is logged into zhihu.com.
+ *
+ * Zhihu's `z_c0` is the authenticated session token. Guest cookies such as
+ * `_xsrf` and `d_c0` are deliberately ignored because they exist for logged-out
+ * visitors too.
+ */
+export async function readZhihuLoginState(): Promise<boolean> {
+  const cookies = await readCookiesForDomains(["zhihu.com"]);
+  return cookies.some(
+    (cookie) => cookie.name === ZHIHU_LOGIN_COOKIE_NAME && String(cookie.value || "").trim() !== "",
+  );
+}
+
+/** Return whether linux.do has the authenticated `_t` cookie. */
+export async function readLinuxdoLoginState(): Promise<boolean> {
+  const cookies = await readCookiesForDomains(["linux.do"]);
+  return cookies.some(
+    (cookie) => cookie.name === LINUXDO_LOGIN_COOKIE_NAME && String(cookie.value || "").trim() !== "",
+  );
+}
+
+/** Return whether the V2EX session-cookie name is present without reading its value. */
+export async function readV2EXLoginState(): Promise<boolean> {
+  const cookies = await readCookiesForDomains(["v2ex.com"]);
+  return cookies.some((cookie) => cookie.name === V2EX_LOGIN_COOKIE_NAME);
+}
+
+/** Return whether Weibo has an account session, excluding anonymous SUB. */
+export async function readWeiboLoginState(): Promise<boolean> {
+  const cookies = (await readCookiesForDomains(["weibo.com", "weibo.cn"])).filter(
+    (cookie) => String(cookie.value || "").trim() !== "",
+  );
+  const names = new Set(cookies.map((cookie) => cookie.name));
+  return WEIBO_LOGIN_COOKIE_NAMES.every((name) => names.has(name));
 }
 
 /**
@@ -204,7 +358,7 @@ export async function syncBilibiliCookieToBackend(
     return false;
   }
   try {
-    const response = await fetch(await apiUrl("/bilibili/cookie"), {
+    const response = await authenticatedFetch(await apiUrl("/bilibili/cookie"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -274,7 +428,7 @@ export async function syncDouyinCookieToBackend(
     return false;
   }
   try {
-    const response = await fetch(await apiUrl("/sources/dy/cookie"), {
+    const response = await authenticatedFetch(await apiUrl("/sources/dy/cookie"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -318,7 +472,7 @@ export async function syncXCookieToBackend(
     return false;
   }
   try {
-    const response = await fetch(await apiUrl("/sources/x/cookie"), {
+    const response = await authenticatedFetch(await apiUrl("/sources/x/cookie"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -353,6 +507,229 @@ export async function syncXCookieToBackend(
   }
 }
 
+export async function syncRedditCookieToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const cookieHeader = await readRedditCookieHeader();
+  if (!cookieHeader) {
+    return false;
+  }
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/reddit/cookie"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cookie: cookieHeader,
+        source,
+      }),
+    });
+    if (!response.ok) {
+      console.warn(`[openbiliclaw] reddit cookie sync HTTP ${response.status}`);
+      scheduleCookieSyncAlarm(REDDIT_COOKIE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as {
+      ok: boolean;
+      has_cookie: boolean;
+      error_code?: string;
+      message?: string;
+    };
+    if (result.ok && result.has_cookie) {
+      console.log(`[openbiliclaw] reddit cookie synced via ${source}`);
+      scheduleHourlyCookieSync(REDDIT_COOKIE_SYNC_ALARM);
+      return true;
+    }
+    const message = String(result.message || "");
+    console.warn(`[openbiliclaw] reddit cookie sync rejected (${source}): ${message}`);
+    scheduleCookieSyncAlarm(REDDIT_COOKIE_SYNC_ALARM, COOKIE_SYNC_VALIDATION_NETWORK_RETRY_MINUTES);
+    return false;
+  } catch (err) {
+    console.warn("[openbiliclaw] reddit cookie sync failed:", err);
+    scheduleCookieSyncAlarm(REDDIT_COOKIE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
+export async function syncXhsLoginStateToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const loggedIn = await readXhsLoginState();
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/xhs/login-state"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logged_in: loggedIn }),
+    });
+    if (!response.ok) {
+      console.warn(`[openbiliclaw] xhs login-state sync HTTP ${response.status}`);
+      scheduleCookieSyncAlarm(XHS_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as {
+      ok: boolean;
+      logged_in: boolean;
+      updated_at?: string;
+      message?: string;
+    };
+    if (result.ok) {
+      console.log(
+        `[openbiliclaw] xhs login-state synced via ${source}` +
+          ` (${result.logged_in ? "logged in" : "logged out"})`,
+      );
+      scheduleHourlyCookieSync(XHS_LOGIN_STATE_SYNC_ALARM);
+      return true;
+    }
+    const message = String(result.message || "");
+    console.warn(`[openbiliclaw] xhs login-state sync rejected (${source}): ${message}`);
+    scheduleCookieSyncAlarm(XHS_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  } catch (err) {
+    console.warn("[openbiliclaw] xhs login-state sync failed:", err);
+    scheduleCookieSyncAlarm(XHS_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
+export async function syncZhihuLoginStateToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const loggedIn = await readZhihuLoginState();
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/zhihu/login-state"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logged_in: loggedIn }),
+    });
+    if (!response.ok) {
+      console.warn(`[openbiliclaw] zhihu login-state sync HTTP ${response.status}`);
+      scheduleCookieSyncAlarm(ZHIHU_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as {
+      ok: boolean;
+      logged_in: boolean;
+      updated_at?: string;
+      message?: string;
+    };
+    if (result.ok) {
+      console.log(
+        `[openbiliclaw] zhihu login-state synced via ${source}` +
+          ` (${result.logged_in ? "logged in" : "logged out"})`,
+      );
+      scheduleHourlyCookieSync(ZHIHU_LOGIN_STATE_SYNC_ALARM);
+      return true;
+    }
+    const message = String(result.message || "");
+    console.warn(`[openbiliclaw] zhihu login-state sync rejected (${source}): ${message}`);
+    scheduleCookieSyncAlarm(ZHIHU_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  } catch (err) {
+    console.warn("[openbiliclaw] zhihu login-state sync failed:", err);
+    scheduleCookieSyncAlarm(ZHIHU_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
+export async function syncLinuxdoLoginStateToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const loggedIn = await readLinuxdoLoginState();
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/linuxdo/login-state"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logged_in: loggedIn }),
+    });
+    if (!response.ok) {
+      console.warn(`[openbiliclaw] linuxdo login-state sync HTTP ${response.status}`);
+      scheduleCookieSyncAlarm(LINUXDO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as {
+      ok: boolean;
+      logged_in: boolean;
+      message?: string;
+    };
+    if (result.ok) {
+      console.log(
+        `[openbiliclaw] linuxdo login-state synced via ${source}` +
+          ` (${result.logged_in ? "logged in" : "logged out"})`,
+      );
+      scheduleHourlyCookieSync(LINUXDO_LOGIN_STATE_SYNC_ALARM);
+      return true;
+    }
+    console.warn(
+      `[openbiliclaw] linuxdo login-state sync rejected (${source}): ${String(result.message || "")}`,
+    );
+    scheduleCookieSyncAlarm(LINUXDO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  } catch (err) {
+    console.warn("[openbiliclaw] linuxdo login-state sync failed:", err);
+    scheduleCookieSyncAlarm(LINUXDO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
+export async function syncV2EXLoginStateToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const loggedIn = await readV2EXLoginState();
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/v2ex/credential"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "login_state", value: loggedIn, source }),
+    });
+    if (!response.ok) {
+      console.warn(`[openbiliclaw] v2ex login-state sync HTTP ${response.status}`);
+      scheduleCookieSyncAlarm(V2EX_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as { accepted: boolean; message?: string };
+    if (result.accepted) {
+      console.log(
+        `[openbiliclaw] v2ex login-state synced via ${source}` +
+          ` (${loggedIn ? "logged in" : "logged out"})`,
+      );
+      scheduleHourlyCookieSync(V2EX_LOGIN_STATE_SYNC_ALARM);
+      return true;
+    }
+    scheduleCookieSyncAlarm(V2EX_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  } catch (err) {
+    console.warn("[openbiliclaw] v2ex login-state sync failed:", err);
+    scheduleCookieSyncAlarm(V2EX_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
+export async function syncWeiboLoginStateToBackend(
+  source: string = "extension",
+): Promise<boolean> {
+  const loggedIn = await readWeiboLoginState();
+  try {
+    const response = await authenticatedFetch(await apiUrl("/sources/weibo/credential"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "login_state", value: loggedIn, source }),
+    });
+    if (!response.ok) {
+      scheduleCookieSyncAlarm(WEIBO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+      return false;
+    }
+    const result = (await response.json()) as { accepted?: boolean };
+    if (result.accepted) {
+      scheduleHourlyCookieSync(WEIBO_LOGIN_STATE_SYNC_ALARM);
+      return true;
+    }
+    scheduleCookieSyncAlarm(WEIBO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  } catch {
+    scheduleCookieSyncAlarm(WEIBO_LOGIN_STATE_SYNC_ALARM, COOKIE_SYNC_RETRY_MINUTES);
+    return false;
+  }
+}
+
 /**
  * Handle backend runtime-stream events that explicitly ask the extension
  * to push the current site cookie now.
@@ -369,6 +746,30 @@ export function handleCookieSyncRuntimeEvent(event: Record<string, unknown>): bo
   }
   if (eventType === "x_cookie_sync_requested") {
     void syncXCookieToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "reddit_cookie_sync_requested") {
+    void syncRedditCookieToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "xhs_login_state_sync_requested") {
+    void syncXhsLoginStateToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "zhihu_login_state_sync_requested") {
+    void syncZhihuLoginStateToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "linuxdo_login_state_sync_requested") {
+    void syncLinuxdoLoginStateToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "v2ex_login_state_sync_requested") {
+    void syncV2EXLoginStateToBackend("runtime-stream-request");
+    return true;
+  }
+  if (eventType === "weibo_login_state_sync_requested") {
+    void syncWeiboLoginStateToBackend("runtime-stream-request");
     return true;
   }
   return false;
@@ -391,8 +792,20 @@ function scheduleCookieSync(platform: CookieSyncPlatform, source: string): void 
       void syncBilibiliCookieToBackend(source);
     } else if (platform === "douyin") {
       void syncDouyinCookieToBackend(source);
-    } else {
+    } else if (platform === "x") {
       void syncXCookieToBackend(source);
+    } else if (platform === "reddit") {
+      void syncRedditCookieToBackend(source);
+    } else if (platform === "xhs") {
+      void syncXhsLoginStateToBackend(source);
+    } else if (platform === "zhihu") {
+      void syncZhihuLoginStateToBackend(source);
+    } else if (platform === "linuxdo") {
+      void syncLinuxdoLoginStateToBackend(source);
+    } else if (platform === "v2ex") {
+      void syncV2EXLoginStateToBackend(source);
+    } else {
+      void syncWeiboLoginStateToBackend(source);
     }
   }, COOKIE_SYNC_DEBOUNCE_MS);
 }
@@ -421,6 +834,12 @@ export function startCookieSync(): void {
   void syncBilibiliCookieToBackend("startup");
   void syncDouyinCookieToBackend("startup");
   void syncXCookieToBackend("startup");
+  void syncRedditCookieToBackend("startup");
+  void syncXhsLoginStateToBackend("startup");
+  void syncZhihuLoginStateToBackend("startup");
+  void syncLinuxdoLoginStateToBackend("startup");
+  void syncV2EXLoginStateToBackend("startup");
+  void syncWeiboLoginStateToBackend("startup");
 
   // React to login / logout / refresh.
   chromeApi.cookies.onChanged.addListener((changeInfo) => {
@@ -448,6 +867,50 @@ export function startCookieSync(): void {
         return;
       }
       scheduleCookieSync("x", changeInfo.removed ? "x-logout" : "x-cookies-onchange");
+      return;
+    }
+    if (domain.endsWith("reddit.com")) {
+      if (!REQUIRED_REDDIT_COOKIE_NAMES.includes(changeInfo.cookie.name)) {
+        return;
+      }
+      scheduleCookieSync(
+        "reddit",
+        changeInfo.removed ? "reddit-logout" : "reddit-cookies-onchange",
+      );
+      return;
+    }
+    if (domain.endsWith("xiaohongshu.com")) {
+      if (changeInfo.cookie.name !== XHS_LOGIN_COOKIE_NAME) {
+        return;
+      }
+      scheduleCookieSync("xhs", changeInfo.removed ? "xhs-logout" : "xhs-cookies-onchange");
+      return;
+    }
+    if (domain.endsWith("zhihu.com")) {
+      if (changeInfo.cookie.name !== ZHIHU_LOGIN_COOKIE_NAME) {
+        return;
+      }
+      scheduleCookieSync("zhihu", changeInfo.removed ? "zhihu-logout" : "zhihu-cookies-onchange");
+      return;
+    }
+    if (domain.endsWith("linux.do")) {
+      if (changeInfo.cookie.name !== LINUXDO_LOGIN_COOKIE_NAME) return;
+      scheduleCookieSync(
+        "linuxdo",
+        changeInfo.removed ? "linuxdo-logout" : "linuxdo-cookies-onchange",
+      );
+      return;
+    }
+    if (domain.endsWith("v2ex.com")) {
+      if (changeInfo.cookie.name !== V2EX_LOGIN_COOKIE_NAME) {
+        return;
+      }
+      scheduleCookieSync("v2ex", changeInfo.removed ? "v2ex-logout" : "v2ex-cookies-onchange");
+      return;
+    }
+    if (domain.endsWith("weibo.com") || domain.endsWith("weibo.cn")) {
+      if (!WEIBO_LOGIN_COOKIE_NAMES.includes(changeInfo.cookie.name)) return;
+      scheduleCookieSync("weibo", changeInfo.removed ? "weibo-logout" : "weibo-cookies-onchange");
     }
   });
 
@@ -458,6 +921,12 @@ export function startCookieSync(): void {
   scheduleHourlyCookieSync(BILI_COOKIE_SYNC_ALARM);
   scheduleHourlyCookieSync(DY_COOKIE_SYNC_ALARM);
   scheduleHourlyCookieSync(X_COOKIE_SYNC_ALARM);
+  scheduleHourlyCookieSync(REDDIT_COOKIE_SYNC_ALARM);
+  scheduleHourlyCookieSync(XHS_LOGIN_STATE_SYNC_ALARM);
+  scheduleHourlyCookieSync(ZHIHU_LOGIN_STATE_SYNC_ALARM);
+  scheduleHourlyCookieSync(LINUXDO_LOGIN_STATE_SYNC_ALARM);
+  scheduleHourlyCookieSync(V2EX_LOGIN_STATE_SYNC_ALARM);
+  scheduleHourlyCookieSync(WEIBO_LOGIN_STATE_SYNC_ALARM);
 }
 
 /**
@@ -478,6 +947,30 @@ export function handleCookieSyncAlarm(alarmName: string): boolean {
     void syncXCookieToBackend("hourly-alarm");
     return true;
   }
+  if (alarmName === REDDIT_COOKIE_SYNC_ALARM) {
+    void syncRedditCookieToBackend("hourly-alarm");
+    return true;
+  }
+  if (alarmName === XHS_LOGIN_STATE_SYNC_ALARM) {
+    void syncXhsLoginStateToBackend("hourly-alarm");
+    return true;
+  }
+  if (alarmName === ZHIHU_LOGIN_STATE_SYNC_ALARM) {
+    void syncZhihuLoginStateToBackend("hourly-alarm");
+    return true;
+  }
+  if (alarmName === LINUXDO_LOGIN_STATE_SYNC_ALARM) {
+    void syncLinuxdoLoginStateToBackend("hourly-alarm");
+    return true;
+  }
+  if (alarmName === V2EX_LOGIN_STATE_SYNC_ALARM) {
+    void syncV2EXLoginStateToBackend("hourly-alarm");
+    return true;
+  }
+  if (alarmName === WEIBO_LOGIN_STATE_SYNC_ALARM) {
+    void syncWeiboLoginStateToBackend("hourly-alarm");
+    return true;
+  }
   if (alarmName === LEGACY_COOKIE_SYNC_ALARM) {
     // One last full round for an alarm persisted by an older version; each
     // sync re-registers its own per-platform alarm on success/failure and
@@ -485,6 +978,12 @@ export function handleCookieSyncAlarm(alarmName: string): boolean {
     void syncBilibiliCookieToBackend("hourly-alarm");
     void syncDouyinCookieToBackend("hourly-alarm");
     void syncXCookieToBackend("hourly-alarm");
+    void syncRedditCookieToBackend("hourly-alarm");
+    void syncXhsLoginStateToBackend("hourly-alarm");
+    void syncZhihuLoginStateToBackend("hourly-alarm");
+    void syncLinuxdoLoginStateToBackend("hourly-alarm");
+    void syncV2EXLoginStateToBackend("hourly-alarm");
+    void syncWeiboLoginStateToBackend("hourly-alarm");
     return true;
   }
   return false;

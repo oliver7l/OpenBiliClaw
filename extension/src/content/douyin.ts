@@ -25,9 +25,155 @@ import type {
   DouyinSearchItem,
   DouyinSearchScope,
 } from "../main/dy-fetch-tap.js";
-import { apiUrl } from "../shared/backend-endpoint.ts";
+import { runtimeAssetCandidates } from "../shared/asset-prefix.ts";
 import { douyinAdapter } from "../shared/platforms/douyin.ts";
 import { registerE2EExecutor } from "./e2e-executor.ts";
+import { installNativeSaveExecutor } from "./native-save/runtime.ts";
+import { shouldStartPassiveCollector } from "./native-save/task-mode.ts";
+import { saveDouyin, verifyDouyin } from "./native-save/douyin.ts";
+
+const PASSIVE_DISCOVERY_REPLAY_LIMIT = 256;
+const PASSIVE_DISCOVERY_REPLAY_TTL_MS = 120_000;
+const PASSIVE_DISCOVERY_SCOPES = new Set<DouyinSearchScope>([
+  "dy_search",
+  "dy_hot",
+  "dy_feed",
+]);
+
+interface PassiveDiscoveryReplayEntry {
+  item: DouyinSearchItem;
+  receivedAt: number;
+}
+
+/**
+ * Preserve early MAIN-world discovery messages until a task executor attaches.
+ *
+ * The MAIN tap runs at document_start so it can observe Douyin's first feed
+ * request. The isolated task listener is intentionally attached later, after
+ * the task tab is complete. Without a bounded replay buffer, the first response
+ * can land in that gap and a healthy feed is misreported as empty.
+ */
+export class DouyinPassiveDiscoveryReplayBuffer {
+  private readonly entries = new Map<string, PassiveDiscoveryReplayEntry>();
+  private readonly responseTimes = new Map<DouyinSearchScope, number[]>();
+  private readonly maxItems: number;
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+
+  constructor(
+    maxItems: number = PASSIVE_DISCOVERY_REPLAY_LIMIT,
+    ttlMs: number = PASSIVE_DISCOVERY_REPLAY_TTL_MS,
+    now: () => number = Date.now,
+  ) {
+    this.maxItems = maxItems;
+    this.ttlMs = ttlMs;
+    this.now = now;
+  }
+
+  ingest(scopeValue: unknown, values: unknown): number {
+    const scope = normalizePassiveDiscoveryScope(scopeValue);
+    if (!scope || !Array.isArray(values)) return 0;
+    const receivedAt = this.now();
+    this.prune(receivedAt);
+    const responseTimes = this.responseTimes.get(scope) ?? [];
+    responseTimes.push(receivedAt);
+    this.responseTimes.set(scope, responseTimes.slice(-this.maxResponseCount()));
+
+    let added = 0;
+    for (const value of values) {
+      const key = passiveDiscoveryItemKey(value);
+      if (!key) continue;
+      if (!key.startsWith(`${scope}:`)) continue;
+      if (!this.entries.has(key)) added += 1;
+      this.entries.delete(key);
+      this.entries.set(key, {
+        item: value as DouyinSearchItem,
+        receivedAt,
+      });
+    }
+    const limit = Math.max(1, Math.floor(this.maxItems));
+    while (this.entries.size > limit) {
+      const oldest = this.entries.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.entries.delete(oldest);
+    }
+    return added;
+  }
+
+  drain(scope: DouyinSearchScope): {
+    items: DouyinSearchItem[];
+    responsesObserved: number;
+  } {
+    this.prune(this.now());
+    const items: DouyinSearchItem[] = [];
+    for (const [key, entry] of this.entries) {
+      if (!key.startsWith(`${scope}:`)) continue;
+      items.push(entry.item);
+      this.entries.delete(key);
+    }
+    const responsesObserved = this.responseTimes.get(scope)?.length ?? 0;
+    this.responseTimes.delete(scope);
+    return { items, responsesObserved };
+  }
+
+  private prune(now: number): void {
+    const ttlMs = Math.max(0, this.ttlMs);
+    for (const [key, entry] of this.entries) {
+      if (now - entry.receivedAt <= ttlMs) continue;
+      this.entries.delete(key);
+    }
+    for (const [scope, responseTimes] of this.responseTimes) {
+      const fresh = responseTimes.filter((receivedAt) => now - receivedAt <= ttlMs);
+      if (fresh.length > 0) {
+        this.responseTimes.set(scope, fresh);
+      } else {
+        this.responseTimes.delete(scope);
+      }
+    }
+  }
+
+  private maxResponseCount(): number {
+    return Math.max(1, Math.min(64, Math.floor(this.maxItems)));
+  }
+}
+
+function normalizePassiveDiscoveryScope(value: unknown): DouyinSearchScope | null {
+  const scope = String(value ?? "").trim() as DouyinSearchScope;
+  return PASSIVE_DISCOVERY_SCOPES.has(scope) ? scope : null;
+}
+
+function passiveDiscoveryItemKey(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const item = value as Partial<DouyinSearchItem>;
+  const scope = normalizePassiveDiscoveryScope(item.scope);
+  if (!scope) return "";
+  const awemeId = String(item.aweme_id ?? "").trim();
+  return awemeId ? `${scope}:${awemeId}` : "";
+}
+
+const passiveDiscoveryReplayBuffer = new DouyinPassiveDiscoveryReplayBuffer();
+const activePassiveDiscoveryScopes = new Set<DouyinSearchScope>();
+
+function cachePassiveDiscoveryMessage(event: MessageEvent): void {
+  if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
+  const data = event.data as Record<string, unknown> | null;
+  if (!data || typeof data !== "object") return;
+  if (data.type !== "OPENBILICLAW_DOUYIN_SEARCH_PAGE") return;
+  const values = Array.isArray(data.items) ? data.items : [];
+  const scope =
+    normalizePassiveDiscoveryScope(data.scope) ??
+    normalizePassiveDiscoveryScope(
+      (values.find((item) => item && typeof item === "object") as
+        | Partial<DouyinSearchItem>
+        | undefined)?.scope,
+    );
+  if (!scope || activePassiveDiscoveryScopes.has(scope)) return;
+  passiveDiscoveryReplayBuffer.ingest(scope, values);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("message", cachePassiveDiscoveryMessage);
+}
 
 let behaviorCollectorStarted = false;
 
@@ -39,8 +185,11 @@ function startDouyinBehaviorCollector(): void {
   const start = (): void => {
     if (behaviorCollectorStarted) return;
     behaviorCollectorStarted = true;
-    void import("./kernel.js").then(({ startCollector }) => {
-      startCollector(douyinAdapter);
+    void shouldStartPassiveCollector().then((shouldStart) => {
+      if (!shouldStart) return;
+      void import("./kernel.js").then(({ startCollector }) => {
+        startCollector(douyinAdapter);
+      });
     });
   };
 
@@ -53,20 +202,8 @@ function startDouyinBehaviorCollector(): void {
 
 startDouyinBehaviorCollector();
 registerE2EExecutor("douyin");
-
-// TEMP DEBUG: relay content-script events to daemon (see debug-log.ts).
-function debugLog(event: string, data?: unknown): void {
-  void (async () => {
-    try {
-      await fetch(await apiUrl("/sources/_debug/log"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source: "dy-cs", event, data: data ?? null }),
-      });
-    } catch {
-      // ignore — debug relay must not break the content script
-    }
-  })();
+if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+  installNativeSaveExecutor("douyin", saveDouyin, verifyDouyin);
 }
 
 /**
@@ -88,11 +225,20 @@ function debugLog(event: string, data?: unknown): void {
  */
 function reinjectFetchTap(): void {
   if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.getURL) return;
-  const script = document.createElement("script");
-  script.src = chrome.runtime.getURL("dist/main/dy-fetch-tap.js");
-  script.onload = () => script.remove();
-  script.onerror = () => script.remove();
-  (document.head || document.documentElement).appendChild(script);
+  const candidates = runtimeAssetCandidates("main/dy-fetch-tap.js");
+  const injectCandidate = (index: number): void => {
+    const file = candidates[index];
+    if (!file) return;
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL(file);
+    script.onload = () => script.remove();
+    script.onerror = () => {
+      script.remove();
+      injectCandidate(index + 1);
+    };
+    (document.head || document.documentElement).appendChild(script);
+  };
+  injectCandidate(0);
 }
 
 // Dynamic import for the chrome-lifecycle code path so node:test's
@@ -112,8 +258,16 @@ async function loadTaskExecutorHelpers(): Promise<{
 async function loadDomExtractor(): Promise<{
   extractDouyinItemsFromDocument: typeof import("./dy/dom-extractor.js").extractDouyinItemsFromDocument;
   extractDouyinSearchItemsFromDocument: typeof import("./dy/dom-extractor.js").extractDouyinSearchItemsFromDocument;
+  pickSearchScrollTarget: typeof import("./dy/dom-extractor.js").pickSearchScrollTarget;
 }> {
   return await import("./dy/dom-extractor.js");
+}
+
+async function loadBootstrapHelpers(): Promise<{
+  extractDouyinSecUidFromRenderData: typeof import("./dy/bootstrap.js").extractDouyinSecUidFromRenderData;
+  reconcileDouyinSelfIdentity: typeof import("./dy/bootstrap.js").reconcileDouyinSelfIdentity;
+}> {
+  return await import("./dy/bootstrap.js");
 }
 
 interface ScopeExecuteMessage {
@@ -130,7 +284,7 @@ interface ScopeResultPayload {
   scope: DouyinScope;
   items: DouyinBootstrapItem[];
   scope_count: number;
-  status: "ok" | "empty" | "failed";
+  status: "ok" | "empty" | "degraded" | "failed";
   error?: string;
   /**
    * Diagnostic counters surfaced through the dispatcher into the
@@ -148,6 +302,8 @@ interface ScopeResultPayload {
     api_pages_fetched?: number;
     api_error?: string;
     sec_uid?: string;
+    sec_uid_source?: DouyinSecUidSource;
+    identity_error?: string;
     end_of_feed?: string;
     inject_status?: string;
     page_url?: string;
@@ -161,6 +317,8 @@ interface SearchExecuteMessage {
   keyword: string;
   max_items: number;
   debug_inject_status?: string;
+  /** Resume collection in the new document after the UI caused a full navigation. */
+  resume_after_navigation?: boolean;
 }
 
 interface HotExecuteMessage {
@@ -194,6 +352,11 @@ interface SearchResultPayload {
     ui_triggered?: boolean;
     search_navigation_ok?: boolean;
     search_submit_method?: string;
+    navigation_resumed?: boolean;
+    passive_items_harvested?: number;
+    passive_responses_observed?: number;
+    early_buffer_items?: number;
+    scroll_rounds?: number;
     inject_status?: string;
     page_url?: string;
   };
@@ -213,6 +376,9 @@ interface HotResultPayload {
     api_items_harvested: number;
     api_error?: string;
     dom_items_harvested?: number;
+    passive_items_harvested?: number;
+    passive_responses_observed?: number;
+    early_buffer_items?: number;
     seed_aweme_id?: string;
     ui_triggered?: boolean;
     inject_status?: string;
@@ -231,6 +397,9 @@ interface FeedResultPayload {
     api_pages_fetched: number;
     api_items_harvested: number;
     dom_items_harvested: number;
+    passive_items_harvested?: number;
+    passive_responses_observed?: number;
+    early_buffer_items?: number;
     api_error?: string;
     inject_status?: string;
     page_url?: string;
@@ -239,6 +408,21 @@ interface FeedResultPayload {
 
 const SCROLL_DELAY_MS = 1_500;
 const POST_INSTALL_SETTLE_MS = 800;
+
+/**
+ * Accept only messages emitted by this page's top-level Window and origin.
+ *
+ * This is defense-in-depth against accidental cross-frame/page chatter, not
+ * an authorization boundary: any script running in the same page can still
+ * call window.postMessage. Sentinels, request IDs, and payload validation
+ * remain required for every bridge message.
+ */
+export function isSameWindowSameOriginDouyinMessage(
+  event: MessageEvent,
+  target: Window,
+): boolean {
+  return event.source === target && event.origin === target.location.origin;
+}
 
 // Module-level: track the last fetch-tap install ping. The MAIN-world
 // dy-fetch-tap.js posts one of:
@@ -250,9 +434,20 @@ const POST_INSTALL_SETTLE_MS = 800;
 // fetch in this tab.
 let _lastFetchTapInstallStatus: "unknown" | "installed" | "skipped_no_sdk" = "unknown";
 let _installMessagesReceived = 0;
+type DouyinSecUidSource = "" | "profile_self";
 let _detectedSecUid = "";
+let _detectedSecUidSource: DouyinSecUidSource = "";
+
+function rememberAuthoritativeDouyinSecUid(secUid: string): void {
+  const normalized = secUid.trim();
+  if (!normalized) return;
+  _detectedSecUid = normalized;
+  _detectedSecUidSource = "profile_self";
+}
+
 if (typeof window !== "undefined") {
   window.addEventListener("message", (event: MessageEvent) => {
+    if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
     const data = event?.data as { type?: unknown; status?: unknown } | null;
     if (!data || typeof data !== "object") return;
     if (data.type === "OPENBILICLAW_DOUYIN_FETCH_TAP_INSTALL") {
@@ -262,25 +457,6 @@ if (typeof window !== "undefined") {
         _lastFetchTapInstallStatus = s;
       }
       return;
-    }
-    if (data.type === "OPENBILICLAW_DOUYIN_SEC_UID") {
-      const secUid = String((data as { secUid?: unknown }).secUid ?? "");
-      if (secUid && secUid !== _detectedSecUid) {
-        _detectedSecUid = secUid;
-        debugLog("sec_uid_detected", { secUid });
-      }
-      return;
-    }
-    // TEMP DIAGNOSTIC (2026-05-08): relay every /aweme*/ URL the
-    // MAIN-world tap sees back to the daemon log so we can diagnose
-    // why aweme_messages_received stays at 0.
-    if (data.type === "OPENBILICLAW_DOUYIN_URL_PROBE") {
-      const probe = data as { transport?: unknown; url?: unknown; classified?: unknown };
-      debugLog("url_probe", {
-        transport: String(probe.transport ?? ""),
-        url: String(probe.url ?? ""),
-        classified: probe.classified ?? null,
-      });
     }
   });
 }
@@ -311,6 +487,7 @@ async function harvestScopeViaApiBridge(
       resolve({ items: [], pages: 0, error: "timeout" });
     }, timeoutMs);
     const onMessage = (event: MessageEvent): void => {
+      if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
       const data = event?.data as Record<string, unknown> | null;
       if (!data || typeof data !== "object") return;
       if (data.type !== "OPENBILICLAW_DOUYIN_API_RESPONSE") return;
@@ -340,10 +517,95 @@ async function harvestScopeViaApiBridge(
   });
 }
 
+async function resolveDouyinSelfSecUidViaBridge(
+  timeoutMs: number = 15_000,
+): Promise<{ secUid: string; error?: string }> {
+  return new Promise((resolve) => {
+    const requestId = `obc_dy_identity_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      resolve({ secUid: "", error: "timeout" });
+    }, timeoutMs);
+    const onMessage = (event: MessageEvent): void => {
+      if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
+      const data = event?.data as Record<string, unknown> | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "OPENBILICLAW_DOUYIN_IDENTITY_RESPONSE") return;
+      if (data.requestId !== requestId || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      const secUid = typeof data.secUid === "string" ? data.secUid.trim() : "";
+      const error = typeof data.error === "string" ? data.error : undefined;
+      resolve({ secUid, error });
+    };
+    window.addEventListener("message", onMessage);
+    window.postMessage(
+      {
+        type: "OPENBILICLAW_DOUYIN_IDENTITY_REQUEST",
+        requestId,
+      },
+      window.location.origin,
+    );
+  });
+}
+
+async function resolveDouyinBootstrapSecUid(): Promise<{
+  secUid: string;
+  source: DouyinSecUidSource;
+  error?: string;
+}> {
+  if (_detectedSecUid && _detectedSecUidSource === "profile_self") {
+    return { secUid: _detectedSecUid, source: _detectedSecUidSource };
+  }
+  let renderDataSecUid = "";
+  let reconcileDouyinSelfIdentity:
+    | typeof import("./dy/bootstrap.js").reconcileDouyinSelfIdentity
+    | undefined;
+  try {
+    const helpers = await loadBootstrapHelpers();
+    reconcileDouyinSelfIdentity = helpers.reconcileDouyinSelfIdentity;
+    const raw = document.getElementById("RENDER_DATA")?.textContent ?? "";
+    renderDataSecUid = helpers.extractDouyinSecUidFromRenderData(raw);
+  } catch {
+    // RENDER_DATA is only a candidate; profile/self remains authoritative.
+  }
+
+  const profileResult = await resolveDouyinSelfSecUidViaBridge();
+  const identity = reconcileDouyinSelfIdentity
+    ? reconcileDouyinSelfIdentity({
+        renderDataSecUid,
+        profileSelfSecUid: profileResult.secUid,
+        profileError: profileResult.error,
+      })
+    : {
+        secUid: profileResult.secUid,
+        source: profileResult.secUid ? ("profile_self" as const) : ("" as const),
+        conflict: false,
+        ...(!profileResult.secUid
+          ? { error: profileResult.error ?? "identity_unavailable" }
+          : {}),
+      };
+  if (identity.secUid) {
+    // Cache only the identity positively confirmed by profile/self.
+    rememberAuthoritativeDouyinSecUid(identity.secUid);
+    return { secUid: _detectedSecUid, source: _detectedSecUidSource };
+  }
+
+  return {
+    secUid: "",
+    source: "",
+    error: identity.error ?? "identity_unavailable",
+  };
+}
+
 async function harvestSearchViaApiBridge(
   keyword: string,
   maxItems: number,
-  timeoutMs: number = 45_000,
+  timeoutMs: number = 20_000,
 ): Promise<{ items: DouyinSearchItem[]; pages: number; error?: string }> {
   return new Promise((resolve) => {
     const requestId = `obc_dy_search_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -355,6 +617,7 @@ async function harvestSearchViaApiBridge(
       resolve({ items: [], pages: 0, error: "timeout" });
     }, timeoutMs);
     const onMessage = (event: MessageEvent): void => {
+      if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
       const data = event?.data as Record<string, unknown> | null;
       if (!data || typeof data !== "object") return;
       if (data.type !== "OPENBILICLAW_DOUYIN_SEARCH_API_RESPONSE") return;
@@ -398,6 +661,7 @@ async function harvestHotRelatedViaApiBridge(
       resolve({ items: [], pages: 0, error: "timeout" });
     }, timeoutMs);
     const onMessage = (event: MessageEvent): void => {
+      if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
       const data = event?.data as Record<string, unknown> | null;
       if (!data || typeof data !== "object") return;
       if (data.type !== "OPENBILICLAW_DOUYIN_HOT_API_RESPONSE") return;
@@ -440,6 +704,7 @@ async function harvestFeedViaApiBridge(
       resolve({ items: [], pages: 0, error: "timeout" });
     }, timeoutMs);
     const onMessage = (event: MessageEvent): void => {
+      if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
       const data = event?.data as Record<string, unknown> | null;
       if (!data || typeof data !== "object") return;
       if (data.type !== "OPENBILICLAW_DOUYIN_FEED_API_RESPONSE") return;
@@ -538,27 +803,185 @@ export function douyinDiscoveryExecutionPolicy(): {
   };
 }
 
-function attachPassiveDiscoveryCollector(allItems: DouyinSearchItem[]): () => void {
+export function classifyDouyinDiscoveryCompletion(input: {
+  source: "search" | "hot" | "feed";
+  itemCount: number;
+  injectStatus?: string;
+  fetchTapInstallStatus: "unknown" | "installed" | "skipped_no_sdk";
+  apiError?: string;
+  uiTriggered?: boolean;
+  searchNavigationOk?: boolean;
+  alternateCollectionCompleted?: boolean;
+  passiveResponsesObserved?: number;
+  domItemsHarvested?: number;
+}): { status: "ok" | "empty" | "failed"; error?: string } {
+  if (input.itemCount > 0) return { status: "ok" };
+
+  const injectStatus = String(input.injectStatus ?? "").trim().toLowerCase();
+  if (injectStatus === "scripting_api_missing" || /^error(?:\s*:|$)/.test(injectStatus)) {
+    return { status: "failed", error: "fetch_tap_injection_failed" };
+  }
+
+  if (input.source === "search") {
+    if (input.uiTriggered === false) {
+      return { status: "failed", error: "search_ui_not_triggered" };
+    }
+    if (input.searchNavigationOk === false) {
+      return { status: "failed", error: "search_navigation_failed" };
+    }
+  }
+  if (input.source === "hot" && input.uiTriggered === false) {
+    return { status: "failed", error: "hot_ui_not_triggered" };
+  }
+
+  const apiError = String(input.apiError ?? "").trim().toLowerCase();
+  if (apiError) {
+    if (/\b429\b|rate[\s_-]*limit|too many requests|too frequent|hit_shark|请求频繁/.test(apiError)) {
+      return { status: "failed", error: "api_rate_limited" };
+    }
+    if (/\btimeout\b|timed[\s_-]*out|\babort(?:ed|error)?\b/.test(apiError)) {
+      return { status: "failed", error: "api_timeout" };
+    }
+    if (
+      /\b(?:http(?:\s+status)?|status(?:\s+code)?)\s*[:=_-]?\s*[45]\d{2}\b/.test(apiError)
+    ) {
+      return { status: "failed", error: "api_http_error" };
+    }
+    return { status: "failed", error: "api_collection_failed" };
+  }
+
+  if (input.fetchTapInstallStatus === "skipped_no_sdk") {
+    return { status: "failed", error: "fetch_tap_sdk_unavailable" };
+  }
+  const feedObservationReported = input.passiveResponsesObserved !== undefined;
+  if (
+    input.source === "feed" &&
+    input.fetchTapInstallStatus === "installed" &&
+    feedObservationReported &&
+    Number(input.passiveResponsesObserved ?? 0) <= 0
+  ) {
+    return { status: "failed", error: "feed_no_observed_response" };
+  }
+  if (
+    input.fetchTapInstallStatus === "installed" ||
+    input.alternateCollectionCompleted === true
+  ) {
+    return { status: "empty" };
+  }
+  return { status: "failed", error: "fetch_tap_status_unknown" };
+}
+
+interface PassiveDiscoveryCollector {
+  detach: () => void;
+  /** How many items arrived passively (page-issued responses via fetch-tap). */
+  passiveCount: () => number;
+  /** How many matching page responses were observed, including valid empty responses. */
+  responseCount: () => number;
+  /** How many unique items were replayed from before task-listener attachment. */
+  earlyBufferCount: () => number;
+}
+
+export function shouldReplayEarlyDiscoveryItems(
+  scope: DouyinSearchScope,
+  resumeAfterNavigation: boolean,
+): boolean {
+  return scope !== "dy_search" || resumeAfterNavigation;
+}
+
+function attachPassiveDiscoveryCollector(
+  allItems: DouyinSearchItem[],
+  scope: DouyinSearchScope,
+  replayEarly: boolean = true,
+): PassiveDiscoveryCollector {
+  const drained = passiveDiscoveryReplayBuffer.drain(scope);
+  // A normal search execution attaches before submitting its keyword. Any
+  // buffered dy_search rows therefore belong to the previous keyword and
+  // must be discarded. A full-navigation resume runs in a fresh document and
+  // does need the early response captured before the resumed collector.
+  const early = shouldReplayEarlyDiscoveryItems(scope, replayEarly)
+    ? drained
+    : { items: [] as DouyinSearchItem[], responsesObserved: 0 };
+  allItems.push(...early.items);
+  activePassiveDiscoveryScopes.add(scope);
+  let passiveCount = early.items.length;
+  let responseCount = early.responsesObserved;
   const onMessage = (event: MessageEvent): void => {
+    if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
     const data = event?.data as Record<string, unknown> | null;
     if (!data || typeof data !== "object") return;
     if (data.type !== "OPENBILICLAW_DOUYIN_SEARCH_PAGE") return;
     if (!Array.isArray(data.items)) return;
-    allItems.push(...(data.items as DouyinSearchItem[]));
+    const messageScope =
+      normalizePassiveDiscoveryScope(data.scope) ??
+      normalizePassiveDiscoveryScope(
+        (data.items.find((item) => item && typeof item === "object") as
+          | Partial<DouyinSearchItem>
+          | undefined)?.scope,
+      );
+    if (messageScope !== scope) return;
+    responseCount += 1;
+    const matchingItems = (data.items as DouyinSearchItem[]).filter(
+      (item) => item.scope === scope,
+    );
+    passiveCount += matchingItems.length;
+    allItems.push(...matchingItems);
   };
   window.addEventListener("message", onMessage);
-  return () => window.removeEventListener("message", onMessage);
+  return {
+    detach: () => {
+      window.removeEventListener("message", onMessage);
+      activePassiveDiscoveryScopes.delete(scope);
+    },
+    passiveCount: () => passiveCount,
+    responseCount: () => responseCount,
+    earlyBufferCount: () => early.items.length,
+  };
+}
+
+/**
+ * Pure round-budget controller for the adaptive search scroll loop.
+ *
+ * Call `shouldContinue(count)` with the current (deduped) item count
+ * before each round. It stops when: the count reached `maxItems`, the
+ * round cap was hit, or `stagnantLimit` consecutive rounds ended
+ * without the count growing.
+ */
+export function createScrollRoundController(opts: {
+  roundCap: number;
+  stagnantLimit: number;
+  maxItems: number;
+}): { shouldContinue(count: number): boolean; roundsExecuted(): number } {
+  let rounds = 0;
+  let stagnantRounds = 0;
+  let lastCount: number | null = null;
+  return {
+    shouldContinue(count: number): boolean {
+      if (lastCount !== null) {
+        if (count <= lastCount) stagnantRounds += 1;
+        else stagnantRounds = 0;
+      }
+      lastCount = count;
+      if (count >= opts.maxItems) return false;
+      if (stagnantRounds >= opts.stagnantLimit) return false;
+      if (rounds >= opts.roundCap) return false;
+      rounds += 1;
+      return true;
+    },
+    roundsExecuted: () => rounds,
+  };
 }
 
 export function isDouyinSearchResultUrl(href: string, keyword?: string): boolean {
   try {
     const url = new URL(href, "https://www.douyin.com");
     const path = decodeURIComponent(url.pathname);
-    if (!path.includes("/search/")) return false;
+    const segments = path.split("/").filter(Boolean);
+    const searchIndex = segments.lastIndexOf("search");
+    if (searchIndex < 0) return false;
     const trimmedKeyword = String(keyword ?? "").trim();
     if (!trimmedKeyword) return true;
     return (
-      path.includes(`/search/${trimmedKeyword}`) ||
+      (segments[searchIndex + 1] ?? "") === trimmedKeyword ||
       url.searchParams.get("keyword") === trimmedKeyword ||
       url.searchParams.get("q") === trimmedKeyword
     );
@@ -991,27 +1414,6 @@ function scrollScopeListToEnd(scope: DouyinScope): boolean {
 }
 
 /**
- * Diagnostic helper — finds the apparent inner scroll container by
- * walking ancestors of the last visible scope card, looking for a
- * node where scrollHeight > clientHeight (the canonical "this is the
- * scroller" signal). Returns its scrollHeight, or 0 when no scroller
- * was identified. Lets us see in debug logs whether (a) the page has
- * an inner overflow:auto container at all and (b) whether it's
- * growing across scroll rounds.
- */
-function findScopeScrollerHeight(): number {
-  const last = document.querySelector<HTMLElement>(
-    'a[href*="/video/"]:last-of-type, a[href*="/user/MS4w"]:last-of-type',
-  );
-  let cur: HTMLElement | null = last;
-  while (cur && cur !== document.body) {
-    if (cur.scrollHeight > cur.clientHeight + 5) return cur.scrollHeight;
-    cur = cur.parentElement;
-  }
-  return 0;
-}
-
-/**
  * Detect Douyin's "no more content" indicator on the current tab.
  * Returns the matched phrase when found (so the caller can log it),
  * or "" when the list still has more to load.
@@ -1081,12 +1483,25 @@ function detectEndOfFeed(): string {
   return "";
 }
 
+export function classifyDouyinScopeCompletion(input: {
+  itemCount: number;
+  secUid: string;
+  apiError: string;
+  identityError?: string;
+}): { status: ScopeResultPayload["status"]; error?: string } {
+  if (!input.secUid) {
+    return {
+      status: "degraded",
+      error: input.identityError || "no_sec_uid",
+    };
+  }
+  if (input.apiError) {
+    return { status: "degraded", error: input.apiError };
+  }
+  return { status: input.itemCount > 0 ? "ok" : "empty" };
+}
+
 async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
-  debugLog("runScope:start", {
-    scope: msg.scope,
-    page_url: location.href,
-    inject_status: msg.debug_inject_status,
-  });
   const { BootstrapItemSink, dyShouldContinueScroll, ingestMainWorldFetchMessage } =
     await loadTaskExecutorHelpers();
   const { extractDouyinItemsFromDocument } = await loadDomExtractor();
@@ -1108,8 +1523,10 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
   let apiItemsHarvested = 0;
   let apiPagesFetched = 0;
   let apiError = "";
+  let identityError = "";
 
   const onMessage = (event: MessageEvent): void => {
+    if (!isSameWindowSameOriginDouyinMessage(event, window)) return;
     const data = event?.data as { type?: unknown } | null;
     if (data && typeof data === "object" && data.type === "OPENBILICLAW_DOUYIN_AWEME_PAGE") {
       awemeMessagesReceived += 1;
@@ -1150,14 +1567,12 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
     // than chrome.tabs.update URL jumps). clickToScope handles both
     // the homepage→profile transition and the sub-tab switch.
     clickReport = await clickToScope(msg.scope);
-    debugLog("runScope:clickToScope_done", { scope: msg.scope, clickReport });
 
     // Re-inject MAIN-world fetch-tap after the click-driven SPA route.
     // Douyin's React app sometimes re-sets window.fetch on URL change,
     // which would silently bypass our wrap. Reinjecting guarantees
     // the latest live fetch is wrapped.
     reinjectFetchTap();
-    debugLog("runScope:reinjected_fetch_tap");
 
     // The MAIN-world fetch-tap auto-installs after waitForDouyinSdk
     // resolves. Give it a beat to settle so any pageload-time
@@ -1170,20 +1585,16 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
     // gives our XHR tap a sec_uid to broadcast.
     harvestDomSnapshot();
 
-    // API-driven harvest — primary path. UI scrolling on Douyin's
-    // user-tab list does not reliably trigger lazy-load (verified
-    // 2026-05-08), so we directly call the page's own paged
-    // endpoints via window.fetch (already X-Bogus signed by
-    // webmssdk). Need a sec_uid first — wait up to 4s for the
-    // page-bundle's initial XHR to leak it (caught by the XHR tap
-    // and broadcast as OPENBILICLAW_DOUYIN_SEC_UID).
-    for (let waited = 0; waited < 4_000 && !_detectedSecUid; waited += 200) {
-      await sleep(200);
-    }
-    if (_detectedSecUid) {
+    // API-driven harvest — primary path. RENDER_DATA and passive
+    // sec_user_id values are diagnostic candidates only; the final identity
+    // must come from the authoritative profile/self MAIN-world fetch (or its
+    // same-tab confirmed cache), preserving live cookie/signing context.
+    const identity = await resolveDouyinBootstrapSecUid();
+    identityError = identity.error ?? "";
+    if (identity.secUid) {
       const apiResult = await harvestScopeViaApiBridge(
         msg.scope,
-        _detectedSecUid,
+        identity.secUid,
         msg.max_items_per_scope,
       );
       apiPagesFetched = apiResult.pages;
@@ -1195,25 +1606,11 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
           if (item.scope === msg.scope) allItems.push(item);
         }
       }
-      debugLog("api_harvest_done", {
-        scope: msg.scope,
-        pages: apiResult.pages,
-        items_total: apiResult.items.length,
-        items_new: apiItemsHarvested,
-        error: apiError,
-      });
-    } else {
-      debugLog("api_harvest_skipped", { scope: msg.scope, reason: "no_sec_uid" });
     }
 
-    const anchorSelector =
-      msg.scope === "dy_follow"
-        ? 'a[href*="/user/MS4w"]'
-        : 'a[href*="/video/"]';
     let stagnantRounds = 0;
     for (let round = 0; round < msg.max_scroll_rounds; round += 1) {
       const beforeCount = sink.scopeCounts()[msg.scope];
-      const beforeDomSize = document.querySelectorAll(anchorSelector).length;
 
       // Trigger Douyin's virtual-list pagination. Two strategies in
       // sequence:
@@ -1233,19 +1630,7 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
       harvestDomSnapshot();
 
       const afterCount = sink.scopeCounts()[msg.scope];
-      const afterDomSize = document.querySelectorAll(anchorSelector).length;
       endOfFeedPhrase = detectEndOfFeed();
-      debugLog("scroll_round", {
-        scope: msg.scope,
-        round,
-        beforeCount,
-        afterCount,
-        beforeDomSize,
-        afterDomSize,
-        scrollY: window.scrollY,
-        innerScrollerHeight: findScopeScrollerHeight(),
-        endOfFeed: endOfFeedPhrase,
-      });
       stagnantRounds = afterCount > beforeCount ? 0 : stagnantRounds + 1;
 
       if (endOfFeedPhrase) break; // page tells us we're done
@@ -1268,12 +1653,19 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
     // we'd otherwise miss because the loop broke before re-scanning.
     harvestDomSnapshot();
 
+    const completion = classifyDouyinScopeCompletion({
+      itemCount: allItems.length,
+      secUid: _detectedSecUid,
+      apiError,
+      identityError,
+    });
     return {
       task_id: msg.task_id,
       scope: msg.scope,
       items: allItems,
       scope_count: sink.scopeCounts()[msg.scope],
-      status: allItems.length > 0 ? "ok" : "empty",
+      status: completion.status,
+      error: completion.error,
       debug: {
         fetch_tap_install_status: _lastFetchTapInstallStatus,
         aweme_messages_received: awemeMessagesReceived,
@@ -1283,6 +1675,8 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
         api_pages_fetched: apiPagesFetched,
         api_error: apiError,
         sec_uid: _detectedSecUid,
+        sec_uid_source: _detectedSecUidSource,
+        identity_error: identityError,
         end_of_feed: endOfFeedPhrase,
         inject_status: msg.debug_inject_status,
         page_url: clickReport.page_url,
@@ -1307,6 +1701,8 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
         api_pages_fetched: apiPagesFetched,
         api_error: apiError,
         sec_uid: _detectedSecUid,
+        sec_uid_source: _detectedSecUidSource,
+        identity_error: identityError,
         end_of_feed: endOfFeedPhrase,
         inject_status: msg.debug_inject_status,
         page_url: clickReport.page_url,
@@ -1319,30 +1715,65 @@ async function runScope(msg: ScopeExecuteMessage): Promise<ScopeResultPayload> {
   }
 }
 
+// Adaptive search-scroll loop budget: up to 10 rounds, stop after 2
+// consecutive rounds without item growth. Each round polls for growth
+// every 250ms up to 3s instead of always burning a fixed sleep.
+const SEARCH_SCROLL_ROUND_CAP = 10;
+const SEARCH_SCROLL_STAGNANT_LIMIT = 2;
+const SEARCH_SCROLL_GROWTH_POLL_INTERVAL_MS = 250;
+const SEARCH_SCROLL_GROWTH_POLL_TIMEOUT_MS = 3_000;
+
 async function runSearch(msg: SearchExecuteMessage): Promise<SearchResultPayload> {
-  const { extractDouyinSearchItemsFromDocument } = await loadDomExtractor();
+  const { extractDouyinSearchItemsFromDocument, pickSearchScrollTarget } =
+    await loadDomExtractor();
   const maxItems = Math.max(1, Math.floor(msg.max_items));
   let apiPagesFetched = 0;
   let apiItemsHarvested = 0;
   let domItemsHarvested = 0;
+  let scrollRounds = 0;
   let apiError = "";
   let uiTriggered = false;
   let searchNavigationOk = false;
   let searchSubmitMethod = "none";
   const allItems: DouyinSearchItem[] = [];
-  const detachPassiveCollector = attachPassiveDiscoveryCollector(allItems);
+  const passiveCollector = attachPassiveDiscoveryCollector(
+    allItems,
+    "dy_search",
+    msg.resume_after_navigation === true,
+  );
 
   try {
     reinjectFetchTap();
     await sleep(POST_INSTALL_SETTLE_MS);
-    const triggerResult = await triggerSearchUi(msg.keyword);
-    uiTriggered = triggerResult.submitted;
-    searchNavigationOk = triggerResult.navigated;
-    searchSubmitMethod = triggerResult.method;
-    debugLog("search_ui_triggered", { keyword: msg.keyword, ...triggerResult });
+    if (msg.resume_after_navigation) {
+      // A real button/Enter submission may perform a full document load. The
+      // original isolated-world promise disappears in that case, so the
+      // dispatcher re-sends the task into the new document and asks us to
+      // resume at collection. Never submit the search a second time here.
+      uiTriggered = true;
+      searchNavigationOk = isDouyinSearchResultUrl(location.href, msg.keyword);
+      searchSubmitMethod = "navigation_resume";
+    } else {
+      const triggerResult = await triggerSearchUi(msg.keyword);
+      uiTriggered = triggerResult.submitted;
+      searchNavigationOk = triggerResult.navigated;
+      searchSubmitMethod = triggerResult.method;
+    }
     await sleep(2_000);
 
-    for (let round = 0; round < 4 && allItems.length < maxItems; round += 1) {
+    // Passive-first pagination: scroll the REAL results container so the
+    // page itself issues properly-signed page-2..N search requests, and
+    // harvest them via the passive fetch-tap. Raw allItems re-accumulates
+    // the same DOM cards every round, so growth is measured on the
+    // deduped in-scope count.
+    const dedupedCount = (): number =>
+      filterDiscoveryItemsForScope(allItems, "dy_search", maxItems).length;
+    const roundController = createScrollRoundController({
+      roundCap: SEARCH_SCROLL_ROUND_CAP,
+      stagnantLimit: SEARCH_SCROLL_STAGNANT_LIMIT,
+      maxItems,
+    });
+    while (roundController.shouldContinue(dedupedCount())) {
       const domItems = extractDouyinSearchItemsFromDocument(
         document,
         location.origin,
@@ -1350,8 +1781,25 @@ async function runSearch(msg: SearchExecuteMessage): Promise<SearchResultPayload
       );
       domItemsHarvested = Math.max(domItemsHarvested, domItems.length);
       allItems.push(...domItems);
-      window.scrollBy({ top: window.innerHeight * 2, behavior: "auto" });
-      await sleep(1_000);
+      const countAtScroll = dedupedCount();
+      // Re-pick the scroll target each round — the SPA can re-render the
+      // results container. Fall back to window scrolling when no inner
+      // scrollable container is found.
+      const scrollTarget = pickSearchScrollTarget(document);
+      if (scrollTarget) {
+        scrollTarget.scrollTop = scrollTarget.scrollHeight;
+      } else {
+        window.scrollBy({ top: window.innerHeight * 2, behavior: "auto" });
+      }
+      for (
+        let waited = 0;
+        waited < SEARCH_SCROLL_GROWTH_POLL_TIMEOUT_MS;
+        waited += SEARCH_SCROLL_GROWTH_POLL_INTERVAL_MS
+      ) {
+        await sleep(SEARCH_SCROLL_GROWTH_POLL_INTERVAL_MS);
+        if (dedupedCount() > countAtScroll) break;
+      }
+      scrollRounds = roundController.roundsExecuted();
     }
 
     let items = filterDiscoveryItemsForScope(allItems, "dy_search", maxItems);
@@ -1367,12 +1815,23 @@ async function runSearch(msg: SearchExecuteMessage): Promise<SearchResultPayload
         apiError = String(err);
       }
     }
+    const completion = classifyDouyinDiscoveryCompletion({
+      source: "search",
+      itemCount: items.length,
+      injectStatus: msg.debug_inject_status,
+      fetchTapInstallStatus: _lastFetchTapInstallStatus,
+      apiError,
+      uiTriggered,
+      searchNavigationOk,
+      alternateCollectionCompleted: apiPagesFetched > 0 && !apiError,
+    });
     return {
       task_id: msg.task_id,
       keyword: msg.keyword,
       items,
       scope_count: items.length,
-      status: items.length > 0 ? "ok" : "empty",
+      status: completion.status,
+      ...(completion.error ? { error: completion.error } : {}),
       debug: {
         fetch_tap_install_status: _lastFetchTapInstallStatus,
         api_pages_fetched: apiPagesFetched,
@@ -1382,6 +1841,11 @@ async function runSearch(msg: SearchExecuteMessage): Promise<SearchResultPayload
         ui_triggered: uiTriggered,
         search_navigation_ok: searchNavigationOk,
         search_submit_method: searchSubmitMethod,
+        navigation_resumed: msg.resume_after_navigation === true,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
+        scroll_rounds: scrollRounds,
         inject_status: msg.debug_inject_status,
         page_url: location.href,
       },
@@ -1404,12 +1868,17 @@ async function runSearch(msg: SearchExecuteMessage): Promise<SearchResultPayload
         ui_triggered: uiTriggered,
         search_navigation_ok: searchNavigationOk,
         search_submit_method: searchSubmitMethod,
+        navigation_resumed: msg.resume_after_navigation === true,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
+        scroll_rounds: scrollRounds,
         inject_status: msg.debug_inject_status,
         page_url: location.href,
       },
     };
   } finally {
-    detachPassiveCollector();
+    passiveCollector.detach();
   }
 }
 
@@ -1424,17 +1893,12 @@ async function runHot(msg: HotExecuteMessage): Promise<HotResultPayload> {
   let uiTriggered = false;
   const fallbackSeedAwemeId = String(msg.seed_aweme_id ?? "").trim();
   const allItems: DouyinSearchItem[] = [];
-  const detachPassiveCollector = attachPassiveDiscoveryCollector(allItems);
+  const passiveCollector = attachPassiveDiscoveryCollector(allItems, "dy_hot");
 
   try {
     reinjectFetchTap();
     await sleep(POST_INSTALL_SETTLE_MS);
     uiTriggered = await triggerHotUi(msg.sentence_id, msg.word);
-    debugLog("hot_ui_triggered", {
-      sentence_id: msg.sentence_id,
-      word: msg.word,
-      uiTriggered,
-    });
     await sleep(2_000);
     seedAwemeId = await waitForCurrentVideoAwemeId(2_000);
     if (!seedAwemeId && fallbackSeedAwemeId) {
@@ -1483,19 +1947,32 @@ async function runHot(msg: HotExecuteMessage): Promise<HotResultPayload> {
         apiError = String(err);
       }
     }
+    const completion = classifyDouyinDiscoveryCompletion({
+      source: "hot",
+      itemCount: items.length,
+      injectStatus: msg.debug_inject_status,
+      fetchTapInstallStatus: _lastFetchTapInstallStatus,
+      apiError,
+      uiTriggered,
+      alternateCollectionCompleted: apiPagesFetched > 0 && !apiError,
+    });
     return {
       task_id: msg.task_id,
       sentence_id: msg.sentence_id,
       word: msg.word,
       items,
       scope_count: items.length,
-      status: items.length > 0 ? "ok" : "empty",
+      status: completion.status,
+      ...(completion.error ? { error: completion.error } : {}),
       debug: {
         fetch_tap_install_status: _lastFetchTapInstallStatus,
         api_pages_fetched: apiPagesFetched,
         api_items_harvested: apiItemsHarvested,
         api_error: apiError,
         dom_items_harvested: domItemsHarvested,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
         seed_aweme_id: seedAwemeId,
         ui_triggered: uiTriggered,
         inject_status: msg.debug_inject_status,
@@ -1518,6 +1995,9 @@ async function runHot(msg: HotExecuteMessage): Promise<HotResultPayload> {
         api_items_harvested: apiItemsHarvested,
         api_error: apiError || String(err),
         dom_items_harvested: domItemsHarvested,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
         seed_aweme_id: seedAwemeId,
         ui_triggered: uiTriggered,
         inject_status: msg.debug_inject_status,
@@ -1525,7 +2005,7 @@ async function runHot(msg: HotExecuteMessage): Promise<HotResultPayload> {
       },
     };
   } finally {
-    detachPassiveCollector();
+    passiveCollector.detach();
   }
 }
 
@@ -1537,7 +2017,7 @@ async function runFeed(msg: FeedExecuteMessage): Promise<FeedResultPayload> {
   let domItemsHarvested = 0;
   let apiError = "";
   const allItems: DouyinSearchItem[] = [];
-  const detachPassiveCollector = attachPassiveDiscoveryCollector(allItems);
+  const passiveCollector = attachPassiveDiscoveryCollector(allItems, "dy_feed");
 
   try {
     reinjectFetchTap();
@@ -1548,6 +2028,7 @@ async function runFeed(msg: FeedExecuteMessage): Promise<FeedResultPayload> {
         document,
         location.origin,
         maxItems,
+        true,
       ).map((item) => ({ ...item, scope: "dy_feed" as const }));
       domItemsHarvested = Math.max(domItemsHarvested, domItems.length);
       allItems.push(...domItems);
@@ -1556,16 +2037,29 @@ async function runFeed(msg: FeedExecuteMessage): Promise<FeedResultPayload> {
     }
 
     const items = filterDiscoveryItemsForScope(allItems, "dy_feed", maxItems);
+    const completion = classifyDouyinDiscoveryCompletion({
+      source: "feed",
+      itemCount: items.length,
+      injectStatus: msg.debug_inject_status,
+      fetchTapInstallStatus: _lastFetchTapInstallStatus,
+      apiError,
+      passiveResponsesObserved: passiveCollector.responseCount(),
+      domItemsHarvested,
+    });
     return {
       task_id: msg.task_id,
       items,
       scope_count: items.length,
-      status: items.length > 0 ? "ok" : "empty",
+      status: completion.status,
+      ...(completion.error ? { error: completion.error } : {}),
       debug: {
         fetch_tap_install_status: _lastFetchTapInstallStatus,
         api_pages_fetched: apiPagesFetched,
         api_items_harvested: apiItemsHarvested,
         dom_items_harvested: domItemsHarvested,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
         api_error: apiError,
         inject_status: msg.debug_inject_status,
         page_url: location.href,
@@ -1584,13 +2078,16 @@ async function runFeed(msg: FeedExecuteMessage): Promise<FeedResultPayload> {
         api_pages_fetched: apiPagesFetched,
         api_items_harvested: apiItemsHarvested,
         dom_items_harvested: domItemsHarvested,
+        passive_items_harvested: passiveCollector.passiveCount(),
+        passive_responses_observed: passiveCollector.responseCount(),
+        early_buffer_items: passiveCollector.earlyBufferCount(),
         api_error: apiError || String(err),
         inject_status: msg.debug_inject_status,
         page_url: location.href,
       },
     };
   } finally {
-    detachPassiveCollector();
+    passiveCollector.detach();
   }
 }
 
@@ -1612,6 +2109,12 @@ export function isValidSearchExecuteMessage(value: unknown): value is SearchExec
   if (typeof v.task_id !== "string" || !v.task_id) return false;
   if (typeof v.keyword !== "string" || !v.keyword.trim()) return false;
   if (typeof v.max_items !== "number") return false;
+  if (
+    v.resume_after_navigation !== undefined &&
+    typeof v.resume_after_navigation !== "boolean"
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -1632,6 +2135,12 @@ export function isValidFeedExecuteMessage(value: unknown): value is FeedExecuteM
   return Number.isFinite(v.max_items) && v.max_items > 0;
 }
 
+// A SPA URL change keeps the original isolated world alive while the
+// background navigation watcher may also send a resume message. Keep one
+// execution per task/keyword in a document; a genuine full navigation gets a
+// fresh JS world and therefore accepts the resume exactly once.
+const activeSearchExecutions = new Set<string>();
+
 export function registerDyScopeExecutor(): void {
   if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.onMessage) return;
   chrome.runtime.onMessage.addListener(
@@ -1639,22 +2148,13 @@ export function registerDyScopeExecutor(): void {
       if (message.action !== "DY_SCOPE_EXECUTE") return false;
       const data = message.data;
       if (!isValidScopeExecuteMessage(data)) {
-        debugLog("listener:invalid_scope_execute", { message });
         return false;
       }
-      debugLog("listener:DY_SCOPE_EXECUTE_received", {
-        scope: (data as { scope: string }).scope,
-        page_url: location.href,
-      });
 
       void runScope(data).then((result) => {
-        debugLog("runScope:returning", {
-          scope: result.scope,
-          status: result.status,
-          items_count: result.items.length,
-        });
-        chrome.runtime.sendMessage({ action: "DY_SCOPE_RESULT", data: result }).catch((err) => {
-          debugLog("listener:DY_SCOPE_RESULT_send_failed", { error: String(err) });
+        chrome.runtime.sendMessage({ action: "DY_SCOPE_RESULT", data: result }).catch(() => {
+          // Service worker may have torn down between scopes; the dispatcher
+          // will eventually time out and report the task failure.
         });
       });
 
@@ -1667,24 +2167,24 @@ export function registerDyScopeExecutor(): void {
       if (message.action !== "DY_SEARCH_EXECUTE") return false;
       const data = message.data;
       if (!isValidSearchExecuteMessage(data)) {
-        debugLog("listener:invalid_search_execute", { message });
         return false;
       }
-      debugLog("listener:DY_SEARCH_EXECUTE_received", {
-        keyword: (data as { keyword: string }).keyword,
-        page_url: location.href,
-      });
 
-      void runSearch(data).then((result) => {
-        debugLog("runSearch:returning", {
-          keyword: result.keyword,
-          status: result.status,
-          items_count: result.items.length,
+      const executionKey = `${data.task_id}\u0000${data.keyword}`;
+      if (activeSearchExecutions.has(executionKey)) return false;
+      activeSearchExecutions.add(executionKey);
+      void runSearch(data)
+        .then((result) => {
+          return chrome.runtime
+            .sendMessage({ action: "DY_SEARCH_RESULT", data: result })
+            .catch(() => {
+              // The dispatcher timeout is the retry/failure path if the worker
+              // disappears before the result can be delivered.
+            });
+        })
+        .finally(() => {
+          activeSearchExecutions.delete(executionKey);
         });
-        chrome.runtime.sendMessage({ action: "DY_SEARCH_RESULT", data: result }).catch((err) => {
-          debugLog("listener:DY_SEARCH_RESULT_send_failed", { error: String(err) });
-        });
-      });
 
       return false;
     },
@@ -1694,22 +2194,13 @@ export function registerDyScopeExecutor(): void {
       if (message.action !== "DY_HOT_EXECUTE") return false;
       const data = message.data;
       if (!isValidHotExecuteMessage(data)) {
-        debugLog("listener:invalid_hot_execute", { message });
         return false;
       }
-      debugLog("listener:DY_HOT_EXECUTE_received", {
-        sentence_id: (data as { sentence_id: string }).sentence_id,
-        page_url: location.href,
-      });
 
       void runHot(data).then((result) => {
-        debugLog("runHot:returning", {
-          sentence_id: result.sentence_id,
-          status: result.status,
-          items_count: result.items.length,
-        });
-        chrome.runtime.sendMessage({ action: "DY_HOT_RESULT", data: result }).catch((err) => {
-          debugLog("listener:DY_HOT_RESULT_send_failed", { error: String(err) });
+        chrome.runtime.sendMessage({ action: "DY_HOT_RESULT", data: result }).catch(() => {
+          // The dispatcher timeout is the retry/failure path if delivery
+          // fails while the service worker is being recycled.
         });
       });
 
@@ -1721,20 +2212,13 @@ export function registerDyScopeExecutor(): void {
       if (message.action !== "DY_FEED_EXECUTE") return false;
       const data = message.data;
       if (!isValidFeedExecuteMessage(data)) {
-        debugLog("listener:invalid_feed_execute", { message });
         return false;
       }
-      debugLog("listener:DY_FEED_EXECUTE_received", {
-        page_url: location.href,
-      });
 
       void runFeed(data).then((result) => {
-        debugLog("runFeed:returning", {
-          status: result.status,
-          items_count: result.items.length,
-        });
-        chrome.runtime.sendMessage({ action: "DY_FEED_RESULT", data: result }).catch((err) => {
-          debugLog("listener:DY_FEED_RESULT_send_failed", { error: String(err) });
+        chrome.runtime.sendMessage({ action: "DY_FEED_RESULT", data: result }).catch(() => {
+          // The dispatcher timeout is the retry/failure path if delivery
+          // fails while the service worker is being recycled.
         });
       });
 

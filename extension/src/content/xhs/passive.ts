@@ -11,10 +11,20 @@
  */
 
 import { pickMetricCount } from "../metric-count.ts";
+import {
+  NOTE_AUTHOR_SELECTOR,
+  NOTE_CARD_CONTAINER_SELECTOR,
+  NOTE_COVER_SELECTOR,
+  NOTE_TITLE_SELECTOR,
+} from "./selectors.ts";
 
 /** Note detail URL variants xhs exposes. We accept any non-empty segment
  *  after the prefix; backend validation can tighten the id shape. */
-const NOTE_PATH_PATTERNS = [/^\/explore\/[^/?#]+/i, /^\/discovery\/item\/[^/?#]+/i];
+const NOTE_PATH_PATTERNS = [
+  /^\/explore\/[^/?#]+/i,
+  /^\/discovery\/item\/[^/?#]+/i,
+  /^\/search_result\/[^/?#]+/i,
+];
 
 /** Query params we preserve. xsec_token is required by xhs detail APIs. */
 const PRESERVED_QUERY_PARAMS = new Set(["xsec_token"]);
@@ -48,10 +58,20 @@ export interface XhsNoteMetadata {
   title: string;
   author: string;
   cover_url: string;
+  /**
+   * Cover bytes (base64) harvested in the page context by cover-harvest.ts —
+   * fetched at scrape time while the rotating xhscdn URL token is freshest,
+   * so caching no longer depends on the backend's own fetch succeeding.
+   * Absent when the fetch failed.
+   */
+  cover_data?: string;
+  cover_content_type?: string;
   view_count?: number;
   like_count?: number;
   collect_count?: number;
   comment_count?: number;
+  published_at?: string | number;
+  published_label?: string;
 }
 
 /**
@@ -80,6 +100,7 @@ export interface XhsUrlObservation {
 }
 
 export function classifyXhsPageType(url: string): XhsPageType {
+  if (/\/search_result\/[^/?#]+/i.test(url)) return "note";
   if (url.includes("/search_result")) return "search";
   if (url.includes("/user/profile/")) return "profile";
   if (url.includes("/explore/") || url.includes("/discovery/item/")) return "note";
@@ -166,12 +187,9 @@ export function extractNoteMetadataFromAnchor(
   if (!url) return null;
 
   // Walk up to the card container — xhs uses .note-item or a nearby section/div
-  const card =
-    anchor.closest(".note-item, section, [class*='note'], [class*='card']") ?? anchor;
+  const card = anchor.closest(NOTE_CARD_CONTAINER_SELECTOR) ?? anchor;
 
-  const titleEl = card.querySelector(
-    ".title, .note-title, [class*='title'] span, [class*='title']",
-  );
+  const titleEl = card.querySelector(NOTE_TITLE_SELECTOR);
   const title = titleEl?.textContent?.trim() || anchor.title || "";
 
   // Skip notes with empty title — xhs frequently changes DOM structure,
@@ -179,16 +197,21 @@ export function extractNoteMetadataFromAnchor(
   // recommendation cards and wastes LLM classification budget.
   if (!title) return null;
 
-  const authorEl = card.querySelector(
-    ".author-wrapper .name, .author .name, .user-name, [class*='author'] .name, .nickname",
-  );
+  const authorEl = card.querySelector(NOTE_AUTHOR_SELECTOR);
   const author = authorEl?.textContent?.trim() || "";
 
-  const coverImg = card.querySelector(
-    "img.cover, .cover img, img[src*='xhscdn'], img[src*='sns-img'], img",
-  );
+  const coverImg = card.querySelector(NOTE_COVER_SELECTOR);
+  // Lazy-load placeholders (data:/blob: inline PNGs) are not covers — in
+  // background tabs they never upgrade, and storing them yields cards that
+  // can never render. Leave cover_url empty so state-based backfill
+  // (cover-harvest.ts) can supply the real CDN URL.
+  const rawCover = coverImg?.getAttribute("src") || coverImg?.getAttribute("data-src") || "";
+  const trimmedCover = rawCover.trim();
   const cover_url =
-    coverImg?.getAttribute("src") || coverImg?.getAttribute("data-src") || "";
+    trimmedCover.toLowerCase().startsWith("data:") ||
+    trimmedCover.toLowerCase().startsWith("blob:")
+      ? ""
+      : trimmedCover;
 
   const view_count = pickMetricCount(card, ["浏览", "观看", "view"]);
   const like_count = pickMetricCount(card, ["赞", "点赞", "喜欢", "like"]);

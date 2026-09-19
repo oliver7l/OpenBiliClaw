@@ -7,6 +7,11 @@
  */
 
 import { apiUrl } from "../shared/backend-endpoint.ts";
+import { authenticatedFetch } from "../shared/auth.ts";
+import { withTaskTabMarker } from "../shared/task-tab.ts";
+import { createTaskTab } from "./task-tab.ts";
+
+const BILI_TASK_MARKER = "openbiliclaw_bili_task";
 
 const _MUTEX_STALE_MS = 6 * 60 * 1000;
 function tryAcquireDispatcherMutex(label: string): boolean {
@@ -51,6 +56,10 @@ export interface BiliTask {
   limit?: number;
   page?: number;
   page_size?: number;
+  order?: "totalrank" | "pubdate";
+  discovery_lane?: "recent";
+  pubtime_begin?: number;
+  pubtime_end?: number;
   source_keyword_id?: number;
 }
 
@@ -85,7 +94,17 @@ export function buildBiliTaskUrl(task: BiliTask): string | null {
   if (typeof task.page === "number" && Number.isFinite(task.page) && task.page > 1) {
     params.push(`page=${Math.floor(task.page)}`);
   }
-  return `https://search.bilibili.com/all?${params.join("&")}`;
+  if (task.order === "pubdate") params.push("order=pubdate");
+  if (typeof task.pubtime_begin === "number") {
+    params.push(`pubtime_begin=${Math.floor(task.pubtime_begin)}`);
+  }
+  if (typeof task.pubtime_end === "number") {
+    params.push(`pubtime_end=${Math.floor(task.pubtime_end)}`);
+  }
+  return withTaskTabMarker(
+    `https://search.bilibili.com/all?${params.join("&")}`,
+    BILI_TASK_MARKER,
+  );
 }
 
 export function isValidBiliTask(task: unknown): task is BiliTask {
@@ -98,6 +117,12 @@ export function isValidBiliTask(task: unknown): task is BiliTask {
   for (const key of ["limit", "page", "page_size"] as const) {
     if (t[key] === undefined) continue;
     if (typeof t[key] !== "number" || !Number.isFinite(t[key]) || t[key] <= 0) return false;
+  }
+  if (t.order !== undefined && t.order !== "totalrank" && t.order !== "pubdate") return false;
+  if (t.discovery_lane !== undefined && t.discovery_lane !== "recent") return false;
+  for (const key of ["pubtime_begin", "pubtime_end"] as const) {
+    if (t[key] === undefined) continue;
+    if (typeof t[key] !== "number" || !Number.isFinite(t[key]) || t[key] < 0) return false;
   }
   return true;
 }
@@ -114,6 +139,8 @@ export function buildBiliExecuteMessageData(task: BiliTask): Record<string, unkn
   };
   if (task.limit !== undefined) data.limit = task.limit;
   if (task.page_size !== undefined) data.page_size = task.page_size;
+  if (task.pubtime_begin !== undefined) data.pubtime_begin = task.pubtime_begin;
+  if (task.pubtime_end !== undefined) data.pubtime_end = task.pubtime_end;
   return data;
 }
 
@@ -123,7 +150,9 @@ export function buildBiliExecuteMessageData(task: BiliTask): Record<string, unkn
 
 async function fetchNextTask(): Promise<BiliTask | null> {
   try {
-    const response = await fetch(await apiUrl("/sources/bili/next-task"), { method: "GET" });
+    const response = await authenticatedFetch(await apiUrl("/sources/bili/next-task"), {
+      method: "GET",
+    });
     if (response.status === 204) return null;
     if (!response.ok) return null;
     const payload: unknown = await response.json();
@@ -135,7 +164,7 @@ async function fetchNextTask(): Promise<BiliTask | null> {
 
 async function postTaskResult(result: BiliTaskResult): Promise<void> {
   try {
-    await fetch(await apiUrl("/sources/bili/task-result"), {
+    await authenticatedFetch(await apiUrl("/sources/bili/task-result"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(result),
@@ -258,7 +287,7 @@ export async function executeTask(task: BiliTask): Promise<void> {
   currentTaskId = task.id;
 
   try {
-    const tab = await chrome.tabs.create({ url, active: false });
+    const tab = await createTaskTab({ url, active: false });
     taskTabId = tab.id ?? null;
   } catch {
     await postTaskResult({ task_id: task.id, status: "failed", error: "tab_create_failed" });

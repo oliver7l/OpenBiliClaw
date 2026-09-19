@@ -22,15 +22,23 @@ const GF_LOG = new Array(256).fill(0);
   }
 }
 
-export function buildMobileWebUrl({ host, port } = {}) {
+export function buildMobileWebUrl({ scheme, host, port } = {}) {
+  const safeScheme = scheme === "https" ? "https" : "http";
   const safeHost = String(host || "127.0.0.1").trim() || "127.0.0.1";
+  const urlHost = safeHost.includes(":") && !safeHost.startsWith("[") ? `[${safeHost}]` : safeHost;
   const safePort = Number.isInteger(Number(port)) ? Number(port) : 8420;
-  return `http://${safeHost}:${safePort}/m/`;
+  return `${safeScheme}://${urlHost}:${safePort}/m/`;
 }
 
 export function isLoopbackMobileHost(host) {
   const value = String(host || "").trim().toLowerCase();
-  return value === "" || value === "localhost" || value === "::1" || value.startsWith("127.");
+  return (
+    value === "" ||
+    value === "localhost" ||
+    value === "::1" ||
+    value === "[::1]" ||
+    value.startsWith("127.")
+  );
 }
 
 export function getMobileQrViewState(endpoint = {}) {

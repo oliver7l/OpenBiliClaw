@@ -15,15 +15,68 @@ import {
   executeTask,
   handleTaskResult,
   isValidTask,
+  pollXhsTaskOnce,
+  postXhsNativeSaveResult,
   type XhsTask,
 } from "../src/background/xhs-task-dispatcher.ts";
+import type { NativeSaveResult, NativeSaveTask } from "../src/shared/native-save.ts";
+
+const nativeTask: NativeSaveTask = {
+  id: "123e4567-e89b-42d3-a456-426614174011",
+  type: "native_save",
+  platform: "xiaohongshu",
+  platform_slug: "xhs",
+  item_key: "xiaohongshu:66aabbcc000000001e00dead",
+  content_id: "66aabbcc000000001e00dead",
+  content_url: "https://www.xiaohongshu.com/explore/66aabbcc000000001e00dead",
+  content_type: "note",
+  requested_action: "favorite",
+  resolved_action: "favorite",
+  target_label: "小红书收藏",
+};
+
+test("xhs task native_save union and dispatcher close through the exact authenticated result contract", async () => {
+  assert.equal(isValidTask(nativeTask), true);
+  assert.equal(isValidTask({ ...nativeTask, platform: "douyin", platform_slug: "dy" }), false);
+  assert.equal(buildTaskUrl(nativeTask), nativeTask.content_url);
+  const result: NativeSaveResult = {
+    task_id: nativeTask.id,
+    item_key: nativeTask.item_key,
+    status: "synced",
+    error_code: "",
+    error_message: "",
+  };
+  const calls: unknown[] = [];
+  await executeTask(nativeTask, {
+    run: async (receivedTask, slug, postResult) => {
+      calls.push([receivedTask, slug]);
+      await postResult(result);
+    },
+    postResult: async (received) => { calls.push(received); },
+  });
+  assert.deepEqual(calls, [[nativeTask, "xhs"], result]);
+
+  const requests: unknown[] = [];
+  await postXhsNativeSaveResult(result, {
+    resolveUrl: async (path) => `http://127.0.0.1:8420/api${path}`,
+    fetch: async (input, init) => { requests.push([input, init]); },
+  });
+  assert.deepEqual(requests, [[
+    "http://127.0.0.1:8420/api/sources/xhs/task-result",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(result),
+    },
+  ]]);
+});
 
 test("buildTaskUrl encodes keyword search URL", () => {
   const task: XhsTask = { id: "t1", type: "search", keyword: "机械键盘" };
   const url = buildTaskUrl(task);
   assert.equal(
     url,
-    "https://www.xiaohongshu.com/search_result?keyword=%E6%9C%BA%E6%A2%B0%E9%94%AE%E7%9B%98",
+    "https://www.xiaohongshu.com/search_result?keyword=%E6%9C%BA%E6%A2%B0%E9%94%AE%E7%9B%98&openbiliclaw_xhs_task=1",
   );
 });
 
@@ -35,13 +88,13 @@ test("buildTaskUrl returns creator URL directly", () => {
   };
   assert.equal(
     buildTaskUrl(task),
-    "https://www.xiaohongshu.com/user/profile/abc",
+    "https://www.xiaohongshu.com/user/profile/abc?openbiliclaw_xhs_task=1",
   );
 });
 
 test("buildTaskUrl routes bootstrap profile tasks to explore", () => {
   const task: XhsTask = { id: "t-bootstrap", type: "bootstrap_profile" };
-  assert.equal(buildTaskUrl(task), "https://www.xiaohongshu.com/explore");
+  assert.equal(buildTaskUrl(task), "https://www.xiaohongshu.com/explore?openbiliclaw_xhs_task=1");
 });
 
 test("buildTaskUrl returns null for search without keyword", () => {
@@ -143,7 +196,7 @@ interface ChromeMock {
   tabs: {
     create: (opts: { url: string; active?: boolean }) => Promise<{ id: number }>;
     query: (opts: { active?: boolean; currentWindow?: boolean }) => Promise<Array<{ id?: number; url?: string; status?: string }>>;
-    update: (tabId: number, opts: { url?: string; active?: boolean }) => Promise<void>;
+    update: (tabId: number, opts: { url?: string; active?: boolean; muted?: boolean }) => Promise<void>;
     remove: (tabId: number) => Promise<void>;
     sendMessage: (tabId: number, message: unknown) => Promise<void>;
     onUpdated: {
@@ -161,7 +214,7 @@ interface MockState {
   sentMessages: { tabId: number; message: unknown }[];
   sendMessageImpl: (tabId: number, message: unknown) => Promise<void>;
   fetchCalls: { url: string; body?: unknown }[];
-  updatedTabs: { tabId: number; url?: string; active?: boolean }[];
+  updatedTabs: { tabId: number; url?: string; active?: boolean; muted?: boolean }[];
   removedTabs: number[];
   queriedTabs: { active?: boolean; currentWindow?: boolean }[];
   queryResult: Array<{ id?: number; url?: string; status?: string }>;
@@ -239,6 +292,39 @@ async function flush(): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
+test("concurrent XHS poll triggers share one task claim", async () => {
+  const state = installChromeMock();
+
+  await Promise.all([pollXhsTaskOnce(), pollXhsTaskOnce()]);
+
+  assert.equal(
+    state.fetchCalls.filter((call) => call.url.endsWith("/sources/xhs/next-task")).length,
+    1,
+  );
+});
+
+test("XHS poll does not claim a backend task while another source holds the mutex", async () => {
+  const state = installChromeMock();
+  const mutexState = globalThis as unknown as {
+    __OBC_DISPATCHER_MUTEX_HOLDER__?: string;
+    __OBC_DISPATCHER_MUTEX_HELD_SINCE__?: number;
+  };
+  mutexState.__OBC_DISPATCHER_MUTEX_HOLDER__ = "dy";
+  mutexState.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ = Date.now();
+
+  try {
+    await pollXhsTaskOnce();
+    assert.equal(
+      state.fetchCalls.filter((call) => call.url.endsWith("/sources/xhs/next-task")).length,
+      0,
+      "the backend claim must happen only after the cross-source mutex is acquired",
+    );
+  } finally {
+    mutexState.__OBC_DISPATCHER_MUTEX_HOLDER__ = undefined;
+    mutexState.__OBC_DISPATCHER_MUTEX_HELD_SINCE__ = undefined;
+  }
+});
+
 test("executeTask sends XHS_TASK_EXECUTE once the tab finishes loading", async () => {
   const state = installChromeMock();
   const chrome = (globalThis as unknown as { chrome: ChromeMock }).chrome;
@@ -297,14 +383,14 @@ test("executeTask opens bootstrap_profile in a foreground tab regardless of scro
   await executeTask(task);
 
   assert.deepEqual(state.createdTabs, [
-    { url: "https://www.xiaohongshu.com/explore", active: true },
+    { url: "https://www.xiaohongshu.com/explore?openbiliclaw_xhs_task=1", active: true },
   ]);
 
   await handleTaskResult({ task_id: "t-bootstrap-no-scroll", urls: [], status: "ok" });
   await flush();
 });
 
-test("executeTask opens search tasks in a background tab", async () => {
+test("executeTask keeps search discovery in a background tab", async () => {
   const state = installChromeMock();
 
   const task: XhsTask = { id: "t-search-bg", type: "search", keyword: "demo" };
@@ -312,13 +398,58 @@ test("executeTask opens search tasks in a background tab", async () => {
 
   assert.deepEqual(state.createdTabs, [
     {
-      url: "https://www.xiaohongshu.com/search_result?keyword=demo",
+      url: "https://www.xiaohongshu.com/search_result?keyword=demo&openbiliclaw_xhs_task=1",
       active: false,
     },
   ]);
+  assert.deepEqual(state.queriedTabs, []);
 
   await handleTaskResult({ task_id: "t-search-bg", urls: [], status: "ok" });
   await flush();
+  assert.deepEqual(state.removedTabs, [42]);
+  assert.deepEqual(state.updatedTabs, [{ tabId: 42, muted: true }]);
+});
+
+test("rate-limited task result is reported and closes the task tab", async () => {
+  const state = installChromeMock();
+  const task: XhsTask = {
+    id: "t-search-rate-limited",
+    type: "search",
+    keyword: "demo",
+  };
+  await executeTask(task);
+
+  await handleTaskResult({
+    task_id: task.id,
+    urls: [],
+    notes: [],
+    status: "rate_limited",
+    error: "xhs_rate_limited",
+    debug: {
+      xhs_risk_control: {
+        reason: "security_verification",
+      },
+    },
+  });
+  await flush();
+
+  const resultPost = state.fetchCalls.find((call) =>
+    call.url.endsWith("/sources/xhs/task-result")
+  );
+  assert.ok(resultPost);
+  assert.deepEqual(resultPost.body, {
+    task_id: task.id,
+    urls: [],
+    notes: [],
+    status: "rate_limited",
+    error: "xhs_rate_limited",
+    debug: {
+      xhs_risk_control: {
+        reason: "security_verification",
+      },
+    },
+  });
+  assert.deepEqual(state.removedTabs, [42]);
 });
 
 test("executeTask opens explore active and waits after clicked profile navigation", async () => {
@@ -334,7 +465,7 @@ test("executeTask opens explore active and waits after clicked profile navigatio
 
   assert.deepEqual(state.createdTabs, [
     {
-      url: "https://www.xiaohongshu.com/explore",
+      url: "https://www.xiaohongshu.com/explore?openbiliclaw_xhs_task=1",
       active: true,
     },
   ]);
@@ -363,7 +494,11 @@ test("executeTask opens explore active and waits after clicked profile navigatio
   });
   await flush();
 
-  assert.deepEqual(state.updatedTabs, [], "clicked profile navigation must not call tabs.update");
+  assert.deepEqual(
+    state.updatedTabs,
+    [{ tabId: 42, muted: true }],
+    "clicked profile navigation must not call tabs.update beyond the initial mute",
+  );
 
   chrome.tabs.onUpdated._emit(42, { status: "complete" });
   await flush();
@@ -441,9 +576,10 @@ test("bootstrap task follows a discovered profile URL before reporting the resul
   await flush();
 
   assert.deepEqual(state.updatedTabs, [
+    { tabId: 42, muted: true },
     {
       tabId: 42,
-      url: "https://www.xiaohongshu.com/user/profile/current-user",
+      url: "https://www.xiaohongshu.com/user/profile/current-user?openbiliclaw_xhs_task=1",
     },
   ]);
   assert.equal(

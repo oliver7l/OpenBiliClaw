@@ -1,5 +1,6 @@
 const DEFAULT_TITLE = "这条标题还没对上号";
 const DEFAULT_UP_NAME = "这位 UP 还没认出来";
+const DEFAULT_CREATOR_NAME = "这位创作者还没认出来";
 const DEFAULT_PORTRAIT = "画像还在慢慢攒，先多看一阵。";
 const DEFAULT_DELIGHT_TITLE = "这条惊喜推荐还没起好标题";
 const DEFAULT_DELIGHT_REASON = "这条可能会给你一点意外之喜。";
@@ -31,12 +32,24 @@ function normalizeSourcePlatform(value, url = "") {
     dy: "douyin",
     douyin: "douyin",
     tiktok: "douyin",
+    wb: "weibo",
+    weibo: "weibo",
     yt: "youtube",
     youtube: "youtube",
     x: "twitter",
     twitter: "twitter",
+    gh: "github",
+    github: "github",
     zh: "zhihu",
     zhihu: "zhihu",
+    rd: "reddit",
+    reddit: "reddit",
+    bgm: "bangumi",
+    bangumi: "bangumi",
+    linuxdo: "linuxdo",
+    "linux.do": "linuxdo",
+    v2: "v2ex",
+    v2ex: "v2ex",
   };
   if (aliases[key]) return aliases[key];
   if (key) return key;
@@ -44,9 +57,15 @@ function normalizeSourcePlatform(value, url = "") {
   if (lowerUrl.includes("bilibili.com") || lowerUrl.includes("b23.tv")) return "bilibili";
   if (lowerUrl.includes("xiaohongshu.com") || lowerUrl.includes("xhslink.com")) return "xiaohongshu";
   if (lowerUrl.includes("douyin.com")) return "douyin";
+  if (urlHostMatches(url, ["weibo.com", "weibo.cn", "sinaimg.cn", "sinaimg.com"])) return "weibo";
   if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) return "youtube";
   if (urlHostMatches(url, ["x.com", "twitter.com"])) return "twitter";
+  if (urlHostMatches(url, ["github.com"])) return "github";
   if (urlHostMatches(url, ["zhihu.com", "zhuanlan.zhihu.com"])) return "zhihu";
+  if (urlHostMatches(url, ["reddit.com", "redd.it"])) return "reddit";
+  if (urlHostMatches(url, ["bgm.tv", "bangumi.tv"])) return "bangumi";
+  if (urlHostMatches(url, ["linux.do"])) return "linuxdo";
+  if (urlHostMatches(url, ["v2ex.com"])) return "v2ex";
   return "";
 }
 
@@ -143,6 +162,54 @@ export function buildImageProxyPath(value) {
   return `/api/image-proxy?url=${encodeURIComponent(src)}`;
 }
 
+const PLATFORM_DISPLAY_NAMES = {
+  bilibili: "B 站",
+  youtube: "YouTube",
+  douyin: "抖音",
+  weibo: "微博",
+  wb: "微博",
+  xiaohongshu: "小红书",
+  xhs: "小红书",
+  twitter: "X",
+  x: "X",
+  github: "GitHub",
+  gh: "GitHub",
+  zhihu: "知乎",
+  reddit: "Reddit",
+  bgm: "Bangumi",
+  bangumi: "Bangumi",
+  linuxdo: "Linux.do",
+  "linux.do": "Linux.do",
+  v2: "V2EX",
+  v2ex: "V2EX",
+};
+
+export function platformDisplayName(value) {
+  const key = normalizeText(value).toLowerCase();
+  return PLATFORM_DISPLAY_NAMES[key] || normalizeText(value);
+}
+
+/**
+ * Build the author line shown on a recommendation card.
+ *
+ * "UP 主" is Bilibili-specific jargon, so the warm "这位 UP：" prefix only
+ * applies to Bilibili content. Every other source carries a creator whose
+ * role differs per platform (Bangumi ships directors / studios, Zhihu ships
+ * answer authors, YouTube ships channels), so prefixing them with "UP" is
+ * simply wrong. Those fall back to the bare name — which is what desktop web
+ * (`recommendationMetaHtml`) and mobile web (`views/recommend.js`) already
+ * render, so this keeps the three surfaces consistent.
+ *
+ * @param {{ up_name?: string, author_name?: string, source_platform?: string }} [item]
+ * @returns {string} display text, or "" when there is no creator to show
+ */
+export function formatRecommendationAuthorLine(item) {
+  const name = normalizeText(item?.up_name) || normalizeText(item?.author_name);
+  if (!name) return "";
+  const platform = normalizeSourcePlatform(item?.source_platform) || "bilibili";
+  return platform === "bilibili" ? `这位 UP：${name}` : name;
+}
+
 export function buildVideoUrl(bvid) {
   return `https://www.bilibili.com/video/${normalizeText(bvid)}`;
 }
@@ -153,11 +220,23 @@ export function buildYouTubeUrl(videoId) {
 
 export function buildContentUrl(item) {
   if (item?.content_url) return item.content_url;
-  const platform = normalizeText(item?.source_platform);
+  const platform = normalizeSourcePlatform(item?.source_platform, item?.content_url);
   const vid = normalizeText(item?.content_id || item?.bvid);
   if (!vid) return "";
   if (platform === "youtube") return buildYouTubeUrl(vid);
-  if (platform === "zhihu") return "";
+  if (platform === "bangumi") return `https://bgm.tv/subject/${encodeURIComponent(vid)}`;
+  if (platform === "linuxdo") {
+    const topicId = vid.replace(/^(?:linuxdo:)?topic[:_]/i, "");
+    return /^[1-9]\d*$/.test(topicId)
+      ? `https://linux.do/t/${encodeURIComponent(topicId)}`
+      : "";
+  }
+  // A GitHub numeric repository id cannot reconstruct owner/name. The backend
+  // always supplies the canonical https://github.com/<owner>/<repo> URL; if it
+  // is absent, fail closed instead of fabricating a Bilibili link.
+  if (platform === "github" || platform === "zhihu" || platform === "reddit") return "";
+  if (platform === "v2ex") return `https://www.v2ex.com/t/${encodeURIComponent(vid)}`;
+  if (platform === "zhihu" || platform === "reddit" || platform === "weibo") return "";
   return buildVideoUrl(vid);
 }
 
@@ -197,11 +276,18 @@ export function shouldAutoLoadRecommendations({
   );
 }
 
-export function getConnectionBadgeState(online) {
-  if (online) {
+export function getConnectionBadgeState(status) {
+  if (status === "online") {
     return {
       tone: "online",
       label: "已连接",
+    };
+  }
+
+  if (status === "reconnecting") {
+    return {
+      tone: "reconnecting",
+      label: "重连中",
     };
   }
 
@@ -219,25 +305,111 @@ export function getHintBannerState(tone) {
   return { tone: "info" };
 }
 
+// Decide what Bangumi username guided init should send, or null to omit it so
+// the backend keeps the configured value (an omitted username means "keep
+// existing"). Only a deliberately typed value, or an explicit clear of a value
+// a successful /api/config prefill put in the field, is sent — an empty field
+// we never prefilled (config fetch pending/failed, or never touched) must NOT
+// erase a configured username with "".
+export function resolveInitBangumiUsername({ touched, prefilled, value } = {}) {
+  const trimmed = String(value ?? "").trim();
+  if (!touched) return null;
+  if (!trimmed && !prefilled) return null;
+  return trimmed;
+}
+
+// GitHub uses the same write-only omit-vs-clear rule as Bangumi usernames:
+// an untouched field keeps the configured value, while deliberately clearing
+// a successfully prefilled username sends an empty string. Keep a named helper
+// so guided-init call sites cannot accidentally clear identity on a failed
+// config prefill.
+export function resolveInitGitHubUsername({ touched, prefilled, value } = {}) {
+  return resolveInitBangumiUsername({ touched, prefilled, value });
+}
+
 export function normalizeRecommendation(item) {
+  const bvid = normalizeText(item?.bvid);
+  const sourcePlatform = normalizeSourcePlatform(item?.source_platform, item?.content_url) || "bilibili";
+  const contentId = normalizeText(item?.content_id)
+    || (bvid && !bvid.includes(":") ? bvid : "");
   return {
     id: Number(item?.id ?? 0),
-    bvid: normalizeText(item?.bvid),
+    bvid,
     title: normalizeText(item?.title) || DEFAULT_TITLE,
-    up_name: normalizeText(item?.up_name) || DEFAULT_UP_NAME,
+    up_name: normalizeText(item?.up_name)
+      || (sourcePlatform === "bangumi"
+        ? ""
+        : sourcePlatform === "bilibili"
+        ? DEFAULT_UP_NAME
+        : DEFAULT_CREATOR_NAME),
     cover_url: normalizeCoverUrl(item?.cover_url),
     expression: normalizeText(item?.expression),
     topic_label: normalizeText(item?.topic_label),
     presented: Boolean(item?.presented),
-    content_id: normalizeText(item?.content_id) || normalizeText(item?.bvid),
+    item_key: normalizeText(item?.item_key),
+    content_id: contentId,
     content_url: normalizeText(item?.content_url) || "",
-    source_platform: normalizeSourcePlatform(item?.source_platform, item?.content_url) || "bilibili",
-    content_type: normalizeText(item?.content_type) || "video",
+    source_platform: sourcePlatform,
+    content_type: normalizeText(item?.content_type)
+      || (sourcePlatform === "bilibili" && contentId ? "video" : ""),
     body_text: normalizeText(item?.body_text),
+    published_at: normalizeText(item?.published_at),
+    published_label: String(item?.published_label ?? "").replace(/\s+/g, " ").trim().slice(0, 64),
+    // Engagement counts so the card can render the ▶/👍/💬/⭐ stats row
+    // (favorite_count already folds in Xiaohongshu 收藏 backend-side).
+    view_count: Number(item?.view_count ?? 0) || 0,
+    like_count: Number(item?.like_count ?? 0) || 0,
+    comment_count: Number(item?.comment_count ?? 0) || 0,
+    share_count: Number(item?.share_count ?? 0) || 0,
+    favorite_count: Number(item?.favorite_count ?? 0) || 0,
+    danmaku_count: Number(item?.danmaku_count ?? 0) || 0,
+    rating_score: Number(item?.rating_score ?? 0) || 0,
+    rating_count: Number(item?.rating_count ?? 0) || 0,
+    source_rank: Number(item?.source_rank ?? 0) || 0,
   };
 }
 
-const TEXT_CARD_CONTENT_TYPES = new Set(["tweet", "thread", "answer", "article", "question"]);
+export function reconcileRecommendationReplacement(currentItems, incomingItems) {
+  const current = Array.isArray(currentItems) ? currentItems : [];
+  const incoming = Array.isArray(incomingItems) ? incomingItems : [];
+  const preserved = incoming.length === 0 && current.length > 0;
+  return {
+    items: preserved ? current : incoming,
+    preserved,
+  };
+}
+
+export function formatPublishedTime(item, now = Date.now()) {
+  const parsed = Date.parse(String(item?.published_at || ""));
+  if (Number.isFinite(parsed)) {
+    const diff = now - parsed;
+    if (diff >= -300_000 && diff < 60_000) return "刚刚";
+    if (diff >= 0 && diff < 86_400_000) {
+      return `${Math.max(1, Math.floor(diff / 3_600_000))} 小时前`;
+    }
+    if (diff >= 0 && diff < 604_800_000) {
+      return `${Math.floor(diff / 86_400_000)} 天前`;
+    }
+    const date = new Date(parsed);
+    const current = new Date(now);
+    if (date.getFullYear() === current.getFullYear()) {
+      return `${date.getMonth() + 1}月${date.getDate()}日`;
+    }
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  return String(item?.published_label || "").replace(/\s+/g, " ").trim().slice(0, 64);
+}
+
+const TEXT_CARD_CONTENT_TYPES = new Set([
+  "tweet",
+  "thread",
+  "repository",
+  "answer",
+  "article",
+  "question",
+  "post",
+  "comment",
+]);
 
 /**
  * Decide how a recommendation card should render its media slot.
@@ -271,7 +443,7 @@ export function normalizeSavedItem(item) {
     ...item,
     bvid,
     title: normalizeText(item?.title) || bvid,
-    up_name: normalizeText(item?.up_name),
+    up_name: normalizeText(item?.up_name || item?.author_name),
     cover_url: normalizeCoverUrl(item?.cover_url),
     content_url: normalizeText(item?.content_url),
     source_platform: normalizeSourcePlatform(item?.source_platform, item?.content_url) || "bilibili",
@@ -282,6 +454,8 @@ export function normalizeDelightCandidate(item) {
   const normalizedState = normalizeText(item?.state) || "pending";
   return {
     bvid: normalizeText(item?.bvid),
+    item_key: normalizeText(item?.item_key),
+    content_id: normalizeText(item?.content_id),
     title: normalizeText(item?.title) || DEFAULT_DELIGHT_TITLE,
     delight_reason: normalizeText(item?.delight_reason) || DEFAULT_DELIGHT_REASON,
     delight_score: Number(item?.delight_score ?? 0),
@@ -289,9 +463,22 @@ export function normalizeDelightCandidate(item) {
     cover_url: normalizeCoverUrl(item?.cover_url),
     content_url: normalizeText(item?.content_url) || "",
     source_platform: normalizeSourcePlatform(item?.source_platform, item?.content_url) || "",
+    published_at: normalizeText(item?.published_at),
+    published_label: String(item?.published_label ?? "").replace(/\s+/g, " ").trim().slice(0, 64),
+    content_type: normalizeText(item?.content_type),
+    body_text: normalizeText(item?.body_text),
     state: normalizedState,
     response_message: normalizeText(item?.response_message),
     chat_reply: normalizeText(item?.chat_reply),
+    view_count: Number(item?.view_count ?? 0),
+    like_count: Number(item?.like_count ?? 0),
+    comment_count: Number(item?.comment_count ?? 0),
+    share_count: Number(item?.share_count ?? 0),
+    favorite_count: Number(item?.favorite_count ?? 0),
+    danmaku_count: Number(item?.danmaku_count ?? 0),
+    rating_score: Number(item?.rating_score ?? 0),
+    rating_count: Number(item?.rating_count ?? 0),
+    source_rank: Number(item?.source_rank ?? 0),
     // Local UI fields preserved across re-normalizations
     turns: Array.isArray(item?.turns) ? item.turns : [],
     composer_open: Boolean(item?.composer_open),
@@ -311,11 +498,19 @@ export function mergeDelightCandidate(current, incoming, dismissedBvids = []) {
   if (!current || normalizeText(current?.bvid) !== normalizedIncoming.bvid) {
     return normalizedIncoming;
   }
+  const currentState = normalizeText(current?.state) || "pending";
+  const incomingState = normalizedIncoming.state;
+  const currentResponse = normalizeText(current?.response_message);
+  let responseMessage = normalizedIncoming.response_message;
+  if (incomingState === "pending") {
+    responseMessage = currentResponse || responseMessage;
+  } else if (incomingState === currentState && !responseMessage) {
+    responseMessage = currentResponse;
+  }
   return {
     ...normalizedIncoming,
-    state: normalizeText(current?.state) || normalizedIncoming.state,
-    response_message:
-      normalizeText(current?.response_message) || normalizedIncoming.response_message,
+    state: incomingState !== "pending" ? incomingState : currentState,
+    response_message: responseMessage,
     chat_reply: normalizeText(current?.chat_reply) || normalizedIncoming.chat_reply,
     composer_open: Boolean(current?.composer_open),
     chat_draft: normalizeText(current?.chat_draft),
@@ -333,6 +528,10 @@ export function getDelightUiState(delight, { highlightBvid = "" } = {}) {
       visible: false,
       highlighted: false,
       handled: false,
+      show_status: false,
+      show_actions: false,
+      like_pressed: false,
+      like_disabled: false,
       score_label: "",
       response_tone: "info",
       response_message: "",
@@ -344,26 +543,50 @@ export function getDelightUiState(delight, { highlightBvid = "" } = {}) {
     score >= 0.65 ? "这条可能会拐到你" :
     "有点出其不意";
   const highlight = normalizeText(highlightBvid) === normalized.bvid;
+  const base = {
+    visible: true,
+    highlighted: highlight,
+    handled: false,
+    show_status: Boolean(normalized.response_message),
+    show_actions: true,
+    like_pressed: false,
+    like_disabled: false,
+    score_label: scoreLabel,
+    response_tone: "info",
+    response_message: normalized.response_message,
+  };
 
   if (normalized.state === "viewed") {
     return {
-      visible: true,
-      highlighted: highlight,
+      ...base,
       handled: true,
-      score_label: scoreLabel,
+      show_status: true,
+      show_actions: false,
+      like_disabled: true,
       response_tone: "success",
       response_message:
         normalized.response_message || "已打开，阿B 会把这次点击当成强信号。",
     };
   }
 
+  if (normalized.state === "liked") {
+    return {
+      ...base,
+      show_status: true,
+      like_pressed: true,
+      like_disabled: true,
+      response_tone: "success",
+      response_message: normalized.response_message || "好，这类多来点。",
+    };
+  }
+
   if (normalized.state === "rejected") {
     return {
-      visible: true,
-      highlighted: highlight,
+      ...base,
       handled: true,
-      score_label: scoreLabel,
-      response_tone: "info",
+      show_status: true,
+      show_actions: false,
+      like_disabled: true,
       response_message:
         normalized.response_message || "记下了，这类惊喜先少来点。",
     };
@@ -371,24 +594,14 @@ export function getDelightUiState(delight, { highlightBvid = "" } = {}) {
 
   if (normalized.state === "chatted") {
     return {
-      visible: true,
-      highlighted: highlight,
-      handled: true,
-      score_label: scoreLabel,
-      response_tone: "info",
+      ...base,
+      show_status: true,
       response_message:
         normalized.response_message || "这句已经记下，后面会更会试探。",
     };
   }
 
-  return {
-    visible: true,
-    highlighted: highlight,
-    handled: false,
-    score_label: scoreLabel,
-    response_tone: "info",
-    response_message: normalized.response_message,
-  };
+  return base;
 }
 
 export function buildFeedbackPayload(recommendationId, feedbackType, note = "") {
@@ -752,6 +965,11 @@ export function mergeRuntimeStatusEvent(status, event) {
     ...runtime,
   };
   if (typeof event?.pool_available_count === "number") {
+    // A canonical pool snapshot is emitted only after the backend runtime is
+    // initialized.  Let this authoritative stream event recover a first-load
+    // /api/runtime-status timeout instead of keeping real inventory hidden as
+    // an uninitialized zero.  Mobile Web follows the same contract.
+    next.initialized = true;
     next.pool_available_count = Number(event.pool_available_count);
   }
   if (typeof event?.pool_raw_count === "number") {
@@ -819,6 +1037,8 @@ export function getPoolStatusSummary(status) {
         ? `刚补进 ${runtime.last_replenished_count} 条`
         : runtime.last_discovered_count > 0
           ? "这轮找到了内容"
+        : runtime.pool_pending_count > 0
+          ? `另有 ${runtime.pool_pending_count} 条素材`
         : poolIsSufficient
           ? "这会儿先不补货"
           : "这轮还没补进",
@@ -827,6 +1047,8 @@ export function getPoolStatusSummary(status) {
         ? runtime.recent_pool_topics.join(" / ")
         : runtime.last_discovered_count > 0
           ? "但可立即换的库存还没变"
+        : runtime.pool_pending_count > 0
+          ? "素材已抓到，会按可换库存缺口整理"
         : poolIsSufficient
           ? "先把这一池给你慢慢换开"
           : "还在继续摸你的口味",
@@ -883,7 +1105,11 @@ export function getReadyRecommendationHint(status) {
   };
 }
 
-export function getManualRefreshResultHint({ itemCount = 0, hadAdvertisedInventory = false } = {}) {
+export function getManualRefreshResultHint({
+  itemCount = 0,
+  hadAdvertisedInventory = false,
+  preservedCurrent = false,
+} = {}) {
   const count = Number(itemCount || 0);
   if (count > 0) {
     return {
@@ -891,9 +1117,15 @@ export function getManualRefreshResultHint({ itemCount = 0, hadAdvertisedInvento
       tone: "success",
     };
   }
+  if (preservedCurrent) {
+    return {
+      message: "这次没换出新内容，当前推荐已保留。",
+      tone: "info",
+    };
+  }
   if (hadAdvertisedInventory) {
     return {
-      message: "池子状态刚刚同步，正在整理内容。",
+      message: "库存还在，但这批暂时没有可用新内容，稍后再试。",
       tone: "info",
     };
   }
@@ -1086,6 +1318,49 @@ export function getPopupState({ online, items = [], error = null, runtimeStatus 
   }
 
   if (error) {
+    // A degraded backend answers every business route with a 503 envelope
+    // ({status:"degraded", issues:[...]}) that requestJson preserves on
+    // error.details. Lumping it into the generic error copy ("接口这会儿没回")
+    // hides the only actionable fact — the LLM config is broken and the
+    // settings panel can repair it — so surface it as its own state.
+    const details = typeof error === "object" && error !== null ? error.details : null;
+    if (details && typeof details === "object" && details.status === "degraded") {
+      const issueMessages = (Array.isArray(details.issues) ? details.issues : [])
+        .map((issue) => normalizeText(issue?.message))
+        .filter(Boolean);
+      const degradedMessage =
+        issueMessages.join("；") || "后端的 AI 服务配置有问题，修复并保存后会立即恢复。";
+      // A degraded backend that was NEVER initialized should still land the
+      // user in the guided-init journey — its first step IS configuring the
+      // LLM provider, and the init checklist surfaces the degraded blocker
+      // from /api/init-status (allow-listed while degraded). Reserve the pure
+      // repair state for an initialized backend that degraded later.
+      // /api/runtime-status is also allow-listed, so the snapshot is available
+      // here; without it we cannot rule out an initialized backend and fall
+      // through to the repair state.
+      const degradedRuntime = runtimeStatus == null ? null : normalizeRuntimeStatus(runtimeStatus);
+      const neverInitialized =
+        degradedRuntime !== null &&
+        !degradedRuntime.initialized &&
+        degradedRuntime.recommendation_count === 0 &&
+        degradedRuntime.pool_available_count === 0 &&
+        degradedRuntime.pool_pending_count === 0 &&
+        degradedRuntime.last_replenished_count === 0 &&
+        degradedRuntime.last_discovered_count === 0;
+      if (neverInitialized) {
+        return {
+          kind: "uninitialized",
+          degraded: true,
+          message: degradedMessage,
+          items: [],
+        };
+      }
+      return {
+        kind: "degraded",
+        message: degradedMessage,
+        items: [],
+      };
+    }
     return {
       kind: "error",
       message: "推荐暂时没刷出来，稍后再试",
@@ -1094,6 +1369,20 @@ export function getPopupState({ online, items = [], error = null, runtimeStatus 
   }
 
   const normalizedItems = items.map(normalizeRecommendation);
+  if (normalizedItems.length === 0 && runtimeStatus == null) {
+    // Backend online but the runtime snapshot is unavailable: we cannot tell
+    // "never initialized" apart from "initialized with a drained pool plus a
+    // transient /runtime-status failure". Claiming uninitialized here would
+    // flash the init CTA at a healthy backend, so render a transient degraded
+    // state instead — pollers / runtime-stream reclassify on the next pass,
+    // and a genuinely uninitialized backend still gets the toolbar badge from
+    // the service worker's own runtime-status check.
+    return {
+      kind: "error",
+      message: "后端状态暂时没读到，稍后自动重试。",
+      items: [],
+    };
+  }
   const runtime = normalizeRuntimeStatus(runtimeStatus);
   const hasPostInitRuntimeSignals =
     runtime.recommendation_count > 0 ||
@@ -1118,7 +1407,9 @@ export function getPopupState({ online, items = [], error = null, runtimeStatus 
     if (!runtime.initialized && !hasPostInitRuntimeSignals) {
       return {
         kind: "uninitialized",
-        message: "还没完成初始化，先运行 openbiliclaw init",
+        // Button-driven copy, consistent with the rendered card in popup.js:
+        // guided init runs from the「开始初始化」button, not a CLI command.
+        message: "点「开始初始化」，会先检查前置条件，再依次保存完整画像并基于它生成首轮可用推荐。",
         items: [],
       };
     }

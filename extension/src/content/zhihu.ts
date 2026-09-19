@@ -7,8 +7,14 @@ import { startCollector } from "./kernel.js";
 import { installZhihuMessageListener } from "./zhihu/task-executor.js";
 import { isZhihuTaskTabLocation } from "./zhihu/task-mode.js";
 import { zhihuAdapter } from "../shared/platforms/zhihu.js";
+import { installNativeSaveExecutor } from "./native-save/runtime.ts";
+import { shouldStartPassiveCollector } from "./native-save/task-mode.ts";
+import { saveZhihu, verifyZhihu } from "./native-save/zhihu.ts";
 
-if (!isZhihuTaskTabLocation()) {
-  startCollector(zhihuAdapter);
-}
 installZhihuMessageListener();
+installNativeSaveExecutor("zhihu", saveZhihu, verifyZhihu);
+if (!isZhihuTaskTabLocation()) {
+  void shouldStartPassiveCollector().then((shouldStart) => {
+    if (shouldStart) startCollector(zhihuAdapter);
+  });
+}

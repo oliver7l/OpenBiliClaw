@@ -5,6 +5,10 @@
 import type { ZhihuScope, ZhihuTaskResult, ZhihuTaskType } from "../content/zhihu/task-executor.ts";
 import { ZHIHU_TASK_TAB_URL } from "../content/zhihu/task-mode.ts";
 import { apiUrl } from "../shared/backend-endpoint.ts";
+import { authenticatedFetch } from "../shared/auth.ts";
+import { isNativeSaveTask, type NativeSaveResult, type NativeSaveTask } from "../shared/native-save.ts";
+import { ensureNativeSaveTaskRecovery, runNativeSaveTask } from "./native-save-task-runner.ts";
+import { createTaskTab } from "./task-tab.ts";
 
 const _MUTEX_STALE_MS = 6 * 60 * 1000;
 function tryAcquireDispatcherMutex(label: string): boolean {
@@ -44,7 +48,7 @@ const BASE_TIMEOUT_MS = 45_000;
 const PER_SCOPE_MS = 45_000;
 const MAX_TIMEOUT_MS = 300_000;
 
-export interface ZhihuTask {
+export interface ZhihuLegacyTask {
   id: string;
   type: ZhihuTaskType;
   scopes?: ZhihuScope[];
@@ -61,7 +65,12 @@ export interface ZhihuTask {
   max_items_per_seed?: number;
 }
 
+export type ZhihuTask = ZhihuLegacyTask | NativeSaveTask;
+
 export function isValidZhihuTask(task: unknown): task is ZhihuTask {
+  if (isNativeSaveTask(task)) {
+    return task.platform === "zhihu" && task.platform_slug === "zhihu";
+  }
   if (typeof task !== "object" || task === null) return false;
   const t = task as Record<string, unknown>;
   if (typeof t.id !== "string" || !t.id) return false;
@@ -89,7 +98,7 @@ export function isValidZhihuTask(task: unknown): task is ZhihuTask {
   return true;
 }
 
-export function computeZhihuTaskTimeoutMs(task: ZhihuTask): number {
+export function computeZhihuTaskTimeoutMs(task: ZhihuLegacyTask): number {
   let scopeCount =
     Array.isArray(task.scopes) && task.scopes.length > 0 ? task.scopes.length : DEFAULT_SCOPES.length;
   if (task.type === "search") scopeCount = Math.max(1, task.keywords?.length ?? 1);
@@ -106,11 +115,11 @@ export function shouldOpenZhihuTaskActive(task: ZhihuTask): boolean {
 let taskInFlight = false;
 let taskTabId: number | null = null;
 let taskTimeoutId: ReturnType<typeof setTimeout> | null = null;
-let currentTask: ZhihuTask | null = null;
+let currentTask: ZhihuLegacyTask | null = null;
 
 async function fetchNextTask(): Promise<ZhihuTask | null> {
   try {
-    const resp = await fetch(await apiUrl("/sources/zhihu/next-task"));
+    const resp = await authenticatedFetch(await apiUrl("/sources/zhihu/next-task"));
     if (resp.status === 204) return null;
     if (!resp.ok) return null;
     const payload: unknown = await resp.json();
@@ -122,7 +131,7 @@ async function fetchNextTask(): Promise<ZhihuTask | null> {
 
 async function postTaskResult(result: ZhihuTaskResult): Promise<void> {
   try {
-    await fetch(await apiUrl("/sources/zhihu/task-result"), {
+    await authenticatedFetch(await apiUrl("/sources/zhihu/task-result"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(result),
@@ -131,6 +140,51 @@ async function postTaskResult(result: ZhihuTaskResult): Promise<void> {
     // Backend transient unavailability — drop rather than crash.
   }
 }
+
+export interface ZhihuNativeSaveResultTransport {
+  resolveUrl: (path: string) => Promise<string>;
+  fetch: (input: string, init: RequestInit) => Promise<{ ok?: boolean }>;
+}
+
+const ZHIHU_NATIVE_SAVE_RESULT_TRANSPORT: ZhihuNativeSaveResultTransport = {
+  resolveUrl: apiUrl,
+  fetch: authenticatedFetch,
+};
+
+export async function postZhihuNativeSaveResult(
+  result: NativeSaveResult,
+  signal?: AbortSignal,
+  transport: ZhihuNativeSaveResultTransport = ZHIHU_NATIVE_SAVE_RESULT_TRANSPORT,
+): Promise<void> {
+  const response = await transport.fetch(await transport.resolveUrl("/sources/zhihu/task-result"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(result),
+    signal,
+  });
+  if (response.ok !== true) throw new Error("Zhihu native-save result was not acknowledged");
+}
+
+export interface ZhihuNativeSaveDispatchDependencies {
+  run: (
+    task: NativeSaveTask,
+    platformSlug: "zhihu",
+    postResult: (result: NativeSaveResult, signal?: AbortSignal) => Promise<void>,
+  ) => Promise<void>;
+  postResult: (result: NativeSaveResult, signal?: AbortSignal) => Promise<void>;
+}
+
+export async function dispatchZhihuNativeSaveTask(
+  task: NativeSaveTask,
+  dependencies: ZhihuNativeSaveDispatchDependencies,
+): Promise<void> {
+  await dependencies.run(task, "zhihu", dependencies.postResult);
+}
+
+const ZHIHU_NATIVE_SAVE_DISPATCH_DEPENDENCIES: ZhihuNativeSaveDispatchDependencies = {
+  run: runNativeSaveTask,
+  postResult: postZhihuNativeSaveResult,
+};
 
 function cleanupTask(): void {
   if (taskTimeoutId !== null) {
@@ -150,7 +204,7 @@ function cleanupTask(): void {
   releaseDispatcherMutex("zhihu");
 }
 
-function armTaskTimeout(task: ZhihuTask): void {
+function armTaskTimeout(task: ZhihuLegacyTask): void {
   const ms = computeZhihuTaskTimeoutMs(task);
   taskTimeoutId = setTimeout(async () => {
     await postTaskResult({
@@ -218,7 +272,20 @@ function sendExecuteMessage(): void {
     });
 }
 
-export async function executeTask(task: ZhihuTask): Promise<void> {
+export async function executeTask(
+  task: ZhihuTask,
+  nativeDependencies: ZhihuNativeSaveDispatchDependencies = ZHIHU_NATIVE_SAVE_DISPATCH_DEPENDENCIES,
+): Promise<void> {
+  if (task.type === "native_save") {
+    if (taskInFlight) return;
+    taskInFlight = true;
+    try {
+      await dispatchZhihuNativeSaveTask(task, nativeDependencies);
+    } finally {
+      taskInFlight = false;
+    }
+    return;
+  }
   if (taskInFlight) return;
   if (!tryAcquireDispatcherMutex("zhihu")) return;
 
@@ -227,7 +294,7 @@ export async function executeTask(task: ZhihuTask): Promise<void> {
 
   let tab: chrome.tabs.Tab;
   try {
-    tab = await chrome.tabs.create({ url: ZHIHU_TASK_TAB_URL, active: shouldOpenZhihuTaskActive(task) });
+    tab = await createTaskTab({ url: ZHIHU_TASK_TAB_URL, active: shouldOpenZhihuTaskActive(task) });
   } catch {
     await postTaskResult({
       task_id: task.id,
@@ -264,10 +331,17 @@ export async function handleZhihuTaskResult(result: ZhihuTaskResult): Promise<vo
 }
 
 async function pollNextTask(): Promise<void> {
+  await ensureNativeSaveTaskRecovery();
   if (taskInFlight) return;
   const task = await fetchNextTask();
   if (!task) return;
   await executeTask(task);
+}
+
+function pollNextTaskBestEffort(): void {
+  void pollNextTask().catch(() => {
+    // Result delivery is bounded and cleanup has already run; the next alarm can recover the task.
+  });
 }
 
 export function startZhihuTaskPolling(): void {
@@ -277,10 +351,10 @@ export function startZhihuTaskPolling(): void {
 
 export function handleZhihuTaskAlarm(alarmName: string): void {
   if (alarmName === POLL_ALARM_NAME) {
-    void pollNextTask();
+    pollNextTaskBestEffort();
   }
 }
 
 export function pollZhihuTaskNow(): void {
-  void pollNextTask();
+  pollNextTaskBestEffort();
 }

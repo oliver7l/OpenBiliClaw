@@ -29,6 +29,14 @@ import type {
   DouyinSearchItem,
 } from "../main/dy-fetch-tap.js";
 import { apiUrl } from "../shared/backend-endpoint.ts";
+import { authenticatedFetch } from "../shared/auth.ts";
+import { isNativeSaveTask, type NativeSaveResult, type NativeSaveTask } from "../shared/native-save.ts";
+import { withTaskTabMarker } from "../shared/task-tab.ts";
+import { ensureNativeSaveTaskRecovery, runNativeSaveTask } from "./native-save-task-runner.ts";
+import { runtimeAssetCandidates } from "../shared/asset-prefix.ts";
+import { createTaskTab } from "./task-tab.ts";
+
+const DY_TASK_MARKER = "openbiliclaw_dy_task";
 // Cross-source mutex via globalThis. Mirror of the helper inlined
 // in xhs-task-dispatcher; both dispatchers coordinate by writing to
 // the same field on globalThis. See dispatcher-mutex.ts for the
@@ -61,21 +69,6 @@ function releaseDispatcherMutex(label: string): void {
   }
 }
 
-// TEMP DEBUG: extension-side log relay → daemon (see debug-log.ts).
-function debugLog(event: string, data?: unknown): void {
-  void (async () => {
-    try {
-      await fetch(await apiUrl("/sources/_debug/log"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source: "dy", event, data: data ?? null }),
-      });
-    } catch {
-      // ignore
-    }
-  })();
-}
-
 // buildScopeUrl is loaded lazily via dynamic import inside the
 // chrome-lifecycle code path (executeTask / navigateToCurrentScope).
 // Reason: node:test's --experimental-strip-types resolver can't follow
@@ -95,6 +88,7 @@ async function loadBuildScopeUrl(): Promise<
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const TASK_TIMEOUT_MS = 30_000;
 const SEARCH_TASK_TIMEOUT_MS = 180_000;
+const FEED_TASK_TIMEOUT_MS = 120_000;
 const BOOTSTRAP_PER_ROUND_TIMEOUT_MS = 3_000;
 const BOOTSTRAP_MAX_TASK_TIMEOUT_MS = 360_000;
 const POLL_ALARM_NAME = "openbiliclaw-dy-task-poll";
@@ -105,7 +99,7 @@ const KNOWN_SCOPES: readonly DouyinScope[] = [
   "dy_follow",
 ] as const;
 
-export interface DyTask {
+export interface DyLegacyTask {
   id: string;
   type: "bootstrap_profile" | "search" | "hot" | "feed";
   scopes?: DouyinScope[];
@@ -119,6 +113,8 @@ export interface DyTask {
   max_items?: number;
 }
 
+export type DyTask = DyLegacyTask | NativeSaveTask;
+
 export interface DyHotTaskItem {
   word?: string;
   sentence_id: string;
@@ -129,14 +125,18 @@ export interface DyHotTaskItem {
 
 export interface DyTaskResult {
   task_id: string;
-  status: "ok" | "empty" | "partial" | "failed";
+  status: "ok" | "empty" | "partial" | "degraded" | "failed";
   videos?: unknown[];
   scope_counts?: Record<string, number>;
   error?: string;
   debug?: Record<string, unknown>;
 }
 
+export type DyTaskExecutionDisposition = "accepted" | "declined";
+export type DyTaskCallbackResult = DyTaskResult | NativeSaveResult;
+
 let taskInFlight = false;
+let pollInFlight: Promise<void> | null = null;
 let taskTabId: number | null = null;
 let ownsTaskTab = false;
 let taskTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -152,6 +152,8 @@ interface TaskProgress {
   scopes: DouyinScope[];
   current_scope_idx: number;
   accumulated_counts: Record<DouyinScope, number>;
+  scope_statuses: Partial<Record<DouyinScope, DyScopeResult["status"]>>;
+  degraded_reasons: string[];
   max_items_per_scope: number;
   max_scroll_rounds: number;
   max_stagnant_scroll_rounds: number;
@@ -165,9 +167,16 @@ interface SearchProgress {
   current_keyword_idx: number;
   accumulated_count: number;
   max_items_per_keyword: number;
+  navigation_resume_count: number;
+  navigation_resume_dispatched: boolean;
+  navigation_generation: number;
 }
 
 let searchProgress: SearchProgress | null = null;
+let searchNavigationListener:
+  | ((tabId: number, info: { status?: string; url?: string }, tab: chrome.tabs.Tab) => void)
+  | null = null;
+let searchNavigationFallbackId: ReturnType<typeof setTimeout> | null = null;
 
 interface HotProgress {
   task_id: string;
@@ -184,6 +193,7 @@ interface FeedProgress {
   task_id: string;
   accumulated_count: number;
   max_items: number;
+  capture_retry_count: number;
 }
 
 let feedProgress: FeedProgress | null = null;
@@ -193,17 +203,18 @@ let feedProgress: FeedProgress | null = null;
 // ---------------------------------------------------------------------------
 
 export function buildDyTaskUrl(task: DyTask): string | null {
+  if (task.type === "native_save") return task.content_url;
   if (task.type === "bootstrap_profile") {
-    return "https://www.douyin.com/";
+    return withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER);
   }
   if (task.type === "search") {
-    return "https://www.douyin.com/";
+    return withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER);
   }
   if (task.type === "hot") {
-    return "https://www.douyin.com/";
+    return withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER);
   }
   if (task.type === "feed") {
-    return "https://www.douyin.com/";
+    return withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER);
   }
   return null;
 }
@@ -212,10 +223,13 @@ export function buildDyDiscoveryPageUrl(
   _type: "search" | "hot" | "feed",
   _target?: string,
 ): string {
-  return "https://www.douyin.com/";
+  return withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER);
 }
 
 export function isValidDyTask(task: unknown): task is DyTask {
+  if (isNativeSaveTask(task)) {
+    return task.platform === "douyin" && task.platform_slug === "dy";
+  }
   if (typeof task !== "object" || task === null) return false;
   const t = task as Record<string, unknown>;
   if (typeof t.id !== "string" || !t.id) return false;
@@ -245,7 +259,7 @@ export function isValidDyTask(task: unknown): task is DyTask {
   return true;
 }
 
-export function computeDyTaskTimeoutMs(task: DyTask): number {
+export function computeDyTaskTimeoutMs(task: DyLegacyTask): number {
   if (task.type === "search") {
     const keywordCount =
       Array.isArray(task.keywords) && task.keywords.length > 0 ? task.keywords.length : 1;
@@ -263,7 +277,10 @@ export function computeDyTaskTimeoutMs(task: DyTask): number {
     );
   }
   if (task.type === "feed") {
-    return Math.min(Math.max(TASK_TIMEOUT_MS, 60_000), BOOTSTRAP_MAX_TASK_TIMEOUT_MS);
+    return Math.min(
+      Math.max(TASK_TIMEOUT_MS, FEED_TASK_TIMEOUT_MS),
+      BOOTSTRAP_MAX_TASK_TIMEOUT_MS,
+    );
   }
   // Default per-task timeout has to account for the executor visiting
   // up to 4 scope tabs in series, each scrolling up to N rounds. We
@@ -284,7 +301,7 @@ export function computeDyTaskTimeoutMs(task: DyTask): number {
   );
 }
 
-export function buildDyExecuteMessageData(task: DyTask): Record<string, unknown> {
+export function buildDyExecuteMessageData(task: DyLegacyTask): Record<string, unknown> {
   const data: Record<string, unknown> = { task_id: task.id, type: task.type };
   if (task.scopes !== undefined) data.scopes = task.scopes;
   if (task.max_items_per_scope !== undefined) {
@@ -320,8 +337,52 @@ export function shouldFinalizeHotTask({
   return accumulatedCount >= maxItemsTotal || currentHotIndex + 1 >= hotItemCount;
 }
 
-export function shouldOpenDyTaskActive(task: DyTask): boolean {
+export function shouldRetryDyFeedCapture(
+  result: Pick<DyFeedResult, "status" | "error">,
+  captureRetryCount: number,
+): boolean {
+  return (
+    result.status === "failed" &&
+    result.error === "feed_no_observed_response" &&
+    captureRetryCount < 1
+  );
+}
+
+export function shouldOpenDyTaskActive(task: DyLegacyTask): boolean {
   return task.type === "bootstrap_profile";
+}
+
+export function isDySearchResultUrl(urlValue: string, keyword: string): boolean {
+  try {
+    const url = new URL(urlValue);
+    const path = decodeURIComponent(url.pathname);
+    const segments = path.split("/").filter(Boolean);
+    const searchIndex = segments.lastIndexOf("search");
+    if (searchIndex < 0) return false;
+    const expected = keyword.trim();
+    if (!expected) return false;
+    return (
+      (segments[searchIndex + 1] ?? "") === expected ||
+      url.searchParams.get("keyword") === expected ||
+      url.searchParams.get("q") === expected
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function finalizeDyBootstrapStatus(
+  scopeStatuses: Partial<Record<DouyinScope, DyScopeResult["status"]>>,
+): "ok" | "degraded" {
+  return Object.values(scopeStatuses).some(
+    (status) => status === "degraded" || status === "failed",
+  )
+    ? "degraded"
+    : "ok";
+}
+
+export function dyScopeDegradedReason(result: DyScopeResult): string {
+  return `${result.scope}:${result.error || result.status}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +392,7 @@ export function shouldOpenDyTaskActive(task: DyTask): boolean {
 
 async function fetchNextTask(): Promise<DyTask | null> {
   try {
-    const resp = await fetch(await apiUrl("/sources/dy/next-task"));
+    const resp = await authenticatedFetch(await apiUrl("/sources/dy/next-task"));
     if (resp.status === 204) return null; // no pending task
     if (!resp.ok) return null;
     const payload: unknown = await resp.json();
@@ -341,20 +402,157 @@ async function fetchNextTask(): Promise<DyTask | null> {
   }
 }
 
+export interface DyTaskResultResponse {
+  ok: boolean;
+  status: number;
+}
+
+export interface DyTaskResultTransport {
+  resolveUrl: (path: string) => Promise<string>;
+  fetch: (input: string, init: RequestInit) => Promise<DyTaskResultResponse>;
+  sleep: (delayMs: number) => Promise<void>;
+}
+
+export interface DyTaskResultRetryOptions {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+}
+
+const DY_TASK_RESULT_MAX_ATTEMPTS = 3;
+const DY_TASK_RESULT_RETRY_BASE_DELAY_MS = 250;
+const DY_TASK_RESULT_RETRY_MAX_DELAY_MS = 2_000;
+
+function delay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+const DY_TASK_RESULT_TRANSPORT: DyTaskResultTransport = {
+  resolveUrl: apiUrl,
+  fetch: authenticatedFetch,
+  sleep: delay,
+};
+
+/**
+ * Deliver one idempotent task callback and require a backend ACK.
+ *
+ * The task-result endpoint makes terminal callbacks immutable, so retrying the
+ * exact JSON body is safe. Keep the retry window deliberately short and
+ * bounded: it covers a transient daemon restart without turning a disconnected
+ * backend into a service-worker retry storm. Callers must not clean up their
+ * local task lifecycle when this function rejects.
+ */
+export async function postDyTaskResult(
+  result: DyTaskCallbackResult,
+  transport: DyTaskResultTransport = DY_TASK_RESULT_TRANSPORT,
+  options: DyTaskResultRetryOptions = {},
+): Promise<void> {
+  const maxAttempts = Math.max(
+    1,
+    Math.min(5, Math.floor(options.maxAttempts ?? DY_TASK_RESULT_MAX_ATTEMPTS)),
+  );
+  const baseDelayMs = Math.max(
+    0,
+    Math.min(
+      DY_TASK_RESULT_RETRY_MAX_DELAY_MS,
+      Math.floor(options.baseDelayMs ?? DY_TASK_RESULT_RETRY_BASE_DELAY_MS),
+    ),
+  );
+  const body = JSON.stringify(result);
+  let lastFailure = "unknown";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await transport.fetch(await transport.resolveUrl("/sources/dy/task-result"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      if (response.ok) return;
+      lastFailure = `HTTP ${response.status}`;
+    } catch (error) {
+      lastFailure = String(error);
+    }
+
+    if (attempt < maxAttempts) {
+      const retryDelayMs = Math.min(
+        DY_TASK_RESULT_RETRY_MAX_DELAY_MS,
+        baseDelayMs * 2 ** (attempt - 1),
+      );
+      await transport.sleep(retryDelayMs);
+    }
+  }
+
+  throw new Error(`dy_task_result_unacknowledged: ${lastFailure}`);
+}
+
 async function postTaskResult(result: DyTaskResult): Promise<void> {
+  await postDyTaskResult(result);
+}
+
+export interface DyNativeSaveResultTransport {
+  resolveUrl: (path: string) => Promise<string>;
+  fetch: (input: string, init: RequestInit) => Promise<unknown>;
+}
+
+const DY_NATIVE_SAVE_RESULT_TRANSPORT: DyNativeSaveResultTransport = {
+  resolveUrl: apiUrl,
+  fetch: authenticatedFetch,
+};
+
+export async function postDyNativeSaveResult(
+  result: NativeSaveResult,
+  transport: DyNativeSaveResultTransport = DY_NATIVE_SAVE_RESULT_TRANSPORT,
+): Promise<void> {
   try {
-    await fetch(await apiUrl("/sources/dy/task-result"), {
+    await transport.fetch(await transport.resolveUrl("/sources/dy/task-result"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(result),
     });
   } catch {
-    // Backend transient unavailability — drop the result rather than
-    // crashing the dispatcher. The next task poll will keep things moving.
+    // Backend transient unavailability should not crash the service worker.
+  }
+}
+
+export interface DyNativeSaveDispatchDependencies {
+  run: (
+    task: NativeSaveTask,
+    platformSlug: "dy",
+    postResult: (result: NativeSaveResult) => Promise<void>,
+  ) => Promise<void>;
+  postResult: (result: NativeSaveResult) => Promise<void>;
+}
+
+/** Behavior seam used by executeTask and tests to keep native-result closure explicit. */
+export async function dispatchDyNativeSaveTask(
+  task: NativeSaveTask,
+  dependencies: DyNativeSaveDispatchDependencies,
+): Promise<void> {
+  await dependencies.run(task, "dy", dependencies.postResult);
+}
+
+const DY_NATIVE_SAVE_DISPATCH_DEPENDENCIES: DyNativeSaveDispatchDependencies = {
+  run: runNativeSaveTask,
+  postResult: postDyNativeSaveResult,
+};
+
+function clearSearchNavigationWatcher(): void {
+  if (searchNavigationListener !== null) {
+    try {
+      chrome.tabs.onUpdated.removeListener(searchNavigationListener);
+    } catch {
+      // The extension context may already be invalidated during a dev reload.
+    }
+    searchNavigationListener = null;
+  }
+  if (searchNavigationFallbackId !== null) {
+    clearTimeout(searchNavigationFallbackId);
+    searchNavigationFallbackId = null;
   }
 }
 
 function cleanupTask(): void {
+  clearSearchNavigationWatcher();
   if (taskTimeoutId !== null) {
     clearTimeout(taskTimeoutId);
     taskTimeoutId = null;
@@ -381,15 +579,22 @@ function emptyScopeCounts(): Record<DouyinScope, number> {
   return { dy_post: 0, dy_collect: 0, dy_like: 0, dy_follow: 0 };
 }
 
-function armTaskTimeout(task: DyTask): void {
+function armTaskTimeout(task: DyLegacyTask): void {
   const timeoutMs = computeDyTaskTimeoutMs(task);
   taskTimeoutId = setTimeout(async () => {
-    await postTaskResult({
-      task_id: task.id,
-      status: "failed",
-      error: "task_timeout",
-    });
-    cleanupTask();
+    taskTimeoutId = null;
+    try {
+      await postTaskResult({
+        task_id: task.id,
+        status: "failed",
+        error: "task_timeout",
+      });
+      cleanupTask();
+    } catch {
+      // Keep the local task state intact after an unacknowledged terminal
+      // callback. A later worker recovery/backend stale-claim path remains
+      // safer than pretending the task was durably failed and claiming more.
+    }
   }, timeoutMs);
 }
 
@@ -446,29 +651,14 @@ export function onTabReady(
  * an empty DY_SCOPE_RESULT so the state machine still advances and
  * the task eventually finalises rather than hanging until timeout.
  */
-// TEMP DEBUG: track the most recent injectFetchTapInto outcome so
-// it can be passed through DY_SCOPE_EXECUTE → content script →
-// DY_SCOPE_RESULT → backend logs. Lets us diagnose
-// install_messages_received=0 without needing the user's browser
-// console. Will be reverted before release.
+// Keep the latest injection outcome in the normal task-result diagnostics so
+// browser-side failures remain distinguishable from an empty source result.
 let _lastInjectStatus: string = "not_attempted";
 
 function sendScopeExecuteMessage(): void {
-  if (!progress || !taskTabId) {
-    debugLog("sendScopeExecute:no_progress_or_tab", {
-      hasProgress: !!progress,
-      taskTabId,
-    });
-    return;
-  }
+  if (!progress || !taskTabId) return;
   const scope = progress.scopes[progress.current_scope_idx];
-  if (!scope) {
-    debugLog("sendScopeExecute:no_scope_at_idx", {
-      idx: progress.current_scope_idx,
-    });
-    return;
-  }
-  debugLog("sendScopeExecute:start", { scope, idx: progress.current_scope_idx });
+  if (!scope) return;
   void chrome.tabs
     .sendMessage(taskTabId, {
       action: "DY_SCOPE_EXECUTE",
@@ -481,8 +671,7 @@ function sendScopeExecuteMessage(): void {
         debug_inject_status: _lastInjectStatus,
       },
     })
-    .catch((err) => {
-      debugLog("sendScopeExecute:sendMessage_failed", { error: String(err) });
+    .catch(() => {
       // Synthesise an empty per-scope result so the state machine
       // still advances; this is what we'd see if the user landed
       // on a Douyin login wall or risk-control page where our
@@ -498,7 +687,7 @@ function sendScopeExecuteMessage(): void {
     });
 }
 
-function sendSearchExecuteMessage(): void {
+function sendSearchExecuteMessage(resumeAfterNavigation: boolean = false): void {
   if (!searchProgress || !taskTabId) return;
   const keyword = searchProgress.keywords[searchProgress.current_keyword_idx];
   if (!keyword) return;
@@ -510,6 +699,7 @@ function sendSearchExecuteMessage(): void {
         keyword,
         max_items: searchProgress.max_items_per_keyword,
         debug_inject_status: _lastInjectStatus,
+        ...(resumeAfterNavigation ? { resume_after_navigation: true } : {}),
       },
     })
     .catch((err) => {
@@ -522,6 +712,84 @@ function sendSearchExecuteMessage(): void {
         error: `sendMessage_failed: ${String(err)}`,
       });
     });
+}
+
+function dispatchSearchNavigationResume(
+  tabId: number,
+  keyword: string,
+  generation: number,
+): void {
+  if (
+    !searchProgress ||
+    taskTabId !== tabId ||
+    searchProgress.keywords[searchProgress.current_keyword_idx] !== keyword ||
+    searchProgress.navigation_generation !== generation ||
+    searchProgress.navigation_resume_dispatched
+  ) {
+    return;
+  }
+  searchProgress.navigation_resume_dispatched = true;
+  searchProgress.navigation_resume_count += 1;
+  clearSearchNavigationWatcher();
+  onTabReady(
+    tabId,
+    () => {
+      if (
+        !searchProgress ||
+        taskTabId !== tabId ||
+        searchProgress.navigation_generation !== generation ||
+        searchProgress.keywords[searchProgress.current_keyword_idx] !== keyword
+      ) {
+        return;
+      }
+      void injectFetchTapInto(tabId).then(() => {
+        if (
+          searchProgress &&
+          taskTabId === tabId &&
+          searchProgress.navigation_generation === generation &&
+          searchProgress.keywords[searchProgress.current_keyword_idx] === keyword
+        ) {
+          sendSearchExecuteMessage(true);
+        }
+      });
+    },
+    { fallbackMs: 8_000 },
+  );
+}
+
+function armSearchNavigationWatcher(tabId: number, keyword: string): void {
+  clearSearchNavigationWatcher();
+  if (!searchProgress) return;
+  searchProgress.navigation_generation += 1;
+  const generation = searchProgress.navigation_generation;
+  const listener = (
+    updatedId: number,
+    info: { status?: string; url?: string },
+    tab: chrome.tabs.Tab,
+  ): void => {
+    if (updatedId !== tabId) return;
+    const candidateUrl = info.url ?? tab.url ?? "";
+    if (!isDySearchResultUrl(candidateUrl, keyword)) return;
+    dispatchSearchNavigationResume(tabId, keyword, generation);
+  };
+  searchNavigationListener = listener;
+  chrome.tabs.onUpdated.addListener(listener);
+  // Some SPA builds update history without a usable onUpdated transition.
+  // Query the final tab URL once as a bounded fallback. A same-document run
+  // ignores the resume via the content-side execution lock; a new document
+  // accepts it and continues collection.
+  searchNavigationFallbackId = setTimeout(() => {
+    searchNavigationFallbackId = null;
+    if (!searchProgress || taskTabId !== tabId) return;
+    void chrome.tabs
+      .get(tabId)
+      .then((tab) => {
+        if (isDySearchResultUrl(tab.url ?? "", keyword)) {
+          dispatchSearchNavigationResume(tabId, keyword, generation);
+        }
+      })
+      .catch(() => {});
+  }, 10_000);
 }
 
 function sendHotExecuteMessage(): void {
@@ -580,14 +848,63 @@ function navigateToCurrentSearch(): void {
   if (!searchProgress || taskTabId === null) return;
   const keyword = searchProgress.keywords[searchProgress.current_keyword_idx];
   if (!keyword) return;
-  chrome.tabs.update(taskTabId, { url: buildDyDiscoveryPageUrl("search", keyword) }, () => {
-    onTabReady(taskTabId!, () => {
-      void injectFetchTapInto(taskTabId!).then(() => {
-        debugLog("executeSearchTask:inject_done", { inject_status: _lastInjectStatus });
-        sendSearchExecuteMessage();
-      });
-    }, { fallbackMs: 8_000 });
+  const tabId = taskTabId;
+  // The tab is already ready when this function is entered. Do not update it
+  // back to the same homepage: that old-document `complete` race used to let
+  // the execute message land in a document that was about to unload.
+  armSearchNavigationWatcher(tabId, keyword);
+  void injectFetchTapInto(tabId).then(() => {
+    sendSearchExecuteMessage();
   });
+}
+
+async function replaceSearchTabForNextKeyword(): Promise<void> {
+  if (!searchProgress) return;
+  clearSearchNavigationWatcher();
+  const previousTabId = taskTabId;
+  taskTabId = null;
+  ownsTaskTab = false;
+  if (previousTabId !== null) {
+    try {
+      await chrome.tabs.remove(previousTabId);
+    } catch {
+      // It may already have closed during navigation; continue with a fresh tab.
+    }
+  }
+
+  let tab: chrome.tabs.Tab;
+  try {
+    tab = await createTaskTab({ url: withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER), active: false });
+  } catch (err) {
+    await postTaskResult({
+      task_id: searchProgress.task_id,
+      status: "failed",
+      error: "tab_create_failed",
+      debug: { tab_create_error: String(err), stage: "next_search_keyword" },
+    });
+    cleanupTask();
+    return;
+  }
+  taskTabId = tab.id ?? null;
+  ownsTaskTab = true;
+  if (taskTabId === null) {
+    await postTaskResult({
+      task_id: searchProgress.task_id,
+      status: "failed",
+      error: "tab_id_unknown",
+      debug: { stage: "next_search_keyword" },
+    });
+    cleanupTask();
+    return;
+  }
+  const newTabId = taskTabId;
+  onTabReady(
+    newTabId,
+    () => {
+      if (searchProgress && taskTabId === newTabId) navigateToCurrentSearch();
+    },
+    { fallbackMs: 5_000 },
+  );
 }
 
 function navigateToCurrentHot(): void {
@@ -597,7 +914,6 @@ function navigateToCurrentHot(): void {
   chrome.tabs.update(taskTabId, { url: buildDyDiscoveryPageUrl("hot", hotItem.sentence_id) }, () => {
     onTabReady(taskTabId!, () => {
       void injectFetchTapInto(taskTabId!).then(() => {
-        debugLog("executeHotTask:inject_done", { inject_status: _lastInjectStatus });
         sendHotExecuteMessage();
       });
     }, { fallbackMs: 10_000 });
@@ -609,11 +925,28 @@ function navigateToFeed(): void {
   chrome.tabs.update(taskTabId, { url: buildDyDiscoveryPageUrl("feed") }, () => {
     onTabReady(taskTabId!, () => {
       void injectFetchTapInto(taskTabId!).then(() => {
-        debugLog("executeFeedTask:inject_done", { inject_status: _lastInjectStatus });
         sendFeedExecuteMessage();
       });
     }, { fallbackMs: 8_000 });
   });
+}
+
+async function reloadFeedForCaptureRetry(): Promise<void> {
+  if (!feedProgress || taskTabId === null) {
+    throw new Error("feed_retry_tab_missing");
+  }
+  const tabId = taskTabId;
+  _lastInjectStatus = "feed_capture_retry_pending";
+  await chrome.tabs.reload(tabId, { bypassCache: true });
+  onTabReady(
+    tabId,
+    () => {
+      void injectFetchTapInto(tabId).then(() => {
+        sendFeedExecuteMessage();
+      });
+    },
+    { fallbackMs: 10_000 },
+  );
 }
 
 function navigateToCurrentScope(): void {
@@ -637,20 +970,32 @@ async function injectFetchTapInto(tabId: number): Promise<void> {
     _lastInjectStatus = "scripting_api_missing";
     return;
   }
-  try {
-    const result = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: false },
-      files: ["dist/main/dy-fetch-tap.js"],
-      world: "MAIN",
-    });
-    _lastInjectStatus = `ok_results=${Array.isArray(result) ? result.length : "n/a"}`;
-  } catch (err) {
-    // Inject failed — could be scripting permission missing, file
-    // not in web_accessible_resources, captcha intermediate page,
-    // or chrome:// blocked. Capture the error so the content script
-    // can ship it back through scope debug.
-    _lastInjectStatus = `error: ${String(err).slice(0, 120)}`;
+  let lastError = "unknown injection error";
+  for (const file of runtimeAssetCandidates("main/dy-fetch-tap.js")) {
+    try {
+      const result = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        files: [file],
+        world: "MAIN",
+      });
+      _lastInjectStatus =
+        `ok_file=${file};results=${Array.isArray(result) ? result.length : "n/a"}`;
+      return;
+    } catch (err) {
+      // Firefox structured-clones the completion value of a MAIN-world file
+      // injection and rejects a non-clonable result even though the script
+      // executed fine (only the result clone failed). Treat that as success.
+      if (String(err).includes("non-structured-clonable")) {
+        _lastInjectStatus = `ok_file=${file};uncloneable_result`;
+        return;
+      }
+      lastError = String(err);
+    }
   }
+  // Inject failed — could be a mismatched unpacked layout, scripting
+  // permission missing, captcha intermediate page, or chrome:// blocked.
+  // Capture the final error so the content script can ship it through debug.
+  _lastInjectStatus = `error: ${lastError.slice(0, 120)}`;
 }
 
 function normalizeHotTaskItems(items: DyHotTaskItem[] | undefined): DyHotTaskItem[] {
@@ -671,19 +1016,26 @@ function normalizeHotTaskItems(items: DyHotTaskItem[] | undefined): DyHotTaskIte
   return result.sort((a, b) => Number(Boolean(b.seed_aweme_id)) - Number(Boolean(a.seed_aweme_id)));
 }
 
-export async function executeTask(task: DyTask): Promise<void> {
-  debugLog("executeTask:start", { task_id: task.id, taskInFlight });
-  if (taskInFlight) {
-    debugLog("executeTask:already_in_flight");
-    return;
+export async function executeTask(
+  task: DyTask,
+  nativeDependencies: DyNativeSaveDispatchDependencies = DY_NATIVE_SAVE_DISPATCH_DEPENDENCIES,
+  mutexAlreadyHeld: boolean = false,
+): Promise<DyTaskExecutionDisposition> {
+  if (task.type === "native_save") {
+    if (taskInFlight) return "declined";
+    taskInFlight = true;
+    try {
+      await dispatchDyNativeSaveTask(task, nativeDependencies);
+    } finally {
+      taskInFlight = false;
+    }
+    return "accepted";
   }
-  // Cross-source mutex — bail if another dispatcher is currently
-  // holding the task slot. The next alarm fires in 60s and we'll
-  // retry then. Without this guard, daemon producers can race with
-  // a user's manual fetch and both dispatchers may fight over tabs.
-  const mutexAcquired = tryAcquireDispatcherMutex("dy");
-  debugLog("executeTask:mutex", { acquired: mutexAcquired });
-  if (!mutexAcquired) return;
+  if (taskInFlight) return "declined";
+  // Direct callers acquire here. pollDyTaskOnce acquires before claiming
+  // from the backend so a busy sibling dispatcher cannot strand an already
+  // claimed Douyin task in ``in_progress``.
+  if (!mutexAlreadyHeld && !tryAcquireDispatcherMutex("dy")) return "declined";
   taskInFlight = true;
   currentTask = task;
 
@@ -697,17 +1049,19 @@ export async function executeTask(task: DyTask): Promise<void> {
       current_keyword_idx: 0,
       accumulated_count: 0,
       max_items_per_keyword: Math.max(1, Math.floor(task.max_items_per_keyword ?? 20)),
+      navigation_resume_count: 0,
+      navigation_resume_dispatched: false,
+      navigation_generation: 0,
     };
 
     let tab: chrome.tabs.Tab;
     try {
-      tab = await chrome.tabs.create({
-        url: "https://www.douyin.com/",
+      tab = await createTaskTab({
+        url: withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER),
         active: shouldOpenDyTaskActive(task),
       });
-      debugLog("executeSearchTask:tab_created", { tabId: tab.id, keywords: keywords.length });
     } catch (err) {
-      debugLog("executeSearchTask:tab_create_failed", { error: String(err) });
+      armTaskTimeout(task);
       await postTaskResult({
         task_id: task.id,
         status: "failed",
@@ -715,7 +1069,7 @@ export async function executeTask(task: DyTask): Promise<void> {
         debug: { tab_create_error: String(err) },
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     taskTabId = tab.id ?? null;
     ownsTaskTab = true;
@@ -727,12 +1081,12 @@ export async function executeTask(task: DyTask): Promise<void> {
         error: taskTabId === null ? "tab_id_unknown" : "missing_keywords",
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     onTabReady(taskTabId, () => {
       navigateToCurrentSearch();
     }, { fallbackMs: 5_000 });
-    return;
+    return "accepted";
   }
 
   if (task.type === "hot") {
@@ -752,13 +1106,12 @@ export async function executeTask(task: DyTask): Promise<void> {
 
     let tab: chrome.tabs.Tab;
     try {
-      tab = await chrome.tabs.create({
-        url: "https://www.douyin.com/",
+      tab = await createTaskTab({
+        url: withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER),
         active: shouldOpenDyTaskActive(task),
       });
-      debugLog("executeHotTask:tab_created", { tabId: tab.id, hot_count: hotItems.length });
     } catch (err) {
-      debugLog("executeHotTask:tab_create_failed", { error: String(err) });
+      armTaskTimeout(task);
       await postTaskResult({
         task_id: task.id,
         status: "failed",
@@ -766,7 +1119,7 @@ export async function executeTask(task: DyTask): Promise<void> {
         debug: { tab_create_error: String(err) },
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     taskTabId = tab.id ?? null;
     ownsTaskTab = true;
@@ -778,12 +1131,12 @@ export async function executeTask(task: DyTask): Promise<void> {
         error: taskTabId === null ? "tab_id_unknown" : "missing_hot_items",
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     onTabReady(taskTabId, () => {
       navigateToCurrentHot();
     }, { fallbackMs: 5_000 });
-    return;
+    return "accepted";
   }
 
   if (task.type === "feed") {
@@ -791,17 +1144,17 @@ export async function executeTask(task: DyTask): Promise<void> {
       task_id: task.id,
       accumulated_count: 0,
       max_items: Math.max(1, Math.floor(task.max_items ?? 20)),
+      capture_retry_count: 0,
     };
 
     let tab: chrome.tabs.Tab;
     try {
-      tab = await chrome.tabs.create({
-        url: "https://www.douyin.com/",
+      tab = await createTaskTab({
+        url: withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER),
         active: shouldOpenDyTaskActive(task),
       });
-      debugLog("executeFeedTask:tab_created", { tabId: tab.id });
     } catch (err) {
-      debugLog("executeFeedTask:tab_create_failed", { error: String(err) });
+      armTaskTimeout(task);
       await postTaskResult({
         task_id: task.id,
         status: "failed",
@@ -809,7 +1162,7 @@ export async function executeTask(task: DyTask): Promise<void> {
         debug: { tab_create_error: String(err) },
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     taskTabId = tab.id ?? null;
     ownsTaskTab = true;
@@ -821,12 +1174,12 @@ export async function executeTask(task: DyTask): Promise<void> {
         error: "tab_id_unknown",
       });
       cleanupTask();
-      return;
+      return "accepted";
     }
     onTabReady(taskTabId, () => {
       navigateToFeed();
     }, { fallbackMs: 5_000 });
-    return;
+    return "accepted";
   }
 
   const scopes: DouyinScope[] =
@@ -838,6 +1191,8 @@ export async function executeTask(task: DyTask): Promise<void> {
     scopes,
     current_scope_idx: 0,
     accumulated_counts: emptyScopeCounts(),
+    scope_statuses: {},
+    degraded_reasons: [],
     max_items_per_scope: task.max_items_per_scope ?? 300,
     max_scroll_rounds: task.max_scroll_rounds ?? 15,
     max_stagnant_scroll_rounds: task.max_stagnant_scroll_rounds ?? 5,
@@ -853,20 +1208,20 @@ export async function executeTask(task: DyTask): Promise<void> {
   // profile, not empty tab → /user/self).
   let tab: chrome.tabs.Tab;
   try {
-    tab = await chrome.tabs.create({
-      url: "https://www.douyin.com/",
+    tab = await createTaskTab({
+      url: withTaskTabMarker("https://www.douyin.com/", DY_TASK_MARKER),
       active: shouldOpenDyTaskActive(task),
     });
-    debugLog("executeTask:tab_created", { tabId: tab.id });
   } catch (err) {
-    debugLog("executeTask:tab_create_failed", { error: String(err) });
+    armTaskTimeout(task);
     await postTaskResult({
       task_id: task.id,
       status: "failed",
       error: "tab_create_failed",
+      debug: { tab_create_error: String(err) },
     });
     cleanupTask();
-    return;
+    return "accepted";
   }
   taskTabId = tab.id ?? null;
   ownsTaskTab = true;
@@ -879,7 +1234,7 @@ export async function executeTask(task: DyTask): Promise<void> {
       error: "tab_id_unknown",
     });
     cleanupTask();
-    return;
+    return "accepted";
   }
 
   // Single-stage entry now — we land on douyin.com home, inject
@@ -889,12 +1244,11 @@ export async function executeTask(task: DyTask): Promise<void> {
   // session the whole time. No more chrome.tabs.update between
   // scopes; fetch-tap stays installed across SPA routes.
   onTabReady(taskTabId, () => {
-    debugLog("executeTask:tab_ready", { tabId: taskTabId });
     void injectFetchTapInto(taskTabId!).then(() => {
-      debugLog("executeTask:inject_done", { inject_status: _lastInjectStatus });
       sendScopeExecuteMessage();
     });
   });
+  return "accepted";
 }
 
 /**
@@ -904,13 +1258,6 @@ export async function executeTask(task: DyTask): Promise<void> {
  * next scope or finalises the task with status=ok.
  */
 export async function handleDyScopeResult(result: DyScopeResult): Promise<void> {
-  debugLog("handleDyScopeResult", {
-    scope: result.scope,
-    status: result.status,
-    items_count: result.items.length,
-    scope_count: result.scope_count,
-    debug: result.debug,
-  });
   if (!progress || result.task_id !== progress.task_id) return;
   // Reject results from outside the current scope (defensive; the
   // content script should only emit for the scope we asked it to).
@@ -918,6 +1265,10 @@ export async function handleDyScopeResult(result: DyScopeResult): Promise<void> 
   if (result.scope !== expectedScope) return;
 
   progress.accumulated_counts[result.scope] = result.scope_count;
+  progress.scope_statuses[result.scope] = result.status;
+  if (result.status === "degraded" || result.status === "failed") {
+    progress.degraded_reasons.push(dyScopeDegradedReason(result));
+  }
 
   // Post the per-scope items as a partial so the backend's
   // dy_bootstrap_videos_to_events helper propagates them through
@@ -944,9 +1295,13 @@ export async function handleDyScopeResult(result: DyScopeResult): Promise<void> 
   // All scopes done — finalise.
   await postTaskResult({
     task_id: progress.task_id,
-    status: "ok",
+    status: finalizeDyBootstrapStatus(progress.scope_statuses),
     videos: [],
     scope_counts: { ...progress.accumulated_counts },
+    debug: {
+      scope_statuses: { ...progress.scope_statuses },
+      degraded_reasons: [...progress.degraded_reasons],
+    },
   });
   cleanupTask();
 }
@@ -955,13 +1310,20 @@ export async function handleDySearchResult(result: DySearchResult): Promise<void
   if (!searchProgress || result.task_id !== searchProgress.task_id) return;
   const expectedKeyword = searchProgress.keywords[searchProgress.current_keyword_idx];
   if (result.keyword !== expectedKeyword) return;
+  // Invalidate any navigation-ready callback that was armed for this
+  // keyword before awaiting the durable partial/final result POST.
+  searchProgress.navigation_generation += 1;
+  clearSearchNavigationWatcher();
 
   if (result.status === "failed") {
     await postTaskResult({
       task_id: searchProgress.task_id,
       status: "failed",
       error: result.error || "search_failed",
-      debug: result.debug,
+      debug: {
+        search_navigation_resumes: searchProgress.navigation_resume_count,
+        ...(result.debug ?? {}),
+      },
     });
     cleanupTask();
     return;
@@ -976,13 +1338,15 @@ export async function handleDySearchResult(result: DySearchResult): Promise<void
     debug: {
       keyword: result.keyword,
       keyword_status: result.status,
+      search_navigation_resumes: searchProgress.navigation_resume_count,
       ...(result.debug ?? {}),
     },
   });
 
   searchProgress.current_keyword_idx += 1;
   if (searchProgress.current_keyword_idx < searchProgress.keywords.length) {
-    navigateToCurrentSearch();
+    searchProgress.navigation_resume_dispatched = false;
+    await replaceSearchTabForNextKeyword();
     return;
   }
 
@@ -999,6 +1363,13 @@ export async function handleDyHotResult(result: DyHotResult): Promise<void> {
   if (!hotProgress || result.task_id !== hotProgress.task_id) return;
   const expected = hotProgress.hot_items[hotProgress.current_hot_idx];
   if (!expected || result.sentence_id !== expected.sentence_id) return;
+
+  const terminalFailure = buildDyHotTerminalFailure(result);
+  if (terminalFailure) {
+    await postTaskResult(terminalFailure);
+    cleanupTask();
+    return;
+  }
 
   hotProgress.accumulated_count += result.items.length;
   await postTaskResult({
@@ -1052,11 +1423,34 @@ export async function handleDyFeedResult(result: DyFeedResult): Promise<void> {
   if (!feedProgress || result.task_id !== feedProgress.task_id) return;
 
   if (result.status === "failed") {
+    if (shouldRetryDyFeedCapture(result, feedProgress.capture_retry_count)) {
+      feedProgress.capture_retry_count += 1;
+      try {
+        await reloadFeedForCaptureRetry();
+        return;
+      } catch (err) {
+        await postTaskResult({
+          task_id: feedProgress.task_id,
+          status: "failed",
+          error: "feed_capture_reload_failed",
+          debug: {
+            ...(result.debug ?? {}),
+            feed_capture_retries: feedProgress.capture_retry_count,
+            feed_reload_error: String(err),
+          },
+        });
+        cleanupTask();
+        return;
+      }
+    }
     await postTaskResult({
       task_id: feedProgress.task_id,
       status: "failed",
       error: result.error || "feed_failed",
-      debug: result.debug,
+      debug: {
+        ...(result.debug ?? {}),
+        feed_capture_retries: feedProgress.capture_retry_count,
+      },
     });
     cleanupTask();
     return;
@@ -1070,6 +1464,7 @@ export async function handleDyFeedResult(result: DyFeedResult): Promise<void> {
     scope_counts: { dy_feed: feedProgress.accumulated_count },
     debug: {
       feed_status: result.status,
+      feed_capture_retries: feedProgress.capture_retry_count,
       ...(result.debug ?? {}),
     },
   });
@@ -1103,7 +1498,7 @@ export interface DyScopeResult {
   scope: DouyinScope;
   items: DouyinBootstrapItem[];
   scope_count: number;
-  status: "ok" | "empty" | "failed";
+  status: "ok" | "empty" | "degraded" | "failed";
   error?: string;
   debug?: Record<string, unknown>;
 }
@@ -1129,6 +1524,16 @@ export interface DyHotResult {
   debug?: Record<string, unknown>;
 }
 
+export function buildDyHotTerminalFailure(result: DyHotResult): DyTaskResult | null {
+  if (result.status !== "failed") return null;
+  return {
+    task_id: result.task_id,
+    status: "failed",
+    error: result.error || "hot_failed",
+    debug: result.debug,
+  };
+}
+
 export interface DyFeedResult {
   task_id: string;
   items: DouyinSearchItem[];
@@ -1138,11 +1543,98 @@ export interface DyFeedResult {
   debug?: Record<string, unknown>;
 }
 
-async function pollNextTask(): Promise<void> {
-  if (taskInFlight) return;
-  const task = await fetchNextTask();
-  if (!task) return;
-  await executeTask(task);
+export interface DyTaskPollDependencies {
+  ensureRecovery: () => Promise<void>;
+  canExecute?: () => boolean;
+  fetchTask: () => Promise<DyTask | null>;
+  execute: (
+    task: DyTask,
+    mutexAlreadyHeld: boolean,
+  ) => Promise<DyTaskExecutionDisposition>;
+  reportDeclined: (task: DyTask) => Promise<void>;
+}
+
+async function reportDeclinedTask(task: DyTask): Promise<void> {
+  if (task.type === "native_save") {
+    await postDyTaskResult({
+      task_id: task.id,
+      item_key: task.item_key,
+      status: "failed",
+      error_code: "native_save_failed",
+      error_message: "dispatcher_busy_after_claim",
+    });
+    return;
+  }
+  await postTaskResult({
+    task_id: task.id,
+    status: "failed",
+    error: "dispatcher_busy_after_claim",
+  });
+}
+
+const DY_TASK_POLL_DEPENDENCIES: DyTaskPollDependencies = {
+  ensureRecovery: ensureNativeSaveTaskRecovery,
+  canExecute: () => {
+    try {
+      return typeof globalThis.chrome?.tabs?.create === "function";
+    } catch {
+      return false;
+    }
+  },
+  fetchTask: fetchNextTask,
+  execute: async (task, mutexAlreadyHeld) => {
+    return await executeTask(task, DY_NATIVE_SAVE_DISPATCH_DEPENDENCIES, mutexAlreadyHeld);
+  },
+  reportDeclined: reportDeclinedTask,
+};
+
+export function pollDyTaskOnce(
+  dependencies: DyTaskPollDependencies = DY_TASK_POLL_DEPENDENCIES,
+): Promise<void> {
+  if (pollInFlight) return pollInFlight;
+  const running = (async () => {
+    await dependencies.ensureRecovery();
+    if (taskInFlight) return;
+    // A runtime-stream subscriber is not necessarily a fully-capable browser
+    // extension worker. Never atomically claim a backend task when this
+    // execution context cannot create the tab that task requires.
+    if (dependencies.canExecute && !dependencies.canExecute()) return;
+
+    // GET /next-task atomically changes pending -> in_progress. Take the
+    // cross-source slot first so a busy sibling dispatcher can never make us
+    // claim a task that we then abandon without a tab or terminal callback.
+    if (!tryAcquireDispatcherMutex("dy")) return;
+    let releaseOnExit = true;
+    try {
+      const task = await dependencies.fetchTask();
+      if (!task) return;
+      if (task.type === "native_save") {
+        // Native-save owns a separate durable runner/recovery lifecycle and
+        // historically does not hold the legacy discovery tab mutex.
+        releaseDispatcherMutex("dy");
+        releaseOnExit = false;
+        const disposition = await dependencies.execute(task, false);
+        if (disposition === "declined") await dependencies.reportDeclined(task);
+        return;
+      }
+      const disposition = await dependencies.execute(task, true);
+      if (disposition === "declined") {
+        await dependencies.reportDeclined(task);
+        return;
+      }
+      // The legacy task lifecycle now owns the mutex; cleanupTask releases it
+      // after a result, timeout, or tab/message failure.
+      releaseOnExit = false;
+    } finally {
+      if (releaseOnExit) releaseDispatcherMutex("dy");
+    }
+  })();
+  pollInFlight = running;
+  const clearPoll = (): void => {
+    if (pollInFlight === running) pollInFlight = null;
+  };
+  void running.then(clearPoll, clearPoll);
+  return running;
 }
 
 /**
@@ -1170,7 +1662,7 @@ export function startDyTaskPolling(): void {
  */
 export function handleDyTaskAlarm(alarmName: string): void {
   if (alarmName === POLL_ALARM_NAME) {
-    void pollNextTask();
+    void pollDyTaskOnce().catch(() => {});
   }
 }
 
@@ -1182,7 +1674,7 @@ export function handleDyTaskAlarm(alarmName: string): void {
  * if a task is already in flight.
  */
 export function pollDyTaskNow(): void {
-  void pollNextTask();
+  void pollDyTaskOnce().catch(() => {});
 }
 
 /**

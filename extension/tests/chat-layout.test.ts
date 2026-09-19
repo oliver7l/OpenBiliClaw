@@ -20,8 +20,6 @@ test("chat tab layout pins a compact composer below a flexible history pane", ()
   const chatShellBlock = cssBlockWith(popupHtml, ".chat-shell", /overflow:\s*hidden;/);
   const chatMessagesBlock = cssBlockWith(popupHtml, ".chat-messages", /overflow-y:\s*auto;/);
   const chatFormBlock = cssBlockWith(popupHtml, ".chat-form", /margin-top:\s*auto;/);
-  const chatFooterBlock =
-    popupHtml.match(/\.shell:has\(#viewChat:not\(\[hidden\]\)\)\s+\.footer\s*\{[\s\S]*?\}/)?.[0] ?? "";
 
   assert.match(viewBlock, /flex:\s*1;/);
   assert.match(chatShellBlock, /flex:\s*1;/);
@@ -31,7 +29,44 @@ test("chat tab layout pins a compact composer below a flexible history pane", ()
   assert.doesNotMatch(chatMessagesBlock, /max-height:/);
   assert.match(chatFormBlock, /margin-top:\s*auto;/);
   assert.match(chatFormBlock, /flex-shrink:\s*0;/);
-  assert.match(chatFooterBlock, /display:\s*none;/);
+  assert.doesNotMatch(
+    popupHtml,
+    /\.shell:has\(#viewChat:not\(\[hidden\]\)\)\s+\.footer\s*\{[\s\S]*?display:\s*none;/,
+    "the global activity footer must stay visible on the chat tab",
+  );
+});
+
+test("pending confirmations stay bounded and scroll independently from chat history", () => {
+  const popupHtml = readFileSync(resolve("popup", "popup.html"), "utf8");
+  const pendingBlock = cssBlockWith(popupHtml, ".chat-pending", /max-height:/);
+  const listBlock = cssBlockWith(popupHtml, ".chat-pending-list", /overflow-y:\s*auto;/);
+  const messagesBlock = cssBlockWith(popupHtml, ".chat-messages", /overflow-y:\s*auto;/);
+
+  assert.match(pendingBlock, /max-height:\s*min\(32vh,\s*240px\);/);
+  assert.match(pendingBlock, /overflow:\s*hidden;/);
+  assert.match(listBlock, /grid-auto-rows:\s*max-content;/);
+  assert.match(listBlock, /overflow-y:\s*auto;/);
+  assert.match(listBlock, /overscroll-behavior:\s*contain;/);
+  assert.match(messagesBlock, /min-height:\s*0;/);
+  assert.match(messagesBlock, /scrollbar-width:\s*thin;/);
+  assert.match(
+    popupHtml,
+    /id="chatMessages"[^>]*role="region"[^>]*aria-label="口味对话记录"[^>]*tabindex="0"/,
+  );
+});
+
+test("chat refresh preserves reader position and expanded evidence", () => {
+  const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
+
+  assert.match(
+    popupJs,
+    /function isChatMessagesNearBottom\(messages = elements\.chatMessages\)/,
+  );
+  assert.match(popupJs, /function openChatEvidenceTurnIds\(\)/);
+  assert.match(popupJs, /const previousScrollTop = elements\.chatMessages\.scrollTop;/);
+  assert.match(popupJs, /if \(openEvidence\.has\(turnId\)\) details\.open = true;/);
+  assert.match(popupJs, /suppressChatAutoScroll = true;/);
+  assert.match(popupJs, /else elements\.chatMessages\.scrollTop = previousScrollTop;/);
 });
 
 test("chat composer stays compact so short side panels keep room for messages", () => {
@@ -89,7 +124,7 @@ test("chat form reserves a dedicated status line for staged progress", () => {
 test("chat tab scrolls restored history to the newest message", () => {
   const popupJs = readFileSync(resolve("popup", "popup.js"), "utf8");
   const setActiveTabBlock =
-    popupJs.match(/function setActiveTab\(tabName\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+    popupJs.match(/function setActiveTab\([^)]*\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const hydrateBlock =
     popupJs.match(/async function hydrateChatHistory\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
 
