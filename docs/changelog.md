@@ -4,7 +4,31 @@
 
 ---
 
-## docs: 补齐 index.md 导航表缺失条目 + soul/discovery 幽灵路径修正（2026-09-19）
+## docs: 重制 soul / discovery 架构图并修正导航（2026-09-19）
+
+模块盘点进一步核实：**soul 与 discovery 并非"散落"，而是已抽取为独立包迁移**：
+
+- **灵魂引擎** → `packages/obc-soul/obc_soul/`（engine / pipeline / analyzers / profile / overrides /
+  speculator 等，含 `py.typed`），从 `src/openbiliclaw/soul/` 迁出。
+- **内容发现** → `packages/obc-discovery/obc_discovery/`（engine / strategies / candidate_pool /
+  candidate_pipeline），从 `src/openbiliclaw/discovery/` 迁出。
+- 修正此前误标为「文档漂移/散落」的结论，改为「包迁移」真实路径。
+
+本次文档改动：
+
+- **index.md**：灵魂引擎 / 内容发现 / 灵魂管线架构三行代码路径改为 `packages/obc-*`；架构图链接去掉「⚠ 已漂移」。
+- **diagrams/soul-architecture.html / discovery-architecture.html**：banner 由「漂移」改为「包已迁移」，
+  指向 `packages/obc-soul|obc-discovery/`，正文结构与代码一致。
+- **modules/soul-pipeline-architecture.md**：7 处 `src/openbiliclaw/soul/` 路径批量改为
+  `packages/obc-soul/obc_soul/`，顶部说明同步更新。
+
+---
+
+## docs: 补齐 index.md 导航表缺失条目 + soul/discovery 路径修正（2026-09-19）
+
+> **⚠ 更正**：本条目早期判断 soul/discovery 为「散落」，后经进一步核实（见上方
+> `docs: 重制 soul / discovery 架构图并修正导航`）实为**抽取为独立包**
+> `packages/obc-soul/`、`packages/obc-discovery/` 迁移，非散落。条目序号与导航补全部分有效，路径结论以上方条目为准。
 
 模块盘点（代码包 ↔ 40 份模块文档 ↔ `docs/index.md` 导航表交叉比对）修正：
 

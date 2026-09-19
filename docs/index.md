@@ -25,11 +25,11 @@
 
 ## 可视化架构图
 
-- [Soul 模块架构与流程图](diagrams/soul-architecture.html) — ⚠ 已漂移（历史设计稿）：Soul 真实写回口、pipeline 输入边界、完整 rebuild 与局部写回路径
+- [Soul 模块架构与流程图](diagrams/soul-architecture.html) — 灵魂引擎（`packages/obc-soul/`）：写回口、pipeline 输入边界、rebuild 与局部写回路径
 - [Soul 更新变化流程图](diagrams/soul-update-flow.html) — 事件来源矩阵、分层路由、典型场景和专属名词注释
 - [Recommendation 模块架构与流程图](diagrams/recommendation-architecture.html) — 候选池 readiness、serve 热路径、PoolCurator、MMR 和反馈回流
 - [Web HTML 模块架构与流程图](diagrams/web-architecture.html) — `/web` 桌面端、`/m` 移动端、REST hydration、runtime-stream 和用户动作边界
-- [Discovery 模块架构图](diagrams/discovery-architecture.html) — ⚠ 已漂移（历史设计稿）：多源发现、刷新调度、评估优化和模块协议边界
+- [Discovery 模块架构图](diagrams/discovery-architecture.html) — 内容发现引擎（`packages/obc-discovery/`）：多源发现、策略执行、评估优化、候选池
 
 ## 模块文档
 
@@ -43,14 +43,14 @@
 | 日记系统 | [modules/diary.md](modules/diary.md) | `src/openbiliclaw/diary/` | ✅ 完整日记记录 + AI 分析 + 多格式导入 + 桌面端页面；v2026-09-14 补多来源导入管线（`diary/sources/` + `scripts/import_diary.py`，苹果备忘录 / 有道云 / WPS）与 24 表文档 |
 | 笔记系统 | [modules/notes.md](modules/notes.md) | `src/openbiliclaw/notes/` | ✅ v0.3.201 视频转笔记管线 + FTS 搜索 + 已读库导入 + CLI/API |
 | 聊天记录分析系统 | [modules/chat_analysis.md](modules/chat_analysis.md) | `src/openbiliclaw/chat_analysis/` | ✅ 独立数据库，801 会话，360 万消息，832 分析片段，13 个 API 端点 |
-| 灵魂引擎 | [modules/soul.md](modules/soul.md) | 无独立 `soul/` 包：`memory/manager.py` + `self_evolution/`（画像合成/兴趣漂移）+ `recommendation/delight.py` + `cli/_cmd_soul.py` | ⚠ 文档漂移：代码散落如上，非独立包 |
-| 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | 无独立 `discovery/` 包：多源 producers 在 `runtime/*producer.py`，评估在 `eval/`（evaluator / discovery_evaluator / optimizer），keyword 生成在 `runtime/keyword_planner.py`，待评估池在 `storage/_discovery_candidates_mixin.py` | ⚠ 文档漂移：代码散落如上，非独立包 |
+| 灵魂引擎 | [modules/soul.md](modules/soul.md) | `packages/obc-soul/obc_soul/`（engine / pipeline / analyzers / profile / overrides）+ `src/openbiliclaw/memory/manager.py`（五层记忆持久化）+ `src/openbiliclaw/cli/_cmd_soul.py` | ✅ 独立包 obc-soul（从 `src/openbiliclaw/soul/` 迁出） |
+| 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `packages/obc-discovery/obc_discovery/`（engine / strategies / candidate_pool / candidate_pipeline）+ `src/openbiliclaw/runtime/*producer.py`（多源拉取）+ `src/openbiliclaw/eval/`（评估） | ✅ 独立包 obc-discovery（从 `src/openbiliclaw/discovery/` 迁出） |
 | 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |
 | 存储层 | [modules/storage.md](modules/storage.md) | `src/openbiliclaw/storage/` | ✅ SQLite schema + discovery_candidates 待评估池 + pool readiness 计数 |
 | 阅读库正文回补 | [modules/refill.md](modules/refill.md) | `src/openbiliclaw/refill/` | ✅ M1–M5 全部落地：中央队列 + 6 通道 + Scheduler + 归档收口 |
 | 二创/下载项目统一管理 | [vendor-policy.md](vendor-policy.md) | `scripts/vendor_manage.py` + `vendor-registry.json` | ✅ 独立 git + 主仓忽略 + 注册表登记；70 项已登记，7 项打「本地修改」标 |
 | Knowledge Forge 知识锻造炉 | [modules/knowledge_forge.md](modules/knowledge_forge.md) | `src/openbiliclaw/knowledge_forge/` | ✅ v0.3.217 六管线 + 质量审计 + 知识图谱 + 自动补充 + 实体网络 774 / 共现 4,712 |
-| 灵魂管线架构 | [modules/soul-pipeline-architecture.md](modules/soul-pipeline-architecture.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
+| 灵魂管线架构 | [modules/soul-pipeline-architecture.md](modules/soul-pipeline-architecture.md) | `packages/obc-soul/obc_soul/` | ✅ 完成 |
 | 浏览器插件 | [modules/extension.md](modules/extension.md) | `extension/` | ✅ 支持 B 站 + 小红书 + 抖音 + YouTube / X 任务桥、跨平台行为采集、扩展驱动 E2E 捕捉自检、Cookie 同步、自启动开关和降级配置修复 |
 | CLI 命令参考 | [modules/cli.md](modules/cli.md) | `src/openbiliclaw/cli.py` | ✅ 持续更新 (含 `autostart` / `setup-embedding` / `discover-douyin` / `fetch-youtube` / `import-youtube`) |
 | 配置参考 | [modules/config.md](modules/config.md) | `config.example.toml` | ✅ 持续更新 (含 `[autostart]`、`/api/config` 回滚与 `reset_fields`) |

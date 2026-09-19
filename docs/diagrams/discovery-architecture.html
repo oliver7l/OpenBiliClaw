@@ -94,12 +94,13 @@
 <body>
 
 <h1>Discovery 模块架构全景</h1>
-<div class="arch-banner"><strong>⛔ 架构已漂移（2026-09-19 盘点）</strong>：图中无独立 <code>discovery/</code> 包，<code>src/openbiliclaw/</code> 下该目录不存在。
-  内容发现逻辑真实散落在 <code>runtime/*producer.py</code>（多源拉取）、<code>eval/</code>（评估/优化）、
-  <code>runtime/keyword_planner.py</code>（keyword 生成）、<code>storage/_discovery_candidates_mixin.py</code>（待评估池）。
-  本图为历史设计稿，代码落点以 <code>docs/index.md</code> 内容发现行为准，修复前勿据此重建 <code>discovery/</code>。</div>
+<div class="arch-banner"><strong>包已迁移（2026-09-19 盘点修正）</strong>：内容发现引擎的真实代码位于独立包
+  <code>packages/obc-discovery/obc_discovery/</code>（engine / strategies / candidate_pool / candidate_pipeline 等），
+  已从旧的 <code>src/openbiliclaw/discovery/</code> 迁出（该目录不存在）。图中各策略与
+  <code>ContentDiscoveryEngine.discover() / evaluate_content_batch()</code> 与真实代码一致，仅路径以
+  <code>packages/obc-discovery/</code> 为准。</div>
 <p class="subtitle">内容发现引擎 &mdash; 从用户画像到候选内容池的完整数据流（生产路径走真实 Bilibili API；MockClient 仅用于离线评估）</p>
-<p class="stamp">docs/diagrams/discovery-architecture.html &middot; 对齐 v0.3.97 (2026-05-31) 主干代码</p>
+<p class="stamp">docs/diagrams/discovery-architecture.html &middot; 2026-09-19 路径对齐 packages/obc-discovery/</p>
 
 <div class="legend">
   <div class="legend-item"><div class="legend-swatch" style="background:#58a6ff"></div>外部输入/输出 / 真实 API</div>

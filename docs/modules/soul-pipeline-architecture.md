@@ -1,11 +1,9 @@
 # OpenBiliClaw 用户画像管道架构文档
 
-> **⛔ 本架构描述已漂移（2026-09-19 盘点）**：下文引用的 `src/openbiliclaw/soul/*.py`
-> **不存在**，`src/openbiliclaw/` 下已无 `soul/` 包。灵魂画像的真实实现散落在：
-> `memory/manager.py`（五层记忆持久化）、`self_evolution/`（画像合成/兴趣漂移/洞察）、
-> `recommendation/delight.py`、`cli/_cmd_soul.py`。本文档保留为**历史设计稿**，
-> 供理解管道分层意图之用；实际代码落点以 `docs/index.md` 「灵魂引擎」行为准。
-> 修复代码区位置前不要据此重建 `soul/` 目录。
+> **包已迁移（2026-09-19 盘点修正）**：本文档引用的 `soul/*.py` 现位于独立包
+> **`packages/obc-soul/obc_soul/`**（已从旧的 `src/openbiliclaw/soul/` 迁出，该目录不存在）。
+> 相关代码位置以 `packages/obc-soul/obc_soul/` 为准；`_cmd_soul.py` 仍位于
+> `src/openbiliclaw/cli/_cmd_soul.py`。五层洋葱模型与引擎编排结构请复核后使用。
 
 ## 概述
 
@@ -19,7 +17,7 @@ OpenBiliClaw 采用**五层记忆网络 + 五层洋葱模型**的双层架构，
 
 **职责：** 协调各层分析器，驱动整个画像更新流程
 
-**位置：** `src/openbiliclaw/soul/engine.py`
+**位置：** `packages/obc-soul/obc_soul/engine.py`
 
 **输入：**
 - 原始行为事件列表 `list[dict[str, Any]]`（view、like、comment 等）
@@ -56,7 +54,7 @@ OpenBiliClaw 采用**五层记忆网络 + 五层洋葱模型**的双层架构，
 
 **职责：** 从事件序列中提取结构化的偏好信号，执行衰减和合并逻辑
 
-**位置：** `src/openbiliclaw/soul/preference_analyzer.py`
+**位置：** `packages/obc-soul/obc_soul/preference_analyzer.py`
 
 **输入：**
 - 事件列表 `list[dict[str, object]]`（event_type、title、category、tags 等）
@@ -110,7 +108,7 @@ updated = await analyzer.analyze_events(
 
 **职责：** 从历史数据 + 偏好 + 观察笔记 + insight，一次性生成或重生成Soul层
 
-**位置：** `src/openbiliclaw/soul/profile_builder.py`
+**位置：** `packages/obc-soul/obc_soul/profile_builder.py`
 
 **输入：**
 - 历史摘要 `dict[str, object]`（标题列表、作者列表、观看计数）
@@ -167,7 +165,7 @@ profile = await builder.build(
 
 **职责：** 定义所有用户理解数据的结构，支持序列化/反序列化
 
-**位置：** `src/openbiliclaw/soul/profile.py`
+**位置：** `packages/obc-soul/obc_soul/profile.py`
 
 **洋葱模型（OnionProfile）五层架构（从内到外）：**
 
@@ -192,7 +190,7 @@ profile = await builder.build(
 
 **职责：** 将所有类型的输入信号分类、缓冲、按层触发更新
 
-**位置：** `src/openbiliclaw/soul/pipeline.py`
+**位置：** `packages/obc-soul/obc_soul/pipeline.py`
 
 **输入：**
 - ProfileSignal 对象
@@ -233,7 +231,7 @@ result = await pipeline.flush(layers=...)    # 强制刷新
 
 **职责：** 实现每一层的具体更新策略
 
-**位置：** `src/openbiliclaw/soul/layer_updaters.py`
+**位置：** `packages/obc-soul/obc_soul/layer_updaters.py`
 
 | 层 | 更新方式 | 实现状态 |
 |----|---------|---------|
@@ -264,7 +262,7 @@ timestamp: str             # ISO时间戳
 
 **职责：** 主动生成用户可能感兴趣但未接触的领域，通过事件匹配验证和晋升
 
-**位置：** `src/openbiliclaw/soul/speculator.py`
+**位置：** `packages/obc-soul/obc_soul/speculator.py`
 
 **生命周期：**
 ```

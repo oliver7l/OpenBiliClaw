@@ -287,12 +287,12 @@
 <main>
   <header>
     <h1>Soul 模块架构全景</h1>
-    <div class="arch-banner"><strong>⛔ 架构已漂移（2026-09-19 盘点）</strong>：图中源码无 <code>soul/</code> 包，
-      <code>src/openbiliclaw/</code> 下该目录不存在。灵魂画像真实实现散落在 <code>memory/manager.py</code>、
-      <code>self_evolution/</code>（画像合成/兴趣漂移/洞察）、<code>recommendation/delight.py</code>、
-      <code>cli/_cmd_soul.py</code>。本图为历史设计稿，代码落点以 <code>docs/index.md</code> 灵魂引擎行为准，修复前勿据此重建 <code>soul/</code>。</div>
+    <div class="arch-banner"><strong>包已迁移（2026-09-19 盘点修正）</strong>：灵魂引擎的真实代码位于独立包
+      <code>packages/obc-soul/obc_soul/</code>（engine / pipeline / analyzers / profile / overrides / speculator 等），
+      已从旧的 <code>src/openbiliclaw/soul/</code> 迁出（该目录不存在）。本图编排结构（ProfileUpdatePipeline、
+      OnionProfile、PreferenceAnalyzer 等）与真实代码一致，仅路径以 <code>packages/obc-soul/</code> 为准。</div>
     <p class="subtitle">这张图按当前源码梳理 Soul 的真实写回口：哪些输入会进入 ProfileUpdatePipeline，哪些后台 loop 会定时触发，哪些路径会完整 rebuild，哪些只是局部写回或读时覆盖。</p>
-    <p class="stamp">docs/diagrams/soul-architecture.html · updated 2026-06-17 · source-aligned architecture map</p>
+    <p class="stamp">docs/diagrams/soul-architecture.html · updated 2026-09-19 · 路径对齐 packages/obc-soul/</p>
     <div class="legend" aria-label="图例">
       <span><i class="dot" style="background:var(--blue)"></i>外部输入</span>
       <span><i class="dot" style="background:var(--green)"></i>局部写回</span>
