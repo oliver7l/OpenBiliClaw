@@ -1,6 +1,6 @@
 # refill —— 阅读库正文统一回补模块
 
-> 状态：M1 ✦ M2 ✦ M3 ✦ M4 全部通道已交付（中央队列 + Scheduler + direct/search_click/ytdlp/getnote/bili_cli/zhihu_api）；旧脚本停用/归档为运维交接步骤。
+> 状态：M1 ✦ M2 ✦ M3 ✦ M4 全部通道已交付（中央队列 + Scheduler + direct/search_click/ytdlp/getnote/bili_cli/zhihu_api + M4+ yt_bridge）；旧脚本停用/归档为运维交接步骤。
 > 设计稿：`docs/refill-module-design.md`；开发/交接：`docs/refill-module-dev-guide.md`。
 
 ## 概述
@@ -20,6 +20,7 @@
 | Scheduler 调度 | `RefillScheduler`：按配额 pick → route → 抓 → 写正文 → 收口；AgentLimb 关断只跳过依赖它的通道，不阻塞其它 | ✅ |
 | `direct` 通道 | 登录态 Chrome 直接访问 + 防假命中守卫（镜像 web_capture） | ✅ |
 | `search_click` 通道 | 小红书标题搜索 + CDP 点击读 `noteDetailMap`（镜像 agentlimb_xhs_batch） | ✅ |
+| `yt_bridge` 通道 | 登录态 Chrome 抓 YouTube 字幕（播放器 POT 收割）/ 简介兜底 | ✅ M4+ |
 | `ytdlp` 通道 | YouTube 字幕/简介（镜像 refill_youtube_subtitles，字幕→简介兜底） | ✅ M3 |
 | `getnote` 通道 | 得到大脑服务端兜底（同步 save + 异步 task/note 回收；配额打满熔断） | ✅ M3 |
 | `bili_cli` 通道 | B 站字幕口播稿 / AI 总结 + 简介 兜底（镜像 refill_article_bodies） | ✅ M4 |
@@ -61,24 +62,30 @@ sch = RefillScheduler(queue, min_body_len=30, quota=cfg.refill.quota,
 summary = sch.run_cycle(sources=("bilibili",))      # {source: {picked/done/...}}
 ```
 
-- `build_channels(bridge=None)` → `direct / search_click / ytdlp / getnote / bili_cli /
-  zhihu_api`。`direct` / `search_click` 依赖 AgentLimb（`requires_bridge=True`）；其余用本机
-  子进程、不依赖桥接——`bridge=None` 即可纯 ytdlp/getnote/bili_cli/zhihu_api 调度。
-- 路由见 `channels.base.route_channels`：小红书 `search_click→direct→getnote`、YouTube
-  `ytdlp→getnote→direct`、抖音 `getnote→direct`、B站 `bili_cli→getnote→direct`、知乎
-  `zhihu_api→getnote→direct`、其余 `direct`。
+- `build_channels(bridge=None)` → `direct / search_click / yt_bridge / ytdlp /
+  getnote / bili_cli / zhihu_api`。`direct` / `search_click` / `yt_bridge` 依赖
+  AgentLimb（`requires_bridge=True`）；其余用本机子进程、不依赖桥接——
+  `bridge=None` 即可纯 ytdlp/getnote/bili_cli/zhihu_api 调度。
+- 路由见 `channels.base.route_channels`：小红书 `search_click→direct→getnote`、
+  YouTube `yt_bridge→ytdlp→getnote→direct`、抖音 `getnote→direct`、B站
+  `bili_cli→getnote→direct`、知乎 `zhihu_api→getnote→direct`、其余 `direct`。
 - 语义：抓成功且正文 ≥ `min_body_len` → 写正文、标 `done`；detail 以 `PERMANENT` 开头
   （YT 无字幕 / B站无字幕AI简介等真不可抓）→ 标 `skipped`；否则 `attempts+1`，达
   `max_attempts` 置 `dropped`；基础设施故障抛 `BridgeUnavailableError` → 不计数、跳过该条继续。
 - 外部依赖：`bili_cli` 需本机 `bili` CLI；`zhihu_api` 需 `zhihu-toolkit` venv python 与
   `06_正文补抓/archive/zhihu_api_body.py`（M4 收尾 git mv 归档）；`getnote` 需本机 getnote CLI 与配额。
 
-> **YouTube 环境约束（2026-09-19 定：保持现状，不主动解决）**
-> `ytdlp` 通道需**可达代理**（默认 `127.0.0.1:7890`，可用 `YT_PROXY_POOL` 逗号分隔多出口轮换）
-> 且 YouTube 直连在国内被墙。当前无可用代理出口 + 无登录 cookie（`YT_COOKIE_FILE` /
-> `YT_COOKIES_FROM_BROWSER`）时，出口被判 bot 会抛 `BridgeUnavailableError`（全局熔断，
-> **不消耗配额**，仅计 `bridge_off`）。因此 1.9 万 条 YouTube 队列暂时 0 完成，维持现状：
-> 配额保留（`per_cycle=2`）、每轮白轮询无害；待用户提供可用代理 + cookie 后自然恢复，无需改代码。
+> **YouTube 环境约束（2026-09-19 定 → 当晚已被 yt_bridge 化解）**
+> 原状：`ytdlp` 通道需可达代理且出口被判 bot（POT token 机制）→ 1.9 万条队列 0 完成。
+> **M4+ 已接入 `yt_bridge` 通道**（`refill/channels/yt_bridge.py`）：AgentLimb 登录态
+> Chrome navigate watch 页 → 驱动 `movie_player` 加载字幕 → 从 `performance` 资源表
+> 收割播放器自带的带 POT timedtext URL → 页内 fetch + json3 解析；无字幕轨时简介
+> 兜底，两者皆无 / 不可播放 → `PERMANENT`。已验证被否的替代路径：直接 fetch
+> `baseUrl`（200 空 body）、ANDROID / WEB_EMBEDDED / TVHTML5 player 客户端（无轨道
+> 或 ERROR）、`get_transcript`（YouTube 自带 params 仍 400 Precondition failed）。
+> **桥接 `javascript_eval` 不支持 `await`**（SyntaxError），页内 JS 一律同步 IIFE /
+> `.then` 链。路由桥接优先（ytdlp bot 抛错会中断整条候选链），AgentLimb 关断时
+> 自动回落 ytdlp（有可用代理 + `YT_COOKIE_FILE` 时仍可直连）。
 
 ## 配置项
 

@@ -4,6 +4,27 @@
 
 ---
 
+## feat: refill 新增 yt_bridge 通道——登录态 Chrome 抓 YouTube 字幕（2026-09-19）
+
+- **背景**：ytdlp 通道出口代理（127.0.0.1:7890）被 YouTube 判 bot（POT token 机制），
+  1.9 万条 YouTube 队列持续 0 完成、每轮全熔断。
+- **新通道 `yt_bridge`**（`refill/channels/yt_bridge.py`，`requires_bridge=True`）：
+  AgentLimb 登录态 Chrome navigate 到 watch 页 → 读 `ytInitialPlayerResponse`
+  （playability / 简介 / 字幕轨道）→ 驱动 `movie_player` 加载字幕并从
+  `performance` 资源表收割播放器自带的带 POT timedtext URL → 页内 fetch + json3
+  解析 → 去重拼接；无字幕轨时简介兜底，两者皆无 / 视频不可播放 → `PERMANENT`。
+- **关键约束**：桥接 `javascript_eval` 不支持 `await` 关键字（SyntaxError），
+  页内 JS 全部用同步 IIFE / `.then` 链（返回 Promise 会被桥接自动 resolve）。
+  直接 fetch `baseUrl`（含 fmt 变体）返回 200 空 body（POT 拦截），ANDROID /
+  WEB_EMBEDDED / TVHTML5 player 客户端与 `get_transcript`（YouTube 自带 params
+  仍 400 Precondition failed）均不可用——播放器 POT 收割是唯一验证可行路径。
+- **路由**：youtube → `yt_bridge → ytdlp → getnote → direct`（桥接优先；桥接
+  关断时回落 ytdlp）。新增单测 11 例（`tests/refill/test_yt_bridge_channel.py`），
+  refill 全套 45 例通过；ruff / mypy 干净。首轮实测 2 pick 1 成功。
+
+---
+
+
 ## docs: 模块文档全量审计收尾（46 包 / 44 文档一致）（2026-09-19）
 
 对全部 46 个代码包 / 44 份模块文档完成「文档 ↔ 代码」一致性审计（类名交叉核验 +

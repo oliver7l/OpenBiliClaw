@@ -11,15 +11,16 @@ scheduler 负责。
 from __future__ import annotations
 
 from openbiliclaw.refill.channels.base import (
-    Channel,
-    BridgeUnavailableError,
     PERMANENT,
+    BridgeUnavailableError,
+    Channel,
 )
 from openbiliclaw.refill.channels.bili_cli import BiliCliChannel
 from openbiliclaw.refill.channels.bridge import AgentLimbBridge
 from openbiliclaw.refill.channels.direct import DirectChannel
 from openbiliclaw.refill.channels.getnote import GetnoteChannel, Runner
 from openbiliclaw.refill.channels.search_click import SearchClickChannel
+from openbiliclaw.refill.channels.yt_bridge import YtBridgeChannel
 from openbiliclaw.refill.channels.ytdlp import YtdlpChannel
 from openbiliclaw.refill.channels.zhihu_api import ZhihuApiChannel
 
@@ -31,6 +32,7 @@ __all__ = [
     "DirectChannel",
     "SearchClickChannel",
     "YtdlpChannel",
+    "YtBridgeChannel",
     "GetnoteChannel",
     "BiliCliChannel",
     "ZhihuApiChannel",
@@ -54,6 +56,7 @@ def build_channels(
     if bridge is not None:
         channels["direct"] = DirectChannel(bridge)
         channels["search_click"] = SearchClickChannel(bridge)
+        channels["yt_bridge"] = YtBridgeChannel(bridge)
     channels["ytdlp"] = YtdlpChannel()
     channels["getnote"] = GetnoteChannel(runner=getnote_runner) if getnote_runner else GetnoteChannel()
     channels["bili_cli"] = BiliCliChannel()

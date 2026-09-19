@@ -56,10 +56,12 @@ class Route:
 
 
 # 平台 → 通道路由优先级（M2：search_click 仅小红书无 token 且有标题；
-# M3 为 youtube/douyin/wechat/xiaoyuzhou 接入 ytdlp / getnote；M4 接入 bili_cli / zhihu_api）。
+# M3 为 youtube/douyin/wechat/xiaoyuzhou 接入 ytdlp / getnote；M4 接入 bili_cli / zhihu_api；
+# M4+ YouTube 接入 yt_bridge——登录态 Chrome 无 POT 问题，放 ytdlp 之前
+# （ytdlp 被 bot 判定抛 BridgeUnavailableError 会中断整条候选链））。
 _DEFAULT_ROUTES: dict[str, tuple[str, ...]] = {
     "xiaohongshu": ("search_click", "direct", "getnote"),
-    "youtube": ("ytdlp", "getnote", "direct"),
+    "youtube": ("yt_bridge", "ytdlp", "getnote", "direct"),
     "douyin": ("getnote", "direct"),
     "wechat": ("direct", "getnote"),
     "xiaoyuzhou": ("direct", "getnote"),
