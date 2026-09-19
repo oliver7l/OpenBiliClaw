@@ -16,6 +16,20 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
 
     from fastapi.staticfiles import StaticFiles as _StaticFiles
 
+    class _ImmutableCachedStatic(_StaticFiles):
+        """带 ``Cache-Control: immutable`` 的静态挂载。
+
+        用于相册媒体（/album/thumbs|heic|full）：URL 里的 ``k=`` 签名派生自
+        session_secret，长期不变 ⇒ 响应内容对同一 URL 永不变化，可以放心让
+        浏览器缓存一年。走 frp 内网穿透时收益极大——回看/翻页不用再把几十
+        KB 的缩略图从家里重新拉一遍。
+        """
+
+        async def get_response(self, path: str, scope: dict):  # type: ignore[override]
+            resp = await super().get_response(path, scope)
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return resp
+
     _web_dir = Path(__file__).resolve().parent.parent / "web"
 
     # ── Mobile Web UI ───────────────────────────────────────────
@@ -288,7 +302,11 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
         ("/album/full", _album_full_dir(), "album-full"),
     ):
         if _album_sub.is_dir():
-            app.mount(_album_prefix, _StaticFiles(directory=_album_sub), name=_album_name)
+            app.mount(
+                _album_prefix,
+                _ImmutableCachedStatic(directory=_album_sub),
+                name=_album_name,
+            )
 
     _album_dir = _album_web_dir()
     if _album_dir.is_dir():
@@ -296,6 +314,20 @@ def register_web_ui_routes(app: Any, ctx: Any) -> None:
             "/album",
             _StaticFiles(directory=_album_dir, html=True),
             name="album",
+        )
+
+    # ── Public album index（云端应用消费）────────────────────
+    # 给云端应用（class-album-99010.app.workbuddy.host 等）取相册月度清单。
+    # **完全公开**：路径不在 _PROTECTED_STATIC_PREFIXES 下，自动绕过密码门。
+    # 清单内容仅含文件名/拍摄时间 + 预签名的缩略图 URL（HMAC），**真实访问门槛
+    # 是签名**——没有 k= 的缩略图 URL 在 _album_media_ok 处会 401。
+    # 详情：scripts/build_album_public_index.py。
+    _public_album_dir = _web_dir / "public_album"
+    if _public_album_dir.is_dir():
+        app.mount(
+            "/public-album",
+            _StaticFiles(directory=_public_album_dir, html=False),
+            name="public-album",
         )
 
     # ── Clone Sites static mount ──────────────────────────────────

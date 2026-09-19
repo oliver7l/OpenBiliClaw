@@ -51,6 +51,7 @@ PLATFORM_DOUYIN = "douyin"
 PLATFORM_YOUTUBE = "youtube"
 PLATFORM_TWITTER = "twitter"
 PLATFORM_ZHIHU = "zhihu"
+PLATFORM_LINUXDO = "linuxdo"
 
 
 @dataclass(frozen=True)

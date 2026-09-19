@@ -702,6 +702,13 @@ class RuntimeContext:
             )
             new_discovery_engine.register_adapter(twitter_adapter)
 
+        # Register Linux.do (Discourse) adapter — 直连 Discourse JSON，无需
+        # API key；登录可见内容 cookie 走环境变量（默认 OPENBILICLAW_LINUXDO_COOKIE，
+        # 未配置则带空 cookie 拉公开源）。轻量新增，不设配置门控。
+        from openbiliclaw.sources.linuxdo_adapter import LinuxdoAdapter
+
+        new_discovery_engine.register_adapter(LinuxdoAdapter())
+
         # 8. Continuous refresh controller
         from obc_discovery.candidate_pipeline import DiscoveryCandidatePipeline
 

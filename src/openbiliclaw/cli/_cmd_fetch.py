@@ -15,7 +15,9 @@ patch 语义保留：被测试 patch 的共享符号（``_enqueue_*`` 系列入�
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from typing import Any, cast
@@ -96,6 +98,8 @@ def register(app: typer.Typer) -> None:
     app.command("discover-zhihu-creator")(discover_zhihu_creator)
     app.command("discover-zhihu-related")(discover_zhihu_related)
     app.command("fetch-x")(fetch_x)
+    app.command("fetch-linuxdo")(fetch_linuxdo)
+    app.command("capture-linuxdo")(capture_linuxdo)
     app.command("discover-douyin")(discover_douyin)
     app.command()(discover)
 
@@ -785,6 +789,233 @@ def fetch_x(
     console.print(
         f"  [green]已写入 memory:{len(events)} 条事件。[/green] 跑 `openbiliclaw rebuild-profile` 让画像吃进新信号。"
     )
+
+
+def fetch_linuxdo(
+    url_or_id: str = typer.Argument(
+        "2920473",
+        help="Linux.do 帖子 URL 或 topic id，例如 https://linux.do/t/topic/2920473 或 2920473。",
+    ),
+    wait_seconds: float = typer.Option(
+        30.0,
+        "--wait-seconds",
+        "-w",
+        help="等适配器返回结果的超时秒数(默认 30s)。",
+    ),
+) -> None:
+    """抓取单个 Linux.do 帖子正文并入库(直接适配器直连 Discourse JSON)。
+
+    用本地 :class:`LinuxdoAdapter` 按 ``sources/protocol.py`` 的
+    ``SourceAdapter`` 协议拉取帖子，把全文正文写进阅读库 ``articles``。
+    不依赖浏览器扩展 / daemon，需要网络可达 linux.do（Cloudflare 拦
+    HTML 时 JSON 接口通常仍可用）。登录可见帖子通过 cookie 读取：
+    优先 ``recipe.config.cookie``，缺省回退环境变量
+    ``OPENBILICLAW_LINUXDO_COOKIE``，未配置则带空 cookie 拉公开内容。
+    """
+
+    from openbiliclaw import cli as _cli  # noqa: E402
+    from openbiliclaw.core.contracts import DiscoveredContent
+    from openbiliclaw.sources.linuxdo_adapter import LinuxdoAdapter
+    from openbiliclaw.sources.protocol import SourceRecipe
+
+    _cli._require_runtime_config()
+    _print_page_title("抓取 Linux.do 帖子", "本地适配器直连 Discourse JSON → 阅读库入库")
+
+    recipe_config: dict[str, Any] = {}
+    stripped = (url_or_id or "").strip()
+    if stripped.isdigit():
+        recipe_config["topic_id"] = stripped
+    else:
+        recipe_config["url"] = stripped or "2920473"
+
+    recipe = SourceRecipe(
+        id="linuxdo-cli",
+        source_type="linuxdo",
+        name="Linux.do CLI 抓取",
+        strategy="topic",
+        config=recipe_config,
+    )
+
+    adapter = LinuxdoAdapter()
+
+    async def _run_fetch() -> list[DiscoveredContent]:
+        # requests 内联放同步，套一层简单超时免得 CLI 卡死
+        return await asyncio.wait_for(adapter.fetch(recipe, limit=1), timeout=wait_seconds)
+
+    try:
+        items = asyncio.run(_run_fetch())
+    except Exception as exc:  # 网络失败 / Cloudflare / json 解析等
+        _print_status_panel("error", "Linux.do 抓取失败", str(exc))
+        raise typer.Exit(code=1) from exc
+
+    if not items:
+        _print_status_panel(
+            "warning",
+            "没有抓到内容",
+            "URL / topic id 无效、Cloudflare 拦截，或帖子需要登录而 cookie 缺失。",
+        )
+        raise typer.Exit(code=1)
+
+    item = items[0]
+    database = _cli._get_runtime_database()
+    rowid = database.upsert_article(
+        source_type="linuxdo",
+        source_name="Linux.do",
+        title=item.title or "(无标题)",
+        url=item.content_url,
+        author=item.author_name or "",
+        summary=item.description or "",
+        content_text=item.content_text or item.body_text or "",
+        published_at=item.discovered_at or "",
+        tags=item.tags,
+    )
+
+    text_len = len(item.content_text or item.body_text or "")
+    if rowid:
+        _print_status_panel(
+            "success",
+            "已入库",
+            f"阅读库 articles 新增 id={rowid}，正文 {text_len} 字 -> {item.content_url}",
+        )
+    else:
+        _print_status_panel("warning", "入库未成功", "参考上方日志看 upsert_article 失败原因。")
+    _print_discovered_content_preview(item, 1)
+
+
+def capture_linuxdo(
+    url_or_id: str = typer.Argument(
+        "2920473",
+        help="Linux.do 帖子 URL 或 topic id，例如 https://linux.do/t/topic/2920473 或 2920473。",
+    ),
+    wait_seconds: float = typer.Option(
+        120.0,
+        "--wait-seconds",
+        "-w",
+        help="入队后等待扩展回传正文的最大秒数(默认 120s，0 表示只入队不等)。",
+    ),
+) -> None:
+    """抓取指定 Linux.do 帖子全文并回传阅读库（浏览器扩展通道）。
+
+    走「方案 B」的扩展通道：把带 ``capture_body=true`` 的 ``related`` 任务写进
+    持久化队列，浏览器扩展在已登录的 linux.do 标签页里拉取任务、抓取目标主题
+    的 full first-post 正文，并通过 ``/api/sources/linuxdo/task-result`` 回传。
+    后端把带 ``body_text`` 的条目 ``upsert_article`` 到阅读库 ``articles``。
+
+    需要后台 daemon 正在运行，且浏览器扩展已连接、登录了 linux.do。
+    若目标帖子公开且本机可直连 Discourse JSON，可改用
+    ``openbiliclaw fetch-linuxdo URL`` 一条命令直达，无需扩展。
+    """
+
+    from openbiliclaw import cli as _cli  # noqa: E402
+    from openbiliclaw.sources.linuxdo_tasks import (
+        LinuxdoTaskQueue,
+        _canonical_topic_url,
+        _topic_id_from_url,
+    )
+
+    _cli._require_runtime_config()
+    _print_page_title("抓取 Linux.do 全文（扩展通道）", "浏览器扩展抓正文 → 阅读库入库")
+
+    stripped = (url_or_id or "").strip()
+    topic_id = stripped if stripped.isdigit() else _topic_id_from_url(stripped)
+    if not topic_id:
+        _print_status_panel(
+            "error",
+            "URL / topic id 无效",
+            "示例：https://linux.do/t/topic/2920473 或 (带楼层的) /t/slug/123/11 或纯 2920473。",
+        )
+        raise typer.Exit(code=1)
+
+    topic_url = _canonical_topic_url(topic_id, None)
+    payload: dict[str, Any] = {
+        "related_urls": [topic_url],
+        "max_items_per_seed": 1,
+        "capture_body": True,
+    }
+
+    database = _cli._get_runtime_database()
+    queue = LinuxdoTaskQueue(database)
+    task_id = queue.enqueue_with_id("related", payload, daily_budget=100)
+    if not task_id:
+        _print_status_panel(
+            "warning",
+            "任务入队失败",
+            "Linux.do 任务当天配额可能已用尽，或数据库写入异常。",
+        )
+        raise typer.Exit(code=1)
+
+    _print_status_panel(
+        "info",
+        "任务已入队",
+        f"task_id={task_id}\ntopic={topic_url}\n"
+        "请在已登录 linux.do 的浏览器里打开插件 / 访问 linux.do 页面触发任务，"
+        "回传后正文会自动写入阅读库。",
+    )
+
+    if wait_seconds <= 0:
+        console.print(
+            f"  [cyan]task_id={task_id}[/cyan] 已入队，未等待。"
+            "扩展回传后正文会自动写入阅读库；可重跑本命令（带默认等待）确认结果。"
+        )
+        return
+
+    deadline = asyncio.get_event_loop().time() + wait_seconds
+    last_status = ""
+    while True:
+        task = queue.get(task_id)
+        status = str(task.get("status", "") or "") if task else ""
+        if status != last_status:
+            console.print(f"  [blue]任务状态 -> {status}[/blue]")
+            last_status = status
+        if status == "completed":
+            ingested = _report_linuxdo_captured_items(task)
+            if ingested:
+                _print_status_panel("success", "全文已写入阅读库", f"扩展回传 {ingested} 条带正文条目。")
+            else:
+                _print_status_panel(
+                    "warning",
+                    "任务完成但无正文入库",
+                    "扩展未回传 body_text（登录态失效 / 帖子需登录 / 抓取失败），见上方日志。",
+                )
+            return
+        if status in {"failed", "canceled"}:
+            result = task.get("result_json") or ""
+            _print_status_panel(
+                "error",
+                f"任务{status}",
+                f"扩展回传失败：{_truncate(result, 500)}",
+            )
+            raise typer.Exit(code=1)
+        if asyncio.get_event_loop().time() >= deadline:
+            _print_status_panel(
+                "warning",
+                "等待超时",
+                "任务仍在队列中。确认 daemon 与扩展已连上、已登录 linux.do，"
+                "再跑一次同样的命令或手动刷新页面触发。",
+            )
+            raise typer.Exit(code=1)
+        time.sleep(2)
+
+
+def _report_linuxdo_captured_items(task: dict[str, Any]) -> int:
+    """Return how many completed-task items carried a non-empty body_text."""
+    raw = task.get("result_json") or "{}"
+    try:
+        result = json.loads(raw)
+    except Exception:
+        result = {}
+    items = result.get("items") or []
+    count = 0
+    for item in items:
+        body = str(item.get("body_text") or "").strip()
+        if body:
+            count += 1
+    return count
+
+
+def _truncate(text: str, limit: int) -> str:
+    text = str(text or "").strip()
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def _run_xhs_discovery(*, force: bool) -> None:

@@ -2607,6 +2607,143 @@ def register_source_routes(
                 await publish({"type": "zhihu_task_available", "source": "task_kick"})
         return {"ok": True}
 
+    # ── Linux.do (Discourse) endpoints ─────────────────────────────
+    # The extension-side linuxdo task runner polls /next-task, executes in a
+    # logged-in linux.do tab, and posts /task-result. These routes were the
+    # missing link that left the whole extension channel dead; both the durable
+    # LinuxdoTaskQueue and the producer already existed.
+    from openbiliclaw.sources.linuxdo_tasks import (
+        LinuxdoTaskQueue,
+        linuxdo_topic_id,
+    )
+
+    _linuxdo_task_queue: LinuxdoTaskQueue | None = None
+    db_conn = getattr(ctx.database, "conn", None)
+    if hasattr(db_conn, "executescript"):
+        _linuxdo_task_queue = LinuxdoTaskQueue(ctx.database)
+
+    def _ingest_linuxdo_read_bodies(items: list[dict[str, Any]]) -> int:
+        """Upsert any item that carries a captured full body into the reading library.
+
+        The extension opt-in ``capture_body`` flow returns ``body_text`` on
+        topic items; those are written to the reading library ``articles`` so
+        the post body actually lands where the user can read it.  Keyed by the
+        canonical topic URL so re-capture updates the same row.
+        """
+        from openbiliclaw.sources.linuxdo_tasks import (
+            _author,
+            _canonical_topic_url,
+            _display_title,
+            _summary,
+            _tags,
+        )
+
+        db = getattr(ctx, "database", None)
+        if db is None:
+            return 0
+        ingested = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            body = str(item.get("body_text") or "").strip()
+            if not body:
+                continue
+            topic_id = linuxdo_topic_id(item)
+            if not topic_id:
+                continue
+            with suppress(Exception):
+                summary = _summary(item) or ""
+                title = _display_title(item, topic_id, summary) or f"Linux.do 主题 {topic_id}"
+                db.upsert_article(
+                    source_type="linuxdo",
+                    source_name="Linux.do",
+                    title=title,
+                    url=_canonical_topic_url(topic_id, item),
+                    author=_author(item),
+                    summary=summary,
+                    content_text=body,
+                    published_at="",
+                    tags=_tags(item) or ["linuxdo"],
+                )
+                ingested += 1
+        return ingested
+
+    @app.get("/api/sources/linuxdo/next-task")
+    def linuxdo_next_task(response: Any = None) -> Any:
+        """Return the oldest pending Linux.do task, or 204 if none."""
+        if _linuxdo_task_queue is None:
+            return Response(status_code=204)
+        task = _linuxdo_task_queue.next_pending(only_ids=_init_owned_ids_filter())
+        if task is None:
+            return Response(status_code=204)
+
+        import json as _json
+
+        payload = _json.loads(task["payload_json"]) if task.get("payload_json") else {}
+        return {
+            "id": task["id"],
+            "claim_token": task["claim_token"],
+            "type": task["type"],
+            **payload,
+        }
+
+    @app.post("/api/sources/linuxdo/task-result")
+    async def linuxdo_task_result(payload: dict[str, Any]) -> dict[str, Any]:
+        """Accept a Linux.do task result from the extension dispatcher.
+
+        Merges the durable terminal result (the producer /_wait_for_task reads
+        the same row), and ingests any item with a captured full body straight
+        into the reading library.
+        """
+        task_id = str(payload.get("task_id", "") or "").strip()
+        status = str(payload.get("status", "") or "").strip()
+        items = [v for v in payload.get("items", []) if isinstance(v, dict)]
+        scope_counts = payload.get("scope_counts")
+        if not isinstance(scope_counts, dict):
+            scope_counts = None
+        debug = payload.get("debug")
+        if not isinstance(debug, dict):
+            debug = None
+
+        if not task_id:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail="task_id is required")
+
+        if _linuxdo_task_queue is None:
+            return {"ok": True}
+
+        task = _linuxdo_task_queue.get(task_id)
+        task_type = str(task.get("type", "")).strip() if task else ""
+
+        if status in {"partial", "ok"} or status == "empty":
+            is_final = status in {"ok", "empty"}
+            _linuxdo_task_queue.merge_result(
+                task_id,
+                items=items if items else None,
+                scope_counts=scope_counts,
+                debug=debug,
+                complete=is_final,
+            )
+            # For an opted-in capture task, ship the full body to 阅读库.
+            if items:
+                _ingest_linuxdo_read_bodies(items)
+        else:
+            _linuxdo_task_queue.fail(
+                task_id, error=str(payload.get("error", "") or ""), debug=debug
+            )
+
+        return {"ok": True}
+
+    @app.post("/api/sources/linuxdo/kick")
+    async def linuxdo_task_kick() -> dict[str, Any]:
+        """Broadcast `linuxdo_task_available` over runtime-stream."""
+        publish = getattr(getattr(ctx, "event_hub", None), "publish", None)
+        if callable(publish):
+            with suppress(Exception):
+                await publish({"type": "linuxdo_task_available", "source": "task_kick"})
+        return {"ok": True}
+
     _yt_task_queue: YtTaskQueue | None = None
     if hasattr(ctx.database, "conn"):
         _yt_task_queue = YtTaskQueue(ctx.database)
