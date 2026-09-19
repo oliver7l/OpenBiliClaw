@@ -373,7 +373,7 @@ header，照片只能走 `?k=<HMAC 签名>`。**权限边界卡死在媒体子�
 相册页面、换不到 `/api` 会话、碰不到 `/api/auth/admin`（回归测试
 `tests/api/test_album_gate.py` 锁住这五条）。
 
-**4. 微信小程序工程** `miniprogram-album/`（原生，非 web-view）：数据由
+**4. 微信小程序工程** `17_云端应用/miniprogram-album/`（原生，非 web-view）：数据由
 `scripts/build_album_miniprogram.py` 从同一份源库索引生成（26 月 / 5205 张 /
 481KB，自动排除 `00-` 总览拼图）。首页按月份切换 + 月内分页 60 张 + 路径增量
 `setData`（5205 节点一次性渲染会卡死）；查看页单图 + 手势切换，不用 swiper。

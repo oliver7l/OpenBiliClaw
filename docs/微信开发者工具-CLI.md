@@ -55,7 +55,7 @@ CLI 依赖 IDE 的 HTTP 服务端口，该端口**默认关闭**，且登录态�
 
 ```bash
 # 打开项目（IDE 需已启动且服务端口已开）
-wxdev open --project "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/miniprogram-album"
+wxdev open --project "/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw/17_云端应用/miniprogram-album"
 
 # 生成预览二维码（手机扫码，体验版）
 wxdev preview --project <路径> --qr-output /tmp/preview.png
@@ -76,7 +76,7 @@ wxdev login
 
 ## 六、当前工程状态
 
-- 工程目录：`miniprogram-album/`
+- 工程目录：`17_云端应用/miniprogram-album/`
 - `project.config.json` 中 `appid` 为 `touristappid`（游客模式）
   - 游客模式：可在模拟器看界面，**不能** `preview` / `upload`
   - 真机预览需换成真实 AppID
