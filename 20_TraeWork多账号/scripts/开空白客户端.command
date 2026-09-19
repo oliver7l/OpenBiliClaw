@@ -17,8 +17,9 @@ if [[ ! -x "$APP" ]]; then
   echo "✗ 找不到 $APP"; printf "按回车关闭…"; read -r _; exit 1
 fi
 
-# 已经在跑就别重复开（同目录只有一个实例能持有锁）
-if pgrep -f -- "--user-data-dir=$DATA" >/dev/null; then
+# 已经在跑就别重复开。注意必须限定 Electron 主进程——crashpad 等残留辅助进程的
+# 命令行里也带 --user-data-dir，用宽泛 pgrep -f 会误判成"已在运行"（2026-09-19 实测踩坑）
+if pgrep -f -- "TRAE SOLO CN.app/Contents/MacOS/Electron.*--user-data-dir=$DATA" >/dev/null; then
   echo "已有一个指向该数据目录的实例在运行，直接切到它。"
   open -a "TRAE SOLO CN"
   printf "按回车关闭…"; read -r _; exit 0
