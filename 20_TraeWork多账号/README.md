@@ -150,6 +150,18 @@ App 留在 Dock（点 Dock 图标重开）；菜单栏那个托盘图标是另�
 系统设置 → 通用 → 登录项，把 `tray/TraeBar.app` 拖进去。改菜单逻辑就改
 `tray/TraeBar.swift` 后重跑 `tray/构建.command`。
 
+### 每日自动签到（pm2 托管，2026-09-19 上线）
+
+`scripts/twa_checkin_daily.py` 常驻守护（pm2 进程名 `trae-checkin`）：启动先跑一轮，之后
+**每天 09:00** 自动对全部账号签到 + 刷新余额。报告：`logs/checkin_latest.txt`（按日期留档），
+精简结果在 `pm2 logs trae-checkin`。改执行时间就改脚本里的 `DAILY_AT` 再
+`pm2 restart trae-checkin`。手动立即跑一轮：`python3 twa_checkin_daily.py --once`。
+
+**与账号切换完全解耦**：签到直接用 `accounts.json` 里每个账号自己的 token + 设备 ID
+（设备 ID 是机器属性，切号不变）调 API，不经过客户端登录态——切到哪个账号都签全部 6 个。
+唯一失效场景：某账号 token 过期/被吊销（报告会显示「鉴权失败」）→ 助手里重新授权登录
+一次，守护会自动合成/更新档案与 token。
+
 ## 六、现状（2026-09-19）与未决问题
 
 - **6 账号 / 6 档案全部就位且全部真捕获**：4 份来自主客户端/历史副本，2 份合成档案均通过
