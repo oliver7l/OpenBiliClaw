@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- maskable：底色铺满整块（无圆角），内容缩进到安全区内，避免被系统裁成圆形时切到主体 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFA46E"/>
+      <stop offset="1" stop-color="#FF7A4A"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" fill="url(#bg)"/>
+
+  <g transform="translate(256,256) scale(0.66) translate(-256,-256)">
+    <rect x="126" y="112" width="260" height="272" rx="30" fill="#FFFFFF"/>
+    <rect x="150" y="136" width="212" height="176" rx="20" fill="#FFE3D4"/>
+    <path d="M256 268
+             C 236 248, 202 230, 202 208
+             C 202 188, 216 176, 232 176
+             C 244 176, 252 183, 256 192
+             C 260 183, 268 176, 280 176
+             C 296 176, 310 188, 310 208
+             C 310 230, 276 248, 256 268 Z"
+          fill="#FF8A5C"/>
+    <rect x="196" y="340" width="120" height="14" rx="7" fill="#FFE3D4"/>
+  </g>
+</svg>

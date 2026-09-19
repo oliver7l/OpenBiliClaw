@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>宝贝成长册</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="成长册">
+<meta name="application-name" content="宝贝成长册">
+<meta name="description" content="记录宝贝们的成长瞬间。">
+<!-- 相册图片域名预热（TLS/连接提前建立，省 1-2 个 RTT） -->
+<link rel="preconnect" href="https://lezai.odn.cc" crossorigin>
+<link rel="dns-prefetch" href="https://lezai.odn.cc">
+<style>
+  /* ============ Google Photos 风格设计系统 ============ */
+  :root{
+    --bg:#ffffff; --surface:#f1f3f4; --hover:#f8f9fa;
+    --ink:#202124; --ink2:#5f6368; --line:#e8eaed; --line2:#dadce0;
+    --blue:#1a73e8; --blue-dark:#1967d2; --blue-soft:#e8f0fe;
+    --ok:#188038; --ok-soft:#e6f4ea; --danger:#d93025; --danger-soft:#fce8e6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);
+       font-family:Roboto,"Google Sans",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+       font-size:15px;line-height:1.5;max-width:720px;margin:0 auto;min-height:100dvh;
+       padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+  h1,h2{font-weight:500}
+  button{font-family:inherit}
+  .hidden{display:none !important}
+
+  /* ---------- Material 图标按钮 ---------- */
+  .ibtn{border:0;background:none;width:40px;height:40px;border-radius:50%;cursor:pointer;
+        display:inline-flex;align-items:center;justify-content:center;color:var(--ink2);flex:none;
+        transition:background .15s}
+  .ibtn:hover{background:var(--surface)}
+  .ibtn:active{background:var(--line)}
+  .ibtn svg{width:22px;height:22px;fill:currentColor}
+  .ibtn.blue{color:var(--blue)}
+
+  /* ---------- 顶栏（Google Photos app bar） ---------- */
+  .gp-bar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);
+        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+        display:flex;align-items:center;gap:6px;height:56px;padding:0 10px 0 20px;
+        max-width:720px;margin:0 auto}
+  .gp-bar .gp-title{font-size:20px;font-weight:500;color:var(--ink);flex:1;min-width:0;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-weight:500;font-size:14px;cursor:pointer;flex:none}
+
+  /* ---------- 登录页：全屏覆盖层（默认盖在相册外壳上，JS 决定盖/掀） ---------- */
+  #viewAuth{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;align-items:center;
+        justify-content:center;padding:32px 20px;overflow-y:auto}
+  .auth-logo{width:64px;height:64px;border-radius:18px;background:var(--blue);
+        display:flex;align-items:center;justify-content:center;margin-bottom:22px;
+        box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 12px rgba(26,115,232,.24)}
+  .auth-logo svg{width:34px;height:34px;fill:#fff}
+  .auth-title{font-size:26px;font-weight:400;letter-spacing:0}
+  .auth-sub{font-size:14px;color:var(--ink2);margin:6px 0 30px}
+  .card{background:var(--bg);border:1px solid var(--line2);border-radius:16px;padding:26px 22px;
+        margin-bottom:14px;width:100%;max-width:400px;
+        box-shadow:0 1px 2px rgba(60,64,67,.08)}
+  .seg{display:flex;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .seg button{flex:1;border:0;background:none;padding:13px 0;font-size:14.5px;font-weight:500;
+        color:var(--ink2);cursor:pointer;position:relative}
+  .seg button.on{color:var(--blue)}
+  .seg button.on::after{content:'';position:absolute;left:22%;right:22%;bottom:-1px;height:3px;
+        border-radius:3px 3px 0 0;background:var(--blue)}
+  label{display:block;font-size:13px;color:var(--ink2);margin:14px 0 6px;font-weight:500}
+  input,textarea,select{width:100%;border:1px solid var(--line2);border-radius:8px;padding:12px 14px;
+        font-size:16px;background:var(--bg);color:var(--ink);outline:none;font-family:inherit;
+        transition:border-color .15s}
+  input:focus,textarea:focus,select:focus{border-color:var(--blue);border-width:2px;padding:11px 13px}
+  textarea{min-height:88px;resize:vertical}
+  .btn{display:block;width:100%;border:0;border-radius:24px;padding:12px;font-size:15px;font-weight:500;
+       background:var(--blue);color:#fff;margin-top:18px;cursor:pointer;
+       transition:box-shadow .15s,background .15s}
+  .btn:hover{background:var(--blue-dark);box-shadow:0 1px 3px rgba(60,64,67,.3)}
+  .btn:active{background:#185abc}
+  .btn.ghost{background:none;color:var(--blue);box-shadow:none}
+  .btn.ghost:hover{background:var(--blue-soft)}
+  .btn.mini{width:auto;padding:8px 20px;font-size:14px;margin-top:0;border-radius:20px}
+  .link-row{text-align:center;margin-top:16px;font-size:14px}
+  .link-row a{color:var(--blue);text-decoration:none;font-weight:500;cursor:pointer}
+  .msg{border-radius:8px;padding:11px 14px;font-size:13.5px;margin-top:14px}
+  .msg.err{background:var(--danger-soft);color:var(--danger)}
+  .msg.ok{background:var(--ok-soft);color:var(--ok)}
+  .hint{font-size:13px;color:var(--ink2);margin-top:10px}
+  .auth-foot{margin-top:26px;font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:6px}
+  .auth-foot svg{width:14px;height:14px;fill:var(--ink2)}
+
+  /* ---------- 内容视图通用 ---------- */
+  #viewPost,#viewKids,#viewReport{padding:16px 16px 24px}
+
+  /* ---------- 筛选/选择 chips（M3 filter chip） ---------- */
+  .chip-row{display:flex;gap:8px;overflow-x:auto;padding:12px 16px;scrollbar-width:none}
+  .chip-row::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line2);background:var(--bg);border-radius:8px;
+        padding:6px 14px;font-size:13.5px;color:var(--ink2);cursor:pointer;font-weight:500;
+        transition:background .15s,border-color .15s}
+  .chip.on{background:var(--blue-soft);border-color:var(--blue-soft);color:var(--blue-dark)}
+
+  /* ---------- 动态墙（隐藏保留） ---------- */
+  #viewFeed{padding:0 0 24px}
+  .day{padding:0 16px;margin-bottom:20px}
+  .day-date{font-size:13px;color:var(--ink2);font-weight:500;margin:10px 16px 6px}
+  .post{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .post .kids-line{font-size:12.5px;color:var(--blue);font-weight:500;margin-bottom:6px}
+  .post .note{white-space:pre-wrap;font-size:15px;margin-bottom:8px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;border-radius:8px;overflow:hidden}
+  .grid img{width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;display:block}
+  .post .ops{margin-top:10px;display:flex;gap:14px}
+  .post .ops a{font-size:13px;color:var(--ink2);text-decoration:none}
+  .empty{text-align:center;color:var(--ink2);padding:56px 20px;font-size:14px}
+  .empty .big{font-size:40px;margin-bottom:10px}
+
+  /* ---------- 发布 ---------- */
+  .kid-pick{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .kid-pick .chip{font-size:14px;padding:8px 16px}
+  #photoPick{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .pick-add{width:84px;height:84px;border:1.5px dashed var(--line2);border-radius:12px;background:var(--hover);
+            color:var(--ink2);font-size:28px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .pick-add input{display:none}
+  .thumb{width:84px;height:84px;border-radius:12px;object-fit:cover;display:block}
+  .thumb-wrap{position:relative}
+  .thumb-del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger);
+             color:#fff;border:0;font-size:13px;line-height:1;cursor:pointer}
+
+  /* ---------- 孩子 ---------- */
+  .kid-row{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);
+           border-radius:12px;padding:11px 14px;margin-bottom:10px}
+  .kid-row .av{width:40px;height:40px;border-radius:50%;background:var(--blue-soft);color:var(--blue-dark);
+               display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;flex:none}
+  .kid-row .info{flex:1;min-width:0}
+  .kid-row .nm{font-weight:500;font-size:15px}
+  .kid-row .sub{font-size:12.5px;color:var(--ink2)}
+  .kid-row .del{border:0;background:none;color:var(--ink2);font-size:19px;cursor:pointer}
+  h2.sec{font-size:15px;font-weight:500;margin:20px 2px 10px}
+
+  /* ---------- 周报 ---------- */
+  .rep-form .row2{display:flex;gap:10px}
+  #repResult{text-align:center}
+  #repResult img{width:100%;border-radius:12px;border:1px solid var(--line);margin-top:14px}
+
+  /* ---------- 相册（Google Photos：无缝网格 + 筛选胶囊 + 粘性月份头） ---------- */
+  .al-chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px;scrollbar-width:none;
+        position:sticky;top:56px;z-index:15;background:rgba(255,255,255,.96);
+        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);max-width:720px}
+  .al-chips::-webkit-scrollbar{display:none}
+  .achip{flex:none;border:1px solid var(--line2);background:var(--bg);color:var(--ink2);
+        padding:5px 13px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;
+        white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+  .achip b{font-weight:500}
+  .achip span{opacity:.6;font-weight:400;font-size:12px;margin-left:2px}
+  .achip.on{background:var(--blue-soft);border-color:var(--blue-soft);color:var(--blue-dark)}
+  .achip.on span{opacity:.8}
+  .al-total{padding:2px 20px 0;font-size:12.5px;color:var(--ink2)}
+  .al-head{display:flex;align-items:baseline;gap:10px;padding:12px 20px 10px}
+  .al-head .al-month{font-size:15px;font-weight:500;color:var(--ink)}
+  .al-head .al-cnt{font-size:12.5px;color:var(--ink2)}
+  #albumGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:0 0 8px}
+  .al-cell{position:relative;aspect-ratio:1;overflow:hidden;background:var(--surface);
+        cursor:pointer;animation:alIn .3s ease both}
+  .al-cell::before{ /* shimmer 占位 */
+        content:'';position:absolute;inset:0;
+        background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.75) 50%,transparent 70%);
+        background-size:220% 100%;animation:alShimmer 1.3s linear infinite}
+  .al-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;
+        transition:opacity .3s ease;display:block}
+  .al-cell.ok::before{display:none}
+  .al-cell.ok img{opacity:1}
+  .al-cell:active{filter:brightness(.88)}
+  @keyframes alIn{from{opacity:0}to{opacity:1}}
+  @keyframes alShimmer{from{background-position:130% 0}to{background-position:-90% 0}}
+  .al-sentinel{grid-column:1/-1;text-align:center;color:var(--ink2);font-size:12px;padding:14px 0 6px}
+  #albumStatus{padding:40px 20px;text-align:center;color:var(--ink2);font-size:14px;line-height:1.7}
+  @media (min-width:560px){ #albumGrid{grid-template-columns:repeat(4,1fr)} }
+
+  /* ---------- 相册查看器（Google Photos：纯黑沉浸 + 顶部工具条） ---------- */
+  #albumLightbox{position:fixed;inset:0;background:#000;z-index:100;
+        display:flex;align-items:center;justify-content:center;touch-action:pan-y}
+  #albumLightbox .al-lb-img{max-width:100%;max-height:100%;object-fit:contain;
+        transition:opacity .25s ease}
+  #albumLightbox .al-lb-img.swapping{opacity:.35}
+  .al-lb-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:4px;
+        padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top,0px));z-index:3;
+        background:linear-gradient(rgba(0,0,0,.55),transparent)}
+  .al-lb-top .ibtn{color:#fff}
+  .al-lb-top .al-lb-count{color:rgba(255,255,255,.92);font-size:13.5px;font-weight:500;flex:1;
+        padding-left:6px}
+  .al-lb-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;border:0;cursor:pointer;
+        width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;
+        display:flex;align-items:center;justify-content:center}
+  .al-lb-nav svg{width:24px;height:24px;fill:currentColor}
+  .al-lb-nav:active{background:rgba(255,255,255,.28)}
+  #alLbPrev{left:10px} #alLbNext{right:10px}
+  .al-lb-spin{position:absolute;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.85);font-size:12.5px;z-index:3;background:rgba(255,255,255,.14);
+        padding:6px 14px;border-radius:18px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+
+  /* ---------- 随机回看（Google Memories：全屏黑底 + 顶部进度条 + 底部大控件） ---------- */
+  #viewRandom{padding:0}
+  #rndStage{position:relative;width:100%;height:calc(100dvh - 56px - 64px - env(safe-area-inset-bottom,0px));
+        min-height:420px;background:#000;cursor:pointer;overflow:hidden}
+  .rnd-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;
+        transition:opacity .7s ease;background:#000}
+  .rnd-img.show{opacity:1}
+  .rnd-img.show.zoom{animation:rndZoom 5.2s ease-out forwards}
+  @keyframes rndZoom{from{transform:scale(1)}to{transform:scale(1.04)}}
+  #rndProg{position:absolute;top:0;left:0;right:0;height:3px;z-index:7;background:rgba(255,255,255,.22)}
+  #rndProg i{display:block;height:100%;width:0;background:#8ab4f8;border-radius:0 2px 2px 0}
+  .rnd-load{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;
+        justify-content:center;color:rgba(255,255,255,.85);font-size:14px;z-index:5}
+  .rnd-spin{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.25);
+        border-top-color:#8ab4f8;animation:rndRot 1s linear infinite}
+  @keyframes rndRot{to{transform:rotate(360deg)}}
+  .rnd-cap{position:absolute;left:20px;right:20px;bottom:calc(92px + env(safe-area-inset-bottom,0px));
+        z-index:4;color:#fff;text-align:center;pointer-events:none;
+        text-shadow:0 1px 6px rgba(0,0,0,.65)}
+  .rnd-cap b{font-size:15px;font-weight:500;display:block}
+  .rnd-cap span{opacity:.7;font-size:12px;display:block;margin-top:3px;
+        max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rnd-ctl{position:absolute;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom,0px));
+        z-index:6;display:flex;align-items:center;justify-content:center;gap:22px}
+  .rnd-side{border:0;width:42px;height:42px;border-radius:50%;cursor:pointer;
+        background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center;
+        backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .rnd-side svg{width:22px;height:22px;fill:currentColor}
+  .rnd-side:active{background:rgba(255,255,255,.3)}
+  #rndPause{border:0;width:52px;height:52px;border-radius:50%;cursor:pointer;background:#fff;color:#202124;
+        font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  #rndPause:active{background:#e8eaed}
+
+  /* ---------- 底部导航（M3 navigation bar） ---------- */
+  nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:720px;
+      background:#fff;border-top:1px solid var(--line);display:flex;z-index:20;
+      height:calc(64px + env(safe-area-inset-bottom,0px));
+      padding-bottom:env(safe-area-inset-bottom,0px)}
+  nav button{flex:1;border:0;background:none;cursor:pointer;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:3px;color:var(--ink2)}
+  nav button .nav-ic{width:58px;height:30px;border-radius:15px;display:flex;align-items:center;
+      justify-content:center;transition:background .2s}
+  nav button .nav-ic svg{width:22px;height:22px;fill:currentColor}
+  nav button .nav-lb{font-size:12px;font-weight:500}
+  nav button.on{color:var(--blue-dark)}
+  nav button.on .nav-ic{background:var(--blue-soft)}
+
+  /* ---------- 导入 ---------- */
+  #viewImport{padding:16px}
+  #importProgress{white-space:pre-wrap}
+
+  /* ---------- 灯箱（动态墙） / toast / loading ---------- */
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+  #lightbox img{max-width:100%;max-height:100%}
+  #toast{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
+         background:#323232;color:#fff;padding:11px 20px;border-radius:8px;font-size:13.5px;z-index:120;
+         opacity:0;transition:.25s;pointer-events:none;max-width:80%;text-align:center;
+         box-shadow:0 3px 10px rgba(0,0,0,.3)}
+  #toast.show{opacity:1}
+  .loading{position:fixed;inset:0;background:rgba(255,255,255,.75);z-index:98;display:flex;
+         align-items:center;justify-content:center;font-size:14px;color:var(--ink2)}
+
+  /* ---------- 装到桌面引导（M3 snackbar 风） ---------- */
+  #a2hs{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 24px);max-width:456px;
+        bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:30;
+        display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);
+        border-radius:16px;padding:12px 14px;box-shadow:0 4px 16px rgba(60,64,67,.24);
+        animation:a2hsIn .28s ease}
+  @keyframes a2hsIn{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+  #a2hs .a2hs-ic img{width:36px;height:36px;border-radius:8px;display:block}
+  #a2hs .a2hs-tx{flex:1;min-width:0;line-height:1.3}
+  #a2hs .a2hs-tx b{display:block;font-size:14px;font-weight:500}
+  #a2hs .a2hs-tx span{font-size:12px;color:var(--ink2)}
+  #a2hs .a2hs-go{border:0;background:var(--blue);color:#fff;font-weight:500;font-size:13.5px;
+        padding:8px 18px;border-radius:20px;white-space:nowrap;cursor:pointer}
+  #a2hs .a2hs-x{border:0;background:none;color:var(--ink2);width:32px;height:32px;border-radius:50%;
+        cursor:pointer;display:flex;align-items:center;justify-content:center}
+  /* 离线横幅 */
+  #offline{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:720px;z-index:40;
+        background:#fef7e0;color:#3c4043;font-size:12.5px;text-align:center;padding:7px 10px}
+</style>
+</head>
+<body>
+
+<!-- ============ 登录 / 注册 ============ -->
+<div id="viewAuth">
+  <div class="auth-logo">
+    <svg viewBox="0 0 24 24"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8.2c-1.77 0-3.2 1.43-3.2 3.2s1.43 3.2 3.2 3.2 3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2z"/></svg>
+  </div>
+  <h1 class="auth-title">宝贝成长册</h1>
+  <p class="auth-sub">记录，是为了不忘记</p>
+  <div class="card">
+    <div class="seg">
+      <button id="tabLogin" class="on" onclick="authTab('login')">登录</button>
+      <button id="tabSignup" onclick="authTab('signup')">注册</button>
+    </div>
+
+    <div id="paneLogin">
+      <label>邮箱</label>
+      <input id="liEmail" type="email" placeholder="teacher@example.com" autocomplete="email">
+      <label>密码</label>
+      <input id="liPass" type="password" placeholder="密码" autocomplete="current-password">
+      <button class="btn" id="btnLogin" onclick="doPasswordLogin()">登录</button>
+      <button class="btn ghost" onclick="doOtpLogin('login')">用邮箱验证码登录</button>
+      <div class="link-row"><a onclick="authTab('forgot')">忘记密码？</a></div>
+    </div>
+
+    <div id="paneSignup" class="hidden">
+      <label>邮箱</label>
+      <input id="suEmail" type="email" placeholder="teacher@example.com" autocomplete="email">
+      <label>设置密码（至少 6 位）</label>
+      <input id="suPass" type="password" placeholder="密码" autocomplete="new-password">
+      <button class="btn ghost" id="btnSendOtp" onclick="sendSignupOtp()">发送邮箱验证码</button>
+      <label>邮箱验证码</label>
+      <input id="suCode" inputmode="numeric" placeholder="6 位验证码">
+      <button class="btn" onclick="doSignup()">注册并登录</button>
+    </div>
+
+    <div id="paneForgot" class="hidden">
+      <label>注册邮箱</label>
+      <input id="fpEmail" type="email">
+      <button class="btn ghost" onclick="sendResetEmail()">发送重置验证码</button>
+      <label>验证码</label>
+      <input id="fpCode" inputmode="numeric">
+      <label>新密码</label>
+      <input id="fpPass" type="password">
+      <button class="btn" onclick="doResetPassword()">重置密码并登录</button>
+      <div class="link-row"><a onclick="authTab('login')">返回登录</a></div>
+    </div>
+
+    <div class="link-row hidden" id="otpCodeRow">
+      <label>邮箱验证码</label>
+      <input id="otpCode" inputmode="numeric" placeholder="6 位验证码">
+      <button class="btn" onclick="verifyOtpLogin()">确认登录</button>
+    </div>
+  </div>
+  <div id="authMsg"></div>
+  <p class="auth-foot">
+    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+    数据与照片保存在云端，仅登录账号可见
+  </p>
+</div>
+
+<!-- ============ 主界面 ============ -->
+<div id="viewMain">
+  <div class="gp-bar">
+    <div class="gp-title" id="gpTitle">相册</div>
+    <button class="ibtn" title="刷新" onclick="loadAlbum(true)">
+      <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    </button>
+    <div class="avatar" id="userAvatar" title="退出登录" onclick="signOut()">师</div>
+  </div>
+
+  <!-- 动态墙（暂时下架：只保留相册+随机两个 tab；代码保留，随时可恢复） -->
+  <div id="viewFeed" class="hidden">
+    <div class="chip-row" id="kidFilter"></div>
+    <div id="feedList"></div>
+  </div>
+
+  <!-- 发布 -->
+  <div id="viewPost" class="hidden">
+    <div class="card" style="max-width:none">
+      <label>日期</label>
+      <input type="date" id="postDate">
+      <label>记录了什么？</label>
+      <textarea id="postNote" placeholder="今天在幼儿园发生了什么好玩的事…"></textarea>
+      <label>照片（自动压缩）</label>
+      <div id="photoPick">
+        <label class="pick-add">＋<input type="file" accept="image/*" multiple id="fileInput" onchange="onPickFiles(this)"></label>
+      </div>
+      <label>哪些宝贝？</label>
+      <div class="kid-pick" id="postKids"></div>
+      <button class="btn" id="btnPublish" onclick="publish()">发布记录</button>
+    </div>
+  </div>
+
+  <!-- 相册（来自 8420 后端的乐仔相册） -->
+  <div id="viewAlbum" style="padding:0 0 8px">
+    <div class="al-chips" id="albumMonths"></div>
+    <div class="al-total" id="albumMeta"></div>
+    <div class="al-head">
+      <span class="al-month" id="alCurMonth"></span>
+      <span class="al-cnt" id="alCurCount"></span>
+    </div>
+    <div id="albumStatus" style="display:block;padding:28px 16px;text-align:center;color:var(--ink2);font-size:14px">正在打开相册…</div>
+    <div id="albumGrid"></div>
+    <div id="albumLightbox" class="hidden">
+      <div class="al-lb-top">
+        <button class="ibtn" title="返回" onclick="event.stopPropagation();alLbClose()">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <span class="al-lb-count" id="alLbCount">1 / 1</span>
+        <button class="ibtn" title="下载原图" onclick="event.stopPropagation();alLbDownload()">
+          <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        </button>
+        <button class="ibtn" title="关闭" onclick="event.stopPropagation();alLbClose()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <img class="al-lb-img" id="albumLightboxImg" alt="">
+      <button class="al-lb-nav" id="alLbPrev" onclick="event.stopPropagation();alLbStep(-1)">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <button class="al-lb-nav" id="alLbNext" onclick="event.stopPropagation();alLbStep(1)">
+        <svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+      </button>
+      <div class="al-lb-spin hidden" id="alLbSpin">原图加载中…</div>
+    </div>
+  </div>
+
+  <!-- 随机回看：回忆式全屏轮播 -->
+  <div id="viewRandom" class="hidden">
+    <div id="rndStage" title="点一下换下一张">
+      <img id="rndImgA" class="rnd-img" alt="">
+      <img id="rndImgB" class="rnd-img" alt="">
+      <div id="rndProg"><i id="rndProgI"></i></div>
+      <div id="rndLoad" class="rnd-load"><div class="rnd-spin"></div>正在翻找回忆…</div>
+      <div class="rnd-cap" id="rndCap"></div>
+      <div class="rnd-ctl">
+        <button class="rnd-side" id="rndPrev" title="换一张" onclick="event.stopPropagation();rndStep(-1)">
+          <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </button>
+        <button id="rndPause" title="暂停/播放" onclick="event.stopPropagation();rndToggle()">⏸</button>
+        <button class="rnd-side" id="rndNext" title="下一张" onclick="event.stopPropagation();rndNext(true)">
+          <svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 孩子 -->
+  <div id="viewKids" class="hidden">
+    <div class="card" style="max-width:none">
+      <label>姓名 *</label>
+      <input id="kidName" placeholder="比如：童童">
+      <label>小名 / 备注</label>
+      <input id="kidNick" placeholder="比如：小土豆">
+      <label>生日（可选）</label>
+      <input type="date" id="kidBirth">
+      <button class="btn" onclick="addKid()">添加宝贝</button>
+    </div>
+    <h2 class="sec">班级名单</h2>
+    <div id="kidList"></div>
+  </div>
+
+  <!-- 周报 -->
+  <div id="viewReport" class="hidden">
+    <div class="card rep-form" style="max-width:none">
+      <label>给哪位宝贝？</label>
+      <select id="repKid"></select>
+      <div class="row2">
+        <div style="flex:1"><label>开始日期</label><input type="date" id="repFrom"></div>
+        <div style="flex:1"><label>结束日期</label><input type="date" id="repTo"></div>
+      </div>
+      <label>老师寄语（选填）</label>
+      <textarea id="repWords" placeholder="本周小结、想对家长说的话…"></textarea>
+      <button class="btn" onclick="makeReport()">生成成长周报长图</button>
+      <p class="hint">长图可直接保存到手机，微信发给家长。只有你手动发送，家长才能看到。</p>
+    </div>
+    <div id="repResult" class="hidden">
+      <img id="repImg" alt="成长周报">
+      <button class="btn" onclick="downloadReport()">保存长图</button>
+    </div>
+  </div>
+
+  <nav>
+    <button class="on" data-v="viewAlbum" onclick="go('viewAlbum',this)">
+      <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></span>
+      <span class="nav-lb">相册</span>
+    </button>
+    <button data-v="viewRandom" onclick="go('viewRandom',this)">
+      <span class="nav-ic"><svg viewBox="0 0 24 24"><path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg></span>
+      <span class="nav-lb">随机</span>
+    </button>
+  </nav>
+</div>
+
+<!-- 一次性工具：从旧 app 导出的 JSON 导入（URL 末尾加 #import 进入） -->
+<div id="viewImport" class="hidden">
+  <div class="gp-bar">
+    <button class="ibtn" title="返回" onclick="history.replaceState(null,'','./');go('viewAlbum',document.querySelector('nav button[data-v=viewAlbum]'))">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+    <div class="gp-title">导入数据</div>
+  </div>
+  <div class="card" style="max-width:none;margin:0 16px">
+    <p class="hint" style="margin-top:0">把从旧 app 导出的 JSON 文件选进来，导入会创建宝贝和记录（同名会被复用）。照片会重新上传到当前 app。</p>
+    <input type="file" accept="application/json" id="importFile" onchange="onImportFile(this)">
+    <div id="importProgress" class="hint" style="margin-top:12px;white-space:pre-wrap"></div>
+    <button class="btn hidden" id="importGo" onclick="runImport()">开始导入</button>
+  </div>
+  <p class="hint" style="margin:18px 16px 0">导入完成后点这里 <a href="#" style="color:var(--blue);font-weight:500" onclick="event.preventDefault();history.replaceState(null,'','./');go('viewAlbum',document.querySelector('nav button[data-v=viewAlbum]'))">回到相册</a>。这是一个一次性工具，下次不会再用到。</p>
+</div>
+
+<div id="lightbox" class="hidden" onclick="this.classList.add('hidden')"><img id="lightboxImg"></div>
+<div id="toast"></div>
+<div id="loading" class="loading hidden">处理中…</div>
+
+<!-- ===== PWA：装到桌面引导 / 离线提示 ===== -->
+<div id="a2hs" class="hidden">
+  <div class="a2hs-ic"><img src="/icons/icon-192.png" alt=""></div>
+  <div class="a2hs-tx"><b>装到桌面</b><span id="a2hsSub">像 App 一样打开，还能离线看</span></div>
+  <button class="a2hs-go" id="a2hsGo">安装</button>
+  <button class="a2hs-x" id="a2hsX" aria-label="关闭">✕</button>
+</div>
+<div id="offline" class="hidden">当前处于离线状态，显示的是已缓存的内容</div>
+
+<script>
+/* ================= PWA：离线缓存 + 装到桌面 ================= */
+(function pwa(){
+  /* ---- ① 注册 Service Worker（页面离线可开、图片二次打开更快） ---- */
+  if ('serviceWorker' in navigator) {
+    var doRegister = function(){
+      navigator.serviceWorker.register('/sw.js').then(function(reg){
+        document.documentElement.setAttribute('data-sw', 'ok');
+        // 有新版本在等待时，直接让它接管（下次刷新即最新）
+        reg.addEventListener('updatefound', function(){
+          var sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', function(){
+            if (sw.state === 'installed' && navigator.serviceWorker.controller){
+              sw.postMessage('skip-waiting');
+            }
+          });
+        });
+      }).catch(function(e){
+        document.documentElement.setAttribute('data-sw', 'fail:' + ((e && e.message) || e));
+      });
+    };
+    // 立即注册：本脚本位于页面元素之后，DOM 已可用；不等 load，避免被慢资源拖住
+    doRegister();
+  }
+
+  /* ---- ② 离线状态横幅 ---- */
+  var off = document.getElementById('offline');
+  function paintNet(){ if (off) off.classList.toggle('hidden', navigator.onLine); }
+  window.addEventListener('online', paintNet);
+  window.addEventListener('offline', paintNet);
+  paintNet();
+
+  /* ---- ③ 装到桌面引导 ---- */
+  var KEY = 'bgz_a2hs_snooze', DAY = 864e5;
+  var bar = document.getElementById('a2hs');
+  if (!bar) return;
+  var sub = document.getElementById('a2hsSub');
+  var goBtn = document.getElementById('a2hsGo');
+  var xBtn = document.getElementById('a2hsX');
+
+  function standalone(){
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+        || window.navigator.standalone === true;
+  }
+  function snoozed(){
+    try { return Date.now() < Number(localStorage.getItem(KEY) || 0); } catch(e){ return false; }
+  }
+  function snooze(days){
+    try { localStorage.setItem(KEY, String(Date.now() + days * DAY)); } catch(e){}
+  }
+  function hide(){ bar.classList.add('hidden'); }
+  function show(){ bar.classList.remove('hidden'); }
+
+  if (standalone()) return;   // 已经是装好的独立窗口了，不再提示
+
+  xBtn.addEventListener('click', function(){ hide(); snooze(14); });
+
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferred = e;
+    if (snoozed()) return;
+    sub.textContent = '像 App 一样打开，还能离线看';
+    goBtn.textContent = '安装';
+    show();
+  });
+
+  goBtn.addEventListener('click', function(){
+    if (deferred){
+      deferred.prompt();
+      deferred.userChoice.then(function(){ deferred = null; hide(); });
+      return;
+    }
+    hide();          // iOS：系统没有可编程安装，点一下就不再打扰
+    snooze(14);
+  });
+
+  window.addEventListener('appinstalled', function(){ hide(); snooze(3650); });
+
+  /* iOS Safari 不派发 beforeinstallprompt，只能用文案引导 */
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (isIOS && !snoozed()){
+    sub.textContent = '点底部 ⤴ 分享，选「添加到主屏幕」';
+    goBtn.textContent = '知道了';
+    show();
+  }
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script>
+/* ================= publicConfig（来自云服务激活结果） ================= */
+const publicConfig = {
+  endpoint: "https://class-album-99010.app.workbuddy.host",
+  publishableKey: "wbpk_rQU2ufkqy0jIb6Fi2v7F1J_05oi4ajf1UfM5NJa3FiAsP5f6gat9q7e",
+};
+/* 云 SDK 若没加载成功（例如 CDN 不可达），这一行一旦抛错，后面所有脚本都会静默中断，
+   用户看到的就是一个「按钮点了没反应」的空壳页。这里兜住，交给 init() 给出明确提示。 */
+let cloud = null;
+try {
+  if (window.WorkBuddyCloud) {
+    cloud = WorkBuddyCloud.createWorkBuddyCloud({
+      endpoint: publicConfig.endpoint,
+      publishableKey: publicConfig.publishableKey,
+    });
+  }
+} catch (e) { cloud = null; }
+
+/* ================= 工具 ================= */
+const $ = id => document.getElementById(id);
+function toast(t, ms=1800){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'), ms); }
+function loading(on){ $('loading').classList.toggle('hidden', !on); }
+function authMsg(t, kind='err'){ $('authMsg').innerHTML = t ? `<div class="msg ${kind}">${t}</div>` : ''; }
+function fmtErr(e){ return (e && (e.message || e.msg)) || '出错了，请重试'; }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function uuid(){ return (crypto.randomUUID ? crypto.randomUUID() : 'x'+Date.now()+Math.random().toString(36).slice(2)).replace(/-/g,''); }
+function unwrap(res, action){
+  if (res.error) throw new Error(fmtErr(res.error));
+  return res.data;
+}
+function fmtYm(ym){  // "2026-09" → "2026年9月"；非月份分组原样返回
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || '');
+  return m ? `${m[1]}年${+m[2]}月` : ym;
+}
+
+/* ================= 状态 ================= */
+let KIDS = [];      // [{id,name,nickname,...}]
+let FEED = [];      // moments + signed urls
+let feedKid = 0;    // 筛选：0=全部
+let pendingFiles = []; // 待发布照片 [{blob, url}]
+
+/* ================= Auth ================= */
+let otpFlow = null; // {verificationId, email, isExistingUser}
+
+function authTab(which){
+  ['login','signup','forgot'].forEach(w=>{
+    $('pane'+w[0].toUpperCase()+w.slice(1)).classList.toggle('hidden', w!==which);
+  });
+  $('tabLogin').classList.toggle('on', which==='login');
+  $('tabSignup').classList.toggle('on', which==='signup');
+  $('otpCodeRow').classList.add('hidden');
+  authMsg('');
+}
+
+async function doPasswordLogin(){
+  authMsg('');
+  const email=$('liEmail').value.trim(), password=$('liPass').value;
+  if(!email||!password) return authMsg('请填写邮箱和密码');
+  loading(true);
+  const { error } = await cloud.auth.signInWithPassword({ email, password });
+  loading(false);
+  if (error) return authMsg('登录失败：' + fmtErr(error));
+  await enterApp();
+}
+
+async function doOtpLogin(){
+  authMsg('');
+  const email=$('liEmail').value.trim();
+  if(!email) return authMsg('请先填写邮箱');
+  loading(true);
+  const sent = await cloud.auth.sendOtp({ email });
+  loading(false);
+  if (sent.error) return authMsg('验证码发送失败：' + fmtErr(sent.error));
+  otpFlow = { verificationId: sent.data.verificationId, email, isExistingUser: sent.data.isExistingUser };
+  $('otpCodeRow').classList.remove('hidden');
+  authMsg('验证码已发送到邮箱，请查收（注意垃圾邮件）', 'ok');
+}
+
+async function verifyOtpLogin(){
+  const token=$('otpCode').value.trim();
+  if(!token || !otpFlow) return authMsg('请输入验证码');
+  loading(true);
+  const completed = await cloud.auth.verifyOtp({
+    verificationId: otpFlow.verificationId, token, email: otpFlow.email,
+    isExistingUser: otpFlow.isExistingUser,
+  });
+  loading(false);
+  if (completed.error) return authMsg('验证失败：' + fmtErr(completed.error));
+  await enterApp();
+}
+
+async function sendSignupOtp(){
+  authMsg('');
+  const email=$('suEmail').value.trim(), password=$('suPass').value;
+  if(!email) return authMsg('请填写邮箱');
+  if(password.length<6) return authMsg('密码至少 6 位');
+  loading(true);
+  const sent = await cloud.auth.sendOtp({ email });
+  loading(false);
+  if (sent.error) return authMsg('验证码发送失败：' + fmtErr(sent.error));
+  $('suEmail')._vid = sent.data.verificationId;
+  $('suEmail')._existing = sent.data.isExistingUser;
+  authMsg('验证码已发送，请查收后填写下方输入框', 'ok');
+}
+
+async function doSignup(){
+  authMsg('');
+  const email=$('suEmail').value.trim(), password=$('suPass').value, token=$('suCode').value.trim();
+  if(!email||!password||!token) return authMsg('请填写完整：邮箱、密码、验证码');
+  if(!$('suEmail')._vid) return authMsg('请先点击"发送邮箱验证码"');
+  loading(true);
+  const completed = await cloud.auth.verifyOtp({
+    verificationId: $('suEmail')._vid, token, email,
+    isExistingUser: $('suEmail')._existing,
+    password: $('suEmail')._existing ? undefined : password,
+  });
+  loading(false);
+  if (completed.error) return authMsg('注册失败：' + fmtErr(completed.error));
+  await enterApp();
+}
+
+async function sendResetEmail(){
+  authMsg('');
+  const email=$('fpEmail').value.trim();
+  if(!email) return authMsg('请填写注册邮箱');
+  loading(true);
+  const started = await cloud.auth.resetPasswordForEmail(email);
+  loading(false);
+  if (started.error) return authMsg('发送失败：' + fmtErr(started.error));
+  authMsg('重置验证码已发送，请查收', 'ok');
+}
+
+async function doResetPassword(){
+  authMsg('');
+  const email=$('fpEmail').value.trim(), nonce=$('fpCode').value.trim(), password=$('fpPass').value;
+  if(!email||!nonce||!password) return authMsg('请填写完整');
+  loading(true);
+  const completed = await started_reset(email, nonce, password);
+  loading(false);
+  if (completed && completed.error) return authMsg('重置失败：' + fmtErr(completed.error));
+  await enterApp();
+}
+async function started_reset(email, nonce, password){
+  const started = await cloud.auth.resetPasswordForEmail(email);
+  if (started.error) return started;
+  return started.data.updateUser({ nonce, password });
+}
+
+async function signOut(){ await cloud.auth.signOut(); location.reload(); }
+
+/* ================= 应用入口 ================= */
+async function enterApp(){
+  const { data: session, error } = await cloud.auth.getSession();
+  if (error || !session) return;
+  $('viewAuth').classList.add('hidden');
+  $('viewMain').classList.remove('hidden');
+  const u = session.user || {};
+  $('userAvatar').textContent = (u.email||'师')[0].toUpperCase();
+  $('postDate').value = todayStr();
+  $('repTo').value = todayStr();
+  const d=new Date(Date.now()-6*864e5); $('repFrom').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  // 先进相册：不等 kids 云端查询——它慢（穿透延迟）或失败都不允许挡住首屏，
+  // 否则所有视图仍带 hidden，页面空白直到用户手点 tab
+  go('viewAlbum', document.querySelector('nav button[data-v=viewAlbum]'));
+  // kids 只服务于已下架的 记录/周报 视图，后台补拉即可
+  loadKids().catch(e => console.warn('kids 名单加载失败（不影响相册）:', e));
+}
+
+/* ================= 孩子名单 ================= */
+async function loadKids(){
+  KIDS = unwrap(await cloud.database.from('kids').select('*').order('id')) || [];
+  renderKidList(); renderKidFilter(); renderPostKids(); renderRepKids();
+}
+function renderKidList(){
+  const box=$('kidList');
+  if(!KIDS.length){ box.innerHTML='<div class="empty"><div class="big">🧒</div>还没有添加宝贝<br>先在上方添加吧</div>'; return; }
+  box.innerHTML = KIDS.map(k=>`
+    <div class="kid-row">
+      <div class="av">${(k.nickname||k.name)[0]}</div>
+      <div class="info"><div class="nm">${esc(k.name)}${k.nickname?` <span style="font-weight:400;color:var(--ink2)">${esc(k.nickname)}</span>`:''}</div>
+      <div class="sub">${k.birthdate?('生日 '+k.birthdate):''}${k.note?(' · '+esc(k.note)):''}</div></div>
+      <button class="del" onclick="delKid(${k.id},'${esc(k.name)}')">🗑</button>
+    </div>`).join('');
+}
+async function addKid(){
+  const name=$('kidName').value.trim();
+  if(!name) return toast('请填写姓名');
+  loading(true);
+  try{
+    unwrap(await cloud.database.from('kids').insert({
+      name, nickname: $('kidNick').value.trim()||null,
+      birthdate: $('kidBirth').value||null,
+    }).select());
+    $('kidName').value=''; $('kidNick').value=''; $('kidBirth').value='';
+    toast('已添加'); await loadKids();
+  }catch(e){ toast('添加失败：'+fmtErr(e), 3000); }
+  loading(false);
+}
+async function delKid(id,name){
+  if(!confirm(`删除「${name}」？其关联记录不会删除，但将不再显示名字。`)) return;
+  loading(true);
+  try{ unwrap(await cloud.database.from('kids').delete().eq('id', id).select()); await loadKids(); }
+  catch(e){ toast('删除失败：'+fmtErr(e),3000); }
+  loading(false);
+}
+function renderKidFilter(){
+  const f=$('kidFilter');
+  f.innerHTML = `<button class="chip ${feedKid===0?'on':''}" onclick="setFeedKid(0)">全部</button>` +
+    KIDS.map(k=>`<button class="chip ${feedKid===k.id?'on':''}" onclick="setFeedKid(${k.id})">${esc(k.nickname||k.name)}</button>`).join('');
+}
+function setFeedKid(id){ feedKid=id; renderKidFilter(); renderFeed(); }
+function renderPostKids(){
+  const box=$('postKids');
+  box.innerHTML = KIDS.map(k=>`<button type="button" class="chip" data-kid="${k.id}" onclick="this.classList.toggle('on')">${esc(k.nickname||k.name)}</button>`).join('');
+}
+function renderRepKids(){
+  $('repKid').innerHTML = KIDS.map(k=>`<option value="${k.id}">${esc(k.name)}${k.nickname?('（'+esc(k.nickname)+'）'):''}</option>`).join('');
+}
+
+/* ================= 照片 ================= */
+async function shrink(file){
+  const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); });
+  const max=1600, sc=Math.min(1, max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas'); c.width=img.width*sc; c.height=img.height*sc;
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  return await new Promise(res=>c.toBlob(b=>res(b),'image/jpeg',0.82));
+}
+function onPickFiles(input){
+  [...input.files].forEach(f=>{
+    shrink(f).then(blob=>{
+      pendingFiles.push({blob, url:URL.createObjectURL(blob)});
+      renderThumbs();
+    });
+  });
+  input.value='';
+}
+function renderThumbs(){
+  const box=$('photoPick');
+  box.querySelectorAll('.thumb-wrap').forEach(e=>e.remove());
+  pendingFiles.forEach((p,i)=>{
+    const w=document.createElement('div'); w.className='thumb-wrap';
+    w.innerHTML=`<img class="thumb" src="${p.url}"><button class="thumb-del" onclick="pendingFiles.splice(${i},1);renderThumbs()">×</button>`;
+    box.appendChild(w);
+  });
+}
+
+/* ================= 发布 ================= */
+async function publish(){
+  const date=$('postDate').value || todayStr();
+  const note=$('postNote').value.trim();
+  const kids=[...document.querySelectorAll('#postKids .chip.on')].map(b=>+b.dataset.kid);
+  if(!note && !pendingFiles.length) return toast('写点什么或加张照片吧');
+  if(!kids.length) return toast('选一下是哪些宝贝');
+  loading(true);
+  try{
+    const paths=[];
+    for(const p of pendingFiles){
+      const path = cloud.storage.userPath((await cloud.auth.getSession()).data.user.id, `photos/${uuid()}.jpg`);
+      const r = await cloud.storage.upload(path, p.blob, { contentType:'image/jpeg' });
+      if (r.error) throw new Error('照片上传失败：'+fmtErr(r.error));
+      paths.push(path);
+    }
+    unwrap(await cloud.database.from('moments').insert({
+      happened_on: date, note: note||null, kid_ids: kids, photo_paths: paths,
+    }).select());
+    pendingFiles=[]; renderThumbs(); $('postNote').value='';
+    toast('已发布 ✅'); feedKid=0; go('viewAlbum', document.querySelector('nav button'));
+    await loadFeed();
+  }catch(e){ toast(fmtErr(e), 3500); }
+  loading(false);
+}
+
+/* ================= 动态墙 ================= */
+async function loadFeed(){
+  loading(true);
+  try{
+    FEED = unwrap(await cloud.database.from('moments').select('*').order('happened_on',{ascending:false}).limit(200)) || [];
+    const paths = FEED.flatMap(m=>m.photo_paths||[]);
+    const urls = paths.length ? unwrap(await cloud.storage.createSignedUrls(paths, 3600)) : [];
+    const map = {}; (urls||[]).forEach(u=>{ if(u && u.path) map[u.path]=u.signedUrl || (u.data&&u.data.signedUrl); });
+    FEED.forEach(m=>{ m.urls=(m.photo_paths||[]).map(p=>map[p]).filter(Boolean); });
+    renderFeed();
+  }catch(e){ toast('加载失败：'+fmtErr(e),3000); }
+  loading(false);
+}
+function renderFeed(){
+  const list = feedKid ? FEED.filter(m=>(m.kid_ids||[]).includes(feedKid)) : FEED;
+  const box=$('feedList');
+  if(!list.length){ box.innerHTML='<div class="empty"><div class="big">🌱</div>还没有记录<br>点下方「记录」发布第一条吧</div>'; return; }
+  const kidName = id => { const k=KIDS.find(x=>x.id===id); return k?(k.nickname||k.name):'已删除'; };
+  let html='', lastDate='';
+  for(const m of list){
+    if(m.happened_on!==lastDate){ html+=`<div class="day-date">${m.happened_on}</div><div class="day">`; lastDate=m.happened_on; }
+    html+=`<div class="post">
+      <div class="kids-line"> ${(m.kid_ids||[]).map(kidName).join(' · ')||'—'} </div>
+      ${m.note?`<div class="note">${esc(m.note)}</div>`:''}
+      ${m.urls&&m.urls.length?`<div class="grid">${m.urls.map(u=>`<img src="${u}" onclick="showBig('${u}')" loading="lazy">`).join('')}</div>`:''}
+      <div class="ops"><a href="javascript:delMoment(${m.id})">删除</a></div>
+    </div>`;
+  }
+  html+='</div>';
+  box.innerHTML=html;
+}
+async function delMoment(id){
+  if(!confirm('删除这条记录？')) return;
+  loading(true);
+  try{ unwrap(await cloud.database.from('moments').delete().eq('id',id).select()); await loadFeed(); }
+  catch(e){ toast('删除失败：'+fmtErr(e),3000); }
+  loading(false);
+}
+function showBig(u){ $('lightboxImg').src=u; $('lightbox').classList.remove('hidden'); }
+
+/* ================= 成长周报长图 ================= */
+let repBlob=null;
+async function makeReport(){
+  const kidId=+$('repKid').value; const from=$('repFrom').value, to=$('repTo').value;
+  const kid=KIDS.find(k=>k.id===kidId); if(!kid) return toast('请先添加宝贝');
+  if(!from||!to) return toast('选择日期范围');
+  loading(true);
+  try{
+    const items = FEED.filter(m=>m.happened_on>=from && m.happened_on<=to && (m.kid_ids||[]).includes(kidId));
+    repBlob = await renderReportCanvas(kid, from, to, items, $('repWords').value.trim());
+    $('repImg').src = URL.createObjectURL(repBlob);
+    $('repResult').classList.remove('hidden');
+    toast('长图已生成');
+  }catch(e){ toast('生成失败：'+fmtErr(e), 3500); }
+  loading(false);
+}
+function loadImg(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); }
+async function renderReportCanvas(kid, from, to, items, words){
+  const W=1080, PAD=60, GAP=24, CW=W-PAD*2;
+  const photos = items.flatMap(m=>(m.urls||[]).map(u=>({u, d:m.happened_on}))).slice(0,9);
+  const imgs = [];
+  for(const p of photos){
+    try{ const r=await fetch(p.u); const b=await r.blob(); imgs.push({img: await loadImg(URL.createObjectURL(b)), d:p.d}); }
+    catch(e){ /* 单张失败跳过 */ }
+  }
+  const cell=(CW-GAP*2)/3, cellH=cell;
+  const photoH = imgs.length ? Math.ceil(imgs.length/3)*(cellH+GAP) : 0;
+  const noteBlocks = items.filter(m=>m.note).map(m=>({d:m.happened_on, t:m.note}));
+  const wrap=(text,maxChars)=>{ // 简单中文换行
+    const lines=[]; let line='';
+    for(const ch of text){ line+=ch; if(line.length>=maxChars){ lines.push(line); line=''; } }
+    if(line) lines.push(line); return lines;
+  };
+  let notesH = 0; const noteLines = noteBlocks.map(n=>{ const ls=wrap(n.t, 26); notesH += 46 + ls.length*44 + 18; return {...n, ls}; });
+  const wordsLs = words ? wrap(words, 26) : [];
+  const headH = 340, wordsH = words ? 90 + wordsLs.length*44 : 0;
+  const H = Math.max(1200, PAD + headH + (photoH?60+photoH:0) + (notesH?60+notesH:0) + wordsH + 200);
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const x=c.getContext('2d');
+  x.fillStyle='#FFF8F0'; x.fillRect(0,0,W,H);
+  // 头部
+  x.fillStyle='#FF8A5C'; x.fillRect(0,0,W,14);
+  x.fillStyle='#3D3229'; x.font='700 64px sans-serif'; x.textAlign='center';
+  x.fillText('🌱 宝贝成长周报', W/2, 150);
+  x.fillStyle='#8C7F72'; x.font='40px sans-serif';
+  x.fillText(`${kid.name}${kid.nickname?'（'+kid.nickname+'）':''} · ${from} ~ ${to}`, W/2, 230);
+  x.fillText(`共 ${items.length} 条记录 · ${imgs.length} 张照片`, W/2, 290);
+  let y = PAD + headH;
+  // 照片
+  if(imgs.length){
+    x.textAlign='left'; x.fillStyle='#3D3229'; x.font='700 40px sans-serif'; x.fillText('📷 精彩瞬间', PAD, y+10); y+=60;
+    imgs.forEach((it,i)=>{
+      const col=i%3, row=Math.floor(i/3);
+      const px=PAD+col*(cell+GAP), py=y+row*(cellH+GAP);
+      x.save(); x.beginPath(); x.roundRect(px,py,cell,cellH,20); x.clip();
+      const s=Math.max(cell/it.img.width, cellH/it.img.height);
+      const w=it.img.width*s, h=it.img.height*s;
+      x.drawImage(it.img, px+(cell-w)/2, py+(cellH-h)/2, w, h);
+      x.restore();
+    });
+    y += photoH;
+  }
+  // 记录
+  if(noteLines.length){
+    x.textAlign='left'; x.fillStyle='#3D3229'; x.font='700 40px sans-serif'; x.fillText('📝 成长记录', PAD, y+50); y+=80;
+    for(const n of noteLines){
+      x.fillStyle='#FF8A5C'; x.font='700 32px sans-serif'; x.fillText(n.d, PAD, y+30); y+=46;
+      x.fillStyle='#3D3229'; x.font='34px sans-serif';
+      for(const l of n.ls){ x.fillText(l, PAD, y+30); y+=44; }
+      y+=18;
+    }
+  }
+  // 寄语
+  if(words){
+    y+=60; x.fillStyle='#FFE3D4'; x.beginPath(); x.roundRect(PAD, y, CW, 60+wordsLs.length*44+40, 24); x.fill();
+    x.fillStyle='#3D3229'; x.font='700 34px sans-serif'; x.fillText('💌 老师寄语', PAD+30, y+50); y+=70;
+    x.font='34px sans-serif';
+    for(const l of wordsLs){ x.fillText(l, PAD+30, y+30); y+=44; }
+    y+=40;
+  }
+  // 底部
+  x.textAlign='center'; x.fillStyle='#8C7F72'; x.font='32px sans-serif';
+  x.fillText('—— 由宝贝成长册生成 · 陪伴是最好的教育 ——', W/2, H-80);
+  return await new Promise(res=>c.toBlob(res,'image/png'));
+}
+function downloadReport(){
+  if(!repBlob) return;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(repBlob);
+  a.download=`成长周报-${$('repKid').selectedOptions[0].text}-${todayStr()}.png`;
+  a.click();
+}
+
+/* ================= 导航 ================= */
+function go(viewId, btn){
+  ['viewFeed','viewPost','viewReport','viewKids','viewImport','viewAlbum','viewRandom'].forEach(v=>$(v).classList.toggle('hidden', v!==viewId));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b===btn));
+  $('gpTitle').textContent = viewId==='viewRandom' ? '随机回忆' : '相册';
+  if(viewId==='viewAlbum' && !alManifest) loadAlbum(false);
+  if(viewId==='viewRandom') rndStart(); else rndStop();
+}
+
+function esc(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ================= 相册（来自 8420 后端 public-album 索引，v2 按月拆分） ================= */
+const ALBUM_BASE = 'https://lezai.odn.cc/public-album/';
+const ALBUM_CHUNK = 60;          // 每批渲染张数（IntersectionObserver 增量续渲）
+const ALBUM_IO = 'IntersectionObserver' in window;
+
+let alManifest = null;                       // {base,total,months:[{m,n,c,count}]}
+let alMonthCache = new Map();                // ym -> {items:[...]}（当月条目）
+let alCur = { ym:null, items:[], rendered:0 }; // 当前月渲染状态
+let alRenderOb = null;                       // 哨兵 observer
+let alLb = { idx:0, url:'' };                // 灯箱状态
+
+function alStatus(html){ const s=$('albumStatus'); if(!html){s.style.display='none';return;} s.style.display='block'; s.innerHTML=html; }
+
+async function fetchJson(url, tries){
+  // 带超时+重试：内网穿透链路冷启动时首个请求容易 stall，重试通常立刻成功
+  tries = tries || 3;
+  const one = async () => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try{
+      const r = await fetch(url, { cache:'default', signal: ctrl.signal });
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    }finally{ clearTimeout(t); }
+  };
+  return one().catch(e => tries > 1 ? fetchJson(url, tries - 1) : Promise.reject(e));
+}
+
+let alLoading = null;                        // 加载中防重入（启动预取与 go() 并发时）
+
+async function loadAlbum(force){
+  const meta = $('albumMeta'), months = $('albumMonths'), grid = $('albumGrid');
+  if(!force && alManifest){ alPickMonth(alCur.ym || alManifest.months[alManifest.months.length-1].m); return; }
+  if(!force && alLoading) return alLoading;  // 预取已在路上，直接复用
+  if(force) alMonthCache.clear();
+
+  alLoading = (async () => {
+  grid.innerHTML=''; months.innerHTML='';
+  meta.textContent='';
+  $('alCurMonth').textContent=''; $('alCurCount').textContent='';
+  alStatus('正在打开相册…');
+  try{
+    // 优先 v2 manifest（4KB）；旧索引（1.5MB 全量）作兜底
+    try{
+      alManifest = await fetchJson(ALBUM_BASE + 'manifest.json' + (force ? '?v=' + Date.now() : ''));
+    }catch(_){
+      const full = await fetchJson(ALBUM_BASE + 'public_index.json' + (force?'?v='+Date.now():''));
+      alManifest = {
+        base: full.base, total: full.total,
+        months: full.months.map(m => ({ m:m.m, n:m.n, c:m.c, count:m.i.length, _items:m.i })),
+      };
+    }
+    if(!alManifest.months.length) throw new Error('清单为空');
+
+    meta.textContent = alManifest.total + ' 张照片 · ' + alManifest.months.length + ' 个月 · 家里相册实时同步';
+    alStatus(null);
+
+    months.innerHTML = alManifest.months.map(m =>
+      `<button class="achip" data-m="${esc(m.m)}">${esc(fmtYm(m.m))} <span>${m.count}</span></button>`
+    ).join('');
+    months.querySelectorAll('.achip').forEach(b => b.addEventListener('click', () => alPickMonth(b.dataset.m)));
+
+    // 优先最近有拍摄日期的月份（跳过尾部的「未标注日期」）
+    const dated = alManifest.months.filter(x => /^\d{4}-\d{2}$/.test(x.m));
+    const latest = (dated.length ? dated[dated.length-1] : alManifest.months[alManifest.months.length-1]).m;
+    alPickMonth(window._albumStayYm && alManifest.months.some(x=>x.m===window._albumStayYm) ? window._albumStayYm : latest);
+  }catch(e){
+    alStatus('⚠️ 暂时打不开：' + esc(e.message) +
+      '<br><span style="font-size:12px">家里机器关机或网络问题时，相册不可用。<br>动态/周报数据都在云端，不受影响。</span>');
+  }
+  })();
+  try{ await alLoading; } finally{ alLoading = null; }
+}
+
+function alPickMonth(ym){
+  const man = alManifest; if(!man) return;
+  window._albumStayYm = ym;
+  document.querySelectorAll('.achip').forEach(x => x.classList.toggle('on', x.dataset.m === ym));
+  const chip = document.querySelector('.achip[data-m="'+CSS.escape(ym)+'"]');
+  if(chip) chip.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
+
+  const info = man.months.find(x => x.m === ym);
+  $('alCurMonth').textContent = fmtYm(ym);
+  $('alCurCount').textContent = info ? info.count + ' 张' : '';
+
+  const grid = $('albumGrid');
+  grid.innerHTML='';
+  alCur = { ym, items:[], rendered:0 };
+  if(alRenderOb){ alRenderOb.disconnect(); alRenderOb=null; }
+
+  const cached = alMonthCache.get(ym);
+  if(cached){ alCur.items = cached; alRenderMore(); return; }
+
+  // v2：按月小文件；兜底：全量索引里已内嵌
+  if(info && info._items){ alMonthCache.set(ym, info._items); alCur.items = info._items; alRenderMore(); return; }
+
+  alStatus('正在加载 ' + esc(fmtYm(ym)) + ' …');
+  fetchJson(ALBUM_BASE + 'months/' + encodeURIComponent(ym) + '.json').then(m => {
+    alStatus(null);
+    alMonthCache.set(ym, m.i);
+    if(alCur.ym !== ym) return;           // 用户已切走
+    alCur.items = m.i;
+    alRenderMore();
+  }).catch(e => {
+    if(alCur.ym !== ym) return;
+    alStatus('⚠️ ' + esc(fmtYm(ym)) + ' 加载失败：' + esc(e.message));
+  });
+}
+
+function alRenderMore(){
+  const grid = $('albumGrid');
+  const items = alCur.items;
+  if(!items.length){ alStatus('这个月还没有照片'); return; }
+  alStatus(null);
+
+  const oldSent = grid.querySelector('.al-sentinel');
+  if(oldSent) oldSent.remove();
+
+  const start = alCur.rendered, end = Math.min(start + ALBUM_CHUNK, items.length);
+  const frag = document.createDocumentFragment();
+  for(let i = start; i < end; i++){
+    const it = items[i];
+    const cell = document.createElement('div');
+    cell.className = 'al-cell';
+    cell.style.animationDelay = Math.min((i - start) * 22, 300) + 'ms';
+    cell.onclick = () => alLbOpen(i);
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.decoding = 'async'; img.alt = it.n || '';
+    img.src = it.u;
+    img.onload = () => cell.classList.add('ok');
+    img.onerror = () => { cell.classList.add('ok'); cell.style.background='#E8EAED'; };
+    cell.appendChild(img);
+    frag.appendChild(cell);
+  }
+  alCur.rendered = end;
+
+  let sentinel = null;
+  if(end < items.length){
+    sentinel = document.createElement('div');
+    sentinel.className = 'al-sentinel';
+    sentinel.textContent = '上滑加载更多… (' + end + '/' + items.length + ')';
+    frag.appendChild(sentinel);
+  } else {
+    const done = document.createElement('div');
+    done.className = 'al-sentinel';
+    done.textContent = '— 本月到底啦 · ' + items.length + ' 张 —';
+    frag.appendChild(done);
+  }
+  grid.appendChild(frag);
+
+  if(sentinel && ALBUM_IO){
+    alRenderOb = new IntersectionObserver(es => {
+      if(es.some(e => e.isIntersecting)){ alRenderOb.disconnect(); alRenderOb = null; alRenderMore(); }
+    }, { rootMargin: '600px 0px' });
+    alRenderOb.observe(sentinel);
+  } else if(sentinel){
+    // 无 IO 的老内核：滚动兜底
+    sentinel.id = 'alSentinel';
+    window.addEventListener('scroll', alScrollFill, { passive:true });
+  }
+}
+function alScrollFill(){
+  const s = document.getElementById('alSentinel');
+  if(s && s.getBoundingClientRect().top < innerHeight + 600){
+    window.removeEventListener('scroll', alScrollFill);
+    s.remove(); alRenderMore();
+  }
+}
+
+/* ---------- 灯箱：缩略图先行 + 原图后台换 + 键盘/滑动切换 ---------- */
+function alLbOpen(i){
+  alLb.idx = i; alLb.url = '';
+  const lb = $('albumLightbox');
+  lb.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  alLbShow();
+}
+function alLbShow(){
+  const items = alCur.items, it = items[alLb.idx];
+  if(!it) return alLbClose();
+  $('alLbCount').textContent = (alLb.idx+1) + ' / ' + items.length;
+  const img = $('albumLightboxImg'), spin = $('alLbSpin');
+  // 先显缩略图（已在浏览器缓存里，秒出），再换原图
+  img.classList.add('swapping');
+  img.src = it.u;
+  spin.classList.remove('hidden');
+  const full = new Image();
+  full.onload = () => {
+    if(alLb.url !== it.f) return;
+    img.src = it.f; img.classList.remove('swapping'); spin.classList.add('hidden');
+  };
+  full.onerror = () => { if(alLb.url === it.f){ img.src = it.u; img.classList.remove('swapping'); spin.classList.add('hidden'); } };
+  alLb.url = it.f;
+  full.src = it.f;
+}
+function alLbStep(d){
+  const n = alCur.items.length; if(!n) return;
+  alLb.idx = (alLb.idx + d + n) % n;
+  alLbShow();
+}
+function alLbClose(){
+  $('albumLightbox').classList.add('hidden');
+  document.body.style.overflow = '';
+  $('albumLightboxImg').src = '';
+  alLb.url = '';
+}
+function alLbDownload(){
+  const it = alCur.items[alLb.idx]; if(!it) return;
+  const a = document.createElement('a');
+  a.href = it.f; a.download = it.n || 'photo.jpg'; a.target = '_blank'; a.rel='noopener';
+  a.click();
+}
+$('albumLightbox').addEventListener('click', e => { if(e.target === $('albumLightbox')) alLbClose(); });
+document.addEventListener('keydown', e => {
+  if($('albumLightbox').classList.contains('hidden')) return;
+  if(e.key === 'Escape') alLbClose();
+  else if(e.key === 'ArrowLeft') alLbStep(-1);
+  else if(e.key === 'ArrowRight') alLbStep(1);
+});
+(function(){   // 触屏滑动切换
+  let sx = 0, sy = 0;
+  const lb = $('albumLightbox');
+  lb.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive:true });
+  lb.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if(Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) alLbStep(dx < 0 ? 1 : -1);
+  }, { passive:true });
+})();
+
+/* ---------- 随机回看：按月加权随机 + 双层交叉淡入 + 自动循环 ---------- */
+const RND_INTERVAL = 4500;                    // 自动切换间隔 ms
+const rnd = { timer:null, paused:false, layer:'A', busy:false, preloading:null };
+
+/* 回忆式顶部进度条：每张照片配一条 4.5s 的线性进度 */
+function rndProgStart(){
+  const p = $('rndProgI'); if(!p) return;
+  p.style.transition = 'none'; p.style.width = '0%';
+  void p.offsetWidth;                          // 强制 reflow 让动画重放
+  p.style.transition = `width ${RND_INTERVAL}ms linear`;
+  p.style.width = '100%';
+}
+function rndProgPause(){
+  const p = $('rndProgI'); if(!p) return;
+  const w = getComputedStyle(p).width;
+  p.style.transition = 'none'; p.style.width = w;
+}
+function rndProgResume(){
+  const p = $('rndProgI'); if(!p) return;
+  const rest = RND_INTERVAL * (1 - parseFloat(p.style.width || '0%') / 100);
+  if(rest <= 0) return rndProgStart();
+  void p.offsetWidth;
+  p.style.transition = `width ${rest}ms linear`;
+  p.style.width = '100%';
+}
+function rndProgReset(){
+  const p = $('rndProgI'); if(!p) return;
+  p.style.transition = 'none'; p.style.width = '0%';
+}
+
+function rndStop(){
+  if(rnd.timer){ clearInterval(rnd.timer); rnd.timer = null; }
+  rnd.paused = false; $('rndPause').textContent = '⏸';
+  rndProgReset();
+}
+async function rndStart(){
+  if(rnd.timer || rnd.busy) return;
+  if(!alManifest){
+    $('rndLoad').style.display = 'flex';
+    try{ await loadAlbum(false); }catch(_){}
+    if(!alManifest){
+      $('rndLoad').innerHTML = '⚠️ 相册清单暂时拉不到<br><span style="font-size:12px;opacity:.7">家里机器关机或网络问题时不可用</span>';
+      return;
+    }
+  }
+  $('rndPause').textContent = '⏸'; rnd.paused = false;
+  rnd.timer = setInterval(() => { if(!rnd.paused) rndNext(false); }, RND_INTERVAL);
+  rndNext(true);
+}
+function rndToggle(){
+  rnd.paused = !rnd.paused;
+  $('rndPause').textContent = rnd.paused ? '▶' : '⏸';
+  if(rnd.paused) rndProgPause(); else rndProgResume();
+  if(!rnd.paused && !$('rndImgA').classList.contains('show') && !$('rndImgB').classList.contains('show')) rndNext(true);
+}
+function rndStep(d){ rndNext(true); }         // 随机模式下「上一张」也随机洗一张
+
+async function rndPick(){
+  const ms = alManifest.months;
+  const total = ms.reduce((s,m)=>s+(m.count||0),0);
+  if(!total) return null;
+  let r = Math.random()*total, mi = ms[ms.length-1];
+  for(const m of ms){ r -= (m.count||0); if(r < 0){ mi = m; break; } }
+  let items = alMonthCache.get(mi.m);
+  if(!items){
+    if(mi._items){ items = mi._items; }
+    else{
+      try{
+        const mj = await fetchJson(ALBUM_BASE + 'months/' + encodeURIComponent(mi.m) + '.json');
+        items = mj.i; alMonthCache.set(mi.m, items);
+      }catch(_){ return null; }
+    }
+  }
+  return items.length ? items[Math.floor(Math.random()*items.length)] : null;
+}
+
+async function rndNext(immediate){
+  if(rnd.busy || !alManifest) return;
+  rnd.busy = true;
+  try{
+    const it = await rndPick();
+    if(!it) return;
+    const cur = $('rndImg' + rnd.layer);
+    const nxt = $('rndImg' + (rnd.layer === 'A' ? 'B' : 'A'));
+    // 先预载，载好才换层——避免黑屏等待
+    await new Promise(res => {
+      const pre = new Image();
+      pre.onload = pre.onerror = res;
+      pre.src = it.u;
+      setTimeout(res, 7000);                  // 兜底：网慢也按时切
+    });
+    if(!immediate && rnd.paused) return;      // 暂停期间预载完成也不切换
+    cur.style.zIndex = 1; nxt.style.zIndex = 2;
+    nxt.classList.remove('zoom');
+    nxt.src = it.u;
+    // 强制 reflow 保证 zoom 动画重放
+    void nxt.offsetWidth;
+    nxt.classList.add('show', 'zoom');
+    cur.classList.remove('show');
+    rnd.layer = (rnd.layer === 'A' ? 'B' : 'A');
+    $('rndCap').innerHTML = '<b>' + esc(it.d || '') + '</b><span>' +
+      [it.d && fmtYm((it.d||'').slice(0,7)), it.n].filter(Boolean).map(esc).join(' · ') + '</span>';
+    $('rndLoad').style.display = 'none';
+    rndProgStart();
+  } finally { rnd.busy = false; }
+}
+$('rndStage').addEventListener('click', () => { if(alManifest) rndNext(true); });
+// 页面切后台自动暂停轮播，回来接着放
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ if(rnd.timer && !rnd.paused){ rnd.paused = true; rndProgPause(); $('rndPause').textContent='▶'; } }
+  else if(rnd.timer && $('viewRandom') && !$('viewRandom').classList.contains('hidden') && rnd.paused){ rnd.paused = false; $('rndPause').textContent='⏸'; rndProgResume(); }
+});
+
+/* ================= 一次性：从旧 app 导出的 JSON 导入 ================= */
+let IMPORT_DATA = null;
+function onImportFile(input){
+  const f = input.files[0];
+  if (!f) return;
+  $('importProgress').innerText = '正在读取文件…';
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      IMPORT_DATA = JSON.parse(reader.result);
+      if (!IMPORT_DATA.kids || !IMPORT_DATA.moments) throw new Error('JSON 缺少 kids / moments 字段');
+      const photos = Object.keys(IMPORT_DATA.photo_b64 || {}).length;
+      $('importProgress').innerText = `已加载：宝贝 ${IMPORT_DATA.kids.length} 个、记录 ${IMPORT_DATA.moments.length} 条、照片 ${photos} 张。\n确认后点下面的「开始导入」按钮。`;
+      $('importGo').classList.remove('hidden');
+    } catch(e) {
+      $('importProgress').innerText = 'JSON 解析失败：' + e.message;
+      IMPORT_DATA = null;
+      $('importGo').classList.add('hidden');
+    }
+  };
+  reader.onerror = () => { $('importProgress').innerText = '文件读取失败'; };
+  reader.readAsText(f);
+}
+
+async function runImport(){
+  if (!IMPORT_DATA) return;
+  if (!confirm(`即将导入 ${IMPORT_DATA.kids.length} 个宝贝、${IMPORT_DATA.moments.length} 条记录。\n（同名宝贝会复用，不会重复创建。）\n确认？`)) return;
+  $('importGo').classList.add('hidden');
+  $('importFile').disabled = true;
+  loading(true);
+  try {
+    /* === 第 1 步：宝贝表 === */
+    const existing = unwrap(await cloud.database.from('kids').select('id,name,nickname')) || [];
+    const nameToId = {};
+    existing.forEach(k => nameToId[k.nickname || k.name] = k.id);
+    $('importProgress').innerText = `已存在 ${existing.length} 个宝贝。\n开始同步宝贝…`;
+
+    let created = 0, reused = 0;
+    for (const k of IMPORT_DATA.kids) {
+      const key = k.nickname || k.name;
+      if (!key) continue;
+      if (nameToId[key]) { reused++; continue; }
+      const r = await cloud.database.from('kids').insert({
+        name: k.name, nickname: k.nickname, birthdate: k.birthdate,
+      }).select();
+      const rows = Array.isArray(r?.data) ? r.data : (r?.data ? [r.data] : null);
+      if (rows && rows[0]) { nameToId[key] = rows[0].id; created++; }
+    }
+    $('importProgress').innerText += `\n宝贝：复用 ${existing.length - created + reused} 个、新建 ${created} 个。\n开始处理记录与照片…`;
+
+    /* === 第 2 步：记录 + 照片 === */
+    const userId = (await cloud.auth.getSession()).data.user.id;
+    const photoMap = IMPORT_DATA.photo_b64 || {};
+    let mOk = 0, mFail = 0;
+    for (let i = 0; i < IMPORT_DATA.moments.length; i++) {
+      const m = IMPORT_DATA.moments[i];
+      try {
+        const kid_ids = (m.kid_names || []).map(n => nameToId[n]).filter(Boolean);
+        const newPaths = [];
+        for (const oldPath of m.photo_paths || []) {
+          const b64 = photoMap[oldPath];
+          if (!b64) continue;
+          const res = await fetch(b64);
+          const blob = await res.blob();
+          const newPath = cloud.storage.userPath(userId, `photos/${uuid()}.jpg`);
+          const up = await cloud.storage.upload(newPath, blob, {contentType:'image/jpeg'});
+          if (up.error) throw new Error('上传失败：'+fmtErr(up.error));
+          newPaths.push(newPath);
+        }
+        const ins = await cloud.database.from('moments').insert({
+          happened_on: m.happened_on, note: m.note||null,
+          kid_ids, photo_paths: newPaths,
+        }).select();
+        if (ins?.error) throw new Error(fmtErr(ins.error));
+        mOk++;
+      } catch(e) {
+        mFail++;
+        console.error('moment failed:', i, e);
+      }
+      if ((i+1) % 5 === 0 || i === IMPORT_DATA.moments.length - 1) {
+        $('importProgress').innerText = `宝贝：复用 ${existing.length - created + reused}、新建 ${created}。\n记录：${i+1}/${IMPORT_DATA.moments.length}（成功 ${mOk}、失败 ${mFail}）`;
+      }
+    }
+
+    $('importProgress').innerText = `✅ 完成\n宝贝：复用 ${existing.length - created + reused}、新建 ${created}\n记录：成功 ${mOk}、失败 ${mFail}\n\n刷新一下动态墙应该能看到新数据。`;
+    await loadKids(); await loadFeed();
+  } catch(e) {
+    $('importProgress').innerText = '导入失败：' + fmtErr(e) + '\n（失败之前已导入的数据会保留，可继续操作）';
+  }
+  loading(false);
+  $('importFile').disabled = false;
+  $('importFile').value = '';
+}
+
+/* ================= 启动 ================= */
+/* 空白态看门狗：PWA 恢复冻结快照、或任何异常导致所有视图都隐藏时，强制回到相册 */
+function ensureVisible(){
+  const auth = $('viewAuth');
+  if(auth && !auth.classList.contains('hidden')) return;   // 登录覆盖层在，属正常态
+  const views=['viewFeed','viewPost','viewReport','viewKids','viewImport','viewAlbum','viewRandom'];
+  if(views.some(v=>{ const el=$(v); return el && !el.classList.contains('hidden'); })) return;
+  go('viewAlbum', document.querySelector('nav button[data-v=viewAlbum]'));
+}
+window.addEventListener('pageshow', e => { if(e.persisted) setTimeout(ensureVisible, 50); });
+
+// 启动即预取相册（4KB 清单 + 当月 JSON）：与登录检查并行，省 1~2 秒；
+// 未登录时在覆盖层下面静默预热，登录后直接出图
+loadAlbum(false).catch(()=>{});
+
+(async function init(){
+  if(!window.WorkBuddyCloud){ document.body.innerHTML='<p style="padding:40px;text-align:center">SDK 加载失败，请检查网络后刷新</p>'; return; }
+  const { data: session } = await cloud.auth.getSession();
+  if (session) {
+    await enterApp();
+    if (location.hash === '#import') {
+      $('viewImport').classList.remove('hidden');
+      ['viewFeed','viewPost','viewReport','viewKids','viewAlbum','viewRandom'].forEach(v=>$(v).classList.add('hidden'));
+    }
+  }
+})();
+setTimeout(ensureVisible, 2500);   // 启动后兜底复查一次
+</script>
+</body>
+</html>
