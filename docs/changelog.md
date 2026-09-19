@@ -4,6 +4,21 @@
 
 ---
 
+## refill 全平台调度验证 + YouTube 环境约束记录（2026-09-19）
+
+验证 `openbiliclaw-refill` 全平台调度已健康：每 2 小时一轮（PM2 cron `5 */2 * * *`），
+7 平台全部参与，最新一轮 xiaohongshu / bilibili / zhihu / wechat / douyin / xiaoyuzhou
+均成功写回正文（search_click 无结果时 direct 自动兜底）。仅记录一项约束到
+`docs/modules/refill.md`：
+
+- **YouTube 环境阻断，保持现状**：`ytdlp` 通道需可达代理（默认 `127.0.0.1:7890`，
+  可用 `YT_PROXY_POOL` 轮换）+ 登录 cookie。当前无代理出口 + 直连被墙 + 无 cookie，
+  出口判 bot 触发 `BridgeUnavailableError` 全局熔断——**不消耗配额、仅计 `bridge_off`**，
+  1.9 万 条队列暂时 0 完成。配额保留（`per_cycle=2`），白轮询无害；待用户提供可用
+  代理 + cookie 后自然恢复，无需改代码。
+
+---
+
 ## refill 收尾：旧 xhs-backfill 线归档（2026-09-19）
 
 `16_浏览器自动化/backfill.py`（小红书低密度回填）的 PM2 进程 `xhs-backfill` 此前已删、改由

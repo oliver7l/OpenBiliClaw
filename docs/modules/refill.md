@@ -73,6 +73,13 @@ summary = sch.run_cycle(sources=("bilibili",))      # {source: {picked/done/...}
 - 外部依赖：`bili_cli` 需本机 `bili` CLI；`zhihu_api` 需 `zhihu-toolkit` venv python 与
   `scripts/content_library/zhihu_api_body.py`；`getnote` 需本机 getnote CLI 与配额。
 
+> **YouTube 环境约束（2026-09-19 定：保持现状，不主动解决）**
+> `ytdlp` 通道需**可达代理**（默认 `127.0.0.1:7890`，可用 `YT_PROXY_POOL` 逗号分隔多出口轮换）
+> 且 YouTube 直连在国内被墙。当前无可用代理出口 + 无登录 cookie（`YT_COOKIE_FILE` /
+> `YT_COOKIES_FROM_BROWSER`）时，出口被判 bot 会抛 `BridgeUnavailableError`（全局熔断，
+> **不消耗配额**，仅计 `bridge_off`）。因此 1.9 万 条 YouTube 队列暂时 0 完成，维持现状：
+> 配额保留（`per_cycle=2`）、每轮白轮询无害；待用户提供可用代理 + cookie 后自然恢复，无需改代码。
+
 ## 配置项
 
 见 `docs/modules/config.md` §`[refill]`：`enabled`（默认 `true`）、`db`（默认
