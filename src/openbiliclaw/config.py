@@ -653,6 +653,37 @@ class StorageConfig:
 
 
 @dataclass
+class RefillQuota:
+    """单平台每轮配额。``per_cycle`` 为该平台每轮补抓条数，``interval_min``
+    为两轮之间的最小间隔（分钟）。两者均在调度层（M2 scheduler）消费。"""
+
+    per_cycle: int = 0
+    interval_min: int = 0
+
+
+@dataclass
+class RefillConfig:
+    """阅读库正文统一回补模块配置（refill）。
+
+    控制 refill_queue 独立子库（refill.db）与回补开关、通道的最小正文阈值、
+    每平台补抓配额与防风控节流。``enabled = false`` 时仍可读现有队列，
+    但不参与调度。
+    """
+
+    enabled: bool = True
+    # 独立子库路径，相对 config.data_path（默认 data/refill.db），支持绝对路径覆盖。
+    db: str = "refill.db"
+    # 判定「抓到正文」的最小字数阈值（对齐旧脚本的 >=30）。
+    min_body_len: int = 30
+    # 每平台配额：platform -> {per_cycle, interval_min}。M2 先收口小红书双路。
+    quota: dict[str, RefillQuota] = field(
+        default_factory=lambda: {"xiaohongshu": RefillQuota(per_cycle=1, interval_min=120)}
+    )
+    # 随机化首段憩志分钟上限（防风控）。
+    jitter_max_min: int = 30
+
+
+@dataclass
 class LoggingConfig:
     """Logging configuration."""
 
@@ -882,6 +913,7 @@ class Config:
     recommendation: RecommendationScoringConfig = field(default_factory=RecommendationScoringConfig)
     autostart: AutostartConfig = field(default_factory=AutostartConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    refill: RefillConfig = field(default_factory=RefillConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     # Top-level `[soul]` is distinct from `[llm.soul]` (per-module
     # provider override): this carries soul-engine behavior toggles.
@@ -1018,6 +1050,9 @@ def _build_config(raw: dict[str, Any]) -> Config:
     if not isinstance(network_raw, dict):
         network_raw = {}
     store_raw = raw.get("storage", {})
+    refill_raw = raw.get("refill", {})
+    if not isinstance(refill_raw, dict):
+        refill_raw = {}
     logging_raw = raw.get("logging", {})
     travel_raw = raw.get("travel", {})
     if not isinstance(travel_raw, dict):
@@ -1369,6 +1404,7 @@ def _build_config(raw: dict[str, Any]) -> Config:
             manage_ollama=_coerce_bool(autostart_raw.get("manage_ollama"), default=True),
         ),
         storage=StorageConfig(**store_raw),
+        refill=_build_refill(refill_raw),
         logging=LoggingConfig(**logging_raw),
         soul=soul,
         travel=TravelConfig(
@@ -1388,6 +1424,33 @@ def _build_config(raw: dict[str, Any]) -> Config:
             mule_path=str(ed2k_raw.get("mule_path", "") or ""),
             download_dir=str(ed2k_raw.get("download_dir", "") or ""),
         ),
+    )
+
+
+def _build_refill(refill_raw: dict[str, Any]) -> RefillConfig:
+    """Assemble ``RefillConfig`` from the raw ``[refill]`` table.
+
+    ``[refill.quota]`` 形如 ``xiaohongshu = {per_cycle=1, interval_min=120}``，
+    缺省平台回退到内置默认（小红书双路收口，防风控）。
+    """
+    quota_raw = refill_raw.get("quota", {})
+    quota: dict[str, RefillQuota] = {}
+    default_quota = RefillConfig().quota
+    if isinstance(quota_raw, dict):
+        for platform, cfg in quota_raw.items():
+            if not isinstance(cfg, dict):
+                continue
+            quota[str(platform)] = RefillQuota(
+                per_cycle=max(0, int(cfg.get("per_cycle", 0) or 0)),
+                interval_min=max(0, int(cfg.get("interval_min", 0) or 0)),
+            )
+    quota = {**default_quota, **quota}
+    return RefillConfig(
+        enabled=_coerce_bool(refill_raw.get("enabled"), default=True),
+        db=str(refill_raw.get("db", "refill.db") or "refill.db"),
+        min_body_len=max(1, int(refill_raw.get("min_body_len", 30) or 30)),
+        quota=quota,
+        jitter_max_min=max(0, int(refill_raw.get("jitter_max_min", 30) or 30)),
     )
 
 

@@ -164,6 +164,11 @@ from openbiliclaw.cli._cmd_notes import note_app  # noqa: E402,F401
 app.add_typer(autostart_app, name="autostart")
 app.add_typer(note_app, name="note")
 
+# 阅读库正文统一回补命令组 refill（M1: refill status，见 docs/refill-module-design.md）。
+from openbiliclaw.cli._cmd_refill import refill_app as _refill_app  # noqa: E402,F401
+
+app.add_typer(_refill_app, name="refill")
+
 # 运行时配置写入 + 交互引导族已抽至 cli/_cmd_config.py（P4 第八刀）；该模块
 # 顶层不 import 本包，此处顶层导入无循环依赖。该族不含 typer 命令（纯 helper +
 # 菜单常量），故无需 register()。re-export 的 20 个符号：4 个 tests/cli 直引、

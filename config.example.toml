@@ -510,6 +510,21 @@ health_db_path = "data/health.db"
 # 豆瓣书影音独立子库；留空则回退到 data/douban.db。
 douban_db_path = "data/douban.db"
 
+# 阅读库正文统一回补（refill）。中央队列 refill_queue 独立子库 data/refill.db，
+# 承担高频回补状态写，避免与阅读库 content.db 锁竞争。M2 先收口小红书双路
+# （无 xsec_token+有标题 走搜索点击，带 token 或标题空 走直接访问）。
+[refill]
+enabled = true
+# 回补队列独立子库路径；相对 data 目录（data/refill.db），支持绝对路径覆盖。
+db = "refill.db"
+# 判定「抓到正文」的最小字数阈值。
+min_body_len = 30
+# 每平台每轮补抓配额与时隙（分钟）；M2 先收口小红书（防风控，别按缺口数调大）。
+[refill.quota]
+xiaohongshu = { per_cycle = 1, interval_min = 120 }
+# 随机化首段憩志分钟上限（防风控）。
+jitter_max_min = 30
+
 [logging]
 # Console log level: DEBUG | INFO | WARNING | ERROR
 level = "INFO"
