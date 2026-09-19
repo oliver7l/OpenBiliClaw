@@ -581,6 +581,11 @@ OpenClaw 收到 `interest.probe` 事件（或主动拉取 `next-probe`），发�
 │   视频转笔记 · 字幕优先/音频兜底 · FTS 搜索 · 已读库导入         │
 │   transcribe(cleaner/chunker/whisper/fetcher) + synthesis     │
 ├───────────────────────────────────────────────────────────────┤
+│                     正文回补层 refill (v0.3.x+)                │
+│   refill_queue(独立 refill.db) · Channel: direct / search_click│
+│   / ytdlp / getnote / bili_cli / zhihu_api → 写 content_text   │
+│   Scheduler 按 [refill].quota 定补 · 防风控 jitter · CLI status │
+├───────────────────────────────────────────────────────────────┤
 │       LLM 适配层(API Key/Codex OAuth) · B 站 API · 扩展代理发现   │
 │       Runtime: Account Sync + producers + candidate eval + probe arbiter   │
 │       Runtime status: pool_available/raw/pending/eval_count        │
@@ -643,6 +648,7 @@ OpenBiliClaw/
 │   │   ├── zhihu_tasks        # 知乎插件任务队列 / bootstrap_events + search/hot/feed/creator/related
 │   │   └── web_adapter        # 通用 Web (Playwright + LLM)
 │   ├── youtube/               # YouTube Takeout 离线导入解析
+│   ├── refill/                # 正文回补层 (中央队列 refill_queue + Channel + Scheduler)
 │   ├── api/                   # 本地 FastAPI (配置回滚 / 降级模式 / popup API)
 │   ├── runtime/               # 后台刷新、feedback 合并、presence gate、autostart/Ollama、降级 RuntimeContext
 │   ├── bilibili/              # B 站接入层 (WBI 签名 · 速率控制)

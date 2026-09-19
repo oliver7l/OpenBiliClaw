@@ -365,6 +365,12 @@ Agent：那我理解了。这是一个很有意思的特质——你可能也会
 └──────────────────────────────────────────────────────────────┘
 ```
 
+> **正文回补层（refill，v0.3.x+）**：阅读库 `articles.content_text` 缺口的统一回补，
+> 位于「多源适配层」之下、命中存储之上——中央队列 `refill_queue`（独立子库 `refill.db`）
+> + 可插拔 Channel（`direct` / `search_click` / `ytdlp` / `getnote` / `bili_cli` /
+> `zhihu_api`）+ 单 Scheduler（按 `[refill].quota` 配额定补、防风控 jitter）。详见
+> [refill 模块](modules/refill.md) 与 `docs/refill-module-design.md`。
+
 ---
 
 ## 4. 技术选型

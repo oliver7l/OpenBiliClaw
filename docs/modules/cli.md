@@ -39,6 +39,8 @@ openbiliclaw [--log-level DEBUG|INFO|WARNING|ERROR] <命令>
 | `fetch-youtube` | 单独触发 YouTube bootstrap 拉取（不重建画像；默认复用近期任务） | ✅ |
 | `fetch-zhihu` | 单独触发知乎事件拉取（默认 smoke；可选写入 memory / 重建画像） | ✅ |
 | `fetch-x` | 单独触发 X（Twitter）点赞 / 收藏拉取（服务端 cookie 重放，无扩展任务，不需 daemon；`--dry-run` 只打印不入库） | ✅ |
+| `fetch-linuxdo <url\|id>` | 用本地 `LinuxdoAdapter` 直连 Discourse JSON 抓取单个 Linux.do 帖子正文，写入阅读库 `articles`（不需 daemon / 扩展；登录可见帖子需 cookie） | ✅ |
+| `capture-linuxdo <url\|id>` | 走浏览器扩展通道抓取单个 Linux.do 帖子全文：入队 `related` + `capture_body` 任务，扩展在已登录标签页抓正文并经 `task-result` 回传入阅读库 | ✅ |
 | `import-youtube <path>` | 从 Google Takeout 导入 YouTube 历史 / 订阅 / 点赞 | ✅ |
 | `setup-embedding` | 配置本地 Ollama 作为独立 embedding provider（可选） | ✅ |
 | `recommend` | 查看推荐 | ✅ |
@@ -65,6 +67,11 @@ openbiliclaw [--log-level DEBUG|INFO|WARNING|ERROR] <命令>
 | `note video <BV号>` | B 站视频转结构化笔记（字幕优先 + 音频兜底） | ✅ |
 | `note import-read-archive <dir>` | 从已读库目录批量导入笔记 | ✅ |
 | `note tasks` | 列出生成任务 | ✅ |
+| `refill status` | 查看阅读库正文缺口的中央回补队列统计（各平台 待补/已补/已满/已完成）；`--fill` 先全量灌入缺口，`--fresh` 并列 articles 实时缺口 | ✅ |
+| `refill run` | 手动补一轮回补（验证/临时加仓，不随机憩志）；`--source` 限定平台、`--n` 覆盖条数 | ✅ |
+| `refill schedule` | 按完整配置与配额跑一轮（PM2 cron 入口，默认随机憩志防风控） | ✅ |
+| `refill channel` | 列出已注册抓取通道及各平台通道路由 | ✅ |
+| `refill reset --source` | 把 `dropped`（重试已满）队项重置回 `pending` 并清零 attempts | ✅ |
 | `interview status` | 求职知识库系统总览（岗位/项目/数字/方向/日志统计） | ✅ |
 | `interview search <关键词>` | 全文检索（02方向库/03岗位库/腾讯文档资料/解码文本） | ✅ |
 | `interview job <公司>` | 查看某公司/岗位登记信息 | ✅ |
@@ -951,6 +958,95 @@ $ openbiliclaw fetch-x -n 50
 ```
 
 `--limit/-n` 控制每类最多拉取条数（默认 50，`init` 回填用 200）；`--dry-run` 只拉取并打印、不写 memory。点赞 → `event_type="like"`、收藏 → `event_type="favorite"`（均为显式正向信号）。cookie 未同步时静默跳过（0 条事件、退出码 0），不报错；拉取本身 best-effort，单类失败（cookie 过期 / 限流 / 偶发 TLS）只打印告警、不中断。
+
+### `openbiliclaw fetch-linuxdo <url|id>`
+
+用本地 `LinuxdoAdapter`（见 `docs/modules/sources.md`）直连 Linux.do 的 Discourse JSON 接口抓取**单个帖子正文**并写入阅读库 `articles`，实现"把帖子真正读进体系"。不需要 daemon、不需要浏览器扩展（是轻量直连通道，不搬上游后端）。
+
+```bash
+$ openbiliclaw fetch-linuxdo 2920473
+# 或
+$ openbiliclaw fetch-linuxdo https://linux.do/t/topic/2920473
+抓取 Linux.do 帖子
+  本地适配器直连 Discourse JSON → 阅读库入库
+  已入库：阅读库 articles 新增 id=42，正文 3128 字 -> https://linux.do/t/xx/2920473
+```
+
+实现走本地 `SourceAdapter` 协议：`topic` 策略把首帖 `raw` / `cooked` 及后续跟帖拼成全文（`content_text`），经 `db.upsert_article(source_type="linuxdo", ...)` 入库（按 `url` 去重，重复抓取会更新内容）。URL 解析优先取数字 topic id（兼容 `/t/<slug>/<id>` 与带楼序号的 `/t/<slug>/<id>/<post>`）。
+
+> 注意：linux.do 全程在 Cloudflare 人机验证后面。无 cookie 时匿名直连对 `*.json` 也返回 `403`，此时命令会空结果告警退出。需要正文时可设置 `OPENBILICLAW_LINUXDO_COOKIE`（或 `recipe.config.cookie`）传入已登录浏览器 cookie 让 Discource 正常返回；这与浏览器扩展通道的登录前提一致，属于避免平台风控的既定取舍。
+
+### `openbiliclaw capture-linuxdo <url|id>`
+
+当需要避开 Cloudflare 人机验证、又不想在本机配置 linux.do cookie 时，用**浏览器扩展通道**抓单个帖子全文：命令把一条 `related` + `capture_body=true` 的任务写进持久化任务队列，浏览器扩展在已登录的 linux.do 标签页里拉取任务、抓取目标主题首帖全文，并通过 `/api/sources/linuxdo/task-result` 回传，后端把带 `body_text` 的条目 `upsert_article` 写入阅读库 `articles`（按 canonical topic URL 去重）。
+
+需要后台 daemon 已运行，且浏览器扩展已连上后端、登录了 linux.do（优先于扩展通道，公开帖子可改用上方的 `fetch-linuxdo` 一条命令直达）。
+
+```bash
+$ openbiliclaw capture-linuxdo 2920473
+# 或（带楼层的帖子 URL 会自动解析出数字 topic id）
+$ openbiliclaw capture-linuxdo https://linux.do/t/slug/2920473/11
+抓取 Linux.do 全文（扩展通道）
+  浏览器扩展抓正文 → 阅读库入库
+  任务已入队 task_id=... topic=https://linux.do/t/2920473 ...
+  任务状态 -> in_progress
+  任务状态 -> completed
+  全文已写入阅读库：扩展回传 1 条带正文条目
+```
+
+`-w/--wait-seconds` 控制入队后等待扩展回传的秒数（默认 120s，`0` 表示只入队不等待）。依赖的扩展侧 `capture_body` 逻辑在 `extension/src/content/linuxdo/task-executor.ts`，后端任务队列与正文入库见 `src/openbiliclaw/sources/linuxdo_tasks.py` 与 `api/source_routes.py`。
+
+### `openbiliclaw refill status`
+
+阅读库正文统一回补模块（`src/openbiliclaw/refill/`，设计稿见 `docs/refill-module-design.md`）M1 的观测入口：从中央队列 `refill_queue`（独立子库 `data/refill.db`）聚合各平台的待补 / 已完成 / 跳过 / 已满数。首次运行队列为空，需 `--fill` 做一次全量缺口灌入；之后每次增量地跟随队列续跑。
+
+```bash
+# 首次：全量灌入 content.db 中「缺正文」的条目（url 唯一，幂等），并展示队列统计
+$ openbiliclaw refill status --fill
+# 并列 articles 表实时「仍然缺正文」的真实欠账口径
+$ openbiliclaw refill status --fill --fresh
+```
+
+- **队列口径（refill_queue）**：已扫描入队并进入回补管线的缺口；任一通道抓回正文写入 `articles.content_text` 后，队项失配下次取值，队列随之合流。
+- **实时口径（articles）**：此刻 `content_text` 仍为空的条目数；两者并列可看出「已补但待清队」的滞后。
+
+### `openbiliclaw refill run` / `refill schedule`
+
+M2 引入的调度入口（`RefillScheduler`，见 `docs/modules/refill.md`）。
+
+- **`refill run`** 手动补一轮：pick → route → 抓 → 写正文 → 收口。不随机憩志，便于观察
+  与临时加仓。`--source xiaohongshu` 限定平台（逗号分隔多个）；`--n 1` 覆盖该平台本轮条数
+  （`--n 0` 为纯 no-op 验证管线）。需要 AgentLimb 桥接（真实登录态 Chrome）在线，否则本轮
+  整轮跳过、不消耗重试。
+- **`refill schedule`** 按完整配置与配额跑一轮（`[refill].quota` 每平台每轮配额），默认随机
+  憩志防风控，是 PM2 cron 的入口命令。`--no-jitter` 供调试。
+
+```bash
+$ openbiliclaw refill run --source xiaohongshu --n 1          # 手动补一条小红书
+$ openbiliclaw refill schedule                                 # PM2 cron 一轮
+```
+
+通道路由：小红书「无 `xsec_token` + 有标题」裸链 → `search_click` 优先、`direct` 兜底、`getnote`
+再兜底；带 `xsec_token` 或标题空 → `direct` → `getnote`；YouTube → `ytdlp`（字幕/简介）→
+`getnote` → `direct`；B站 → `bili_cli`（字幕/AI）→ `getnote` → `direct`；知乎 → `zhihu_api`
+→ `getnote` → `direct`；抖音 → `getnote` → `direct`；其余平台 → `direct`。抓成功且正文 ≥
+`[refill].min_body_len`(默认 30) → 写 `content_text` 并标 `done`；`ytdlp`/`bili_cli` 判定视频真无
+内容 → 标 `skipped`（不消耗重试）；否则 `attempts+1`，达上限置 `dropped`（可用
+`refill reset` 重置）。AgentLimb 桥接关断时只跳过 `direct`/`search_click`，不阻塞
+其它本机子进程通道。
+
+### `openbiliclaw refill channel`
+
+列出已注册抓取通道（`direct` / `search_click` / `ytdlp` / `getnote` / `bili_cli` / `zhihu_api`）及各平台通道路由优先级。
+
+### `openbiliclaw refill reset [--source]`
+
+把 `dropped`（重试已满）队项重置回 `pending` 并清零 attempts。更换通道 / 调整配额 / 节点复活
+后用它重启某平台回补。
+
+```bash
+$ openbiliclaw refill reset --source xiaohongshu
+```
 
 ### `openbiliclaw import-youtube <path>`
 

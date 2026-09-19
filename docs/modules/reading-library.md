@@ -90,3 +90,16 @@ unmigratable: notes#2 「用户负向行为建模 — 面试专题」（source_u
   分叉。归一后应只留一条。
 - **稍后读/收藏**（`saved_memberships`）与本模块相邻但**不同**：那是「保存待看」，已在
   2026-09-15 切成 `saved_memberships` 正本，原生同步见 `docs/modules/saved_sync.md`。
+
+## 6. 正文缺口与统一回补（refill）
+
+`articles` 表长期有大量「有标题无正文」条目（SCHEMA：`content_text` 为空即「待补」）。补正文统一由
+**`refill` 模块**承担（见 `docs/modules/refill.md` 与设计稿 `docs/refill-module-design.md`）：
+
+- **独立子库 `refill.db`**：中央队列 `refill_queue`（`source_type/url/title/state/attempts/...`，
+  `url` 唯一天然去重），高频回补状态写独立于 `content.db`，避免锁竞争。
+- **去重锚点**：`content_text` 是唯一成功判据——任一通道抓成功写正文后，队项标 `done`、失配下次
+  取值窗口；换通道/加配额可 `openbiliclaw refill reset --source` 重置 dropped。
+- **通道**：`direct` / `search_click` / `ytdlp` / `getnote` / `bili_cli` / `zhihu_api`；调度由
+  PM2 `openbiliclaw-refill`（`refill schedule`）按 `[refill].quota` 配额定补。
+- **观测**：`openbiliclaw refill status --fresh` 一处看各平台队列口径 + articles 实时缺口。

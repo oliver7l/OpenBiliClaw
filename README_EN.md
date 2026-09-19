@@ -585,6 +585,13 @@ The whole loop stays local — OpenClaw just calls the CLI bridge; your profile 
 └─────────────────────────────────────────────────────┘
 ```
 
+> **Reading-library backfill layer (`src/openbiliclaw/refill/`, v0.3.x+)** below the
+> source adapter layer and above storage: a central `refill_queue` (own `refill.db`,
+> `url`-unique dedup) + pluggable Channels (`direct` / `search_click` / `ytdlp` /
+> `getnote` / `bili_cli` / `zhihu_api`) + a single Scheduler (quota-driven via
+> `[refill].quota`, anti-risk-control jitter) writing `articles.content_text`. See
+> [modules/refill.md](docs/modules/refill.md).
+
 ### Content Discovery Engine
 
 Four Bilibili strategies work in coordination, each with independent API quota; while backend Bilibili search is degraded or cooling down, the runtime can enqueue extension search fallback tasks, have the extension open a real rendered Bilibili search page in the logged-in browser, and accept the visible DOM results. The source layer also accepts Xiaohongshu extension-proxy signals, YouTube init signals plus a backend-direct YouTube producer, Douyin init signals / DOM-first search / hot / feed discovery, X (Twitter) server-side cookie-replay discovery (search / For-You / followed authors), and Zhihu guided-init signals plus extension-backed search / hot / feed / creator / related discovery:
@@ -625,6 +632,7 @@ OpenBiliClaw/
 │   ├── recommendation/        # Recommendation & expression engine
 │   ├── sources/               # Source adapters and XHS/Douyin/YouTube/Zhihu task bridges
 │   ├── youtube/               # Google Takeout import parser
+│   ├── refill/                # Reading-library backfill (refill_queue + Channels + Scheduler)
 │   ├── api/                   # Local FastAPI (config rollback / degraded mode / popup API)
 │   ├── runtime/               # Refresh, feedback coalescing, presence gate, autostart/Ollama, degraded RuntimeContext
 │   ├── bilibili/              # Bilibili API layer (WBI signing · rate control)

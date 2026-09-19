@@ -423,6 +423,14 @@ X 源健康状态（`ok` / `missing_cookie` / `expired_cookie` / `rate_limited` 
 | `request_interval_seconds` | int | `3` | 后端等待任务时的轮询间隔 / 插件搜索节奏提示；真实平台请求仍发生在用户已登录浏览器内 |
 | `min_interval_minutes` | int | `60` | `ZhihuDiscoveryProducer` 两次执行之间的最小间隔；`0` 表示每个 refresh tick 都允许检查执行 |
 
+### `[sources.linuxdo]`（轻量直连，无配置门控）
+
+Linux.do（Discourse 论坛）本地适配器**不设配置段**，不做 `enabled` 门控，属于轻量补充通道（`openbiliclaw fetch-linuxdo <url|id>` 直连 Discourse JSON 把帖子正文写入阅读库 `articles`）。它读取以下环境变量（不写进 config.toml）：
+
+| 环境变量 | 默认 | 说明 |
+|---------|------|------|
+| `OPENBILICLAW_LINUXDO_COOKIE` | 空 | 已登录 linux.do 浏览器的 Cookie header，用于访问登录可见帖子 / 绕过 Cloudflare。未配置时带空 cookie 拉公开内容（无 cookie 匿名直连会被 Cloudflare 返回 403）；优先级低于 `recipe.config.cookie` |
+
 ### `[scheduler]`
 
 | 键 | 类型 | 默认值 | 说明 |
@@ -559,6 +567,33 @@ cookie_env = "OPENBILICLAW_DOUBAN_COOKIE"
 | `db_path` | string | `"data/openbiliclaw.db"` | SQLite 主库路径 |
 | `health_db_path` | string | `"data/health.db"` | 健康档案独立子库（db sharding P7，隔离锁域）；`cycle.db` 与其同目录派生 |
 | `douban_db_path` | string | `"data/douban.db"` | 豆瓣书影音独立子库（`openbiliclaw/douban/`，隔离锁域） |
+
+### `[refill]`（阅读库正文统一回补）
+
+阅读库正文统一回补模块（`src/openbiliclaw/refill/`，设计稿见 `docs/refill-module-design.md`）的入口配置。中央队列 `refill_queue` 独立子库 `data/refill.db`，承担高频回补状态写，避免与阅读库 `content.db` 锁竞争。M1 交付队列 + `refill status` 观测；M2 接入 Scheduler + direct / search_click 通道，`quota` 由调度层消费。
+
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `enabled` | bool | `true` | 回补模块总开关；`false` 时 `refill status` 仍可读现有队列，但 `refill run/schedule` 不调度 |
+| `db` | string | `"refill.db"` | 回补队列独立子库路径，相对 `data` 目录（即 `data/refill.db`）；支持绝对路径覆盖 |
+| `min_body_len` | int | `30` | 判定「抓到正文」的最小字数阈值（对齐旧脚本的 `>=30`） |
+| `quota` | table | `{xiaohongshu: {per_cycle=1, interval_min=120}}` | 每平台每轮配额与时隙：`per_cycle` 每轮补抓条数，`interval_min` 两轮最小间隔分钟 |
+| `jitter_max_min` | int | `30` | 首段随机憩志分钟上限（`refill schedule` 防风控） |
+
+```toml
+[refill]
+enabled = true
+db = "refill.db"
+min_body_len = 30
+[refill.quota]
+xiaohongshu = { per_cycle = 1, interval_min = 120 }
+jitter_max_min = 30
+```
+
+> 风控守恒：`xiaohongshu` 配额 `per_cycle=1` 是刻意压低的防风控设计，别按缺口数调大。
+> M4 已有 bilibili/zhihu 通道但仍**不默认调度**——要补某平台，在 `[refill.quota]` 按需加对应项
+> （如 `bilibili = { per_cycle = 6, interval_min = 60 }`、`zhihu = { per_cycle = 3, interval_min = 30 }`、
+> `youtube = { per_cycle = 8, interval_min = 60 }`、`douyin = { per_cycle = 2, interval_min = 120 }`）。
 
 ### `[interview]`（v0.3.217+）
 

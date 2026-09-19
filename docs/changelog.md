@@ -4,6 +4,171 @@
 
 ---
 
+## refill 模块 M5：架构/文档收尾（2026-09-19）
+
+把 refill 反映到架构与模块文档（AGENTS 文档强制规则）：
+
+- `docs/architecture.md`：系统概览新增第 7 层「正文回补层（refill）」，`模块职责` 新增
+  `Refill 正文统一回补 (refill/)` 小节。
+- `docs/spec.md` §3 系统架构图后补「正文回补层」说明（保留 ASCII 图完整性）。
+- `docs/modules/reading-library.md`：新增 §6「正文缺口与统一回补（refill）」。
+- `README.md`：顶部架构图插入「正文回补层 refill」块 + 项目结构树加 `refill/`；
+  `README_EN.md` 同步英文说明 + 树条目。
+- `docs/refill-module-dev-guide.md` / `docs/refill-module-design.md`：里程碑 M5 标注完成。
+
+至此 refill 模块 M1–M5 全部落地（代码 + 运维收口 + 文档）。
+
+> 补充（2026-09-19）：`GetnoteChannel` 补上**异步回收**（save 只返回 task_id/note_id 时，有界轮询
+> `getnote task` + 取 `note`），使得到大脑回补**完整**落在回补模块内，不再依赖已归档的外部脚本与
+> 已删的 `getnote_body_task` 表。新增 3 个异步回收测试；refill 全量 34 passed。
+
+---
+## refill 模块 M4：bili_cli + zhihu_api 通道（2026-09-19）
+
+全平台补抓通道收口到单模块：
+
+- **新增 `channels/bili_cli.py`**：`BiliCliChannel`（复用 `scripts/refill_article_bodies.py` 内核，
+  `bili video <BV> -s --ai --json`）。优先字幕口播稿，AI 总结 + 简介兜底；调用失败（超时/限流）
+  计数重试，非空 data 但无字幕/AI/简介 → 标 `skipped`（永久）。
+- **新增 `channels/zhihu_api.py`**：`ZhihuApiChannel`（复用 `scripts/content_library/zhihu_api_body.py`
+  内核），zhihu-toolkit venv 子进程直连 api.zhihu.com；按 URL 判 answer/article；调失败 → 重试。
+- **调度**：`RefillScheduler` 新增 `channels` 覆盖参数（测试/调用方可注入具体通道实例）；路由接入
+  bilibili `bili_cli→getnote→direct`、zhihu `zhihu_api→getnote→direct`。
+- **`build_channels`** 现注册全部 6 个通道；`bili_cli` / `zhihu_api` 走本机子进程（`bili` / venv python），
+  不依赖 AgentLimb。
+- **测试**：`tests/refill/test_refill_channels.py`（bili 字幕/AI兜底/永久/调用失败、zhihu 成功/失败、
+  URL 识别）+ scheduler（bili 永久→skipped）。refill 全量 31 passed。
+- 同步文档：`docs/modules/cli.md`、`docs/modules/config.md`、`docs/modules/refill.md`、
+  `docs/refill-module-design.md`、`docs/refill-module-dev-guide.md`（含 §10 M4 收尾运维交接）。
+
+> M4 旧脚本停用/归档（`git mv` 到 `06_正文补抓/archive`，归档不删除）为运维交接步骤，未在本会话
+> 执行——先跑几天 `refill schedule` 验证命中再停旧线（见 dev-guide §10）。
+
+> **M4 收尾运维已执行（2026-09-19）**：旧脚本 5 个 `git mv` 到 `06_正文补抓/archive`（不删除）；
+> `ZhihuApiChannel.script` 默认路径同步到归档位；PM2 收口为单进程 **`openbiliclaw-refill`**
+> （新增 `start-refill.sh`，cron `5 */2 * * *`，`--no-autorestart`），`xhs-backfill` /
+> `xhs-refill-hourly` 已删除。crontab 无 refill 引用（已备份），无迁移中断风险。
+
+---
+## refill 模块 M3：ytdlp + getnote 通道（2026-09-19）
+
+在 M2 Scheduler 之上接入 YouTube 与无本机通道源的补抓通道：
+
+- **新增 `channels/ytdlp.py`**：`YtdlpChannel`（复用 `scripts/refill_youtube_subtitles.py`
+  内核：`--write-subs --write-auto-subs --write-description`，中文→英文字幕，简介兜底）。
+  分类保留三大判定：429/网络临时可重试、无字幕/会员/私有等**永久**（标 `skipped`）、出口被判
+  bot（抛 `BridgeUnavailableError` 熔断不计数）。代理沿 `YT_PROXY_POOL` 轮换防单 IP 风控。
+- **新增 `channels/getnote.py`**：`GetnoteChannel`（复用 `refill_via_getnote.py` 同步 save
+  语义），服务端抓正文一步带回；配额打满（10203）抛 `BridgeUnavailableError` 熔断不计数。
+- **调度多基础设施化**：`build_channels` 支持 `bridge=None`；`direct`/`search_click` 标
+  `requires_bridge=True`，AgentLimb 关断时**只跳过依赖它的通道，不阻塞 ytdlp/getnote**；
+  `BridgeUnavailableError` 改为按条跳过（不再整轮 abort，因多通道各自独立）。
+- **永久不可抓标 `skipped`**：新增 `queue.mark_skipped`，detail 以 `PERMANENT` 开头即标
+  `skipped` 不消耗重试。
+- **路由更新**：小红书 `search_click→direct→getnote`、YouTube `ytdlp→getnote→direct`、
+  抖音 `getnote→direct`、微信/小宇宙 `direct→getnote`、其余 `direct`。
+- **测试**：`tests/refill/test_refill_channels.py`（getnote runner 注入：成功/配额打满/无正文/
+  超时；ytdlp 分类/vid/vtt）+ scheduler 新用例（AgentLimb 关断不阻塞 getnote、fallback 链计数）。
+  refill 全量 21 passed。
+- 同步文档：`docs/modules/cli.md`、`docs/modules/config.md`、`docs/modules/refill.md`、
+  `docs/refill-module-design.md`、`docs/refill-module-dev-guide.md`。
+
+> M3 通道已就绪但**默认仍只调度小红书**；要补 YouTube/抖音，在 `[refill.quota]` 按需加
+> `youtube` / `douyin` 配额项即可。
+
+---
+## refill 模块 M2：Scheduler + direct/search_click 通道（2026-09-19）
+
+在 M1 中央队列之上接入调度与首批通道，为收口散落的补抓脚本铺路：
+
+- **新增 `src/openbiliclaw/refill/channels/`**：`AgentLimbBridge`（HTTP 直连
+  `127.0.0.1:7791`，镜像 `16_浏览器自动化/web_capture.py` 与
+  `二创/xhs_refill/agentlimb_xhs_batch.py` 的可证明内核）、`direct`（登录态 Chrome
+  直接访问 + 防假命中守卫）、`search_click`（小红书标题搜索 + CDP 点击）；`base.py`
+  定义 Channel 协议、`BridgeUnavailableError`（基础设施故障不计数）与平台→通道路由。
+- **新增 `refill/scheduler.py` 的 `RefillScheduler`**：按 `[refill].quota` pick → route →
+  抓 → 写 `content_text` → 收口队列。桥接不可用 probe 失败 → 整轮跳过不计数；抓成功达
+  `min_body_len` 标 `done`，否则 `attempts+1`、达上限置 `dropped`。状态全落 `refill_queue`
+  → 进程异常退出重启按队列续跑不丢队。
+- **写入封装 `refill/writer.py`**：经 `Database.upsert_article` 只补正文（挂 cleaner），
+  兼容既有 author/tags 语义。
+- **CLI**：新增 `refill run`（手动补一轮验证）、`refill schedule`（PM2 cron 入口，走完整
+  配额 + 防风控 jitter）、`refill channel --list`、`refill reset --source`。
+- **配置**：`[refill.quota]`（per_cycle / interval_min）、`min_body_len`、`jitter_max_min`。
+- **测试**：`tests/refill/test_refill_scheduler.py` 覆盖 不重复写 / attempts 累计至 dropped /
+  probe 关断整轮跳过 / 桥接中途断开不计数 / 假命中守卫计数 / xhs JS 占位替换。refill 全量 11 passed。
+- 同步文档：`docs/modules/cli.md`、`docs/modules/config.md`、`docs/modules/refill.md`、
+  `docs/refill-module-design.md`、`docs/refill-module-dev-guide.md`。
+
+> ⚠️ 交接提示：现有 `xhs-backfill` / `xhs-refill-hourly` 两个 PM2 进程仍在跑、**未停**。
+> M2 全部代码就绪，替换它们的 PM2 编排（`openbiliclaw refill schedule`）待确认后再落地。
+
+---
+## refill 模块 M1：阅读库正文统一回补（中央队列 + 观测，2026-09-19）
+
+把碎片化的补抓脚本收敛为单模块，先交付中央队列与统一观测：
+
+- **新增 `src/openbiliclaw/refill/` 模块**：`RefillQueue` 提供 `refill_queue` 中央队列
+  （独立子库 `data/refill.db`，`url` 唯一天然去重）、缺口灌入扫描（幂等、可按平台限流）
+  与状态聚合。设计稿见 `docs/refill-module-design.md`。
+- **CLI**：新增 `openbiliclaw refill status`（`--fill` 全量灌入、`--fresh` 并列 articles
+  实时缺口），一处查看各平台 待补/已补/已满/已完成。
+- **配置**：新增 `[refill]` 段（`enabled` / `db`），`config.example.toml` 补示例。
+- **测试**：`tests/refill/test_refill_queue.py` 覆盖 schema / 幂等灌入 / 平台限流 /
+  实时口径 / 状态聚合。
+- 同步文档：`docs/modules/cli.md`（`refill status`）、`docs/modules/config.md`（`[refill]`）、
+  新增 `docs/modules/refill.md`。
+
+> 当前 M1 已把约 6 万缺口灌入真实 `data/refill.db`；M2 起接入 Scheduler + Channel，
+> 替换现有 `xhs-backfill` / `xhs-refill-hourly` 两个 PM2 进程。
+
+---
+## Linux.do 扩展通道抓全文（方案 B，2026-09-19）
+
+为"把 Linux.do 帖子正文真正读进阅读库"补上浏览器扩展通道，避开 Cloudflare 人机验证：
+
+- **后端扩通道复活**：`api/source_routes.py` 新增 `/api/sources/linuxdo/{next-task,task-result,kick}`，
+  对接持久化 `LinuxdoTaskQueue`；`api/auth.py` 把 `next-task` 加入 CSRF 白名单。
+- **扩展回传全文**：`extension/src/content/linuxdo/task-executor.ts` 新增 `capture_body` 开关，
+  `related` 任务抓取种子主题首帖全文并以 `body_text` 字段回传；`background/linuxdo-task-dispatcher.ts`
+  透传该开关。
+- **正文入库**：`task-result` 对带 `body_text` 的条目 `upsert_article` 写入阅读库 `articles`
+  （by canonical topic URL 去重），新增 `sources/task_result_protocol.py` 通用暂存式合并协议。
+- **CLI**：新增 `openbiliclaw capture-linuxdo <url|id>`，入队 `related` + `capture_body` 任务并在
+  可选超时内轮询结果确认正文入库。
+- 补充 `sources/linuxdo_tasks.py` 缺失的跨模块引用（`event_format.SOURCE_LINUXDO`、
+  `runtime.keyword_fetch.PLATFORM_LINUXDO`、本地化 published 归一化），使队列/路由链可导入。
+- 同步文档：`docs/modules/cli.md`（新增 `capture-linuxdo`）。
+
+> 边界：`runtime/linuxdo_producer.py`（定时发现管线）仍引用未落地的 `runtime.pool_gate`，属
+> 计划中的后续发现链路；本版本的抓全文/入库扩展通道不依赖它，daemon 只需 `linuxdo_tasks` +
+> `linuxdo_adapter` 即可服务 `next-task`/`task-result`。
+
+---
+## Linux.do 本地直连通道（轻量后端适配器，2026-09-18）
+
+按本地 `sources/protocol.py` 的 `SourceAdapter` 协议补一个轻量 Linux.do 内容通道，
+**不搬上游后端**、保留自研架构：
+
+- 新增 `sources/linuxdo_adapter.py` 的 `LinuxdoAdapter`：直连 Discourse JSON 接口
+  （`/t/{slug}/{id}.json`、`/latest.json`、`/hot.json`、`/search.json?q=`），把首帖
+  `raw`/`cooked` 及跟帖拼成正文，归一化为 `DiscoveredContent`；支持 `topic` /
+  `latest` / `hot` / `search` 策略，cookie 按 `recipe.config.cookie` > 环境变量
+  `OPENBILICLAW_LINUXDO_COOKIE` > `.env` 解析。
+- CLI 新增 `openbiliclaw fetch-linuxdo <url|id>`：抓单个帖子正文并 `db.upsert_article`
+  写入阅读库 `articles`（按 url 去重），URL 解析兼容 `/t/<id>`、`/t/<slug>/<id>`、
+  `/t/<slug>/<id>/<post>`。
+- 在 `api/runtime_context.py` 注册 `LinuxdoAdapter`（无 `[sources.linuxdo]` 配置门控，
+  轻量无钩）。
+- 与既有扩展 task 线（`sources/linuxdo_tasks.py`、`runtime/linuxdo_producer.py`）互补：
+  扩展负责登录态抓取，直连适配器提供无浏览器时可用的正文入库通道。
+- 同步文档：`docs/modules/cli.md`、`docs/modules/sources.md`、`docs/modules/config.md`。
+
+> 边界：linux.do 在 Cloudflare 人机验证之后。匿名直连对 `*.json` 也返回 403，命令会
+> 空结果告警退出；拉正文需设 `OPENBILICLAW_LINUXDO_COOKIE` 提供登录 cookie（与扩展
+> 通道同一登录前提，属避免平台风控的既定取舍）。
+
+---
 ## 开源研究模块收编至 `12_开源项目研究/`（2026-09-18）
 
 按「编号工作区」口径，把散落三处的开源研究（oss_research）资产收进项目根

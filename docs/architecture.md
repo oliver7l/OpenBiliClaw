@@ -10,6 +10,7 @@ OpenBiliClaw 采用分层架构设计，从上到下依次为：
 4. **知识沉淀层** — Notes System（视频转笔记管线 + FTS 全文搜索 + 已读库导入）
 5. **多源适配层（v0.3.0+）** — `SourceAdapter` 协议下的 B 站 / 小红书 / 抖音 / YouTube / X (Twitter) / 知乎 / 通用 Web 源
 6. **多层网状记忆存储** — Core / Episodic / Semantic / Working Memory（SQLite + 向量索引 + JSON）
+7. **正文回补层（refill，v0.3.x+）** — 阅读库 `articles.content_text` 缺口的统一回补：中央队列 `refill_queue`（独立子库 `refill.db`，`url` 唯一去重）+ 可插拔 Channel（`direct` / `search_click` / `ytdlp` / `getnote` / `bili_cli` / `zhihu_api`）+ Scheduler（按 `[refill].quota` 轮询 + 防风控 jitter）。详见 [refill 模块](modules/refill.md)。
 
 详见 [项目 Spec](spec.md) 中的架构图。模块级可视化图放在 `docs/diagrams/`：
 
@@ -198,6 +199,15 @@ X 是第六个内容源，分两条独立通路：
 - 全库索引：`knowledge.db`（`file_index` + `layer_stats` 视图）优先，回退 `06_全库文件索引.csv`；`--rebuild` / POST `/index/rebuild` 覆盖重建
 - 健康检查 `doctor`：C1 题索引引用 / C2 岗位目录 / C3 日志岗位对齐 / C4 数字表完整 / C5 索引新鲜度（`--full`，`--fix` 自动重建索引）
 - 对外接口：CLI `openbiliclaw interview <子命令>`（12+ 命令）+ API `/api/interview/{job,study,review}/*`（64 端点，期 2 URL 分区后；旧 `/api/interview/*` 与 `/api/interview/reviews/*` 保留双挂载兼容别名）+ Web「面试」tab
+
+### Refill 正文统一回补 (`refill/`) — 阅读库缺口回补层 (v0.3.x+)
+
+把碎片化的补抓脚本收敛为「单模块 + 中央队列 + 可插拔通道 + 单调度 + CLI 观测」：
+
+- **中央队列 `refill_queue`** 独立子库 `refill.db`（`url` 唯一 → 跨进程天然去重；`content_text` 为唯一去重锚点）；`状态 pending/done/skipped/dropped`。设计稿见 `docs/refill-module-design.md`。
+- **通道（Channel）协议**：`supports` + `fetch(item)->(ok, body, detail)`；`dirrect`（登录态 Chrome 直访 + 防假命中守卫）、`search_click`（小红书标题搜索 + CDP 点击）、`ytdlp`（YouTube 字幕/简介）、`getnote`（得到大脑服务端兜底）、`bili_cli`（B 站字幕/AI）、`zhihu_api`（知乎直连）。`direct`/`search_click` 依赖 AgentLimb 桥接（`requires_bridge=True`），其余走本机子进程。
+- **Scheduler** 按 `[refill].quota` 每平台每轮配额 pick → route → 抓 → 写 `articles.content_text` → 收口；AgentLimb 关断只跳过依赖它的通道；基础设施故障不计数、跳过该条；永久不可抓标 `skipped`。
+- **观测**：CLI `openbiliclaw refill status / run / schedule / channel / reset`；PM2 `openbiliclaw-refill`（cron `5 */2 * * *`）跑 `refill schedule`。
 
 ## 运行时数据库约束
 
