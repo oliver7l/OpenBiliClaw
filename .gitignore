@@ -185,3 +185,14 @@ miniprogram-album/utils/config.js
 /简历库_backup_*.tar.gz
 /master.tar.gz
 /.wbapp_*.genie
+
+# 大照片/模型/独立子项目（2026-09-19 盘库补：不入库，避免撑爆仓库 / 同类大文件请自行 gitign）
+#   · 19_统一相册库：约 116GB 原始照片分组
+#   · 照片人物判定：人脸识别模型二进制（.onnx/.pkl，约 767M）
+#   · tools/：独立子项目（含各自 .git / .env 密钥 / .venv / node_modules），单独管理，不与主仓混
+/19_统一相册库/
+/照片人物判定/
+/18_照片分析/
+/tools/
+#   · 03_万声科技 内嵌的 GitHub 仓库存档（外来仓库，作 gitlink 会污染本仓；保留其面试文档，仅排除归档仓）
+03_万声科技/**/GitHub仓库存档/
