@@ -29,9 +29,16 @@
 
 **账号进入档案仓的两条路**：
 1. **客户端登录 → 捕获**（capture / `twa_watch.py` 守护自动做）——原生理路径；
-2. **合成**（`twa_synth.py synth`）——2026-09-19 突破：blob 加密完全可逆，
+2. **合成**（`twa_synth.py synth` / 守护自动做）——2026-09-19 突破：blob 加密完全可逆，
    用「现成档案当结构模板 + accounts.json 里的 token」直接造出可切换档案，
    不需要该账号在本机登录过（前提：token 未失效，合成前会验证）。
+
+> 对标 workbuddy-switch：它添加账号一键搞定，是因为 WorkBuddy/CodeBuddy 的登录态就是
+> 一个官方认证文件（`workbuddy-desktop.info`，普通 JSON，零逆向、写进去就生效）。
+> TRAE 的客户端登录态是设备绑定加密 blob，历史上必须客户端登录才能拿到 ⇒ 全家族都是
+> 「捕获式」设计。**合成路径补上之后，体验已追平**：助手浏览器授权添加账号（拿 token）
+> → 守护 15s 内自动合成档案，无需客户端登录。差的只是 wb-switch 把「登录窗口」也内置了
+> （TraeWorkAssistant 其实也内置了浏览器授权，所以两边实际都是两步内完成）。
 
 ## 二、核心机制（逆向实证）
 
@@ -82,7 +89,8 @@ User-Agent: TRAE SOLO CN/1.107.1
 日常切账号                          切换Trae账号.command（菜单数字键，r=重捕获）
 新账号只有浏览器 token、切不了        一键自动收尾.command（synth→verify→checkin 一条龙）
 新账号走客户端登录（验证码）          开空白客户端.command 登录 → 捕获新账号.command
-以后登录即自动入库                   安装守护开机自启.command（装一次，登录自启+崩溃拉起）
+以后添加账号全自动入库               安装守护开机自启.command（装一次，登录自启+崩溃拉起）
+                                     捕获客户端登录 + 合成 accounts.json 新账号，15s 内生效
                                      （手动版：自动捕获守护.command，关终端即停）
 批量签到 + 刷余额快照                twa_checkin.py all（--dry-run 试跑；exit 1=有账号失败）
 批量多开/停实例管理                  traework-multi-open.sh（交互菜单，来自 1172 项目）
