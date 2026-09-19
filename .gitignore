@@ -192,7 +192,7 @@ miniprogram-album/utils/config.js
 #   · tools/：独立子项目（含各自 .git / .env 密钥 / .venv / node_modules），单独管理，不与主仓混
 /19_统一相册库/
 /照片人物判定/
-/18_照片分析/
+/18_照片分组/
 /tools/
 #   · 03_万声科技 内嵌的 GitHub 仓库存档（外来仓库，作 gitlink 会污染本仓；保留其面试文档，仅排除归档仓）
 03_万声科技/**/GitHub仓库存档/
