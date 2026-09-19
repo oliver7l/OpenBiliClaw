@@ -4,11 +4,11 @@
 
 ## 概述
 
-> **实现位置（2026-09-08，阶段 1-K2 收口）**：本模块的真实实现已抽取至
-> `packages/obc-soul/obc_soul/`（含 `py.typed`）；`src/openbiliclaw/soul/` 保留
-> 25 个**模块别名 stub**（`sys.modules[__name__] = obc_soul.<mod>`），
-> `openbiliclaw.soul.*` 旧 import 路径全部继续可用且与包实现为同一模块对象
-> （类身份唯一）。本文档描述的行为语义不变，源码请读 obc-soul 包。
+> **实现位置（2026-09-19 更新）**：本模块的真实实现已抽取至
+> `packages/obc-soul/obc_soul/`（含 `py.typed`）。`src/openbiliclaw/soul/` 目录
+> **已不再存在**——原 `openbiliclaw.soul.*` 兼容别名 stub 于 2026-09-14 摘除，
+> 导入路径统一为 `obc_soul.*`（见文末「2026-09-14 垫片摘除」）。本文档描述的
+> 行为语义不变，源码请读 `packages/obc-soul/obc_soul/`。
 
 `soul/` 包实现了用户理解的核心逻辑，包括：
 
@@ -207,8 +207,8 @@
 
 ### 关键文件
 
-- `src/openbiliclaw/soul/speculator.py` — 核心引擎（生成/观测/转正/过期/force_tick）
-- `src/openbiliclaw/llm/prompts.py` — `build_speculation_generation_prompt()`
+- `packages/obc-soul/obc_soul/speculator.py` — 核心引擎（生成/观测/转正/过期/force_tick）
+- `packages/obc_llm/obc_llm/prompts.py` — `build_speculation_generation_prompt()`
 - `tests/test_speculator.py` — speculative lifecycle / novelty / probe selection 单元测试
 
 ## 不喜欢领域探针系统 (Avoidance Probe Lifecycle)
@@ -273,9 +273,9 @@ active 池会做两层多样性保护：词面 / specifics 的 novelty guard 阻
 
 ### 关键文件
 
-- `src/openbiliclaw/soul/avoidance_speculator.py` — 负向探针状态机、novelty guard、候选选择
-- `src/openbiliclaw/soul/dislike_writeback.py` — confirmed dislike 写回、profile 同步和候选池清理
-- `src/openbiliclaw/llm/prompts.py` — `build_avoidance_generation_prompt()`
+- `packages/obc-soul/obc_soul/avoidance_speculator.py` — 负向探针状态机、novelty guard、候选选择
+- `packages/obc-soul/obc_soul/dislike_writeback.py` — confirmed dislike 写回、profile 同步和候选池清理
+- `packages/obc_llm/obc_llm/prompts.py` — `build_avoidance_generation_prompt()`
 - `tests/test_avoidance_speculator.py` — avoidance lifecycle / novelty / probe selection 单元测试
 
 ## 画像更新逻辑详解

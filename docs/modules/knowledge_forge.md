@@ -309,5 +309,5 @@ KF 配置位于 `config.toml` 的 `[knowledge_forge]` 段（默认值见 `knowle
 ## 未实现（后续阶段）
 
 - 自动补充闭环的多源扩展（非 B站来源）。
-- API 路由（`api/routes/knowledge_forge.py`，设计 §4）与前端（§5）。
+- API 路由（`api/knowledge_forge_routes.py`，见 §4 端点清单）与前端（§5）。
 - `content_cleaner` 尚未接入文章入库流程（设计阶段一任务 1.0 的入库调用）。

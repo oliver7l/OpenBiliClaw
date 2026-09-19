@@ -209,4 +209,4 @@ Content-Type: application/json
 
 - [CLI 命令参考](./cli.md)
 - [笔记系统](./notes.md) — 本模块参考其架构设计
-- [数据库存储](../storage/database.md)
+- [数据库存储](./storage.md)

@@ -11,7 +11,7 @@
 
 页面形态：以**桌面 SPA 内嵌视图**为主（`mediaPage`，与专题/健康/旅行等页一致的
 `card-grid.is-minimal` 3 列小白卡 + 左对齐 subtab），桌面顶栏「🎬 媒体」tab 直达
-`/web/media`；同时保留独立 `/media` 页（可书签直达的兜底实现）。
+`/web/media`。
 
 | 组件 | 职责 | 核心文件 |
 |------|------|----------|
@@ -19,8 +19,7 @@
 | 状态存储 | 收藏/评级持久化（`media_state.db`） | `store.py` `MediaStateStore` |
 | API | `/api/media/*` REST 接口 | `routes.py` `build_media_router` |
 | 前端(SPA) | 桌面内嵌页 `mediaPage` + 卡片/灯箱/视频 | `desktop/assets/js/media-app.js` |
-| 前端(独立) | `/media` 独立页（兜底） | `src/openbiliclaw/web/media/index.html` |
-| 入口 | 桌面顶栏「🎬 媒体」tab → `/web/media` | `desktop/index.html` + `app.js` |
+| 入口 | 桌面顶栏「🎬 媒体」tab → `/web/media`（统一；独立 `/media` 兜底页已移除） | `desktop/index.html` + `app.js` |
 | 测试 | `tests/api/test_api_media.py`（15 例） | 路由级 TestClient 用例 |
 
 ## 模块结构

@@ -71,7 +71,7 @@ summary = sch.run_cycle(sources=("bilibili",))      # {source: {picked/done/...}
   （YT 无字幕 / B站无字幕AI简介等真不可抓）→ 标 `skipped`；否则 `attempts+1`，达
   `max_attempts` 置 `dropped`；基础设施故障抛 `BridgeUnavailableError` → 不计数、跳过该条继续。
 - 外部依赖：`bili_cli` 需本机 `bili` CLI；`zhihu_api` 需 `zhihu-toolkit` venv python 与
-  `scripts/content_library/zhihu_api_body.py`；`getnote` 需本机 getnote CLI 与配额。
+  `06_正文补抓/archive/zhihu_api_body.py`（M4 收尾 git mv 归档）；`getnote` 需本机 getnote CLI 与配额。
 
 > **YouTube 环境约束（2026-09-19 定：保持现状，不主动解决）**
 > `ytdlp` 通道需**可达代理**（默认 `127.0.0.1:7890`，可用 `YT_PROXY_POOL` 逗号分隔多出口轮换）

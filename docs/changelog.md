@@ -4,6 +4,26 @@
 
 ---
 
+## docs: 逐个模块核验并修正 5 处文档过时（2026-09-19）
+
+对 46 个代码包 / 44 份模块文档做「文档 ↔ 代码」一致性审计，全仓类名均可定位（无幽灵类）。
+文档路径断链多数为相对路径解析基准误报，实际存在。修正 5 处确凿的过时内容：
+
+- **soul.md**：顶注「保留 25 个模块别名 stub」与文末「垫片已摘除」矛盾 → 更新为目录已不存在、
+  导入统一 `obc_soul.*`；「关键文件」3 处 `src/openbiliclaw/soul/*.py` + `llm/prompts.py`
+  改为 `packages/obc-soul/obc_soul/*.py` 与 `packages/obc_llm/obc_llm/prompts.py`。
+- **refill.md**：`zhihu_api_body.py` 依赖路径过时，改为 `06_正文补抓/archive/zhihu_api_body.py`
+  （M4 git mv 归档后真实位置，通道代码 `zhihu_api.py:75` 亦指向此处）。
+- **media.md**：删除「保留独立 `/media` 兜底页」过时描述（该页已移除，前端统一 `/web/media`）。
+- **knowledge_forge.md**：待办列表的 `api/routes/knowledge_forge.py` 过时 → `api/knowledge_forge_routes.py`
+  （§4 端点已实现）。
+- **chat_analysis.md**：关联区断链 `../storage/database.md` → `./storage.md`。
+
+其余断链项（interview/knowledge_forge 旧路径、health 导入脚本、oss_research backfill）均为
+「已删/已迁移」的正确叙述，非错误。全仓类名核验通过。
+
+---
+
 ## docs: 补全 4 个缺文档模块页（eval / synthesis / rag / topics）（2026-09-19）
 
 模块盘点收尾：为有代码但缺独立模块文档的 4 个包补写文档（按 AGENTS.md 统一模板：
