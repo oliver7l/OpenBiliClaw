@@ -23,6 +23,58 @@ IDENT = ["乐仔", "艳艳", "妈妈", "我", "七月", "爸爸"]
 # 非跨身份元特征的列名与顺序（后面接 sim_<身份> 各列）。同样跨脚本契约。
 META_KEY_BASE = ["ctx_n", "ctx_max", "det", "logside"]
 
+# AdaFace 第三嵌入通道（第 8 轮产线产出，第 9 轮接入）。
+# adaface npz 只存 ck+emb（行序=faces 表 rowid 序），框坐标取自现役 scrfd npz 同行序。
+ADA_NPZ = ("/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw"
+           "/19_统一相册库/_faces_backup/faces_adaface_20260919.npz")
+SCRFD_NPZ = ("/Volumes/固态硬盘1T/002-探索项目/040-OpenBiliClaw"
+             "/19_统一相册库/_faces_backup/faces_scrfd_20260919.npz")
+_ADA_CACHE = None
+
+
+def ada_join(cks, box, strict=False):
+    """把 AdaFace npz 对齐到**任意过滤后的行子集**，返回 l2 归一化矩阵。
+
+    为什么按键对齐而不是行号：npz 行序 = faces 表全量 rowid 序，但 train/apply
+    各自的过滤子集（det/side 阈值、None 嵌入剔除）行数不同，只有 (ck, 框) 键稳定。
+    strict=True 时未匹配直接抛错（训练端要求全匹配）；False 时零向量兜底并告警
+    （零向量与任何中心余弦=0，模型会自动给它低分）。
+    """
+    global _ADA_CACHE
+    if _ADA_CACHE is None:
+        _d = np.load(ADA_NPZ, allow_pickle=True)
+        _s = np.load(SCRFD_NPZ, allow_pickle=True)
+        assert len(_d["ck"]) == len(_s["ck"]), "adaface/scrfd npz 行数不一致"
+        assert (_d["ck"].astype(str) == _s["ck"].astype(str)).all(), \
+            "adaface/scrfd npz 行序不一致（先查产线）"
+        _ab = _s["box"].astype(np.float64)
+        _idx = {}
+        for i in range(len(_d["ck"])):
+            b = _ab[i]
+            _idx[(str(_d["ck"][i]), round(float(b[0]), 1), round(float(b[1]), 1),
+                  round(float(b[2]), 1), round(float(b[3]), 1))] = i
+        _ADA_CACHE = (_d["emb"].astype(np.float32), _idx)
+    EMB, IDX = _ADA_CACHE
+    B = np.asarray(box, dtype=np.float64)
+    out = np.zeros((len(cks), EMB.shape[1]), dtype=np.float32)
+    miss = []
+    for i in range(len(cks)):
+        b = B[i]
+        j = IDX.get((str(cks[i]), round(float(b[0]), 1), round(float(b[1]), 1),
+                     round(float(b[2]), 1), round(float(b[3]), 1)))
+        if j is None:
+            miss.append(i)
+            continue
+        out[i] = EMB[j]
+    if miss:
+        msg = f"ada_join 未匹配 {len(miss)}/{len(cks)} 行（例 {miss[:3]}）"
+        if strict:
+            raise RuntimeError(msg + "（strict 模式禁止零向量兜底）")
+        print(f"⚠️ {msg}，零向量兜底")
+    n = np.linalg.norm(out, axis=1, keepdims=True)
+    n[n < 1e-9] = 1.0
+    return out / n
+
 
 def l2n(X, axis=1):
     X = np.asarray(X, dtype=np.float32)
@@ -148,11 +200,14 @@ def base_specs():
         ("LR/mbf", "mbf", lambda d: LogisticRegression(C=1.0, max_iter=5000)),
         ("LR/r50", "r50", lambda d: LogisticRegression(C=1.0, max_iter=5000)),
         ("LR/fused", "fused", lambda d: LogisticRegression(C=1.0, max_iter=5000)),
+        ("LR/ada", "ada", lambda d: LogisticRegression(C=1.0, max_iter=5000)),
         ("中心NN/fused", "fused", lambda d: CentroidNN()),
         ("中心NN/mbf", "mbf", lambda d: CentroidNN()),
+        ("中心NN/ada", "ada", lambda d: CentroidNN()),
         ("多中心k5/fused", "fused", lambda d: MultiCenter(5)),
         ("多中心k5/mbf", "mbf", lambda d: MultiCenter(5)),
         ("多中心k5/r50", "r50", lambda d: MultiCenter(5)),
+        ("多中心k5/ada", "ada", lambda d: MultiCenter(5)),
         ("LDA/fused", "fused",
          lambda d: LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")),
         ("KNN/fused", "fused",

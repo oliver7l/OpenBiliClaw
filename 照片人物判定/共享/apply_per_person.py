@@ -105,9 +105,12 @@ def load_faces():
         Xm.append(np.frombuffer(mb, dtype=np.float32))
         Xr.append(np.frombuffer(r5, dtype=np.float32))
     Xm, Xr = l2n(np.vstack(Xm)), l2n(np.vstack(Xr))
+    feats = {"mbf": Xm, "r50": Xr, "fused": l2n(np.hstack([Xm, Xr]))}
+    # AdaFace 第三通道（第 9 轮）：键对齐（box 是 list of tuples，函数内自转 ndarray）。
+    # apply 端允许零向量兜底（理论 0 缺口，缺了会告警而不是静默）。
+    feats["ada"] = EM.ada_join(cks, box)
     return (np.array(rid), np.array(cks, dtype=object), box, np.array(pch),
-            {"mbf": Xm, "r50": Xr, "fused": l2n(np.hstack([Xm, Xr]))}, path_of,
-            np.array(detv, dtype=np.float32))
+            feats, path_of, np.array(detv, dtype=np.float32))
 
 
 def pick_threshold(pos_p, neg_p, target_fpr):

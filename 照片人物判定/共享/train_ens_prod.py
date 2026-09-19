@@ -90,6 +90,9 @@ def load(src):
     det, box = det[keep], box[keep]
     mbf, r50 = EM.l2n(mbf[keep]), EM.l2n(r50[keep])
     feats = {"mbf": mbf, "r50": r50, "fused": EM.l2n(np.hstack([mbf, r50]))}
+    # AdaFace 第三通道（第 9 轮接入）：按键对齐 + 训练端 strict（一个都不少）。
+    # 对齐妥协已在 extract_adaface.py 头注说明（box 近似对齐，非 5 点 norm_crop）。
+    feats["ada"] = EM.ada_join(ck, box, strict=True)
     return dict(ck=np.array(ck, dtype=object), lib=np.array(lib, dtype=object),
                 det=det, box=box, feats=feats)
 

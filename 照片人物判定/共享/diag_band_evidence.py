@@ -58,6 +58,7 @@ def main():
     mbf = EM.l2n(d["mbf"].astype(np.float32))[keep]
     r50 = EM.l2n(d["r50"].astype(np.float32))[keep]
     feats = {"mbf": mbf, "r50": r50, "fused": EM.l2n(np.hstack([mbf, r50]))}
+    feats["ada"] = EM.ada_join(ck, box)   # AdaFace 第三通道（第 9 轮）
 
     con = sqlite3.connect(LIB_DB)
     ck18 = collections.defaultdict(set)
