@@ -38,6 +38,10 @@ python3 scripts/vendor_manage.py status <path> # 单仓体检（json）
 
 `scan` 输出含义：`*N` = 该子仓有 N 项未提交本地改动；`-` = 干净；空白 = 未登记。
 
+> **按用途归类（不搬文件）**：`scan --usage applied|research` / `list --usage applied|research`
+> 一处看同类；另建了机内软链入口 `_应用/`（applied 9 个）与 `_调研/`（research 61 个）
+> 指向各项目（不动原目录/服务/仓库，已 gitignore 不入库）。
+
 ## 4. 分类规则
 
 | 类型 | 处置 | 例子 |

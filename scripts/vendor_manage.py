@@ -105,17 +105,23 @@ def _infer_usage(path: str) -> str:
     return ""
 
 
-def cmd_scan() -> int:
+def cmd_scan(usage: str = "") -> int:
     repos = scan_repos()
     reg = load_registry()
-    print(f"扫描到 {len(repos)} 个嵌套 git 仓库：")
+    if usage and usage not in _USAGE_CHOICES:
+        print("scan --usage 取值: applied / research / archive")
+        return 2
+    header = f"扫描到 {len(repos)} 个嵌套 git 仓库" + (f"（筛选: {usage}）" if usage else "") + "："
+    print(header)
     print(f"{'路径':<40}{'用途':<10}{'改动':<6}{'提交':<6}")
     for p in repos:
         info = repo_info(p)
         meta = reg.get(info["path"], {})
+        cur_usage = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
+        if usage and cur_usage != usage:
+            continue
         dirty = f"*{info['dirty_files']}" if info["dirty"] else "-"
-        usage = meta.get("usage", "") if isinstance(meta, dict) else ""
-        print(f"{info['path']:<40}{(usage or '-')[:9]:<10}{dirty:<6}{info['commits']:<6}")
+        print(f"{info['path']:<40}{(cur_usage or '-')[:9]:<10}{dirty:<6}{info['commits']:<6}")
     return 0
 
 
@@ -166,18 +172,23 @@ def cmd_usage(path: str, value: str) -> int:
     return 0
 
 
-def cmd_list() -> int:
+def cmd_list(usage: str = "") -> int:
     reg = load_registry()
     if not reg:
         print("（注册表为空。先 `scan` 看有哪些，再 `register <path>` 登记。）")
         return 0
+    if usage and usage not in _USAGE_CHOICES:
+        print("list --usage 取值: applied / research / archive")
+        return 2
     found = {p.as_posix() for p in scan_repos()}
-    print(f"注册表 {len(reg)} 项：")
+    print(f"注册表 {len(reg)} 项：" + (f"（筛选: {usage}）" if usage else ""))
     for key, meta in reg.items():
+        if usage and str(meta.get("usage", "")) != usage:
+            continue
         present = "✓" if key in found else "✗(路径缺失)"
-        usage = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
+        usage_cur = str(meta.get("usage", "")) if isinstance(meta, dict) else ""
         dirty_note = "本地改了" if (isinstance(meta, dict) and "本地" in (meta.get("note") or "")) else ""
-        tag = f" [{usage}]{('·' + dirty_note) if dirty_note else ''}" if (usage or dirty_note) else ""
+        tag = f" [{usage_cur}]{('·' + dirty_note) if dirty_note else ''}" if (usage_cur or dirty_note) else ""
         print(f"  [{present}] {key}{tag}")
         if isinstance(meta, dict) and meta.get("note") and "本地" not in (meta.get("note") or ""):
             print(f"      note    : {meta['note']}")
@@ -214,6 +225,12 @@ def cmd_bulk() -> int:
     return 0
 
 
+def _opt(args: list[str], flag: str) -> str:
+    if flag in args:
+        return str(args[args.index(flag) + 1]) if args.index(flag) + 1 < len(args) else ""
+    return ""
+
+
 def cmd_tag() -> int:
     """给有未提交本地改动的仓库打标（note 置为「已本地修改」），标注「改动在子仓提交」。
     纯改注册表，不动任何仓库内容。"""
@@ -242,9 +259,10 @@ def main() -> int:
         return 2
     cmd = args[0]
     if cmd == "scan":
-        return cmd_scan()
+        u = _opt(args[1:], "--usage")
+        return cmd_scan(u)
     if cmd == "list":
-        return cmd_list()
+        return cmd_list(_opt(args[1:], "--usage"))
     if cmd == "bulk":
         return cmd_bulk()
     if cmd == "tag":
